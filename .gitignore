@@ -2,3 +2,7 @@
 .pixi/*
 !.pixi/config.toml
 *.pyc
+*.ipynb
+.agents/*
+*.json
+*.mojo

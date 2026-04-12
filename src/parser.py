@@ -19,13 +19,14 @@ NOT responsible for:
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
 import clang.cindex as cx
 
-from .ir import (
+from src.ir import (
     Array,
     Bitfield,
     BuiltinPrimitiveSpelling,
@@ -146,6 +147,58 @@ _INT_LITERAL_RE = re.compile(
 )
 
 
+# Directory containing this package (`src/`).  Parent is the repository root.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_header_path(header: Path | str) -> Path:
+    """
+    Resolve a header path for parsing.
+
+    Relative paths are tried against the current working directory first, then
+    against the repository root (parent of ``src/``).  That way paths like
+    ``tests/fixtures/foo.h`` work when the process cwd is ``src/`` (e.g. Jupyter
+    notebooks) as well as from the project root.
+    """
+    p = Path(header)
+    if p.is_absolute():
+        r = p.resolve()
+        if not r.is_file():
+            raise FileNotFoundError(f"header not found: {header}")
+        return r
+
+    candidates = [
+        (Path.cwd() / p).resolve(),
+        (_REPO_ROOT / p).resolve(),
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    tried = ", ".join(str(c) for c in candidates)
+    raise FileNotFoundError(
+        f"header not found: {header!r} (relative to cwd and repo root; tried {tried})"
+    )
+
+
+def _default_system_compile_args() -> list[str]:
+    """
+    Include paths so system headers (<stddef.h>, <stdint.h>, …) resolve.
+
+    libclang's ``parse`` call does not always inherit the full compiler-driver
+    include path set; mirroring what the tests used to pass explicitly.
+    """
+    args = ["-I/usr/include"]
+    try:
+        out = subprocess.check_output(
+            ["cc", "-print-file-name=include"], text=True, timeout=10
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return args
+    if out and out != "include" and Path(out).is_dir():
+        args.append(f"-I{out}")
+    return args
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  ClangParser
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,13 +210,19 @@ class ClangParser:
     Parameters
     ----------
     header:
-        Path to the .h file to parse.
+        Path to the .h file to parse.  Relative paths are resolved against the
+        current working directory first, then against the repository root (the
+        directory that contains ``src/``), so the same relative path works from
+        notebooks running under ``src/`` as from the project root.
     library:
         Logical library name written into Unit (e.g. "zlib").
     link_name:
         Shared-library link name written into Unit (e.g. "z").
     compile_args:
-        Extra flags forwarded to libclang (e.g. ["-I/usr/include", "-DFOO=1"]).
+        Extra flags forwarded to libclang (e.g. ``["-DFOO=1"]``).  If omitted
+        (default), standard system include paths are added so ``#include
+        <stddef.h>`` and similar resolve.  Pass an empty list only if you want
+        no extra ``-I`` flags beyond those.
     raise_on_error:
         If True (default), raise ParseError when clang reports error/fatal
         diagnostics.  Set to False to collect partial results despite errors.
@@ -177,10 +236,14 @@ class ClangParser:
         compile_args: list[str] | None = None,
         raise_on_error: bool = True,
     ) -> None:
-        self.header = Path(header).resolve()
+        self.header = _resolve_header_path(header)
         self.library = library
         self.link_name = link_name
-        self.compile_args = list(compile_args or [])
+        self.compile_args = (
+            _default_system_compile_args()
+            if compile_args is None
+            else list(compile_args)
+        )
         self.raise_on_error = raise_on_error
 
         # diagnostics collected during the run
