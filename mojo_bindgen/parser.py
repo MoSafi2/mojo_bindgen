@@ -655,17 +655,15 @@ class ClangParser:
         """
         TYPEDEF_DECL cursor → Typedef.
 
-        The underlying type is resolved by walking through the typedef chain
-        until we hit a non-typedef type (struct, primitive, pointer, etc.).
+        ``aliased`` is the direct underlying clang type (one typedef step), often
+        a :class:`~mojo_bindgen.ir.TypeRef`.  ``canonical`` is the fully
+        unrolled type for ABI lowering.
         """
         name = cursor.spelling
-        # cursor.underlying_typedef_type gives us the *direct* aliased type,
-        # not the fully canonical one.  We resolve it ourselves so the IR
-        # always contains the base type — the TypeResolver pass still runs
-        # afterwards for cross-TU resolution, but simple same-TU chains are
-        # collapsed here.
-        aliased = self._resolver.resolve(cursor.underlying_typedef_type)
-        return Typedef(name=name, aliased=aliased)
+        ut = cursor.underlying_typedef_type
+        aliased = self._resolver.resolve(ut)
+        canonical = self._resolver.resolve(ut.get_canonical())
+        return Typedef(name=name, aliased=aliased, canonical=canonical)
 
     # ── top-level const variable ───────────────────────────────────────────────
 

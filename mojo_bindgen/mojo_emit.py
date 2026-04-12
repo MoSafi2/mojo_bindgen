@@ -2,6 +2,22 @@
 #
 # Typedefs whose name matches an already-emitted struct or enum are skipped
 # (see _emit_typedef / emitted_struct_enum_names) to avoid duplicate aliases.
+#
+# Type lowering policy (canonical vs typedef name)
+# ------------------------------------------------
+# IR may contain :class:`~mojo_bindgen.ir.TypeRef` (C typedef name + canonical
+# type). Use **canonical** lowering everywhere ABI must match layout and FFI
+# wire types: struct/union fields, array elements, function-pointer parameter
+# and return types inside :class:`~mojo_bindgen.ir.FunctionPtr`, and the type
+# lists passed to ``external_call[...]`` / ``OwnedDLHandle.call[...]``.
+#
+# Use the **typedef name** (as a Mojo identifier) on **top-level function**
+# ``def`` signatures — parameters and return type — when a matching
+# ``comptime`` typedef alias is emitted in this module, so POSIX-style names
+# like ``size_t`` survive in the API surface.
+#
+# Top-level ``typedef`` declarations use ``canonical`` for the RHS so the alias
+# target is a concrete Mojo type (or transparent chain toward one).
 from __future__ import annotations
 
 from collections import defaultdict, deque
@@ -24,6 +40,7 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Type,
+    TypeRef,
     Typedef,
     Unit,
 )
@@ -124,8 +141,15 @@ def _new_ctx() -> _TypeContext:
     return _TypeContext()
 
 
+def _peel_typeref(t: Type) -> Type:
+    """Unwrap :class:`~mojo_bindgen.ir.TypeRef` to its canonical type."""
+    return t.canonical if isinstance(t, TypeRef) else t
+
+
 def lower_type(t: Type, ctx: _TypeContext) -> str:
-    """Lower IR Type to a Mojo type string."""
+    """Lower IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
+    if isinstance(t, TypeRef):
+        return lower_type(t.canonical, ctx)
     if isinstance(t, Primitive):
         return lower_primitive(t)
     if isinstance(t, Pointer):
@@ -159,6 +183,24 @@ def lower_type(t: Type, ctx: _TypeContext) -> str:
     raise TypeError(f"unsupported type: {type(t)!r}")
 
 
+def _lower_type_signature(
+    t: Type,
+    ctx: _TypeContext,
+    *,
+    typedef_mojo_names: frozenset[str],
+) -> str:
+    """
+    Lower a type for top-level function ``def`` signatures: use a typedef alias
+    name when this module emits a matching ``comptime`` typedef.
+    """
+    if isinstance(t, TypeRef):
+        mid = mojo_ident(t.name.strip())
+        if mid in typedef_mojo_names:
+            return mid
+        return lower_type(t.canonical, ctx)
+    return lower_type(t, ctx)
+
+
 def _struct_by_mojo_name(unit: Unit) -> dict[str, Struct]:
     """Map Mojo struct alias names to struct declarations (non-union only)."""
     out: dict[str, Struct] = {}
@@ -173,6 +215,8 @@ def _type_ok_for_register_passable_field(t: Type, struct_by_name: dict[str, Stru
     Whether a field type can appear on a struct that conforms to RegisterPassable.
     Conservative: fixed-size arrays (InlineArray in Mojo) are excluded.
     """
+    if isinstance(t, TypeRef):
+        return _type_ok_for_register_passable_field(t.canonical, struct_by_name)
     if isinstance(t, (Primitive, Opaque, FunctionPtr)):
         return True
     if isinstance(t, StructRef):
@@ -217,6 +261,9 @@ def _struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
     edges: list[tuple[str, str]] = []
 
     def walk(ty: Type) -> None:
+        if isinstance(ty, TypeRef):
+            walk(ty.canonical)
+            return
         if isinstance(ty, StructRef):
             if ty.is_union:
                 return
@@ -310,6 +357,16 @@ def _plan_unit_emission(unit: Unit) -> UnitEmissionPlan:
         sorted_structs=tuple(sorted_structs),
         emitted_struct_enum_names=frozenset(emitted_names),
         tail_decls=tuple(tail_decls),
+    )
+
+
+def _emitted_typedef_mojo_names(unit: Unit, plan: UnitEmissionPlan) -> frozenset[str]:
+    """Mojo names for typedefs that receive a ``comptime`` alias (not skipped by struct/enum duplicate)."""
+    emitted = plan.emitted_struct_enum_names
+    return frozenset(
+        mojo_ident(d.name)
+        for d in unit.decls
+        if isinstance(d, Typedef) and mojo_ident(d.name) not in emitted
     )
 
 
@@ -451,16 +508,23 @@ def _emit_function_owned_dl(
 
 
 def _emit_function(
-    fn: Function, options: MojoEmitOptions, struct_by_name: dict[str, Struct]
+    fn: Function,
+    options: MojoEmitOptions,
+    struct_by_name: dict[str, Struct],
+    typedef_mojo_names: frozenset[str],
 ) -> str:
     ctx_ret = _new_ctx()
-    ret_t = lower_type(fn.ret, ctx_ret)
+    ret_t = _lower_type_signature(
+        fn.ret, ctx_ret, typedef_mojo_names=typedef_mojo_names
+    )
     params = fn.params
     pnames = _param_names(params)
     arg_decls = []
     for pname, p in zip(pnames, params):
         ctxp = _new_ctx()
-        tstr = lower_type(p.type, ctxp)
+        tstr = _lower_type_signature(
+            p.type, ctxp, typedef_mojo_names=typedef_mojo_names
+        )
         arg_decls.append(f"{pname}: {tstr}")
 
     args_sig = ", ".join(arg_decls)
@@ -468,11 +532,14 @@ def _emit_function(
         return _emit_function_variadic(fn, ret_t, args_sig)
 
     call_args = ", ".join(pnames)
-    is_void = ret_t == "NoneType"
-    ret_list = "NoneType" if is_void else ret_t
+    ctx_ret_abi = _new_ctx()
+    ret_abi = lower_type(fn.ret, ctx_ret_abi)
+    is_void = ret_abi == "NoneType"
+    ret_list = "NoneType" if is_void else ret_abi
 
-    if isinstance(fn.ret, StructRef):
-        rs = struct_by_name.get(mojo_ident(fn.ret.name.strip()))
+    ret_u = _peel_typeref(fn.ret)
+    if isinstance(ret_u, StructRef):
+        rs = struct_by_name.get(mojo_ident(ret_u.name.strip()))
         if rs is not None and not _struct_decl_register_passable(rs, struct_by_name):
             return _emit_function_non_register_return(fn, ret_t, args_sig)
 
@@ -514,10 +581,10 @@ def _emit_enum(decl: Enum) -> str:
 
 def _emit_typedef(decl: Typedef, emitted_struct_enum_names: Set[str]) -> str:
     """Emit ``alias name = …`` unless the typedef name duplicates a struct/enum alias."""
-    if decl.name in emitted_struct_enum_names:
+    if mojo_ident(decl.name) in emitted_struct_enum_names:
         return ""
     ctx = _new_ctx()
-    tstr = lower_type(decl.aliased, ctx)
+    tstr = lower_type(decl.canonical, ctx)
     return f"comptime {mojo_ident(decl.name)} = {tstr}\n\n"
 
 
@@ -534,6 +601,7 @@ class MojoModuleEmitter:
 
     def emit(self, unit: Unit, plan: UnitEmissionPlan) -> str:
         struct_by_name = _struct_by_mojo_name(unit)
+        typedef_mojo_names = _emitted_typedef_mojo_names(unit, plan)
         chunks: list[str] = []
         if self._opts.module_comment:
             chunks.append(self._module_header(unit))
@@ -544,7 +612,9 @@ class MojoModuleEmitter:
             chunks.append(_emit_struct(s, self._opts, struct_by_name))
         emitted = plan.emitted_struct_enum_names
         for d in plan.tail_decls:
-            chunks.append(self._emit_tail_decl(d, emitted, struct_by_name))
+            chunks.append(
+                self._emit_tail_decl(d, emitted, struct_by_name, typedef_mojo_names)
+            )
         return "".join(chunks)
 
     def _module_header(self, unit: Unit) -> str:
@@ -593,6 +663,7 @@ class MojoModuleEmitter:
         decl: Enum | Typedef | Const | Function,
         emitted: frozenset[str],
         struct_by_name: dict[str, Struct],
+        typedef_mojo_names: frozenset[str],
     ) -> str:
         if isinstance(decl, Enum):
             return _emit_enum(decl)
@@ -600,7 +671,7 @@ class MojoModuleEmitter:
             return _emit_typedef(decl, emitted)
         if isinstance(decl, Const):
             return _emit_const(decl)
-        return _emit_function(decl, self._opts, struct_by_name)
+        return _emit_function(decl, self._opts, struct_by_name, typedef_mojo_names)
 
 
 def emit_unit(unit: Unit, options: MojoEmitOptions | None = None) -> str:

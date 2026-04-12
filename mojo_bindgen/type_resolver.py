@@ -20,6 +20,7 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Type,
+    TypeRef,
 )
 
 
@@ -218,7 +219,12 @@ class TypeResolver:
             return self.resolve(clang_type.get_named_type())
 
         if tk == cx.TypeKind.TYPEDEF:
-            return self.resolve(clang_type.get_canonical())
+            decl = clang_type.get_declaration()
+            alias = decl.spelling or clang_type.spelling or ""
+            return TypeRef(
+                name=alias,
+                canonical=self.resolve(clang_type.get_canonical()),
+            )
 
         if tk == cx.TypeKind.VOID:
             return Primitive(

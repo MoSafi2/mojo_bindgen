@@ -200,6 +200,35 @@ class StructRef:
         )
 
 
+@dataclass
+class TypeRef:
+    """
+    A named reference to a C typedef where the typedef name appears in a type
+    position (parameter, field, pointer target, etc.).
+
+    ``canonical`` is the fully resolved :class:`Type` for ABI lowering; the
+    typedef ``name`` preserves the C API spelling for readable emission.
+    """
+
+    name: str
+    canonical: Type
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "TypeRef",
+            "name": self.name,
+            "canonical": self.canonical.to_json_dict(),
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "TypeRef")
+        return cls(
+            name=d["name"],
+            canonical=type_from_json(d["canonical"]),
+        )
+
+
 # ─────────────────────────────────────────────
 #  Decl — top-level declaration nodes
 # ─────────────────────────────────────────────
@@ -335,6 +364,7 @@ Type = Union[
     FunctionPtr,
     Opaque,
     StructRef,
+    TypeRef,
 ]
 
 @dataclass
@@ -390,22 +420,31 @@ class Enum:
 class Typedef:
     """
     typedef <type> <name>.
-    aliased is the fully resolved Type after TypeResolver unrolls chains.
+
+    ``aliased`` is the direct underlying type (one typedef step), often a
+    :class:`TypeRef` when the underlying names another typedef.
+
+    ``canonical`` is the fully unrolled type for ABI layout and for lowering
+    inside compound positions (struct fields, function pointer signatures).
     """
     name: str
     aliased: Type
+    canonical: Type
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Typedef",
             "name": self.name,
             "aliased": self.aliased.to_json_dict(),
+            "canonical": self.canonical.to_json_dict(),
         }
 
     @classmethod
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "Typedef")
-        return cls(name=d["name"], aliased=type_from_json(d["aliased"]))
+        aliased = type_from_json(d["aliased"])
+        canonical = type_from_json(d["canonical"]) if "canonical" in d else aliased
+        return cls(name=d["name"], aliased=aliased, canonical=canonical)
 
 
 @dataclass
@@ -484,6 +523,7 @@ _TYPE_FROM_JSON: dict[str, Callable[[dict[str, Any]], Type]] = {
     "FunctionPtr": FunctionPtr.from_json_dict,
     "Opaque": Opaque.from_json_dict,
     "StructRef": StructRef.from_json_dict,
+    "TypeRef": TypeRef.from_json_dict,
 }
 
 

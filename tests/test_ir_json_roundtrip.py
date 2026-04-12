@@ -44,7 +44,7 @@ def test_everything_fixture_json_stable() -> None:
 
 
 def test_minimal_types_from_json() -> None:
-    from mojo_bindgen.ir import Opaque, Primitive, StructRef
+    from mojo_bindgen.ir import Opaque, Primitive, StructRef, TypeRef
 
     assert isinstance(
         Primitive.from_json_dict(
@@ -72,6 +72,21 @@ def test_minimal_types_from_json() -> None:
         }
     )
     assert isinstance(r, StructRef)
+    tr = TypeRef.from_json_dict(
+        {
+            "kind": "TypeRef",
+            "name": "size_t",
+            "canonical": {
+                "kind": "Primitive",
+                "primitive_kind": "INT",
+                "name": "unsigned long",
+                "is_signed": False,
+                "size_bytes": 8,
+            },
+        }
+    )
+    assert isinstance(tr, TypeRef)
+    assert tr.name == "size_t"
 
 
 def test_unknown_type_kind_raises() -> None:
