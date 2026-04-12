@@ -1,4 +1,4 @@
-# src/parser.py
+# mojo_bindgen/parser.py
 """
 ClangParser — walks a clang TranslationUnit and produces a Unit.
 
@@ -29,7 +29,7 @@ from typing import Iterator
 
 import clang.cindex as cx
 
-from src.ir import (
+from mojo_bindgen.ir import (
     Const,
     Decl,
     Enum,
@@ -45,7 +45,7 @@ from src.ir import (
     Typedef,
     Unit,
 )
-from src.type_resolver import TypeResolver
+from mojo_bindgen.type_resolver import TypeResolver
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ def _match_int_literal(raw: str) -> tuple[int | None, str]:
     return value, suf
 
 
-# Directory containing this package (`src/`).  Parent is the repository root.
+# Directory containing this package (`mojo_bindgen/`).  Parent is the repository root.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -130,8 +130,8 @@ def _resolve_header_path(header: Path | str) -> Path:
 
     Relative paths are resolved against the **current working directory** first.
     If the environment variable ``MOJO_BINDGEN_DEV`` is set to ``"1"``, the
-    repository root (parent of ``src/``) is also tried so paths like
-    ``tests/fixtures/foo.h`` work when the cwd is ``src/``.  Installed packages
+    repository root (parent of ``mojo_bindgen/``) is also tried so paths like
+    ``tests/fixtures/foo.h`` work when the cwd is the repo root or ``mojo_bindgen/``.  Installed packages
     should not rely on this; use absolute paths or run with an appropriate cwd.
     """
     p = Path(header)
@@ -222,7 +222,7 @@ class ClangParser:
         Path to the ``.h`` file. Absolute paths must exist. Relative paths are
         resolved against the **current working directory** only unless
         ``MOJO_BINDGEN_DEV=1`` is set, in which case the repository root (parent
-        of ``src/``) is also tried—useful for local development; installed
+        of ``mojo_bindgen/``) is also tried—useful for local development; installed
         packages should pass absolute paths or set cwd appropriately.
     library:
         Logical library name written into Unit (e.g. ``"zlib"``).

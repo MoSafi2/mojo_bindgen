@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.parser import _default_system_compile_args, _resolve_header_path
+from mojo_bindgen.parser import _default_system_compile_args, _resolve_header_path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 

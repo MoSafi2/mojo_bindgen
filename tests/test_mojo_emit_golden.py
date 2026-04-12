@@ -39,8 +39,8 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_emit_everything_matches_golden() -> None:
-    from src.mojo_emit import MojoEmitOptions, emit_unit
-    from src.parser import ClangParser
+    from mojo_bindgen.mojo_emit import MojoEmitOptions, emit_unit
+    from mojo_bindgen.parser import ClangParser
 
     header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
     golden_path = _REPO_ROOT / "tests" / "fixtures" / "everything.mojo"

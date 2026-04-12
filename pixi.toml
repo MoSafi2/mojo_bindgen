@@ -15,5 +15,5 @@ ipykernel = ">=7.1.0,<8"
 jupyter = ">=1.1.1,<2"
 
 [pypi-dependencies]
-libclang = ">=18.1.1, <19"
+mojo-bindgen = { path = ".", editable = true }
 pytest = ">=8,<9"

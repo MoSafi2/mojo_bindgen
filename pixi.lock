@@ -170,6 +170,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/1d/fc/716c1e62e512ef1c160e7984a73a5fc7df45166f2ff3f254e71c58076f7c/libclang-18.1.1-py2.py3-none-manylinux2010_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl
+      - pypi: ./
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -1364,6 +1365,13 @@ packages:
   license: LicenseRef-Modular-Proprietary
   size: 93750384
   timestamp: 1775973277888
+- pypi: ./
+  name: mojo-bindgen
+  version: 0.1.0
+  sha256: 934e00191a6423433c1a549cd5f8089077f09ec35589af3668e49a7295d7decc
+  requires_dist:
+  - libclang>=18.1.1,<19
+  requires_python: '>=3.14'
 - conda: https://conda.modular.com/max-nightly/linux-64/mojo-compiler-0.26.3.0.dev2026041205-release.conda
   sha256: 5df5a85f50c5b9531fe4d1b260aae1af72ad8e7e705901ced69e7559829e5492
   md5: 833090ada7631b714768249d107ba7d8

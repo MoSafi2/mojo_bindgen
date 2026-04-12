@@ -25,8 +25,8 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_everything_fixture_json_stable() -> None:
-    from src.ir import Unit
-    from src.parser import ClangParser
+    from mojo_bindgen.ir import Unit
+    from mojo_bindgen.parser import ClangParser
 
     header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
     parser = ClangParser(
@@ -44,7 +44,7 @@ def test_everything_fixture_json_stable() -> None:
 
 
 def test_minimal_types_from_json() -> None:
-    from src.ir import Opaque, Primitive, StructRef
+    from mojo_bindgen.ir import Opaque, Primitive, StructRef
 
     assert isinstance(
         Primitive.from_json_dict(
@@ -75,7 +75,7 @@ def test_minimal_types_from_json() -> None:
 
 
 def test_unknown_type_kind_raises() -> None:
-    from src.ir import type_from_json
+    from mojo_bindgen.ir import type_from_json
 
     with pytest.raises(ValueError) as exc_info:
         type_from_json({"kind": "NoSuchType"})

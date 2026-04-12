@@ -1,6 +1,10 @@
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+# Python packaging
+dist/
+build/
+*.egg-info/
 *.pyc
 *.ipynb
 .agents/*

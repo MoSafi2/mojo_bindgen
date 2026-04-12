@@ -1,5 +1,5 @@
-# src/type_resolver.py
-"""Clang type → IR :class:`Type` resolution (used by :class:`~src.parser.ClangParser`)."""
+# mojo_bindgen/type_resolver.py
+"""Clang type → IR :class:`Type` resolution (used by :class:`~mojo_bindgen.parser.ClangParser`)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import clang.cindex as cx
 
-from src.ir import (
+from mojo_bindgen.ir import (
     Array,
     FunctionPtr,
     Opaque,
@@ -96,7 +96,7 @@ _PRIMITIVE_SPELLINGS: dict[str, BuiltinPrimitiveSpelling] = {
 
 class TypeResolver:
     """
-    Maps libclang :class:`clang.cindex.Type` values to IR :class:`~src.ir.Type` nodes.
+    Maps libclang :class:`clang.cindex.Type` values to IR :class:`~mojo_bindgen.ir.Type` nodes.
 
     Caches struct layouts under cursor USR; ``defined_structs`` is filled by the
     parser's first pass over the translation unit.

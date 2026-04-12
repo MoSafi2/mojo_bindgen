@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mojo-bindgen"
+version = "0.1.0"
+description = "Generate Mojo FFI bindings from C headers using libclang"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "libclang>=18.1.1,<19",
+]
+
+[project.scripts]
+mojo-bindgen = "mojo_bindgen.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mojo_bindgen"]

@@ -1,4 +1,4 @@
-# src/mojo_emit.py — emit thin Mojo FFI from bindgen Unit IR.
+# mojo_bindgen/mojo_emit.py — emit thin Mojo FFI from bindgen Unit IR.
 #
 # Typedefs whose name matches an already-emitted struct or enum are skipped
 # (see _emit_typedef / emitted_struct_enum_names) to avoid duplicate aliases.
@@ -9,7 +9,7 @@ from collections.abc import Set
 from dataclasses import dataclass
 from typing import Literal
 
-from src.ir import (
+from mojo_bindgen.ir import (
     Array,
     Const,
     Enum,
