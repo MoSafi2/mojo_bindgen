@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 // ── 1. INTEGER MACROS ────────────────────────────────────────────────────────
 // Simple literals → IRConst.  Expressions and strings are skipped.
@@ -162,5 +163,66 @@ void ev_set_userdata(struct ev_loop *loop, void *data, ...);
 // Function taking fixed array param (decays to pointer in C ABI)
 void ev_feed_event_batch(struct ev_loop *loop, int *events, int count);
 // int* — the array decays; emit as UnsafePointer[Int32]
+
+// ── 13. DOUBLE POINTERS ────────────────────────────────────────────────────────
+// Out-parameters or argv-style APIs: unroll ** → UnsafePointer[UnsafePointer[...]].
+
+void ev_get_version_string(char **out_version);
+int ev_process_argv(int argc, char ***argv); // Pointer to array of strings
+
+// ── 14. GLOBAL VARIABLES ────────────────────────────────────────────────────
+// Emit as exported symbols or skip; bindgen policy.
+// Not Handled Today
+extern int ev_global_error_code;
+extern const char *ev_backend_name;
+
+// ── 15. FLEXIBLE ARRAY MEMBERS (C99) ─────────────────────────────────────────
+// Struct size excludes FAM; layout tests offset/size vs. Clang.
+
+typedef struct ev_packet {
+    int length;
+    int type;
+    uint8_t payload[]; // C99 FAM — size=8, offset=8 (padding handled)
+} ev_packet;
+
+// ── 16. PACKED STRUCTS & ALIGNMENT ────────────────────────────────────────────
+// Offsets must match compiler layout (#pragma pack, __attribute__((aligned))).
+
+#pragma pack(push, 1)
+typedef struct ev_packed_header {
+    uint8_t  flag;     // offset=0
+    uint32_t length;   // offset=1 (not 4!)
+} ev_packed_header;
+#pragma pack(pop)
+
+struct ev_aligned_data {
+    char a;
+    int b __attribute__((aligned(16))); // offset=16
+};
+
+// ── 17. BOOLEANS (<stdbool.h>) ────────────────────────────────────────────────
+// _Bool/bool → native boolean in target, not raw Int8/Int32.
+
+bool ev_is_active(struct ev_loop *loop);
+
+// ── 18. MULTI-DIMENSIONAL ARRAYS ───────────────────────────────────────────────
+// Naive recursive parsers often mishandle [N][M] fields.
+
+typedef struct ev_matrix {
+    float transform[4][4]; // → InlineArray[InlineArray[Float32, 4], 4]
+} ev_matrix;
+
+// ── 19. INLINE FUNCTIONS ──────────────────────────────────────────────────────
+// No exported symbol in the DSO unless emitted separately; bindgen may skip.
+// TODO FIX: Currently handled  as a function with linkname 
+static inline int ev_fast_check(int x) {
+    return x > 0 ? 1 : 0;
+}
+
+// ── 20. VOLATILE AND RESTRICT QUALIFIERS ───────────────────────────────────────
+// Strip or preserve qualifiers without breaking type parsing.
+
+void ev_atomic_add(volatile int *counter, int amount);
+void ev_memory_copy(void *restrict dest, const void *restrict src, size_t n);
 
 #endif

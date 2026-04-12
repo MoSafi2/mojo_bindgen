@@ -40,6 +40,7 @@ from .ir import (
     Param,
     Pointer,
     Primitive,
+    PrimitiveKind,
     Struct,
     Type,
     Typedef,
@@ -83,16 +84,17 @@ _SEVERITY = {
 #  Type.get_size() in _make_primitive_from_kind (LP64 vs LLP64 `long`, etc.).
 # ─────────────────────────────────────────────────────────────────────────────
 
-_PS_VOID = BuiltinPrimitiveSpelling(is_void=True)
-_PS_BOOL = BuiltinPrimitiveSpelling(is_bool=True)
-_PS_SINT = BuiltinPrimitiveSpelling(is_signed=True)
-_PS_UINT = BuiltinPrimitiveSpelling(is_signed=False)
-_PS_FLOAT = BuiltinPrimitiveSpelling(is_signed=True, is_float=True)
+_PS_VOID = BuiltinPrimitiveSpelling(kind=PrimitiveKind.VOID)
+_PS_BOOL = BuiltinPrimitiveSpelling(kind=PrimitiveKind.BOOL)
+_PS_CHAR = BuiltinPrimitiveSpelling(kind=PrimitiveKind.CHAR)
+_PS_SINT = BuiltinPrimitiveSpelling(kind=PrimitiveKind.INT, is_signed=True)
+_PS_UINT = BuiltinPrimitiveSpelling(kind=PrimitiveKind.INT, is_signed=False)
+_PS_FLOAT = BuiltinPrimitiveSpelling(kind=PrimitiveKind.FLOAT)
 
 _PRIMITIVE_SPELLINGS: dict[str, BuiltinPrimitiveSpelling] = {
     "void": _PS_VOID,
     "_Bool": _PS_BOOL,
-    "char": _PS_SINT,
+    "char": _PS_CHAR,
     "signed char": _PS_SINT,
     "unsigned char": _PS_UINT,
     "short": _PS_SINT,
@@ -441,7 +443,12 @@ class ClangParser:
         underlying = self._resolve_primitive(underlying_clang)
         if underlying is None:
             # Fallback: treat as unsigned int
-            underlying = Primitive("unsigned int", is_signed=False, size_bytes=4)
+            underlying = Primitive(
+                "unsigned int",
+                kind=PrimitiveKind.INT,
+                is_signed=False,
+                size_bytes=4,
+            )
 
         enumerants: list[Enumerant] = []
         for child in cursor.get_children():
@@ -499,7 +506,10 @@ class ClangParser:
         """
         if cursor.type.is_const_qualified():
             prim = self._resolve_primitive(cursor.type)
-            if prim is not None and not prim.is_float and not prim.is_void:
+            if prim is not None and prim.kind not in (
+                PrimitiveKind.FLOAT,
+                PrimitiveKind.VOID,
+            ):
                 # Try to extract the integer value via the token stream.
                 val = self._try_eval_integer_tokens(cursor)
                 if val is not None:
@@ -538,6 +548,7 @@ class ClangParser:
             size = 8 if "ll" in suffix.lower() else 4
             prim = Primitive(
                 name="unsigned int" if not is_signed else "int",
+                kind=PrimitiveKind.INT,
                 is_signed=is_signed,
                 size_bytes=size,
             )
@@ -632,11 +643,21 @@ class ClangParser:
 
         # ── void ──────────────────────────────────────────────────────────
         if tk == cx.TypeKind.VOID:
-            return Primitive("void", is_signed=False, size_bytes=0, is_void=True)
+            return Primitive(
+                "void",
+                kind=PrimitiveKind.VOID,
+                is_signed=False,
+                size_bytes=0,
+            )
 
         # ── bool ──────────────────────────────────────────────────────────
         if tk == cx.TypeKind.BOOL:
-            return Primitive("_Bool", is_signed=False, size_bytes=1, is_bool=True)
+            return Primitive(
+                "_Bool",
+                kind=PrimitiveKind.BOOL,
+                is_signed=False,
+                size_bytes=1,
+            )
 
         # ── integer primitives ────────────────────────────────────────────
         if tk in (
@@ -710,7 +731,12 @@ class ClangParser:
             prim = self._resolve_primitive(underlying_clang)
             if prim:
                 return prim
-            return Primitive("unsigned int", is_signed=False, size_bytes=4)
+            return Primitive(
+                "unsigned int",
+                kind=PrimitiveKind.INT,
+                is_signed=False,
+                size_bytes=4,
+            )
 
         # ── function prototype (not through pointer) ───────────────────────
         if tk in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
@@ -778,25 +804,42 @@ class ClangParser:
 
         defaults = _PRIMITIVE_SPELLINGS.get(norm)
         if defaults:
-            is_signed = defaults.is_signed
-            is_float = defaults.is_float
-            is_bool = defaults.is_bool
-            is_void = defaults.is_void
+            kind = defaults.kind
+            if kind == PrimitiveKind.INT:
+                is_signed = defaults.is_signed
+            elif kind == PrimitiveKind.CHAR:
+                is_signed = canonical.kind == cx.TypeKind.CHAR_S
+            else:
+                is_signed = False
         else:
             # Unknown spelling — guess from TypeKind
-            is_signed = canonical.kind in (
-                cx.TypeKind.CHAR_S, cx.TypeKind.SCHAR, cx.TypeKind.SHORT,
-                cx.TypeKind.INT, cx.TypeKind.LONG, cx.TypeKind.LONGLONG,
-                cx.TypeKind.INT128, cx.TypeKind.WCHAR,
-            )
-            is_float = canonical.kind in (
+            tk = canonical.kind
+            if tk == cx.TypeKind.BOOL:
+                kind = PrimitiveKind.BOOL
+                is_signed = False
+            elif tk in (
                 cx.TypeKind.FLOAT,
                 cx.TypeKind.DOUBLE,
                 cx.TypeKind.LONGDOUBLE,
                 cx.TypeKind.HALF,
-            )
-            is_bool = canonical.kind == cx.TypeKind.BOOL
-            is_void = False
+            ):
+                kind = PrimitiveKind.FLOAT
+                is_signed = False
+            elif tk in (cx.TypeKind.CHAR_S, cx.TypeKind.CHAR_U) and norm == "char":
+                kind = PrimitiveKind.CHAR
+                is_signed = tk == cx.TypeKind.CHAR_S
+            else:
+                kind = PrimitiveKind.INT
+                is_signed = tk in (
+                    cx.TypeKind.CHAR_S,
+                    cx.TypeKind.SCHAR,
+                    cx.TypeKind.SHORT,
+                    cx.TypeKind.INT,
+                    cx.TypeKind.LONG,
+                    cx.TypeKind.LONGLONG,
+                    cx.TypeKind.INT128,
+                    cx.TypeKind.WCHAR,
+                )
 
         # Always ask clang for the actual size — overrides our table default.
         size_raw = canonical.get_size()
@@ -804,11 +847,9 @@ class ClangParser:
 
         return Primitive(
             name=norm or spelling,
+            kind=kind,
             is_signed=is_signed,
             size_bytes=size_bytes,
-            is_float=is_float,
-            is_bool=is_bool,
-            is_void=is_void,
         )
 
     def _resolve_primitive(self, clang_type: cx.Type) -> Primitive | None:

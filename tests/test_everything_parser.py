@@ -45,8 +45,9 @@ class TestEverythingParser(unittest.TestCase):
             compile_args=_system_compile_args(),
         )
         unit = parser.run()
-        print(unit)
+        print(unit.to_json())
 
 
 if __name__ == "__main__":
     unittest.main()
+

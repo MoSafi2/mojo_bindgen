@@ -1,7 +1,20 @@
 # bindgen/ir/types.py
 from __future__ import annotations
+import json
 from dataclasses import dataclass, field
-from typing import Union
+from enum import StrEnum
+from typing import Any, Union
+
+
+class PrimitiveKind(StrEnum):
+    """Discriminant for C scalars; JSON-serializes to the enum value string."""
+
+    INT = "INT"
+    CHAR = "CHAR"
+    FLOAT = "FLOAT"
+    BOOL = "BOOL"
+    VOID = "VOID"
+
 
 # ─────────────────────────────────────────────
 #  Type — recursive type tree
@@ -15,27 +28,28 @@ class Primitive:
     Typical values are 0 (void), 1–8 for integers/bool, often 16 for
     long double / __int128; half-precision (_Float16) uses the size the
     target ABI reports.
-    is_signed distinguishes int (True) from unsigned int (False).
+
+    kind classifies the scalar for lowering (e.g. Mojo ``char`` vs ``Int8``).
+
+    is_signed: for kind INT, signed vs unsigned integer. For kind CHAR, reflects
+    implementation-defined signedness of plain ``char`` (CHAR_S vs CHAR_U from
+    clang). Unused (False) for FLOAT, BOOL, VOID.
     """
-    name: str           # canonical C spelling: "unsigned int", "long long", ...
+    name: str               # canonical C spelling: "unsigned int", "long long", ...
+    kind: PrimitiveKind
     is_signed: bool
-    size_bytes: int     # from clang; often 0,1,2,4,8, or 16
-    is_float: bool = False
-    is_bool: bool = False
-    is_void: bool = False   # the bare `void` type (not void*)
+    size_bytes: int         # from clang; often 0,1,2,4,8, or 16
 
 
 @dataclass(frozen=True)
 class BuiltinPrimitiveSpelling:
     """
-    Flags for a canonical C/clang type spelling used when building Primitive.
+    Kind (and for INT, signedness) for a canonical C/clang type spelling.
     Byte width is never stored here — it always comes from clang Type.get_size().
     """
 
-    is_signed: bool = False
-    is_float: bool = False
-    is_bool: bool = False
-    is_void: bool = False
+    kind: PrimitiveKind
+    is_signed: bool = False  # only used when kind is INT; ignored for CHAR (from clang)
 
 
 @dataclass
@@ -156,7 +170,7 @@ class Enum:
     C enum.  Emitted as:
         alias EnumName = UnderlyingMojoType
         alias MEMBER   = EnumName(value)
-    underlying is always a Primitive integer type.
+    underlying is always Primitive with kind INT (C enum base type is integer).
     """
     name: str
     c_name: str
@@ -193,9 +207,142 @@ Decl = Union[
     Const,
 ]
 
+def _primitive_to_json(p: Primitive) -> dict[str, Any]:
+    return {
+        "kind": "Primitive",
+        "primitive_kind": p.kind.value,
+        "name": p.name,
+        "is_signed": p.is_signed,
+        "size_bytes": p.size_bytes,
+    }
+
+
+def type_to_json(t: Type) -> dict[str, Any]:
+    """Serialize a Type node to a JSON-compatible dict (includes a ``kind`` tag)."""
+    if isinstance(t, Primitive):
+        return _primitive_to_json(t)
+    if isinstance(t, Pointer):
+        return {
+            "kind": "Pointer",
+            "pointee": None if t.pointee is None else type_to_json(t.pointee),
+            "is_const": t.is_const,
+        }
+    if isinstance(t, Array):
+        return {
+            "kind": "Array",
+            "element": type_to_json(t.element),
+            "size": t.size,
+        }
+    if isinstance(t, FunctionPtr):
+        return {
+            "kind": "FunctionPtr",
+            "ret": type_to_json(t.ret),
+            "params": [type_to_json(p) for p in t.params],
+            "is_variadic": t.is_variadic,
+        }
+    if isinstance(t, Opaque):
+        return {"kind": "Opaque", "name": t.name}
+    if isinstance(t, Bitfield):
+        return {
+            "kind": "Bitfield",
+            "backing_type": _primitive_to_json(t.backing_type),
+            "bit_offset": t.bit_offset,
+            "bit_width": t.bit_width,
+        }
+    if isinstance(t, Struct):
+        return {
+            "kind": "Struct",
+            "name": t.name,
+            "c_name": t.c_name,
+            "fields": [field_to_json(f) for f in t.fields],
+            "size_bytes": t.size_bytes,
+            "align_bytes": t.align_bytes,
+            "is_union": t.is_union,
+        }
+    raise TypeError(f"unsupported Type variant: {type(t)!r}")
+
+
+def field_to_json(f: Field) -> dict[str, Any]:
+    return {
+        "name": f.name,
+        "type": type_to_json(f.type),
+        "byte_offset": f.byte_offset,
+    }
+
+
+def param_to_json(p: Param) -> dict[str, Any]:
+    return {"name": p.name, "type": type_to_json(p.type)}
+
+
+def enumerant_to_json(e: Enumerant) -> dict[str, Any]:
+    return {"name": e.name, "c_name": e.c_name, "value": e.value}
+
+
+def decl_to_json(d: Decl) -> dict[str, Any]:
+    if isinstance(d, Function):
+        return {
+            "kind": "Function",
+            "name": d.name,
+            "link_name": d.link_name,
+            "ret": type_to_json(d.ret),
+            "params": [param_to_json(p) for p in d.params],
+            "is_variadic": d.is_variadic,
+        }
+    if isinstance(d, Struct):
+        return {
+            "kind": "Struct",
+            "name": d.name,
+            "c_name": d.c_name,
+            "fields": [field_to_json(f) for f in d.fields],
+            "size_bytes": d.size_bytes,
+            "align_bytes": d.align_bytes,
+            "is_union": d.is_union,
+        }
+    if isinstance(d, Enum):
+        return {
+            "kind": "Enum",
+            "name": d.name,
+            "c_name": d.c_name,
+            "underlying": _primitive_to_json(d.underlying),
+            "enumerants": [enumerant_to_json(x) for x in d.enumerants],
+        }
+    if isinstance(d, Typedef):
+        return {
+            "kind": "Typedef",
+            "name": d.name,
+            "aliased": type_to_json(d.aliased),
+        }
+    if isinstance(d, Const):
+        return {
+            "kind": "Const",
+            "name": d.name,
+            "type": _primitive_to_json(d.type),
+            "value": d.value,
+        }
+    raise TypeError(f"unsupported Decl variant: {type(d)!r}")
+
+
+def unit_to_json_dict(unit: Unit) -> dict[str, Any]:
+    """Serialize a Unit to a JSON-compatible dict (tree structure, ``kind`` on unions)."""
+    return {
+        "kind": "Unit",
+        "source_header": unit.source_header,
+        "library": unit.library,
+        "link_name": unit.link_name,
+        "decls": [decl_to_json(d) for d in unit.decls],
+    }
+
+
 @dataclass
 class Unit:
     source_header: str
     library: str            # e.g. "zlib"
     link_name: str          # e.g. "z"  (used in DLHandle)
     decls: list[Decl] = field(default_factory=list)
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return unit_to_json_dict(self)
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        """Serialize this unit to a JSON string (default: indented for readability)."""
+        return json.dumps(self.to_json_dict(), indent=indent)
