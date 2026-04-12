@@ -6,6 +6,7 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
+test = "pytest"
 
 [dependencies]
 mojo = ">=0.26.3.0.dev2026041205,<0.27"
@@ -15,3 +16,4 @@ jupyter = ">=1.1.1,<2"
 
 [pypi-dependencies]
 libclang = ">=18.1.1, <19"
+pytest = ">=8,<9"

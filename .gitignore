@@ -6,3 +6,4 @@
 .agents/*
 *.json
 *.mojo
+plans/*

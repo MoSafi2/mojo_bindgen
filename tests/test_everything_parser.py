@@ -1,37 +1,43 @@
 """
-Parse tests/fixtures/everything.h and print the resulting Unit (stdlib unittest, no pytest).
+Parse tests/fixtures/everything.h and print the resulting Unit.
 
 Run from repo root:
-  python -m unittest tests.test_everything_parser -v
+  pixi run pytest tests/test_everything_parser.py -v -s
 """
 
 from __future__ import annotations
 
-import sys
-import unittest
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+import pytest
 
 from src.parser import ClangParser
 
-
-class TestEverythingParser(unittest.TestCase):
-    def test_parse_fixture_prints_unit(self) -> None:
-        header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
-        self.assertTrue(header.is_file(), f"missing fixture: {header}")
-
-        parser = ClangParser(
-            header,
-            library="everything",
-            link_name="everything",
-        )
-        unit = parser.run()
-        print(unit.to_json())
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-if __name__ == "__main__":
-    unittest.main()
+def _has_libclang() -> bool:
+    try:
+        import clang.cindex  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
+
+pytestmark = pytest.mark.skipif(
+    not _has_libclang(),
+    reason="libclang not available (use pixi run)",
+)
+
+
+def test_parse_fixture_prints_unit() -> None:
+    header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
+    assert header.is_file(), f"missing fixture: {header}"
+
+    parser = ClangParser(
+        header,
+        library="everything",
+        link_name="everything",
+    )
+    unit = parser.run()
+    print(unit.to_json())
