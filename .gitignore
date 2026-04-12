@@ -11,3 +11,5 @@ build/
 *.json
 *.mojo
 plans/*
+examples/zlib/zlib_dl_smoke
+examples/zlib/*.o

@@ -50,7 +50,7 @@ LinkingMode = Literal["external_call", "owned_dl_handle"]
 # Mojo keywords and reserved — append underscore if collision.
 _MOJO_RESERVED = frozenset(
     """
-    def struct fn var let inout mut ref copy owned deinit self Self import from as
+    def struct fn var let inout out mut ref copy owned deinit self Self import from as
     pass return raise raises try except finally with if elif else for while break continue
     and or not is in del alias comptime True False None
     """.split()
