@@ -54,6 +54,6 @@ ZLIB_H="$(find_zlib_h)" || {
   exit 1
 }
 
-"${BG[@]}" "$ZLIB_H" --library z --link-name z -o zlib_bindings.mojo
+"${BG[@]}" "$ZLIB_H" --library z --link-name z -o zlib_bindings.mojo && mojo build zlib_bindings.mojo
 
 echo "Wrote $HERE/zlib_bindings.mojo (from $ZLIB_H)"

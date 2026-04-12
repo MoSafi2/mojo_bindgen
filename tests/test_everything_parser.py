@@ -41,3 +41,7 @@ def test_parse_fixture_prints_unit() -> None:
     )
     unit = parser.run()
     print(unit.to_json())
+
+
+if __name__ == "__main__":
+    test_parse_fixture_prints_unit()

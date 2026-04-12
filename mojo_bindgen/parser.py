@@ -84,20 +84,6 @@ _INT_LITERAL_RE = re.compile(
 )
 
 
-def _c_integer_spelling_for_literal_suffix(suffix: str) -> str:
-    """Map a C integer literal suffix (e.g. ``ul``, ``ULL``) to a type spelling."""
-    if not suffix:
-        return "int"
-    s = suffix.lower()
-    has_u = "u" in s
-    l_count = s.count("l")
-    if l_count >= 2:
-        return "unsigned long long" if has_u else "long long"
-    if l_count == 1:
-        return "unsigned long" if has_u else "long"
-    return "unsigned int" if has_u else "int"
-
-
 def _match_int_literal(raw: str) -> tuple[int | None, str]:
     """
     Parse a single integer literal token (same rules as #define macro literals).
@@ -216,6 +202,9 @@ class ClangParser:
     """
     Parse one C header and produce a Unit.
 
+    Construction only resolves paths and stores options; libclang parsing and
+    :exc:`ParseError` happen in :meth:`run`.
+
     Parameters
     ----------
     header:
@@ -265,8 +254,7 @@ class ClangParser:
         # Unit accumulator
         self._decls: list[Decl] = []
 
-        # parse
-        self._tu = self._parse()
+        self._tu: cx.TranslationUnit | None = None
 
         self._resolver = TypeResolver(
             compile_args=self.compile_args,
@@ -301,14 +289,26 @@ class ClangParser:
 
     def run(self) -> Unit:
         """
-        Walk the translation unit and return the populated Unit.
-        Call once per ClangParser instance.
+        Parse the header (if not already done), walk the translation unit, and
+        return the populated Unit. Call once per ClangParser instance.
+
+        Pass 1 — struct/union registry: record defined tag names for opaque vs
+        complete resolution.
+
+        Pass 2 — AST to IR: top-level cursors from the primary file in order.
+
+        Pass 3 — macros: simple integer ``#define`` constants appended after AST decls.
         """
-        # First pass: collect all struct/union definitions so we know which
-        # names are opaque vs fully defined before we process any fields.
+        if self._tu is None:
+            self._tu = self._parse()
+
+        assert self._tu is not None
+
+        # Pass 1: collect all struct/union definitions so we know which names are
+        # opaque vs fully defined before we process any fields.
         self._collect_defined_structs(self._tu.cursor)
 
-        # Second pass: emit IR declarations in source order.
+        # Pass 2: emit IR declarations in source order.
         for cursor in self._primary_cursors():
             decl = self._visit_top_level(cursor)
             if decl is None:
@@ -318,8 +318,8 @@ class ClangParser:
             else:
                 self._decls.append(decl)
 
-        # Third pass: extract integer #define macros.
-        self._collect_macros()
+        # Pass 3: extract integer #define macros (after AST decls).
+        self._decls.extend(self._collect_macros())
 
         return Unit(
             source_header=str(self.header),
@@ -365,6 +365,7 @@ class ClangParser:
 
     def _primary_cursors(self) -> Iterator[cx.Cursor]:
         """Yield top-level cursors from the primary file only."""
+        assert self._tu is not None
         for cursor in self._tu.cursor.get_children():
             loc = cursor.location
             if loc.file and Path(loc.file.name).resolve() == self.header:
@@ -414,9 +415,12 @@ class ClangParser:
             return None
 
         if k == cx.CursorKind.ENUM_DECL:
-            if cursor.is_definition():
-                return self._build_enum(cursor)
-            return None
+            if not cursor.is_definition():
+                return None
+            # Anonymous enums lower to top-level Const nodes (policy lives here).
+            if not cursor.spelling:
+                return self._anonymous_enum_as_consts(cursor)
+            return self._build_enum(cursor)
 
         if k == cx.CursorKind.TYPEDEF_DECL:
             return self._build_typedef(cursor)
@@ -579,20 +583,48 @@ class ClangParser:
 
     # ── enum ──────────────────────────────────────────────────────────────────
 
-    def _build_enum(self, cursor: cx.Cursor) -> Enum | list[Const] | None:
+    def _anonymous_enum_as_consts(self, cursor: cx.Cursor) -> list[Const]:
         """
-        ENUM_DECL cursor (definition) → Enum.
-
-        The underlying integer type comes from clang's enum_type property
-        on the cursor (new enough libclang) or falls back to the canonical
-        type of the first enumerant.
+        Anonymous ENUM_DECL (definition): emit each enumerant as a top-level Const.
         """
-        c_name = cursor.spelling
-        # Underlying integer type: use cursor.enum_type if available
         underlying_clang = cursor.enum_type
         underlying = self._resolver.resolve_primitive(underlying_clang)
         if underlying is None:
-            # Fallback: treat as unsigned int
+            underlying = Primitive(
+                "unsigned int",
+                kind=PrimitiveKind.INT,
+                is_signed=False,
+                size_bytes=4,
+            )
+        out: list[Const] = []
+        for child in cursor.get_children():
+            if child.kind != cx.CursorKind.ENUM_CONSTANT_DECL:
+                continue
+            out.append(
+                Const(
+                    name=child.spelling,
+                    type=underlying,
+                    value=child.enum_value,
+                )
+            )
+        return out
+
+    def _build_enum(self, cursor: cx.Cursor) -> Enum | None:
+        """
+        Named ENUM_DECL cursor (definition) → Enum.
+
+        Call only when ``cursor.spelling`` is non-empty; anonymous enums use
+        :meth:`_anonymous_enum_as_consts`.
+
+        The underlying integer type comes from clang's ``enum_type`` on the
+        cursor (new enough libclang) or falls back to a fixed unsigned int.
+        """
+        c_name = cursor.spelling
+        if not c_name:
+            return None
+        underlying_clang = cursor.enum_type
+        underlying = self._resolver.resolve_primitive(underlying_clang)
+        if underlying is None:
             underlying = Primitive(
                 "unsigned int",
                 kind=PrimitiveKind.INT,
@@ -609,13 +641,6 @@ class ClangParser:
                 c_name=child.spelling,
                 value=child.enum_value,
             ))
-
-        # Anonymous enum (c_name == "") — enumerants become top-level Const nodes.
-        if not c_name:
-            return [
-                Const(name=e.name, type=underlying, value=e.value)
-                for e in enumerants
-            ]
 
         return Enum(
             name=c_name,
@@ -663,16 +688,17 @@ class ClangParser:
 
     # ── macro extraction ──────────────────────────────────────────────────────
 
-    def _collect_macros(self) -> None:
+    def _collect_macros(self) -> list[Const]:
         """
-        Walk all MACRO_DEFINITION cursors in the TU and emit Const for
+        Walk all MACRO_DEFINITION cursors in the TU and build Const nodes for
         simple integer / hex literal #defines.  Multi-token, string, float,
         and function-like macros are silently skipped.
 
-        This runs after the main AST walk so that macro Consts are appended
-        after struct/enum/function declarations in the output — matching the
-        logical header structure.
+        Call after the main AST walk so callers can append macro Consts after
+        struct/enum/function declarations — matching the logical header structure.
         """
+        assert self._tu is not None
+        out: list[Const] = []
         for cursor in self._tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
@@ -687,12 +713,15 @@ class ClangParser:
             if val is None:
                 continue
 
-            prim = self._primitive_for_integer_literal_suffix(suffix)
-            self._decls.append(Const(
-                name=cursor.spelling,
-                type=prim,
-                value=val,
-            ))
+            prim = self._resolver.primitive_for_integer_literal_suffix(suffix)
+            out.append(
+                Const(
+                    name=cursor.spelling,
+                    type=prim,
+                    value=val,
+                )
+            )
+        return out
 
     def _try_parse_macro_literal(
         self, cursor: cx.Cursor
@@ -748,27 +777,3 @@ class ClangParser:
                 return None
             return -val
         return None
-
-    def _primitive_for_integer_literal_suffix(self, suffix: str) -> Primitive:
-        """
-        Build a Primitive matching the C type of an integer literal suffix
-        (``u``, ``ul``, ``ull``, …) using the same ABI as this parse (LP64, …).
-        """
-        spell = _c_integer_spelling_for_literal_suffix(suffix)
-        idx = cx.Index.create()
-        src = f"{spell} __bindgen_m;\n"
-        tu = idx.parse(
-            "__bindgen_suffix_probe.c",
-            args=["-x", "c", "-std=c11"] + self.compile_args,
-            unsaved_files=[("__bindgen_suffix_probe.c", src)],
-            options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
-        )
-        for c in tu.cursor.get_children():
-            if c.kind == cx.CursorKind.VAR_DECL and c.spelling == "__bindgen_m":
-                return self._resolver.make_primitive_from_kind(c.type)
-        return Primitive(
-            name=spell,
-            kind=PrimitiveKind.INT,
-            is_signed="unsigned" not in spell.split(),
-            size_bytes=4,
-        )

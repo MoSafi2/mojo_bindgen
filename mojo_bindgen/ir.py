@@ -354,9 +354,11 @@ class Enumerant:
 @dataclass
 class Enum:
     """
-    C enum.  Emitted as:
-        alias EnumName = UnderlyingMojoType
-        alias MEMBER   = EnumName(value)
+    C enum.  Emitted as a thin struct:
+        @fieldwise_init
+        struct EnumName(Copyable, Movable, RegisterPassable):
+            var value: <underlying Mojo int>
+            comptime MEMBER = Self(<underlying>(value))
     underlying is always Primitive with kind INT (C enum base type is integer).
     """
     name: str

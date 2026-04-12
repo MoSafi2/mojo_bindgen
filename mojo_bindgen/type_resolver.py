@@ -94,12 +94,60 @@ _PRIMITIVE_SPELLINGS: dict[str, BuiltinPrimitiveSpelling] = {
 }
 
 
+def _c_integer_spelling_for_literal_suffix(suffix: str) -> str:
+    """Map a C integer literal suffix (e.g. ``ul``, ``ULL``) to a type spelling."""
+    if not suffix:
+        return "int"
+    s = suffix.lower()
+    has_u = "u" in s
+    l_count = s.count("l")
+    if l_count >= 2:
+        return "unsigned long long" if has_u else "long long"
+    if l_count == 1:
+        return "unsigned long" if has_u else "long"
+    return "unsigned int" if has_u else "int"
+
+
+# Suffixes pre-warmed so typical #define literals avoid lazy probe parses.
+_LITERAL_SUFFIX_PREWARM: frozenset[str] = frozenset(
+    {
+        "",
+        "u",
+        "U",
+        "l",
+        "L",
+        "ll",
+        "LL",
+        "ul",
+        "uL",
+        "Ul",
+        "UL",
+        "lu",
+        "lU",
+        "Lu",
+        "LU",
+        "llu",
+        "llU",
+        "LLu",
+        "LLU",
+        "ull",
+        "uLL",
+        "Ull",
+        "ULL",
+    }
+)
+
+
 class TypeResolver:
     """
     Maps libclang :class:`clang.cindex.Type` values to IR :class:`~mojo_bindgen.ir.Type` nodes.
 
     Caches struct layouts under cursor USR; ``defined_structs`` is filled by the
     parser's first pass over the translation unit.
+
+    The ``build_struct`` callback is supplied by :class:`~mojo_bindgen.parser.ClangParser`
+    and may call back into the parser to materialize nested anonymous structs — a
+    deliberate cycle for layout fidelity.
     """
 
     def __init__(
@@ -114,6 +162,41 @@ class TypeResolver:
         self._build_struct = build_struct
         self.type_cache: dict[str, Struct] = {}
         self.defined_structs: set[str] = set()
+        self._literal_suffix_cache: dict[str, Primitive] = {}
+        for suf in _LITERAL_SUFFIX_PREWARM:
+            self.primitive_for_integer_literal_suffix(suf)
+
+    def primitive_for_integer_literal_suffix(self, suffix: str) -> Primitive:
+        """
+        Map a C integer literal suffix (``u``, ``ul``, ``ull``, …) to an IR
+        :class:`~mojo_bindgen.ir.Primitive` using the same ABI as ``compile_args``
+        (LP64, LLP64, …). Results are memoized per suffix.
+        """
+        if suffix in self._literal_suffix_cache:
+            return self._literal_suffix_cache[suffix]
+        spell = _c_integer_spelling_for_literal_suffix(suffix)
+        idx = cx.Index.create()
+        src = f"{spell} __bindgen_m;\n"
+        tu = idx.parse(
+            "__bindgen_suffix_probe.c",
+            args=["-x", "c", "-std=c11"] + self.compile_args,
+            unsaved_files=[("__bindgen_suffix_probe.c", src)],
+            options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
+        )
+        prim: Primitive | None = None
+        for c in tu.cursor.get_children():
+            if c.kind == cx.CursorKind.VAR_DECL and c.spelling == "__bindgen_m":
+                prim = self.make_primitive_from_kind(c.type)
+                break
+        if prim is None:
+            prim = Primitive(
+                name=spell,
+                kind=PrimitiveKind.INT,
+                is_signed="unsigned" not in spell.split(),
+                size_bytes=4,
+            )
+        self._literal_suffix_cache[suffix] = prim
+        return prim
 
     def resolve(self, clang_type: cx.Type) -> Type:
         """

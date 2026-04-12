@@ -496,14 +496,18 @@ def _emit_function(
 
 
 def _emit_enum(decl: Enum) -> str:
+    """Emit C enum as a register-passable struct with `value` + comptime enumerants."""
     base = lower_primitive(decl.underlying)
+    name = mojo_ident(decl.name)
+    u_spelling = decl.underlying.name
     lines = [
-        f"comptime {mojo_ident(decl.name)} = {base}",
-        "",
+        f"# enum {decl.c_name} — underlying {u_spelling} → {base} (verify C ABI)",
+        "@fieldwise_init",
+        f"struct {name}(Copyable, Movable, RegisterPassable):",
+        f"    var value: {base}",
     ]
-    alias = mojo_ident(decl.name)
     for e in decl.enumerants:
-        lines.append(f"comptime {mojo_ident(e.name)} = {alias}({e.value})")
+        lines.append(f"    comptime {mojo_ident(e.name)} = Self({base}({e.value}))")
     lines.append("")
     return "\n".join(lines)
 
