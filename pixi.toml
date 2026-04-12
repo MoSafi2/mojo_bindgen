@@ -1,0 +1,15 @@
+[workspace]
+authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
+channels = ["https://conda.modular.com/max-nightly/", "conda-forge"]
+name = "mojo_bindgen"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+mojo = ">=0.26.3.0.dev2026041205,<0.27"
+python = ">=3.14.4,<3.15"
+
+[pypi-dependencies]
+libclang = ">=18.1.1, <19"
