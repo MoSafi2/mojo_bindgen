@@ -56,3 +56,23 @@ def test_emit_everything_matches_golden() -> None:
     out = emit_unit(unit, MojoEmitOptions())
     expected = golden_path.read_text(encoding="utf-8")
     assert _normalize_source_line(out) == _normalize_source_line(expected)
+
+
+def test_emit_everything_without_align_matches_golden() -> None:
+    from mojo_bindgen.mojo_emit import MojoEmitOptions, emit_unit
+    from mojo_bindgen.parser import ClangParser
+
+    header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
+    golden_path = _REPO_ROOT / "tests" / "fixtures" / "everything_no_align.mojo"
+    assert header.is_file(), f"missing fixture: {header}"
+    assert golden_path.is_file(), f"missing golden: {golden_path}"
+
+    parser = ClangParser(
+        header,
+        library="everything",
+        link_name="everything",
+    )
+    unit = parser.run()
+    out = emit_unit(unit, MojoEmitOptions(emit_align=False))
+    expected = golden_path.read_text(encoding="utf-8")
+    assert _normalize_source_line(out) == _normalize_source_line(expected)

@@ -63,6 +63,13 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Path hint for OwnedDLHandle when --linking owned_dl_handle",
     )
+    p.add_argument(
+        "--emit-align",
+        dest="emit_align",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Emit @align(N) on structs from C alignment (Mojo-valid values only); default on (use --no-emit-align to disable)",
+    )
     return p
 
 
@@ -93,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         opts = MojoEmitOptions(
             linking=args.linking,
             library_path_hint=args.library_path_hint,
+            emit_align=args.emit_align,
         )
         text = emit_unit(unit, opts)
 

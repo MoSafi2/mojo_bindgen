@@ -267,7 +267,7 @@ class TypeResolver:
             is_const = pointee_clang.is_const_qualified()
 
             if pointee_clang.kind == cx.TypeKind.VOID:
-                return Pointer(pointee=None, is_const=False)
+                return Pointer(pointee=None, is_const=is_const)
 
             canonical_pointee = pointee_clang.get_canonical()
             if canonical_pointee.kind in (
