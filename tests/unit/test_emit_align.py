@@ -32,8 +32,8 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
     """Covers the FFI array-stride warning (size_of stride vs align_of)."""
     from mojo_bindgen.parsing.parser import ClangParser
 
-    header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
-    parser = ClangParser(header, library="everything", link_name="everything")
+    header = _REPO_ROOT / "tests" / "stress" / "normal" / "stress_normal_input.h"
+    parser = ClangParser(header, library="stress_normal", link_name="stress_normal")
     unit = parser.run()
     orig = next(d for d in unit.decls if getattr(d, "c_name", None) == "ev_aligned_data")
     assert isinstance(orig, Struct)

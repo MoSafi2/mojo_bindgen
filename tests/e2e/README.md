@@ -48,7 +48,7 @@ The test runner reports:
 ## Existing Coverage
 
 - `test_runtime_ffi.py`: legacy fixture-based runtime checks.
-- `test_bindgen_surface.py`: parse/emit surface checks against `tests/fixtures/everything.h`.
+- parser/emit surface checks now live under `tests/unit/` and `tests/stress/`.
 - `test_golden_runtime.py`: comprehensive golden runtime suite with explicit failure attribution.
 
 ## Golden Case Matrix

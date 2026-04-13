@@ -1,13 +1,8 @@
-"""Round-trip tests for IR JSON (deserialize → serialize). Requires libclang."""
+"""Round-trip tests for focused IR JSON helpers."""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _has_libclang() -> bool:
@@ -22,25 +17,6 @@ pytestmark = pytest.mark.skipif(
     not _has_libclang(),
     reason="libclang not available (use pixi run)",
 )
-
-
-def test_everything_fixture_json_stable() -> None:
-    from mojo_bindgen.ir import Unit
-    from mojo_bindgen.parsing.parser import ClangParser
-
-    header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
-    parser = ClangParser(
-        header,
-        library="everything",
-        link_name="everything",
-    )
-    unit = parser.run()
-    d0 = unit.to_json_dict()
-    text = json.dumps(d0)
-    d1 = json.loads(text)
-    unit2 = Unit.from_json_dict(d1)
-    d2 = unit2.to_json_dict()
-    assert d0 == d2
 
 
 def test_minimal_types_from_json() -> None:

@@ -7,7 +7,8 @@ ABI behavior fail in different places.
 
 - `tests/unit/`
   Focused unit and integration tests for IR lowering, parser helpers, analysis,
-  renderer behavior, and broad regression fixtures such as `everything.h`.
+  renderer behavior, and broad regression fixtures such as
+  `tests/stress/normal/stress_normal_input.h`.
 - `tests/surface/`
   Parser-driven Mojo surface goldens for representative headers. These tests are
   about emitted source shape, not runtime execution.

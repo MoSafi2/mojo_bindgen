@@ -282,7 +282,12 @@ class TypeBuilder:
         )
 
     def _lower_complex(self, t: cx.Type) -> Type:
-        element = self.resolver.resolve_primitive(t.get_element_type())
+        element_type = getattr(t, "get_element_type", None)
+        if callable(element_type):
+            inner = element_type()
+        else:
+            inner = getattr(t, "element_type")
+        element = self.resolver.resolve_primitive(inner)
         if element is None:
             return UnsupportedType(
                 category="complex",
@@ -294,7 +299,12 @@ class TypeBuilder:
         return ComplexType(element=element, size_bytes=max(0, t.get_size()))
 
     def _lower_vector(self, t: cx.Type, *, is_ext_vector: bool) -> Type:
-        element = self.build(t.get_element_type(), TypeContext.FIELD)
+        element_type = getattr(t, "get_element_type", None)
+        if callable(element_type):
+            inner = element_type()
+        else:
+            inner = getattr(t, "element_type")
+        element = self.build(inner, TypeContext.FIELD)
         count_getter = getattr(t, "get_num_elements", None)
         count: int | None = None
         if callable(count_getter):
