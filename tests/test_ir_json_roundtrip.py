@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(
 
 def test_everything_fixture_json_stable() -> None:
     from mojo_bindgen.ir import Unit
-    from mojo_bindgen.parser import ClangParser
+    from mojo_bindgen.parsing.parser import ClangParser
 
     header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
     parser = ClangParser(

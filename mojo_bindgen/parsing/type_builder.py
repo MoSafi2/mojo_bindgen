@@ -18,7 +18,7 @@ from mojo_bindgen.ir import (
     Type,
     TypeRef,
 )
-from mojo_bindgen.type_resolver import TypeResolver
+from mojo_bindgen.parsing.type_resolver import TypeResolver
 
 
 class TypeContext(Enum):

@@ -34,14 +34,14 @@ Codegen pipeline
 from __future__ import annotations
 
 from mojo_bindgen.ir import Const, Enum, Unit
-from mojo_bindgen.lowering import (
+from mojo_bindgen.codegen.lowering import (
     FFIOriginStyle,
     TypeLowerer,
     lower_primitive,
     lower_type,
     mojo_ident,
 )
-from mojo_bindgen.mojo_analyze import (
+from mojo_bindgen.codegen.mojo_analyze import (
     AnalyzedField,
     AnalyzedFunction,
     AnalyzedStruct,
@@ -52,7 +52,7 @@ from mojo_bindgen.mojo_analyze import (
     analyze_unit,
     struct_by_mojo_name,
 )
-from mojo_bindgen.mojo_emit_options import LinkingMode, MojoEmitOptions
+from mojo_bindgen.codegen.mojo_emit_options import LinkingMode, MojoEmitOptions
 
 # Re-exports for callers and tests
 __all__ = [

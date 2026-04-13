@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from mojo_bindgen.ir import Field, Primitive, PrimitiveKind, Struct
-from mojo_bindgen.mojo_analyze import analyzed_struct_for_test, struct_by_mojo_name
-from mojo_bindgen.mojo_emit import MojoEmitOptions, emit_struct, mojo_ident
+from mojo_bindgen.codegen.mojo_analyze import analyzed_struct_for_test, struct_by_mojo_name
+from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_struct, mojo_ident
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 
 def test_stride_comment_when_size_not_multiple_of_align() -> None:
     """Covers the FFI array-stride warning (size_of stride vs align_of)."""
-    from mojo_bindgen.parser import ClangParser
+    from mojo_bindgen.parsing.parser import ClangParser
 
     header = _REPO_ROOT / "tests" / "fixtures" / "everything.h"
     parser = ClangParser(header, library="everything", link_name="everything")

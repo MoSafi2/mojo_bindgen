@@ -6,8 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from mojo_bindgen.mojo_emit import MojoEmitOptions, emit_unit
-from mojo_bindgen.parser import ClangParser, ParseError
+from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_unit
+from mojo_bindgen.parsing.parser import ClangParser, ParseError
 
 
 def _build_parser() -> argparse.ArgumentParser:

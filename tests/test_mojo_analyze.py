@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`mojo_bindgen.mojo_analyze` (no libclang)."""
+"""Unit tests for :mod:`mojo_bindgen.codegen.mojo_analyze` (no libclang)."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from mojo_bindgen.ir import (
 
 def _f32() -> Primitive:
     return Primitive(name="float", kind=PrimitiveKind.FLOAT, is_signed=True, size_bytes=4)
-from mojo_bindgen.mojo_analyze import analyze_unit
-from mojo_bindgen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_analyze import analyze_unit
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
 def _i32() -> Primitive:

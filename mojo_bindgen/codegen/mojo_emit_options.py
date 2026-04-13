@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.lowering import FFIOriginStyle
+from mojo_bindgen.codegen.lowering import FFIOriginStyle
 
 LinkingMode = Literal["external_call", "owned_dl_handle"]
 

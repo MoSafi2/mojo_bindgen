@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 import clang.cindex as cx
 
-from mojo_bindgen.field_builder import FieldBuilder
+from mojo_bindgen.parsing.field_builder import FieldBuilder
 from mojo_bindgen.ir import Field, Struct
-from mojo_bindgen.type_resolver import TypeResolver
+from mojo_bindgen.parsing.type_resolver import TypeResolver
 
 
 @dataclass

@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from mojo_bindgen.ir import EnumRef, Function, Pointer, Primitive, Struct, StructRef, TypeRef
-from mojo_bindgen.field_builder import FieldBuildResult
-from mojo_bindgen.parser import ClangParser
-from mojo_bindgen.struct_builder import StructBuildResult
+from mojo_bindgen.parsing.field_builder import FieldBuildResult
+from mojo_bindgen.parsing.parser import ClangParser
+from mojo_bindgen.parsing.struct_builder import StructBuildResult
 
 
 def _has_libclang() -> bool:

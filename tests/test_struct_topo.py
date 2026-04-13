@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from mojo_bindgen.ir import Pointer, Primitive, PrimitiveKind, Struct, StructRef, Field
-from mojo_bindgen._struct_order import toposort_structs
-from mojo_bindgen.lowering import mojo_ident
+from mojo_bindgen.codegen._struct_order import toposort_structs
+from mojo_bindgen.codegen.lowering import mojo_ident
 
 
 def _i32() -> Primitive:

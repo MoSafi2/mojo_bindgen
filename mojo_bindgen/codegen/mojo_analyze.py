@@ -30,8 +30,8 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
 )
-from mojo_bindgen.lowering import FFIOriginStyle, TypeLowerer, mojo_ident, peel_typeref
-from mojo_bindgen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.lowering import FFIOriginStyle, TypeLowerer, mojo_ident, peel_typeref
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
 

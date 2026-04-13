@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.mojo_emit import MojoEmitOptions, emit_unit
-from mojo_bindgen.parser import ClangParser
+from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_unit
+from mojo_bindgen.parsing.parser import ClangParser
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 

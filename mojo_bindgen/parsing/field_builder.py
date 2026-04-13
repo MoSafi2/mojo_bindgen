@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import clang.cindex as cx
 
 from mojo_bindgen.ir import Field, Primitive, Struct, StructRef, Type
-from mojo_bindgen.type_builder import TypeBuilder, TypeContext
-from mojo_bindgen.type_resolver import TypeResolver
+from mojo_bindgen.parsing.type_builder import TypeBuilder, TypeContext
+from mojo_bindgen.parsing.type_resolver import TypeResolver
 
 
 @dataclass

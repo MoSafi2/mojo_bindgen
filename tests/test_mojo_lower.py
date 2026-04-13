@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mojo_bindgen.ir import Pointer, Primitive, PrimitiveKind
-from mojo_bindgen.mojo_emit import lower_type
+from mojo_bindgen.codegen.mojo_emit import lower_type
 
 
 def test_lower_void_pointer_mutable_external() -> None:

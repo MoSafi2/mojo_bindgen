@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.type_resolver import _suffix_probe_parse_args
+from mojo_bindgen.parsing.type_resolver import _suffix_probe_parse_args
 
 
 def test_suffix_probe_args_uses_default_std_when_missing() -> None:

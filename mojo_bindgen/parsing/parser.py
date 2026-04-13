@@ -42,9 +42,9 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
 )
-from mojo_bindgen.struct_builder import StructBuilder
-from mojo_bindgen.type_builder import TypeBuilder, TypeContext
-from mojo_bindgen.type_resolver import TypeResolver
+from mojo_bindgen.parsing.struct_builder import StructBuilder
+from mojo_bindgen.parsing.type_builder import TypeBuilder, TypeContext
+from mojo_bindgen.parsing.type_resolver import TypeResolver
 
 
 # ─────────────────────────────────────────────────────────────────────────────
