@@ -68,8 +68,8 @@ fi
 OBJ="$(mktemp "${TMPDIR:-/tmp}/cairo-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT
 "${MJ[@]}" build --emit object cairo_bindings.mojo -o "$OBJ"
-"${MJ[@]}" build cairo_smoke.mojo -I "$HERE" -Xlinker -lcairo -o cairo_smoke
+"${MJ[@]}" build cairo_smoke_2.mojo -I "$HERE" -Xlinker -lcairo -o cairo_smoke_2
 
 echo "Wrote $HERE/cairo_bindings.mojo (from $CAIRO_H)"
 echo "Running cairo_smoke (runtime render + file round-trip proof)"
-"$HERE/cairo_smoke"
+"$HERE/cairo_smoke_2"

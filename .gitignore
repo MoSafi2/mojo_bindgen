@@ -11,3 +11,4 @@ build/
 plans/*
 skills-lock.json
 tests/test.json
+examples/cairo/cairo_smoke_2
