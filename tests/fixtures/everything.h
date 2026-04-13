@@ -239,7 +239,7 @@ struct ev_a {
 };
 
 // ── 22. ENUM EDGE CASES ───────────────────────────────────────────────────────
-
+// TODO: FIX: Wrong packing type 
 // Large enum value crossing signed int boundary.
 enum ev_big {
     EV_BIG = 0x7FFFFFFFFFFFFFFFLL
@@ -248,13 +248,14 @@ enum ev_big {
 
 // ── 23. BITFIELD EDGE CASES ───────────────────────────────────────────────────
 // Mix backing types, packing boundaries, and zero-width alignment reset.
-
+// TODO: FIX: Wrong Layout emitted
 struct ev_bf {
     unsigned char a : 3;
     signed int b : 5;
     _Bool c : 1;
 };
 
+// TODO: FIX: Wrong Layout emitted
 struct ev_bf2 {
     unsigned int a : 20;
     unsigned int b : 20;
@@ -267,7 +268,7 @@ struct ev_bf3 {
 };
 
 // ── 24. POINTER-TO-ARRAY VS ARRAY-OF-POINTERS ────────────────────────────────
-
+// TODO: FIX: Not emitted as  IR at all
 int (*ev_ptr_to_array)[10];  // pointer to array[10] of int
 int *ev_array_of_ptrs[10];   // array[10] of pointer to int
 
@@ -310,7 +311,7 @@ struct ev_pad {
 
 // ── 30. ANONYMOUS UNION INSIDE STRUCT ────────────────────────────────────────
 // C11 supports anonymous unions (also accepted by common compilers in C mode).
-
+// TODO: Fix: Fails to capture the union type
 struct ev_event {
     int type;
     union {
