@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from mojo_bindgen.utils import build_c_parse_args, normalize_std_flag
 from mojo_bindgen.parser import _default_system_compile_args, _resolve_header_path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -69,3 +70,31 @@ def test_returns_list_starting_with_usr_include() -> None:
     assert args[0] == "-I/usr/include"
     for x in w:
         assert isinstance(x.message, UserWarning)
+
+
+def test_normalize_std_flag_accepts_legacy_forms() -> None:
+    assert normalize_std_flag("-std=c99") == "-std=c99"
+    assert normalize_std_flag("--std=c99") == "-std=c99"
+    assert normalize_std_flag("std=c99") == "-std=c99"
+    assert normalize_std_flag("-I./include") == "-I./include"
+
+
+def test_build_c_parse_args_uses_default_std_when_missing() -> None:
+    args = build_c_parse_args(["-I./include"], default_std="-std=gnu11")
+    assert args == ["-x", "c", "-std=gnu11", "-I./include"]
+
+
+def test_build_c_parse_args_uses_user_std_and_normalizes() -> None:
+    args = build_c_parse_args(
+        ["--std=c99", "-I./include"],
+        default_std="-std=gnu11",
+    )
+    assert args == ["-x", "c", "-std=c99", "-I./include"]
+
+
+def test_build_c_parse_args_accepts_bare_std_equals() -> None:
+    args = build_c_parse_args(
+        ["std=c17", "-DVALUE=1"],
+        default_std="-std=gnu11",
+    )
+    assert args == ["-x", "c", "-std=c17", "-DVALUE=1"]

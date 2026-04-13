@@ -29,6 +29,7 @@ from typing import Iterator
 
 import clang.cindex as cx
 
+from mojo_bindgen.utils import build_c_parse_args
 from mojo_bindgen.ir import (
     Const,
     Decl,
@@ -104,48 +105,13 @@ def _match_int_literal(raw: str) -> tuple[int | None, str]:
     return value, suf
 
 
-# Directory containing this package (`mojo_bindgen/`).  Parent is the repository root.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
 def _resolve_header_path(header: Path | str) -> Path:
-    """
-    Resolve a header path for parsing.
-
-    Absolute paths must exist as files.
-
-    Relative paths are resolved against the **current working directory** first.
-    If the environment variable ``MOJO_BINDGEN_DEV`` is set to ``"1"``, the
-    repository root (parent of ``mojo_bindgen/``) is also tried so paths like
-    ``tests/fixtures/foo.h`` work when the cwd is the repo root or ``mojo_bindgen/``.  Installed packages
-    should not rely on this; use absolute paths or run with an appropriate cwd.
-    """
+    """Resolve a header path to an existing file, relative to cwd."""
     p = Path(header)
-    if p.is_absolute():
-        r = p.resolve()
-        if not r.is_file():
-            raise FileNotFoundError(f"header not found: {header}")
-        return r
-
-    cwd_resolved = (Path.cwd() / p).resolve()
-    candidates: list[Path] = [cwd_resolved]
-    dev_repo = os.environ.get("MOJO_BINDGEN_DEV") == "1"
-    if dev_repo:
-        candidates.append((_REPO_ROOT / p).resolve())
-    for c in candidates:
-        if c.is_file():
-            return c
-    tried = ", ".join(str(c) for c in candidates)
-    hint = ""
-    if not dev_repo and (_REPO_ROOT / p).resolve().is_file():
-        hint = (
-            " A matching file exists under the package repository root; set "
-            "MOJO_BINDGEN_DEV=1 to allow resolving relative paths against it, "
-            "or use an absolute path."
-        )
-    raise FileNotFoundError(
-        f"header not found: {header!r} (tried {tried}).{hint}"
-    )
+    resolved = (p if p.is_absolute() else Path.cwd() / p).resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(f"header not found: {header!r}")
+    return resolved
 
 
 def _probe_compiler_include(driver: str) -> str | None:
@@ -209,22 +175,22 @@ class ClangParser:
     ----------
     header:
         Path to the ``.h`` file. Absolute paths must exist. Relative paths are
-        resolved against the **current working directory** only unless
-        ``MOJO_BINDGEN_DEV=1`` is set, in which case the repository root (parent
-        of ``mojo_bindgen/``) is also tried—useful for local development; installed
+        resolved against the **current working directory**; installed
         packages should pass absolute paths or set cwd appropriately.
     library:
         Logical library name written into Unit (e.g. ``"zlib"``).
     link_name:
         Shared-library link name written into Unit (e.g. ``"z"``).
     compile_args:
-        Flags forwarded to libclang **in addition** to ``-x c -std=c11`` (and
+        Flags forwarded to libclang **in addition** to ``-x c -std=gnu11`` (and
         the primary file). If ``None`` (default), :func:`_default_system_compile_args`
         supplies typical ``-I`` paths (``/usr/include`` plus a probe from ``cc`` /
         ``clang``). For cross-compilation, NixOS, or non-default sysroots, pass
         explicit ``-I``, ``-isystem``, ``--sysroot``, and target triple flags
         here so ``#include <stdint.h>`` and system headers resolve. Pass ``[]``
         to disable the default system includes (only the bare parse flags apply).
+        C standard flags are accepted as ``-std=...``, ``--std=...``, or
+        ``std=...`` and normalized to ``-std=...``.
     raise_on_error:
         If True (default), raise ParseError when clang reports error/fatal
         diagnostics. Set to False to collect partial results despite errors.
@@ -332,7 +298,7 @@ class ClangParser:
 
     def _parse(self) -> cx.TranslationUnit:
         index = cx.Index.create()
-        args = ["-x", "c", "-std=c11"] + self.compile_args
+        args = build_c_parse_args(self.compile_args, default_std="-std=gnu11")
         tu = index.parse(
             str(self.header),
             args=args,

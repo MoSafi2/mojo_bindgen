@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import clang.cindex as cx
 
+from mojo_bindgen.utils import build_c_parse_args
 from mojo_bindgen.ir import (
     Array,
     FunctionPtr,
@@ -139,6 +140,11 @@ _LITERAL_SUFFIX_PREWARM: frozenset[str] = frozenset(
 )
 
 
+def _suffix_probe_parse_args(compile_args: list[str]) -> list[str]:
+    """Build parse args for integer literal suffix type probes."""
+    return build_c_parse_args(compile_args, default_std="-std=gnu11")
+
+
 class TypeResolver:
     """
     Maps libclang :class:`clang.cindex.Type` values to IR :class:`~mojo_bindgen.ir.Type` nodes.
@@ -180,7 +186,7 @@ class TypeResolver:
         src = f"{spell} __bindgen_m;\n"
         tu = idx.parse(
             "__bindgen_suffix_probe.c",
-            args=["-x", "c", "-std=c11"] + self.compile_args,
+            args=_suffix_probe_parse_args(self.compile_args),
             unsaved_files=[("__bindgen_suffix_probe.c", src)],
             options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
         )
