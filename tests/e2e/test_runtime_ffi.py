@@ -76,6 +76,11 @@ def _assert_expected(got: dict[str, float | int], expected: dict[str, float | in
             assert got_value == exp, key
 
 
+def _persist_generated_bindings(src: Path, dst: Path) -> None:
+    if src.exists():
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 @pytest.mark.skipif(not shutil.which("cc"), reason="requires cc")
 @pytest.mark.parametrize("case_name", ["functional_math", "functional_records"])
 def test_runtime_ffi_fixture_case(case_name: str, tmp_path: Path) -> None:
@@ -130,6 +135,10 @@ def test_runtime_ffi_fixture_case(case_name: str, tmp_path: Path) -> None:
         ],
         cwd=_REPO_ROOT,
     )
+
+    # Keep generated bindings in fixture folders for local inspection.
+    _persist_generated_bindings(bindings_external, case_dir / "generated.bindings.external.mojo")
+    _persist_generated_bindings(bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo")
 
     external_bin = tmp_path / f"{case_name}_runner_external"
     dl_bin = tmp_path / f"{case_name}_runner_dl"

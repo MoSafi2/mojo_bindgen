@@ -17,7 +17,8 @@
 # Two outputs:
 #   - zlib_bindings.mojo — external_call (link-time); mojo build needs -lz.
 #   - zlib_bindings_dl.mojo — OwnedDLHandle + --library-path-hint to libz;
-#     zlib_dl_smoke.mojo builds a tiny binary that loads libz at runtime (no -lz).
+#     zlib_dl_smoke.mojo builds and runs a tiny binary that loads libz at runtime
+#     (no -lz).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -113,6 +114,8 @@ if [[ -n "${LIBZ_SO:-}" ]]; then
     --linking owned_dl_handle --library-path-hint "$LIBZ_SO" -o zlib_bindings_dl.mojo
   "${MOJO[@]}" build zlib_dl_smoke.mojo -I "$HERE" -o zlib_dl_smoke
   echo "Wrote $HERE/zlib_bindings_dl.mojo (dlopen: $LIBZ_SO) and built zlib_dl_smoke"
+  echo "Running zlib_dl_smoke (owned_dl_handle runtime proof)"
+  "$HERE/zlib_dl_smoke"
 else
   echo "mojo-bindgen zlib example: could not locate libz shared library; skipping OwnedDLHandle output." >&2
   echo "  (Install zlib and ensure gcc -print-file-name=libz.so resolves.)" >&2

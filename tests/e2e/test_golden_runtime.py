@@ -121,6 +121,11 @@ def _check_phase(phase: str, expected_status: str, proc: subprocess.CompletedPro
     raise AssertionError(f"unknown expected status {expected_status}")
 
 
+def _persist_generated_bindings(src: Path, dst: Path) -> None:
+    if src.exists():
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 def _case_dirs() -> list[Path]:
     return sorted([p for p in _GOLDEN_ROOT.iterdir() if p.is_dir()])
 
@@ -187,6 +192,10 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         cwd=_REPO_ROOT,
     )
     _check_phase("bindgen_dl", phases["bindgen_dl"], bindgen_dl, str(case_dir))
+
+    # Keep generated bindings under each golden case for local inspection.
+    _persist_generated_bindings(bindings_external, case_dir / "generated.bindings.external.mojo")
+    _persist_generated_bindings(bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo")
 
     if bindgen_external.returncode == 0:
         _assert_emit_has_snippets(bindings_external.read_text(encoding="utf-8"), case_dir / "expect.emit.external.mojo")

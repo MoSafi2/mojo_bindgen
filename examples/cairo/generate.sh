@@ -12,6 +12,7 @@
 # locate cairo/cairo.h and pass it as the input file.
 #
 # The shared library link name is "cairo" (libcairo.so).
+# Also builds/runs cairo_smoke.mojo to prove generated bindings work at runtime.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -67,5 +68,8 @@ fi
 OBJ="$(mktemp "${TMPDIR:-/tmp}/cairo-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT
 "${MJ[@]}" build --emit object cairo_bindings.mojo -o "$OBJ"
+"${MJ[@]}" build cairo_smoke.mojo -I "$HERE" -Xlinker -lcairo -o cairo_smoke
 
 echo "Wrote $HERE/cairo_bindings.mojo (from $CAIRO_H)"
+echo "Running cairo_smoke (runtime render + file round-trip proof)"
+"$HERE/cairo_smoke"
