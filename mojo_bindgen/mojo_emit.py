@@ -1,23 +1,26 @@
-# mojo_bindgen/mojo_emit.py — emit thin Mojo FFI from bindgen Unit IR.
-#
-# Typedefs whose name matches an already-emitted struct or enum are skipped
-# (see _emit_typedef / emitted_struct_enum_names) to avoid duplicate aliases.
-#
-# Type lowering policy (canonical vs typedef name)
-# ------------------------------------------------
-# IR may contain :class:`~mojo_bindgen.ir.TypeRef` (C typedef name + canonical
-# type). Use **canonical** lowering everywhere ABI must match layout and FFI
-# wire types: struct/union fields, array elements, function-pointer parameter
-# and return types inside :class:`~mojo_bindgen.ir.FunctionPtr`, and the type
-# lists passed to ``external_call[...]`` / ``OwnedDLHandle.call[...]``.
-#
-# Use the **typedef name** (as a Mojo identifier) on **top-level function**
-# ``def`` signatures — parameters and return type — when a matching
-# ``comptime`` typedef alias is emitted in this module, so POSIX-style names
-# like ``size_t`` survive in the API surface.
-#
-# Top-level ``typedef`` declarations use ``canonical`` for the RHS so the alias
-# target is a concrete Mojo type (or transparent chain toward one).
+"""Emit thin Mojo FFI from bindgen Unit IR.
+
+Typedefs whose name matches an already-emitted struct or enum are skipped
+(see ``_emit_typedef`` / ``emitted_struct_enum_names``) to avoid duplicate
+aliases.
+
+Type lowering policy (canonical vs typedef name)
+------------------------------------------------
+IR may contain :class:`~mojo_bindgen.ir.TypeRef` (C typedef name + canonical
+type). Use **canonical** lowering everywhere ABI must match layout and FFI
+wire types: struct/union fields, array elements, function-pointer parameter
+and return types inside :class:`~mojo_bindgen.ir.FunctionPtr`, and the type
+lists passed to ``external_call[...]`` / ``OwnedDLHandle.call[...]``.
+
+Use the **typedef name** (as a Mojo identifier) on **top-level function**
+``def`` signatures — parameters and return type — when a matching
+``comptime`` typedef alias is emitted in this module, so POSIX-style names
+like ``size_t`` survive in the API surface.
+
+Top-level ``typedef`` declarations use ``canonical`` for the RHS so the alias
+target is a concrete Mojo type (or transparent chain toward one).
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict, deque
@@ -29,8 +32,8 @@ from typing import Literal
 from mojo_bindgen.ir import (
     Array,
     Const,
-    EnumRef,
     Enum,
+    EnumRef,
     Field,
     Function,
     FunctionPtr,
@@ -59,6 +62,9 @@ _MOJO_RESERVED = frozenset(
     """.split()
 )
 
+_MOJO_MAX_ALIGN_BYTES = 1 << 29
+"""Maximum alignment supported by Mojo ``@align`` (per language rules)."""
+
 
 @dataclass(frozen=True)
 class PointerOriginNames:
@@ -66,12 +72,6 @@ class PointerOriginNames:
 
     mut: str
     immut: str
-
-
-def pointer_origin_names(style: FFIOriginStyle) -> PointerOriginNames:
-    if style == "external":
-        return PointerOriginNames(mut="MutExternalOrigin", immut="ImmutExternalOrigin")
-    return PointerOriginNames(mut="MutAnyOrigin", immut="ImmutAnyOrigin")
 
 
 @dataclass
@@ -99,11 +99,36 @@ class MojoEmitOptions:
     """If True, emit ``@align(N)`` from C ``Struct.align_bytes`` when valid (Mojo: power of 2, ``N > 1``, max ``2**29``)."""
 
 
-_MOJO_MAX_ALIGN_BYTES = 1 << 29
-"""Maximum alignment supported by Mojo ``@align`` (per language rules)."""
+@dataclass(frozen=True)
+class UnitEmissionPlan:
+    """Pure plan for ordering struct and tail declarations."""
+
+    sorted_structs: tuple[Struct, ...]
+    emitted_struct_enum_names: frozenset[str]
+    tail_decls: tuple[Enum | Typedef | Const | Function, ...]
+
+
+@dataclass(frozen=True)
+class EmitContext:
+    """Shared state for Mojo emission fragments (structs, functions, imports)."""
+
+    opts: MojoEmitOptions
+    types: TypeLowerer
+    struct_by_name: dict[str, Struct]
+    typedef_mojo_names: frozenset[str]
+    unsafe_union_comptime: dict[str, list[str]] | None
+    needs_opaque_imports: bool
+
+
+def pointer_origin_names(style: FFIOriginStyle) -> PointerOriginNames:
+    """Return Mut/Immut origin type names for pointer lowering per ``ffi_origin``."""
+    if style == "external":
+        return PointerOriginNames(mut="MutExternalOrigin", immut="ImmutExternalOrigin")
+    return PointerOriginNames(mut="MutAnyOrigin", immut="ImmutAnyOrigin")
 
 
 def _is_power_of_two(n: int) -> bool:
+    """True if ``n`` is a positive power of two."""
     return n > 0 and (n & (n - 1)) == 0
 
 
@@ -137,6 +162,7 @@ def mojo_ident(name: str, *, fallback: str = "field") -> str:
 
 
 def _int_type_for_size(signed: bool, size_bytes: int) -> str:
+    """Map integer width in bytes to ``IntN`` / ``UIntN`` (fallback ``Int64``)."""
     if size_bytes == 1:
         return "Int8" if signed else "UInt8"
     if size_bytes == 2:
@@ -151,6 +177,7 @@ def _int_type_for_size(signed: bool, size_bytes: int) -> str:
 
 
 def lower_primitive(p: Primitive) -> str:
+    """Lower a C primitive to its Mojo type name string."""
     if p.kind == PrimitiveKind.VOID:
         return "NoneType"
     if p.kind == PrimitiveKind.BOOL:
@@ -173,23 +200,29 @@ class CodeBuilder:
     """Indented line buffer for Mojo source emission."""
 
     def __init__(self) -> None:
+        """Start with an empty buffer at indent level zero."""
         self._lines: list[str] = []
         self._level = 0
 
     def indent(self) -> None:
+        """Increase indentation for subsequent ``add`` / ``extend`` lines."""
         self._level += 1
 
     def dedent(self) -> None:
+        """Decrease indentation (floor at zero)."""
         self._level = max(0, self._level - 1)
 
     def add(self, line: str) -> None:
+        """Append one line with the current indent prefix."""
         self._lines.append("    " * self._level + line)
 
     def extend(self, lines: list[str]) -> None:
+        """Append each line in ``lines`` using the current indent level."""
         for ln in lines:
             self.add(ln)
 
     def render(self) -> str:
+        """Join buffered lines with newlines, or empty string if none."""
         if not self._lines:
             return ""
         return "\n".join(self._lines)
@@ -210,6 +243,7 @@ class TypeLowerer:
         unsafe_union_comptime: dict[str, list[str]] | None,
         typedef_mojo_names: frozenset[str] | None = None,
     ) -> None:
+        """Configure pointer origins, optional ``UnsafeUnion`` comptime keys, and typedef aliases for ``signature``."""
         self._ffi_origin = ffi_origin
         self._origin = pointer_origin_names(ffi_origin)
         self._unsafe_union_comptime = unsafe_union_comptime
@@ -229,6 +263,7 @@ class TypeLowerer:
 
     @singledispatchmethod
     def canonical(self, t: Type) -> str:
+        """Lower ``t`` to a Mojo type string for ABI/layout (typedef chain resolved)."""
         raise TypeError(
             f"no canonical lowering registered for IR type {type(t).__name__!r}; "
             "extend TypeLowerer.canonical with @canonical.register"
@@ -296,11 +331,13 @@ class TypeLowerer:
         return ", ".join(self.function_ptr_canonical_signature_parts(fp))
 
     def function_ptr_comment(self, fp: FunctionPtr) -> str:
+        """Human-readable comment line for a function-pointer field (fixed vs varargs)."""
         inner = self.function_ptr_canonical_signature(fp)
         var = "varargs" if fp.is_variadic else "fixed"
         return f"function pointer ({var}): ({inner})"
 
     def param_names(self, params: list[Param]) -> list[str]:
+        """Mojo-safe parameter names; unnamed parameters become ``a0``, ``a1``, …."""
         out: list[str] = []
         for i, p in enumerate(params):
             if p.name.strip():
@@ -310,6 +347,7 @@ class TypeLowerer:
         return out
 
     def function_type_param_list(self, fn: Function, ret_list: str) -> str:
+        """Comma-separated ``external_call`` / ``OwnedDLHandle.call`` bracket contents (link name, ret, params)."""
         type_params = [f'"{fn.link_name}"', ret_list]
         for p in fn.params:
             type_params.append(self.canonical(p.type))
@@ -350,6 +388,7 @@ def _type_needs_opaque_pointer_import(t: Type) -> bool:
 
 
 def _unit_needs_opaque_imports(unit: Unit) -> bool:
+    """True if any declaration lowers to ``MutOpaquePointer`` / ``ImmutOpaquePointer``."""
     for d in unit.decls:
         if isinstance(d, Struct) and not d.is_union:
             for f in d.fields:
@@ -409,6 +448,13 @@ def _eligible_unsafe_union_comptime(unit: Unit, ffi_origin: FFIOriginStyle) -> d
     return out
 
 
+def _emit_unsafe_union_comptime(decl: Struct, type_list: list[str]) -> str:
+    """Emit ``comptime name_Union = UnsafeUnion[...]`` (caller ensures eligibility)."""
+    name = mojo_ident(decl.name.strip() or decl.c_name.strip())
+    types_csv = ", ".join(type_list)
+    return f"comptime {name}_Union = UnsafeUnion[{types_csv}]\n\n"
+
+
 def _struct_by_mojo_name(unit: Unit) -> dict[str, Struct]:
     """Map Mojo struct alias names to struct declarations (non-union only)."""
     out: dict[str, Struct] = {}
@@ -457,12 +503,14 @@ def _type_ok_for_register_passable_field(
 
 
 def _struct_decl_register_passable(decl: Struct, struct_by_name: dict[str, Struct]) -> bool:
+    """Whether ``decl`` may use the ``RegisterPassable`` trait (all fields eligible)."""
     if decl.is_union:
         return False
     return all(_type_ok_for_register_passable_field(f.type, struct_by_name, None) for f in decl.fields)
 
 
 def _field_mojo_name(f: Field, index: int) -> str:
+    """Mojo field name from IR, or ``_anon_{index}`` for anonymous members."""
     if f.name:
         return mojo_ident(f.name)
     return f"_anon_{index}"
@@ -500,6 +548,7 @@ def _struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
 
 
 def _toposort_structs(structs: list[Struct]) -> list[Struct]:
+    """Order structs so value-embedded :class:`~mojo_bindgen.ir.StructRef` predecessors come first."""
     if not structs:
         return []
 
@@ -541,16 +590,8 @@ def _toposort_structs(structs: list[Struct]) -> list[Struct]:
     return [name_to_struct[n] for n in order]
 
 
-@dataclass(frozen=True)
-class UnitEmissionPlan:
-    """Pure plan for ordering struct and tail declarations."""
-
-    sorted_structs: tuple[Struct, ...]
-    emitted_struct_enum_names: frozenset[str]
-    tail_decls: tuple[Enum | Typedef | Const | Function, ...]
-
-
 def _plan_unit_emission(unit: Unit) -> UnitEmissionPlan:
+    """Compute struct order, emitted struct/enum names, and tail declaration list."""
     struct_decls = [d for d in unit.decls if isinstance(d, Struct) and not d.is_union]
     sorted_structs = _toposort_structs(struct_decls)
 
@@ -584,26 +625,8 @@ def _emitted_typedef_mojo_names(unit: Unit, plan: UnitEmissionPlan) -> frozenset
     )
 
 
-def _emit_unsafe_union_comptime(decl: Struct, type_list: list[str]) -> str:
-    """Emit ``comptime name_Union = UnsafeUnion[...]`` (caller ensures eligibility)."""
-    name = mojo_ident(decl.name.strip() or decl.c_name.strip())
-    types_csv = ", ".join(type_list)
-    return f"comptime {name}_Union = UnsafeUnion[{types_csv}]\n\n"
-
-
-@dataclass(frozen=True)
-class EmitContext:
-    """Shared state for Mojo emission fragments (structs, functions, imports)."""
-
-    opts: MojoEmitOptions
-    types: TypeLowerer
-    struct_by_name: dict[str, Struct]
-    typedef_mojo_names: frozenset[str]
-    unsafe_union_comptime: dict[str, list[str]] | None
-    needs_opaque_imports: bool
-
-
 def _emit_context_from_unit(unit: Unit, plan: UnitEmissionPlan, options: MojoEmitOptions) -> EmitContext:
+    """Build :class:`EmitContext` (type lowerer, typedef set, opaque-import flag) from ``unit`` and ``plan``."""
     uq = _eligible_unsafe_union_comptime(unit, options.ffi_origin)
     td = _emitted_typedef_mojo_names(unit, plan)
     uq_opt: dict[str, list[str]] | None = uq if uq else None
@@ -642,6 +665,7 @@ def emit_context_for_struct_test(
 
 
 def emit_field_lines(ctx: EmitContext, b: CodeBuilder, f: Field, index: int, _parent_for_anon: str) -> None:
+    """Emit comments and ``var name: type`` for one struct field (bitfields, fn pointers, ABI hints)."""
     type_str = ctx.types.canonical(f.type)
     fname = _field_mojo_name(f, index)
     if f.is_bitfield:
@@ -693,25 +717,17 @@ def emit_struct(ctx: EmitContext, decl: Struct) -> str:
     return b.render()
 
 
-def _emit_struct(
-    decl: Struct,
-    options: MojoEmitOptions,
-    struct_by_name: dict[str, Struct],
-    unsafe_union_comptime: dict[str, list[str]] | None,
-) -> str:
-    """Emit one struct (tests; thin wrapper over :func:`emit_struct`)."""
-    return emit_struct(emit_context_for_struct_test(options, struct_by_name, unsafe_union_comptime), decl)
-
-
 class MojoModuleEmitter:
     """Orchestrates prelude, struct ordering, and tail declarations."""
 
     def __init__(self, unit: Unit, plan: UnitEmissionPlan, options: MojoEmitOptions) -> None:
+        """Prepare emission from ``unit``, a precomputed ``plan``, and ``options``."""
         self._unit = unit
         self._plan = plan
         self._ctx = _emit_context_from_unit(unit, plan, options)
 
     def emit(self) -> str:
+        """Return the full generated Mojo module source."""
         chunks: list[str] = []
         if self._ctx.opts.module_comment:
             chunks.append(self._module_header(self._unit))
@@ -726,6 +742,7 @@ class MojoModuleEmitter:
         return "".join(chunks)
 
     def _module_header(self, unit: Unit) -> str:
+        """Leading ``#`` comment: generator notice, source header, library, link name, FFI mode."""
         return "\n".join(
             [
                 "# Generated by mojo_bindgen — do not edit by hand.",
@@ -737,6 +754,7 @@ class MojoModuleEmitter:
         )
 
     def _import_block(self) -> str:
+        """``std.ffi`` imports for linking mode and optional ``std.memory`` opaque pointer imports."""
         lines: list[str] = []
         if self._ctx.opts.linking == "external_call":
             ffi_names = ["external_call"]
@@ -753,6 +771,7 @@ class MojoModuleEmitter:
         return "\n".join(lines) + "\n\n"
 
     def _dl_handle_helpers(self) -> str:
+        """``comptime`` path and ``_bindgen_dl`` for ``owned_dl_handle`` mode; empty otherwise."""
         if self._ctx.opts.linking != "owned_dl_handle":
             return ""
         if self._ctx.opts.library_path_hint:
@@ -769,6 +788,7 @@ class MojoModuleEmitter:
         )
 
     def _emit_union_comments(self) -> str:
+        """UnsafeUnion comptime aliases and reference comments for each C union in the unit."""
         parts: list[str] = []
         uq = self._ctx.unsafe_union_comptime or {}
         for d in self._unit.decls:
@@ -835,14 +855,17 @@ class MojoModuleEmitter:
         return f"comptime {mojo_ident(decl.name)} = {tstr}\n\n"
 
     def _emit_const(self, decl: Const) -> str:
+        """Emit ``comptime name = T(value)`` for a C constant."""
         t = lower_primitive(decl.type)
         return f"comptime {mojo_ident(decl.name)} = {t}({decl.value})\n\n"
 
     def _emit_function_variadic(self, fn: Function, ret_t: str, args_sig: str) -> str:
+        """Comment-only stub: variadic C functions are not wrapped."""
         c_sig = f"{ret_t} {fn.link_name}({args_sig}, ...)"
         return f"# variadic C function — not callable from thin FFI:\n# {c_sig}\n"
 
     def _emit_function_non_register_return(self, fn: Function, ret_t: str, args_sig: str) -> str:
+        """Comment-only stub: non-``RegisterPassable`` struct returns are not wrapped."""
         c_sig = f"{ret_t} {fn.link_name}({args_sig})"
         return (
             "# C return type is not RegisterPassable — external_call cannot model this return; bind manually.\n"
@@ -859,6 +882,7 @@ class MojoModuleEmitter:
         is_void: bool,
         ret_list: str,
     ) -> str:
+        """Emit ``def`` + ``external_call`` or ``OwnedDLHandle.call`` body for one function."""
         bracket_inner = self._ctx.types.function_type_param_list(fn, ret_list)
         name = mojo_ident(fn.name)
         b = CodeBuilder()
@@ -887,6 +911,7 @@ class MojoModuleEmitter:
         return b.render() + "\n"
 
     def _emit_function(self, fn: Function) -> str:
+        """Emit a wrapper, variadic stub, or non-register-return comment for ``fn``."""
         ret_t = self._ctx.types.signature(fn.ret)
         params = fn.params
         pnames = self._ctx.types.param_names(params)
@@ -918,6 +943,7 @@ class MojoModuleEmitter:
         )
 
     def _emit_tail_decl(self, decl: Enum | Typedef | Const | Function, emitted: frozenset[str]) -> str:
+        """Dispatch enum, typedef, const, or function emission (typedefs skip struct/enum name clashes)."""
         if isinstance(decl, Enum):
             return self._emit_enum(decl)
         if isinstance(decl, Typedef):
