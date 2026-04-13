@@ -1,0 +1,3 @@
+cairo_bindings.mojo
+cairo_smoke
+*.o

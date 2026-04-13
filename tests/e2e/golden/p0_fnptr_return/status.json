@@ -1,0 +1,12 @@
+{
+  "phases": {
+    "bindgen_external": "known_fail_bindgen",
+    "bindgen_dl": "known_fail_bindgen",
+    "emit_external": "known_fail_bindgen",
+    "emit_dl": "known_fail_bindgen",
+    "mojo_build_external": "known_fail_bindgen",
+    "mojo_build_dl": "known_fail_bindgen",
+    "runtime_external": "known_fail_bindgen",
+    "runtime_owned_dl_handle": "known_fail_bindgen"
+  }
+}

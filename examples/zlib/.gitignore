@@ -1,0 +1,4 @@
+zlib_bindings.mojo
+zlib_bindings_dl.mojo
+zlib_dl_smoke
+*.o
