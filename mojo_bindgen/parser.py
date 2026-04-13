@@ -441,6 +441,88 @@ class ClangParser:
         )
 
     # ── struct / union ────────────────────────────────────────────────────────
+    # TODO: Check alignment of the struct if it corrsponds with mojo conventions
+    def _resolve_struct_name(self, cursor: cx.Cursor) -> tuple[str, str, bool]:
+        c_name_raw = cursor.spelling
+        if c_name_raw:
+            return c_name_raw, c_name_raw, False
+
+        usr0 = cursor.get_usr()
+        digest = hashlib.sha256(usr0.encode("utf-8")).hexdigest()[:16]
+        synth = f"__bindgen_anon_{digest}"
+        return synth, synth, True
+
+    def _get_layout(self, clang_type: cx.Type) -> tuple[int, int]:
+        size = max(0, clang_type.get_size())
+        align = max(1, clang_type.get_align())
+        return size, align
+
+    def _get_field_offset(self, parent_type: cx.Type, field_name: str) -> tuple[int, int]:
+        bit_offset = parent_type.get_offset(field_name) if field_name else -1
+        byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
+        return bit_offset, byte_offset
+
+    def _lower_bitfield(
+        self, child: cx.Cursor, field_name: str, bit_offset: int, byte_offset: int
+    ) -> Field | None:
+        backing = self._resolver.resolve(child.type)
+        if not isinstance(backing, Primitive):
+            return None
+        return Field(
+            name=field_name,
+            type=backing,
+            byte_offset=byte_offset,
+            is_bitfield=True,
+            bit_offset=max(bit_offset, 0),
+            bit_width=child.get_bitfield_width(),
+        )
+
+    def _resolve_field_type(
+        self, child: cx.Cursor, nested_out: list[Struct] | None
+    ) -> Type:
+        ft = child.type.get_canonical()
+        if ft.kind != cx.TypeKind.RECORD:
+            return self._resolver.resolve(child.type)
+
+        decl = ft.get_declaration()
+        def_c = decl.get_definition()
+        is_anon_record = (
+            def_c is not None
+            and not decl.spelling
+            and def_c.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
+        )
+        if not is_anon_record:
+            return self._resolver.resolve(child.type)
+
+        inner = self._build_struct(def_c, nested_out)
+        if inner is None:
+            return self._resolver.resolve(child.type)
+
+        return StructRef(
+            name=inner.name,
+            c_name=inner.c_name,
+            is_union=inner.is_union,
+            size_bytes=inner.size_bytes,
+        )
+
+    def _lower_field(
+        self,
+        parent_type: cx.Type,
+        child: cx.Cursor,
+        nested_out: list[Struct] | None,
+    ) -> Field | None:
+        field_name = child.spelling  # "" for anonymous bitfield padding
+        bit_offset, byte_offset = self._get_field_offset(parent_type, field_name)
+
+        if child.is_bitfield():
+            return self._lower_bitfield(child, field_name, bit_offset, byte_offset)
+
+        field_type = self._resolve_field_type(child, nested_out)
+        return Field(
+            name=field_name,
+            type=field_type,
+            byte_offset=byte_offset,
+        )
 
     def _build_struct(
         self, cursor: cx.Cursor, nested_out: list[Struct] | None
@@ -452,86 +534,17 @@ class ClangParser:
         ``nested_out`` collects anonymous nested struct/union bodies (field
         order) so the caller can emit them before the parent.
         """
-        c_name_raw = cursor.spelling
-        if not c_name_raw:
-            usr0 = cursor.get_usr()
-            digest = hashlib.sha256(usr0.encode("utf-8")).hexdigest()[:16]
-            synth = f"__bindgen_anon_{digest}"
-            c_name = synth
-            name = synth
-        else:
-            c_name = c_name_raw
-            name = c_name
-
+        c_name, name, is_anon = self._resolve_struct_name(cursor)
         clang_type = cursor.type
-
-        size_raw = clang_type.get_size()
-        align_raw = clang_type.get_align()
-        size_bytes = max(0, size_raw) if size_raw > 0 else 0
-        align_bytes = max(1, align_raw) if align_raw > 0 else 1
+        size_bytes, align_bytes = self._get_layout(clang_type)
 
         fields: list[Field] = []
         for child in cursor.get_children():
             if child.kind != cx.CursorKind.FIELD_DECL:
                 continue
-
-            field_name = child.spelling  # "" for anonymous bitfield padding
-
-            bit_off_result = clang_type.get_offset(field_name) if field_name else -1
-            byte_offset = bit_off_result // 8 if bit_off_result >= 0 else 0
-
-            if child.is_bitfield():
-                backing = self._resolver.resolve(child.type)
-                if not isinstance(backing, Primitive):
-                    continue
-                bw = child.get_bitfield_width()
-                bit_off = bit_off_result if bit_off_result >= 0 else 0
-                fields.append(
-                    Field(
-                        name=field_name,
-                        type=backing,
-                        byte_offset=byte_offset,
-                        is_bitfield=True,
-                        bit_offset=bit_off,
-                        bit_width=bw,
-                    )
-                )
-                continue
-
-            ft = child.type.get_canonical()
-            if ft.kind == cx.TypeKind.RECORD:
-                decl = ft.get_declaration()
-                def_c = decl.get_definition()
-                if (
-                    def_c is not None
-                    and not decl.spelling
-                    and def_c.kind
-                    in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
-                ):
-                    inner = self._build_struct(def_c, nested_out)
-                    if inner is not None:
-                        field_type: Type = StructRef(
-                            name=inner.name,
-                            c_name=inner.c_name,
-                            is_union=inner.is_union,
-                            size_bytes=inner.size_bytes,
-                        )
-                    else:
-                        field_type = self._resolver.resolve(child.type)
-                else:
-                    field_type = self._resolver.resolve(child.type)
-            else:
-                field_type = self._resolver.resolve(child.type)
-
-            fields.append(
-                Field(
-                    name=field_name,
-                    type=field_type,
-                    byte_offset=byte_offset,
-                )
-            )
-
-        is_union = cursor.kind == cx.CursorKind.UNION_DECL
+            field = self._lower_field(clang_type, child, nested_out)
+            if field is not None:
+                fields.append(field)
 
         struct = Struct(
             name=name,
@@ -539,11 +552,11 @@ class ClangParser:
             fields=fields,
             size_bytes=size_bytes,
             align_bytes=align_bytes,
-            is_union=is_union,
+            is_union=(cursor.kind == cx.CursorKind.UNION_DECL),
         )
 
         self._resolver.type_cache[cursor.get_usr()] = struct
-        if nested_out is not None and not c_name_raw:
+        if nested_out is not None and is_anon:
             nested_out.append(struct)
         return struct
 
