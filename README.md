@@ -85,6 +85,18 @@ By default, `--library` and `--link-name` are the header file stem (e.g. `me` fo
 pixi run pytest
 ```
 
+Build distributable artifacts through Pixi tasks:
+
+```bash
+pixi run clean-dist
+pixi run build
+```
+
+Optional one-shot targets:
+
+- `pixi run build-wheel`
+- `pixi run build-sdist`
+
 ## License
 
 See project files for license terms if applicable.

@@ -3,11 +3,14 @@ authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
 channels = ["https://conda.modular.com/max-nightly/", "conda-forge"]
 name = "mojo_bindgen"
 platforms = ["linux-64"]
-version = "0.1.0"
 
 [tasks]
 test = "pytest"
 install-editable = "python -m pip install -e ."
+build = "python -m build"
+build-wheel = "python -m build --wheel"
+build-sdist = "python -m build --sdist"
+clean-dist = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in (Path('build'), Path('dist'))]; [shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True) for p in Path('.').glob('*.egg-info')]\""
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
 
@@ -21,3 +24,4 @@ pip = ">=26.0.1,<27"
 [pypi-dependencies]
 mojo-bindgen = { path = ".", editable = true }
 pytest = ">=8,<9"
+build = ">=1,<2"
