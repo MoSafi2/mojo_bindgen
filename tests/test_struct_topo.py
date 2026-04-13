@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Pointer, Primitive, PrimitiveKind, Struct, StructRef, Field
+from mojo_bindgen.ir import Field, Pointer, Primitive, PrimitiveKind, Qualifiers, Struct, StructRef
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.lowering import mojo_ident
 
@@ -14,18 +14,27 @@ def _i32() -> Primitive:
 def test_toposort_pointer_to_struct_does_not_force_pointee_first() -> None:
     """struct A { struct B *pb; } — B may be emitted after A (pointer to incomplete)."""
     i32 = _i32()
-    b_ref = StructRef(name="B", c_name="B", is_union=False, size_bytes=4)
+    b_ref = StructRef(decl_id="struct:B", name="B", c_name="B", is_union=False, size_bytes=4)
     struct_b = Struct(
+        decl_id="struct:B",
         name="B",
         c_name="B",
-        fields=[Field("x", i32, byte_offset=0)],
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0)],
         size_bytes=4,
         align_bytes=4,
     )
     struct_a = Struct(
+        decl_id="struct:A",
         name="A",
         c_name="A",
-        fields=[Field("pb", Pointer(pointee=b_ref, is_const=False), byte_offset=0)],
+        fields=[
+            Field(
+                name="pb",
+                source_name="pb",
+                type=Pointer(pointee=b_ref, qualifiers=Qualifiers(is_const=False)),
+                byte_offset=0,
+            )
+        ],
         size_bytes=8,
         align_bytes=8,
     )
@@ -36,18 +45,20 @@ def test_toposort_pointer_to_struct_does_not_force_pointee_first() -> None:
 def test_toposort_value_embed_orders_pointee_before_container() -> None:
     """struct A { struct B b; } — B must be emitted before A."""
     i32 = _i32()
-    b_ref = StructRef(name="B", c_name="B", is_union=False, size_bytes=4)
+    b_ref = StructRef(decl_id="struct:B", name="B", c_name="B", is_union=False, size_bytes=4)
     struct_b = Struct(
+        decl_id="struct:B",
         name="B",
         c_name="B",
-        fields=[Field("x", i32, byte_offset=0)],
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0)],
         size_bytes=4,
         align_bytes=4,
     )
     struct_a = Struct(
+        decl_id="struct:A",
         name="A",
         c_name="A",
-        fields=[Field("b", b_ref, byte_offset=0)],
+        fields=[Field(name="b", source_name="b", type=b_ref, byte_offset=0)],
         size_bytes=4,
         align_bytes=4,
     )

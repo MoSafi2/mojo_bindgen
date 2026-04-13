@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_builder_result_contracts_are_internal_and_simple() -> None:
-    s = Struct(name="x", c_name="x", fields=[], size_bytes=0, align_bytes=1)
+    s = Struct(decl_id="struct:x", name="x", c_name="x", fields=[], size_bytes=0, align_bytes=1)
     fb = FieldBuildResult(field=None, nested=[s])
     sb = StructBuildResult(struct=s, nested=[s])
     assert fb.field is None

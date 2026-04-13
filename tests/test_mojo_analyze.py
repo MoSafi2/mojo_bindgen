@@ -30,6 +30,7 @@ def _i32() -> Primitive:
 def test_analyze_variadic_function_kind() -> None:
     v = Primitive(name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0)
     fn = Function(
+        decl_id="fn:vf",
         name="vf",
         link_name="vf",
         ret=v,
@@ -47,11 +48,13 @@ def test_analyze_non_register_struct_return_kind() -> None:
     """Fixed-size array field makes struct non-RegisterPassable; return uses stub kind."""
     i32 = _i32()
     inner = Struct(
+        decl_id="struct:Inner",
         name="Inner",
         c_name="Inner",
         fields=[
             Field(
                 name="xs",
+                source_name="xs",
                 type=Array(element=i32, size=4),
                 byte_offset=0,
             )
@@ -60,8 +63,15 @@ def test_analyze_non_register_struct_return_kind() -> None:
         align_bytes=4,
         is_union=False,
     )
-    ref = StructRef(name="Inner", c_name="Inner", is_union=False, size_bytes=16)
+    ref = StructRef(
+        decl_id=inner.decl_id,
+        name="Inner",
+        c_name="Inner",
+        is_union=False,
+        size_bytes=16,
+    )
     fn = Function(
+        decl_id="fn:get_inner",
         name="get_inner",
         link_name="get_inner",
         ret=ref,
@@ -82,14 +92,15 @@ def test_analyze_non_register_struct_return_kind() -> None:
 def test_analyze_typedef_skipped_when_name_collides_with_struct() -> None:
     i32 = _i32()
     st = Struct(
+        decl_id="struct:S",
         name="S",
         c_name="S",
-        fields=[Field(name="x", type=i32, byte_offset=0)],
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0)],
         size_bytes=4,
         align_bytes=4,
         is_union=False,
     )
-    td = Typedef(name="S", aliased=i32, canonical=i32)
+    td = Typedef(decl_id="typedef:S", name="S", aliased=i32, canonical=i32)
     unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st, td])
     au = analyze_unit(unit, MojoEmitOptions())
     assert len(au.tail_decls) == 1
@@ -102,11 +113,12 @@ def test_analyze_eligible_union_gets_comptime_block() -> None:
     i32 = _i32()
     f32 = _f32()
     u = Struct(
+        decl_id="union:U",
         name="U",
         c_name="union U",
         fields=[
-            Field(name="a", type=i32, byte_offset=0),
-            Field(name="b", type=f32, byte_offset=0),
+            Field(name="a", source_name="a", type=i32, byte_offset=0),
+            Field(name="b", source_name="b", type=f32, byte_offset=0),
         ],
         size_bytes=4,
         align_bytes=4,
@@ -122,9 +134,10 @@ def test_analyze_eligible_union_gets_comptime_block() -> None:
 def test_analyze_precomputes_struct_align_and_passability() -> None:
     i32 = _i32()
     st = Struct(
+        decl_id="struct:A",
         name="A",
         c_name="A",
-        fields=[Field(name="x", type=i32, byte_offset=0)],
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0)],
         size_bytes=4,
         align_bytes=8,
         is_union=False,
@@ -141,9 +154,10 @@ def test_analyze_precomputes_struct_align_and_passability() -> None:
 def test_analyze_typedef_name_in_function_signature_when_typedef_emitted() -> None:
     """TypeRef to a typedef that is emitted uses typedef name in analyzed function signature."""
     i32 = _i32()
-    td = Typedef(name="my_size_t", aliased=i32, canonical=i32)
-    tr = TypeRef(name="my_size_t", canonical=i32)
+    td = Typedef(decl_id="typedef:my_size_t", name="my_size_t", aliased=i32, canonical=i32)
+    tr = TypeRef(decl_id=td.decl_id, name="my_size_t", canonical=i32)
     fn = Function(
+        decl_id="fn:f",
         name="f",
         link_name="f",
         ret=i32,

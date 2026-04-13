@@ -44,7 +44,7 @@ def test_everything_fixture_json_stable() -> None:
 
 
 def test_minimal_types_from_json() -> None:
-    from mojo_bindgen.ir import EnumRef, Opaque, Primitive, StructRef, TypeRef
+    from mojo_bindgen.ir import EnumRef, OpaqueRecordRef, Primitive, StructRef, TypeRef
 
     assert isinstance(
         Primitive.from_json_dict(
@@ -59,12 +59,21 @@ def test_minimal_types_from_json() -> None:
         Primitive,
     )
     assert isinstance(
-        Opaque.from_json_dict({"kind": "Opaque", "name": "FILE"}),
-        Opaque,
+        OpaqueRecordRef.from_json_dict(
+            {
+                "kind": "OpaqueRecordRef",
+                "decl_id": "struct:FILE",
+                "name": "FILE",
+                "c_name": "FILE",
+                "is_union": False,
+            }
+        ),
+        OpaqueRecordRef,
     )
     r = StructRef.from_json_dict(
         {
             "kind": "StructRef",
+            "decl_id": "struct:Foo",
             "name": "Foo",
             "c_name": "Foo",
             "is_union": False,
@@ -75,6 +84,7 @@ def test_minimal_types_from_json() -> None:
     er = EnumRef.from_json_dict(
         {
             "kind": "EnumRef",
+            "decl_id": "enum:mode_t",
             "name": "mode_t",
             "c_name": "mode_t",
             "underlying": {
@@ -91,6 +101,7 @@ def test_minimal_types_from_json() -> None:
     tr = TypeRef.from_json_dict(
         {
             "kind": "TypeRef",
+            "decl_id": "typedef:size_t",
             "name": "size_t",
             "canonical": {
                 "kind": "Primitive",
