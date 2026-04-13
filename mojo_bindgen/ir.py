@@ -200,6 +200,32 @@ class StructRef:
         )
 
 
+@dataclass(frozen=True)
+class EnumRef:
+    """Reference to a named enum declaration with its integer ABI type."""
+
+    name: str
+    c_name: str
+    underlying: Primitive
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "EnumRef",
+            "name": self.name,
+            "c_name": self.c_name,
+            "underlying": self.underlying.to_json_dict(),
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "EnumRef")
+        return cls(
+            name=d["name"],
+            c_name=d["c_name"],
+            underlying=type_from_json(d["underlying"]),  # type: ignore[arg-type]
+        )
+
+
 @dataclass
 class TypeRef:
     """
@@ -364,6 +390,7 @@ Type = Union[
     FunctionPtr,
     Opaque,
     StructRef,
+    EnumRef,
     TypeRef,
 ]
 
@@ -523,6 +550,7 @@ _TYPE_FROM_JSON: dict[str, Callable[[dict[str, Any]], Type]] = {
     "FunctionPtr": FunctionPtr.from_json_dict,
     "Opaque": Opaque.from_json_dict,
     "StructRef": StructRef.from_json_dict,
+    "EnumRef": EnumRef.from_json_dict,
     "TypeRef": TypeRef.from_json_dict,
 }
 

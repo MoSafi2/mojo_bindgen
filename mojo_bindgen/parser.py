@@ -46,6 +46,7 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
 )
+from mojo_bindgen.type_builder import TypeBuilder, TypeContext
 from mojo_bindgen.type_resolver import TypeResolver
 
 
@@ -227,6 +228,7 @@ class ClangParser:
             append_type_kind_warning=self._append_type_kind_warning,
             build_struct=self._build_struct,
         )
+        self._type_builder = TypeBuilder(self._resolver)
 
     def _append_diag(self, severity: str, cursor: cx.Cursor, message: str) -> None:
         loc = cursor.location
@@ -412,13 +414,13 @@ class ClangParser:
         fn_type = cursor.type  # FunctionProto or FunctionNoProto
 
         # Return type
-        ret_ir = self._resolver.resolve(fn_type.get_result())
+        ret_ir = self._type_builder.build(fn_type.get_result(), TypeContext.RETURN)
 
         # Parameters — iterate child cursors of kind PARM_DECL
         params: list[Param] = []
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.PARM_DECL:
-                param_type = self._resolver.resolve(child.type)
+                param_type = self._type_builder.build(child.type, TypeContext.PARAM)
                 params.append(Param(name=child.spelling, type=param_type))
 
         is_variadic = (
@@ -465,7 +467,7 @@ class ClangParser:
     def _lower_bitfield(
         self, child: cx.Cursor, field_name: str, bit_offset: int, byte_offset: int
     ) -> Field | None:
-        backing = self._resolver.resolve(child.type)
+        backing = self._type_builder.build(child.type, TypeContext.FIELD)
         if not isinstance(backing, Primitive):
             return None
         return Field(
@@ -482,7 +484,7 @@ class ClangParser:
     ) -> Type:
         ft = child.type.get_canonical()
         if ft.kind != cx.TypeKind.RECORD:
-            return self._resolver.resolve(child.type)
+            return self._type_builder.build(child.type, TypeContext.FIELD)
 
         decl = ft.get_declaration()
         def_c = decl.get_definition()
@@ -492,11 +494,11 @@ class ClangParser:
             and def_c.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
         )
         if not is_anon_record:
-            return self._resolver.resolve(child.type)
+            return self._type_builder.build(child.type, TypeContext.FIELD)
 
         inner = self._build_struct(def_c, nested_out)
         if inner is None:
-            return self._resolver.resolve(child.type)
+            return self._type_builder.build(child.type, TypeContext.FIELD)
 
         return StructRef(
             name=inner.name,
@@ -640,8 +642,8 @@ class ClangParser:
         """
         name = cursor.spelling
         ut = cursor.underlying_typedef_type
-        aliased = self._resolver.resolve(ut)
-        canonical = self._resolver.resolve(ut.get_canonical())
+        aliased = self._type_builder.build(ut, TypeContext.TYPEDEF)
+        canonical = self._type_builder.build(ut.get_canonical(), TypeContext.TYPEDEF)
         return Typedef(name=name, aliased=aliased, canonical=canonical)
 
     # ── top-level const variable ───────────────────────────────────────────────

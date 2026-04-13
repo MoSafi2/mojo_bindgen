@@ -28,6 +28,7 @@ from typing import Literal
 from mojo_bindgen.ir import (
     Array,
     Const,
+    EnumRef,
     Enum,
     Field,
     Function,
@@ -199,6 +200,8 @@ def lower_type(
         )
     if isinstance(t, Primitive):
         return lower_primitive(t)
+    if isinstance(t, EnumRef):
+        return mojo_ident(t.name.strip())
     if isinstance(t, Pointer):
         ctx.needs_unsafe_pointer = True
         if t.pointee is None:
@@ -325,6 +328,8 @@ def _scan_types_for_opaque_imports(unit: Unit) -> bool:
     def walk(t: Type) -> bool:
         if isinstance(t, TypeRef):
             return walk(t.canonical)
+        if isinstance(t, EnumRef):
+            return False
         if isinstance(t, Pointer):
             if t.pointee is None:
                 return True
@@ -370,7 +375,7 @@ def _type_ok_for_register_passable_field(t: Type, struct_by_name: dict[str, Stru
     """
     if isinstance(t, TypeRef):
         return _type_ok_for_register_passable_field(t.canonical, struct_by_name)
-    if isinstance(t, (Primitive, Opaque, FunctionPtr)):
+    if isinstance(t, (Primitive, EnumRef, Opaque, FunctionPtr)):
         return True
     if isinstance(t, StructRef):
         mid = mojo_ident(t.name.strip())
@@ -436,6 +441,8 @@ def _struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
     def walk(ty: Type) -> None:
         if isinstance(ty, TypeRef):
             walk(ty.canonical)
+            return
+        if isinstance(ty, EnumRef):
             return
         if isinstance(ty, StructRef):
             if ty.is_union:

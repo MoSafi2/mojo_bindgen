@@ -1,9 +1,8 @@
 # mojo_bindgen/type_resolver.py
-"""Clang type → IR :class:`Type` resolution (used by :class:`~mojo_bindgen.parser.ClangParser`)."""
+"""Primitive and record helpers for clang type lowering."""
 
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,16 +11,9 @@ import clang.cindex as cx
 
 from mojo_bindgen.utils import build_c_parse_args
 from mojo_bindgen.ir import (
-    Array,
-    FunctionPtr,
-    Opaque,
-    Pointer,
     Primitive,
     PrimitiveKind,
     Struct,
-    StructRef,
-    Type,
-    TypeRef,
 )
 
 
@@ -147,7 +139,7 @@ def _suffix_probe_parse_args(compile_args: list[str]) -> list[str]:
 
 class TypeResolver:
     """
-    Maps libclang :class:`clang.cindex.Type` values to IR :class:`~mojo_bindgen.ir.Type` nodes.
+    Helper services for type lowering.
 
     Caches struct layouts under cursor USR; ``defined_structs`` is filled by the
     parser's first pass over the translation unit.
@@ -204,165 +196,6 @@ class TypeResolver:
             )
         self._literal_suffix_cache[suffix] = prim
         return prim
-
-    def resolve(self, clang_type: cx.Type) -> Type:
-        """
-        Convert a clang Type to a Type, recursively.
-
-        Handles qualifiers, typedef chains, pointers, arrays, function types,
-        struct/union/enum references, and elaborated types.
-        """
-        tk = clang_type.kind
-
-        if tk == cx.TypeKind.INVALID:
-            self._append_type_kind_warning(clang_type, "invalid type (INVALID)")
-            return Opaque(name="invalid")
-        if tk == cx.TypeKind.UNEXPOSED:
-            self._append_type_kind_warning(clang_type, "unexposed type (UNEXPOSED)")
-            return Opaque(name=clang_type.spelling or "unexposed")
-
-        if tk == cx.TypeKind.ELABORATED:
-            return self.resolve(clang_type.get_named_type())
-
-        if tk == cx.TypeKind.TYPEDEF:
-            decl = clang_type.get_declaration()
-            alias = decl.spelling or clang_type.spelling or ""
-            return TypeRef(
-                name=alias,
-                canonical=self.resolve(clang_type.get_canonical()),
-            )
-
-        if tk == cx.TypeKind.VOID:
-            return Primitive(
-                "void",
-                kind=PrimitiveKind.VOID,
-                is_signed=False,
-                size_bytes=0,
-            )
-
-        if tk == cx.TypeKind.BOOL:
-            return Primitive(
-                "_Bool",
-                kind=PrimitiveKind.BOOL,
-                is_signed=False,
-                size_bytes=1,
-            )
-
-        if tk in (
-            cx.TypeKind.CHAR_U, cx.TypeKind.UCHAR,
-            cx.TypeKind.CHAR16, cx.TypeKind.CHAR32,
-            cx.TypeKind.USHORT, cx.TypeKind.UINT,
-            cx.TypeKind.ULONG, cx.TypeKind.ULONGLONG, cx.TypeKind.UINT128,
-            cx.TypeKind.CHAR_S, cx.TypeKind.SCHAR,
-            cx.TypeKind.WCHAR,
-            cx.TypeKind.SHORT, cx.TypeKind.INT,
-            cx.TypeKind.LONG, cx.TypeKind.LONGLONG, cx.TypeKind.INT128,
-        ):
-            return self.make_primitive_from_kind(clang_type)
-
-        if tk in (
-            cx.TypeKind.FLOAT,
-            cx.TypeKind.DOUBLE,
-            cx.TypeKind.LONGDOUBLE,
-            cx.TypeKind.HALF,
-        ):
-            return self.make_primitive_from_kind(clang_type)
-
-        if tk == cx.TypeKind.POINTER:
-            pointee_clang = clang_type.get_pointee()
-            is_const = pointee_clang.is_const_qualified()
-
-            if pointee_clang.kind == cx.TypeKind.VOID:
-                return Pointer(pointee=None, is_const=is_const)
-
-            canonical_pointee = pointee_clang.get_canonical()
-            if canonical_pointee.kind in (
-                cx.TypeKind.FUNCTIONPROTO,
-                cx.TypeKind.FUNCTIONNOPROTO,
-            ):
-                return self._resolve_function_ptr(canonical_pointee)
-
-            pointee_ir = self.resolve(pointee_clang)
-            return Pointer(pointee=pointee_ir, is_const=is_const)
-
-        if tk == cx.TypeKind.CONSTANTARRAY:
-            element_ir = self.resolve(clang_type.get_array_element_type())
-            size = clang_type.get_array_size()
-            return Array(element=element_ir, size=size)
-
-        if tk in (
-            cx.TypeKind.INCOMPLETEARRAY,
-            cx.TypeKind.VARIABLEARRAY,
-            cx.TypeKind.DEPENDENTSIZEDARRAY,
-        ):
-            element_ir = self.resolve(clang_type.get_array_element_type())
-            return Array(element=element_ir, size=None)
-
-        if tk in (cx.TypeKind.RECORD,):
-            return self._resolve_record(clang_type)
-
-        if tk == cx.TypeKind.ENUM:
-            decl_cursor = clang_type.get_declaration()
-            underlying_clang = decl_cursor.enum_type
-            prim = self.resolve_primitive(underlying_clang)
-            if prim:
-                return prim
-            return Primitive(
-                "unsigned int",
-                kind=PrimitiveKind.INT,
-                is_signed=False,
-                size_bytes=4,
-            )
-
-        if tk in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
-            return self._resolve_function_ptr(clang_type)
-
-        spelling = clang_type.spelling or "unknown"
-        return Opaque(name=spelling)
-
-    def _resolve_record(self, clang_type: cx.Type) -> Type:
-        """
-        Struct or union type → :class:`StructRef`, or :class:`Opaque` if incomplete.
-        """
-        decl_cursor = clang_type.get_declaration()
-        c_name = decl_cursor.spelling
-
-        usr = decl_cursor.get_usr()
-        if usr in self.type_cache:
-            s = self.type_cache[usr]
-            return StructRef(
-                name=s.name,
-                c_name=s.c_name,
-                is_union=s.is_union,
-                size_bytes=s.size_bytes,
-            )
-
-        if c_name and c_name in self.defined_structs:
-            struct = self._build_struct(decl_cursor.get_definition(), None)
-            if struct is not None:
-                self.type_cache[usr] = struct
-                return StructRef(
-                    name=struct.name,
-                    c_name=struct.c_name,
-                    is_union=struct.is_union,
-                    size_bytes=struct.size_bytes,
-                )
-
-        if not c_name:
-            digest = hashlib.sha256(usr.encode("utf-8")).hexdigest()[:16]
-            return Opaque(name=f"__bindgen_anon_{digest}")
-        return Opaque(name=c_name)
-
-    def _resolve_function_ptr(self, fn_type: cx.Type) -> FunctionPtr:
-        ret_ir = self.resolve(fn_type.get_result())
-        params: list[Type] = []
-        if fn_type.kind == cx.TypeKind.FUNCTIONPROTO:
-            for arg_t in fn_type.argument_types():
-                params.append(self.resolve(arg_t))
-            is_variadic = fn_type.is_function_variadic()
-        else:
-            is_variadic = False
-        return FunctionPtr(ret=ret_ir, params=params, is_variadic=is_variadic)
 
     def make_primitive_from_kind(self, clang_type: cx.Type) -> Primitive:
         canonical = clang_type.get_canonical()

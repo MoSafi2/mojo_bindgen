@@ -44,7 +44,7 @@ def test_everything_fixture_json_stable() -> None:
 
 
 def test_minimal_types_from_json() -> None:
-    from mojo_bindgen.ir import Opaque, Primitive, StructRef, TypeRef
+    from mojo_bindgen.ir import EnumRef, Opaque, Primitive, StructRef, TypeRef
 
     assert isinstance(
         Primitive.from_json_dict(
@@ -72,6 +72,22 @@ def test_minimal_types_from_json() -> None:
         }
     )
     assert isinstance(r, StructRef)
+    er = EnumRef.from_json_dict(
+        {
+            "kind": "EnumRef",
+            "name": "mode_t",
+            "c_name": "mode_t",
+            "underlying": {
+                "kind": "Primitive",
+                "primitive_kind": "INT",
+                "name": "unsigned int",
+                "is_signed": False,
+                "size_bytes": 4,
+            },
+        }
+    )
+    assert isinstance(er, EnumRef)
+    assert er.name == "mode_t"
     tr = TypeRef.from_json_dict(
         {
             "kind": "TypeRef",
