@@ -312,12 +312,21 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: StructRef) -> str:
+        return self._canonical_struct_ref(t)
+
+    def _canonical_struct_ref(self, t: StructRef) -> str:
         if t.is_union:
-            mid = mojo_ident(t.name.strip())
-            uq = f"{mid}_Union"
-            if self._unsafe_union_comptime is not None and uq in self._unsafe_union_comptime:
-                return uq
-            return f"InlineArray[UInt8, {t.size_bytes}]"
+            return self._canonical_union_struct_ref(t)
+        return self._canonical_record_struct_ref(t)
+
+    def _canonical_union_struct_ref(self, t: StructRef) -> str:
+        mid = mojo_ident(t.name.strip())
+        uq = f"{mid}_Union"
+        if self._unsafe_union_comptime is not None and uq in self._unsafe_union_comptime:
+            return uq
+        return f"InlineArray[UInt8, {t.size_bytes}]"
+
+    def _canonical_record_struct_ref(self, t: StructRef) -> str:
         return mojo_ident(t.name.strip())
 
     def function_ptr_canonical_signature_parts(self, fp: FunctionPtr) -> list[str]:
