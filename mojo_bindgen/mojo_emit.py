@@ -60,6 +60,20 @@ _MOJO_RESERVED = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class PointerOriginNames:
+    """Mut/Immut origin type names for UnsafePointer / OpaquePointer lowering."""
+
+    mut: str
+    immut: str
+
+
+def pointer_origin_names(style: FFIOriginStyle) -> PointerOriginNames:
+    if style == "external":
+        return PointerOriginNames(mut="MutExternalOrigin", immut="ImmutExternalOrigin")
+    return PointerOriginNames(mut="MutAnyOrigin", immut="ImmutAnyOrigin")
+
+
 @dataclass
 class MojoEmitOptions:
     """Controls FFI linking and naming of generated output."""
@@ -186,13 +200,6 @@ def _peel_typeref(t: Type) -> Type:
     return t.canonical if isinstance(t, TypeRef) else t
 
 
-def _ffi_origin_names(style: FFIOriginStyle) -> tuple[str, str]:
-    """Return (mutable_origin, immutable_origin) for UnsafePointer provenance."""
-    if style == "external":
-        return ("MutExternalOrigin", "ImmutExternalOrigin")
-    return ("MutAnyOrigin", "ImmutAnyOrigin")
-
-
 class TypeLowerer:
     """Canonical and signature Mojo type lowering from IR :class:`~mojo_bindgen.ir.Type`."""
 
@@ -200,11 +207,12 @@ class TypeLowerer:
         self,
         *,
         ffi_origin: FFIOriginStyle,
-        unsafe_union_comptime_names: frozenset[str] | None,
+        unsafe_union_comptime: dict[str, list[str]] | None,
         typedef_mojo_names: frozenset[str] | None = None,
     ) -> None:
         self._ffi_origin = ffi_origin
-        self._unsafe_union_comptime_names = unsafe_union_comptime_names
+        self._origin = pointer_origin_names(ffi_origin)
+        self._unsafe_union_comptime = unsafe_union_comptime
         self._typedef_mojo_names = typedef_mojo_names or frozenset()
 
     def signature(self, t: Type) -> str:
@@ -221,7 +229,10 @@ class TypeLowerer:
 
     @singledispatchmethod
     def canonical(self, t: Type) -> str:
-        raise TypeError(f"unsupported type: {type(t)!r}")
+        raise TypeError(
+            f"no canonical lowering registered for IR type {type(t).__name__!r}; "
+            "extend TypeLowerer.canonical with @canonical.register"
+        )
 
     @canonical.register
     def _(self, t: TypeRef) -> str:
@@ -237,56 +248,84 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: Pointer) -> str:
-        mut_o, immut_o = _ffi_origin_names(self._ffi_origin)
+        o = self._origin
         if t.pointee is None:
             if t.is_const:
-                return f"ImmutOpaquePointer[{immut_o}]"
-            return f"MutOpaquePointer[{mut_o}]"
+                return f"ImmutOpaquePointer[{o.immut}]"
+            return f"MutOpaquePointer[{o.mut}]"
         inner = self.canonical(t.pointee)
         if t.is_const:
-            return f"UnsafePointer[{inner}, {immut_o}]"
-        return f"UnsafePointer[{inner}, {mut_o}]"
+            return f"UnsafePointer[{inner}, {o.immut}]"
+        return f"UnsafePointer[{inner}, {o.mut}]"
 
     @canonical.register
     def _(self, t: Array) -> str:
-        mut_o, _immut_o = _ffi_origin_names(self._ffi_origin)
+        o = self._origin
         if t.size is None:
             inner = self.canonical(t.element)
-            return f"UnsafePointer[{inner}, {mut_o}]"
+            return f"UnsafePointer[{inner}, {o.mut}]"
         inner = self.canonical(t.element)
         return f"InlineArray[{inner}, {t.size}]"
 
     @canonical.register
     def _(self, t: FunctionPtr) -> str:
-        mut_o, _immut_o = _ffi_origin_names(self._ffi_origin)
-        return f"MutOpaquePointer[{mut_o}]"
+        return f"MutOpaquePointer[{self._origin.mut}]"
 
     @canonical.register
     def _(self, t: Opaque) -> str:
-        mut_o, _immut_o = _ffi_origin_names(self._ffi_origin)
-        return f"MutOpaquePointer[{mut_o}]"
+        return f"MutOpaquePointer[{self._origin.mut}]"
 
     @canonical.register
     def _(self, t: StructRef) -> str:
         if t.is_union:
             mid = mojo_ident(t.name.strip())
             uq = f"{mid}_Union"
-            if self._unsafe_union_comptime_names is not None and uq in self._unsafe_union_comptime_names:
+            if self._unsafe_union_comptime is not None and uq in self._unsafe_union_comptime:
                 return uq
             return f"InlineArray[UInt8, {t.size_bytes}]"
         return mojo_ident(t.name.strip())
+
+    def function_ptr_canonical_signature_parts(self, fp: FunctionPtr) -> list[str]:
+        """Lowered ret and param types (same as used for FFI wire comments)."""
+        parts = [self.canonical(fp.ret)]
+        parts.extend(self.canonical(p) for p in fp.params)
+        return parts
+
+    def function_ptr_canonical_signature(self, fp: FunctionPtr) -> str:
+        """Comma-separated lowered ret and param types (semantic signature, not wire pointer type)."""
+        return ", ".join(self.function_ptr_canonical_signature_parts(fp))
+
+    def function_ptr_comment(self, fp: FunctionPtr) -> str:
+        inner = self.function_ptr_canonical_signature(fp)
+        var = "varargs" if fp.is_variadic else "fixed"
+        return f"function pointer ({var}): ({inner})"
+
+    def param_names(self, params: list[Param]) -> list[str]:
+        out: list[str] = []
+        for i, p in enumerate(params):
+            if p.name.strip():
+                out.append(mojo_ident(p.name))
+            else:
+                out.append(f"a{i}")
+        return out
+
+    def function_type_param_list(self, fn: Function, ret_list: str) -> str:
+        type_params = [f'"{fn.link_name}"', ret_list]
+        for p in fn.params:
+            type_params.append(self.canonical(p.type))
+        return ", ".join(type_params)
 
 
 def lower_type(
     t: Type,
     *,
     ffi_origin: FFIOriginStyle = "external",
-    unsafe_union_comptime_names: frozenset[str] | None = None,
+    unsafe_union_comptime: dict[str, list[str]] | None = None,
 ) -> str:
     """Lower IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
     return TypeLowerer(
         ffi_origin=ffi_origin,
-        unsafe_union_comptime_names=unsafe_union_comptime_names,
+        unsafe_union_comptime=unsafe_union_comptime,
         typedef_mojo_names=frozenset(),
     ).canonical(t)
 
@@ -346,7 +385,7 @@ def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> lis
     lowered: list[str] = []
     lower = TypeLowerer(
         ffi_origin=ffi_origin,
-        unsafe_union_comptime_names=None,
+        unsafe_union_comptime=None,
         typedef_mojo_names=frozenset(),
     )
     for f in decl.fields:
@@ -358,13 +397,16 @@ def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> lis
     return lowered
 
 
-def _eligible_unsafe_union_comptime_names(unit: Unit, ffi_origin: FFIOriginStyle) -> frozenset[str]:
-    names: set[str] = set()
+def _eligible_unsafe_union_comptime(unit: Unit, ffi_origin: FFIOriginStyle) -> dict[str, list[str]]:
+    """Map ``{mojo_name}_Union`` → lowered member types (computed once per union)."""
+    out: dict[str, list[str]] = {}
     for d in unit.decls:
         if isinstance(d, Struct) and d.is_union:
-            if _try_unsafe_union_type_list(d, ffi_origin) is not None:
-                names.add(f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union")
-    return frozenset(names)
+            tl = _try_unsafe_union_type_list(d, ffi_origin)
+            if tl is not None:
+                key = f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union"
+                out[key] = tl
+    return out
 
 
 def _struct_by_mojo_name(unit: Unit) -> dict[str, Struct]:
@@ -426,20 +468,13 @@ def _field_mojo_name(f: Field, index: int) -> str:
     return f"_anon_{index}"
 
 
-def _function_ptr_comment(
-    fp: FunctionPtr,
-    *,
-    lower: TypeLowerer,
-) -> str:
-    parts = [lower.canonical(fp.ret)]
-    for p in fp.params:
-        parts.append(lower.canonical(p))
-    var = "varargs" if fp.is_variadic else "fixed"
-    return f"function pointer ({var}): ({', '.join(parts)})"
-
-
 def _struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
-    """Return (successor, predecessor) pairs: `succ` depends on `pred` (emit `pred` first)."""
+    """Return (successor, predecessor) pairs: `succ` depends on `pred` (emit `pred` first).
+
+    Only **by-value** struct references create ordering edges. Pointer and function-pointer
+    fields do not (C allows pointers to incomplete types); nested struct layout is still
+    captured via ``Array``/``StructRef`` for value-embedded arrays of structs.
+    """
     me = mojo_ident(s.name.strip() or s.c_name.strip())
     edges: list[tuple[str, str]] = []
 
@@ -456,14 +491,8 @@ def _struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
             if pred != me:
                 edges.append((me, pred))
             return
-        if isinstance(ty, Pointer) and ty.pointee is not None:
-            walk(ty.pointee)
-        elif isinstance(ty, Array):
+        if isinstance(ty, Array):
             walk(ty.element)
-        elif isinstance(ty, FunctionPtr):
-            walk(ty.ret)
-            for p in ty.params:
-                walk(p)
 
     for f in s.fields:
         walk(f.type)
@@ -555,61 +584,123 @@ def _emitted_typedef_mojo_names(unit: Unit, plan: UnitEmissionPlan) -> frozenset
     )
 
 
-def _emit_unsafe_union_comptime(decl: Struct, ffi_origin: FFIOriginStyle) -> str | None:
-    """Emit ``comptime name_Union = UnsafeUnion[...]`` or None if not eligible."""
-    tl = _try_unsafe_union_type_list(decl, ffi_origin)
-    if tl is None:
-        return None
+def _emit_unsafe_union_comptime(decl: Struct, type_list: list[str]) -> str:
+    """Emit ``comptime name_Union = UnsafeUnion[...]`` (caller ensures eligibility)."""
     name = mojo_ident(decl.name.strip() or decl.c_name.strip())
-    types_csv = ", ".join(tl)
+    types_csv = ", ".join(type_list)
     return f"comptime {name}_Union = UnsafeUnion[{types_csv}]\n\n"
 
 
-def _param_names(params: list[Param]) -> list[str]:
-    out: list[str] = []
-    for i, p in enumerate(params):
-        if p.name.strip():
-            out.append(mojo_ident(p.name))
-        else:
-            out.append(f"a{i}")
-    return out
+@dataclass(frozen=True)
+class EmitContext:
+    """Shared state for Mojo emission fragments (structs, functions, imports)."""
+
+    opts: MojoEmitOptions
+    types: TypeLowerer
+    struct_by_name: dict[str, Struct]
+    typedef_mojo_names: frozenset[str]
+    unsafe_union_comptime: dict[str, list[str]] | None
+    needs_opaque_imports: bool
 
 
-def _function_type_param_list(fn: Function, ret_list: str, lower: TypeLowerer) -> str:
-    type_params = [f'"{fn.link_name}"', ret_list]
-    for p in fn.params:
-        type_params.append(lower.canonical(p.type))
-    return ", ".join(type_params)
+def _emit_context_from_unit(unit: Unit, plan: UnitEmissionPlan, options: MojoEmitOptions) -> EmitContext:
+    uq = _eligible_unsafe_union_comptime(unit, options.ffi_origin)
+    td = _emitted_typedef_mojo_names(unit, plan)
+    uq_opt: dict[str, list[str]] | None = uq if uq else None
+    return EmitContext(
+        opts=options,
+        types=TypeLowerer(
+            ffi_origin=options.ffi_origin,
+            unsafe_union_comptime=uq_opt,
+            typedef_mojo_names=td,
+        ),
+        struct_by_name=_struct_by_mojo_name(unit),
+        typedef_mojo_names=td,
+        unsafe_union_comptime=uq_opt,
+        needs_opaque_imports=_unit_needs_opaque_imports(unit),
+    )
 
 
-def _emitter_for_struct_emit(
+def emit_context_for_struct_test(
     options: MojoEmitOptions,
     struct_by_name: dict[str, Struct],
-    unsafe_union_comptime_names: frozenset[str] | None,
-) -> MojoModuleEmitter:
-    """Minimal emitter state for isolated struct emission (tests)."""
-    emitter = MojoModuleEmitter.__new__(MojoModuleEmitter)
-    emitter._opts = options
-    emitter._struct_by_name = struct_by_name
-    emitter._unsafe_union_comptime_names = unsafe_union_comptime_names
-    emitter._typedef_mojo_names = frozenset()
-    emitter._types = TypeLowerer(
-        ffi_origin=options.ffi_origin,
-        unsafe_union_comptime_names=unsafe_union_comptime_names,
+    unsafe_union_comptime: dict[str, list[str]] | None,
+) -> EmitContext:
+    """Build a minimal :class:`EmitContext` for isolated struct emission (tests)."""
+    return EmitContext(
+        opts=options,
+        types=TypeLowerer(
+            ffi_origin=options.ffi_origin,
+            unsafe_union_comptime=unsafe_union_comptime,
+            typedef_mojo_names=frozenset(),
+        ),
+        struct_by_name=struct_by_name,
         typedef_mojo_names=frozenset(),
+        unsafe_union_comptime=unsafe_union_comptime,
+        needs_opaque_imports=False,
     )
-    emitter._needs_opaque_imports = False
-    return emitter
+
+
+def emit_field_lines(ctx: EmitContext, b: CodeBuilder, f: Field, index: int, _parent_for_anon: str) -> None:
+    type_str = ctx.types.canonical(f.type)
+    fname = _field_mojo_name(f, index)
+    if f.is_bitfield:
+        b.add(
+            f"# bitfield: C bits {f.bit_offset}..{f.bit_offset + f.bit_width - 1} "
+            f"({f.bit_width} bits) on {f.type.name}"
+        )
+    if isinstance(f.type, FunctionPtr):
+        b.add(f"# {ctx.types.function_ptr_comment(f.type)}")
+    if ctx.opts.warn_abi and f.is_bitfield:
+        b.add("# ABI: verify bitfield layout matches target C compiler.")
+    b.add(f"var {fname}: {type_str}")
+
+
+def emit_struct(ctx: EmitContext, decl: Struct) -> str:
+    """Emit one non-union ``struct`` definition."""
+    name = mojo_ident(decl.name.strip() or decl.c_name.strip())
+    traits = (
+        "(Copyable, Movable, RegisterPassable)"
+        if _struct_decl_register_passable(decl, ctx.struct_by_name)
+        else "(Copyable, Movable)"
+    )
+    b = CodeBuilder()
+    if ctx.opts.warn_abi:
+        b.add(
+            f"# struct {decl.c_name} — size={decl.size_bytes} align={decl.align_bytes} "
+            "(verify packed/aligned ABI)"
+        )
+    if ctx.opts.emit_align:
+        ab = decl.align_bytes
+        if _mojo_align_decorator_ok(ab):
+            b.add(f"@align({ab})")
+            if decl.size_bytes % ab != 0:
+                b.add(
+                    "# FFI: array stride follows size_of[T](); only T[0] is guaranteed "
+                    "align_of[T]-aligned; pad struct size to a multiple of alignment for per-element alignment."
+                )
+        elif ab > 1 and not _mojo_align_decorator_ok(ab):
+            b.add(
+                f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
+            )
+    b.add("@fieldwise_init")
+    b.add(f"struct {name}{traits}:")
+    b.indent()
+    for i, f in enumerate(decl.fields):
+        emit_field_lines(ctx, b, f, i, name)
+    b.dedent()
+    b.add("")
+    return b.render()
 
 
 def _emit_struct(
     decl: Struct,
     options: MojoEmitOptions,
     struct_by_name: dict[str, Struct],
-    unsafe_union_comptime_names: frozenset[str] | None,
+    unsafe_union_comptime: dict[str, list[str]] | None,
 ) -> str:
-    """Emit one struct (tests; uses fragment emitter state)."""
-    return _emitter_for_struct_emit(options, struct_by_name, unsafe_union_comptime_names)._emit_struct(decl)
+    """Emit one struct (tests; thin wrapper over :func:`emit_struct`)."""
+    return emit_struct(emit_context_for_struct_test(options, struct_by_name, unsafe_union_comptime), decl)
 
 
 class MojoModuleEmitter:
@@ -618,26 +709,17 @@ class MojoModuleEmitter:
     def __init__(self, unit: Unit, plan: UnitEmissionPlan, options: MojoEmitOptions) -> None:
         self._unit = unit
         self._plan = plan
-        self._opts = options
-        self._struct_by_name = _struct_by_mojo_name(unit)
-        self._typedef_mojo_names = _emitted_typedef_mojo_names(unit, plan)
-        self._unsafe_union_comptime_names = _eligible_unsafe_union_comptime_names(unit, options.ffi_origin)
-        self._needs_opaque_imports = _unit_needs_opaque_imports(unit)
-        self._types = TypeLowerer(
-            ffi_origin=options.ffi_origin,
-            unsafe_union_comptime_names=self._unsafe_union_comptime_names,
-            typedef_mojo_names=self._typedef_mojo_names,
-        )
+        self._ctx = _emit_context_from_unit(unit, plan, options)
 
     def emit(self) -> str:
         chunks: list[str] = []
-        if self._opts.module_comment:
+        if self._ctx.opts.module_comment:
             chunks.append(self._module_header(self._unit))
         chunks.append(self._import_block())
         chunks.append(self._dl_handle_helpers())
         chunks.append(self._emit_union_comments())
         for s in self._plan.sorted_structs:
-            chunks.append(self._emit_struct(s))
+            chunks.append(emit_struct(self._ctx, s))
         emitted = self._plan.emitted_struct_enum_names
         for d in self._plan.tail_decls:
             chunks.append(self._emit_tail_decl(d, emitted))
@@ -649,32 +731,32 @@ class MojoModuleEmitter:
                 "# Generated by mojo_bindgen — do not edit by hand.",
                 f"# source: {unit.source_header}",
                 f"# library: {unit.library}  link_name: {unit.link_name}",
-                f"# FFI mode: {self._opts.linking}",
+                f"# FFI mode: {self._ctx.opts.linking}",
                 "",
             ]
         )
 
     def _import_block(self) -> str:
         lines: list[str] = []
-        if self._opts.linking == "external_call":
+        if self._ctx.opts.linking == "external_call":
             ffi_names = ["external_call"]
-            if self._unsafe_union_comptime_names:
+            if self._ctx.unsafe_union_comptime:
                 ffi_names.append("UnsafeUnion")
             lines.append(f"from std.ffi import {', '.join(ffi_names)}")
         else:
             ffi_names = ["DEFAULT_RTLD", "OwnedDLHandle"]
-            if self._unsafe_union_comptime_names:
+            if self._ctx.unsafe_union_comptime:
                 ffi_names.append("UnsafeUnion")
             lines.append(f"from std.ffi import {', '.join(ffi_names)}")
-        if self._needs_opaque_imports:
+        if self._ctx.needs_opaque_imports:
             lines.append("from std.memory import ImmutOpaquePointer, MutOpaquePointer")
         return "\n".join(lines) + "\n\n"
 
     def _dl_handle_helpers(self) -> str:
-        if self._opts.linking != "owned_dl_handle":
+        if self._ctx.opts.linking != "owned_dl_handle":
             return ""
-        if self._opts.library_path_hint:
-            path_lit = self._opts.library_path_hint.replace("\\", "\\\\").replace('"', '\\"')
+        if self._ctx.opts.library_path_hint:
+            path_lit = self._ctx.opts.library_path_hint.replace("\\", "\\\\").replace('"', '\\"')
             return (
                 f'comptime _BINDGEN_LIB_PATH: String = "{path_lit}"\n\n'
                 "def _bindgen_dl() raises -> OwnedDLHandle:\n"
@@ -688,11 +770,13 @@ class MojoModuleEmitter:
 
     def _emit_union_comments(self) -> str:
         parts: list[str] = []
-        fo = self._opts.ffi_origin
+        uq = self._ctx.unsafe_union_comptime or {}
         for d in self._unit.decls:
             if isinstance(d, Struct) and d.is_union:
-                comptime = _emit_unsafe_union_comptime(d, fo)
-                uses = comptime is not None
+                key = f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union"
+                tl = uq.get(key)
+                comptime = _emit_unsafe_union_comptime(d, tl) if tl is not None else None
+                uses = tl is not None
                 if comptime:
                     parts.append(comptime)
                 parts.append(self._emit_union_comment(d, uses_unsafe_union=uses))
@@ -701,8 +785,8 @@ class MojoModuleEmitter:
     def _emit_union_comment(self, decl: Struct, *, uses_unsafe_union: bool) -> str:
         """Document a C union; struct body is not emitted separately."""
         lower = TypeLowerer(
-            ffi_origin=self._opts.ffi_origin,
-            unsafe_union_comptime_names=None,
+            ffi_origin=self._ctx.opts.ffi_origin,
+            unsafe_union_comptime=None,
             typedef_mojo_names=frozenset(),
         )
         name = mojo_ident(decl.name.strip() or decl.c_name.strip())
@@ -726,57 +810,6 @@ class MojoModuleEmitter:
         lines.append("")
         return "\n".join(lines)
 
-    def _emit_field_lines(self, f: Field, index: int, _parent_for_anon: str) -> list[str]:
-        type_str = self._types.canonical(f.type)
-        fname = _field_mojo_name(f, index)
-        lines: list[str] = []
-        if f.is_bitfield:
-            lines.append(
-                f"# bitfield: C bits {f.bit_offset}..{f.bit_offset + f.bit_width - 1} "
-                f"({f.bit_width} bits) on {f.type.name}"
-            )
-        if isinstance(f.type, FunctionPtr):
-            lines.append(f"# {_function_ptr_comment(f.type, lower=self._types)}")
-        if self._opts.warn_abi and f.is_bitfield:
-            lines.append("# ABI: verify bitfield layout matches target C compiler.")
-        lines.append(f"var {fname}: {type_str}")
-        return lines
-
-    def _emit_struct(self, decl: Struct) -> str:
-        name = mojo_ident(decl.name.strip() or decl.c_name.strip())
-        traits = (
-            "(Copyable, Movable, RegisterPassable)"
-            if _struct_decl_register_passable(decl, self._struct_by_name)
-            else "(Copyable, Movable)"
-        )
-        b = CodeBuilder()
-        if self._opts.warn_abi:
-            b.add(
-                f"# struct {decl.c_name} — size={decl.size_bytes} align={decl.align_bytes} "
-                "(verify packed/aligned ABI)"
-            )
-        if self._opts.emit_align:
-            ab = decl.align_bytes
-            if _mojo_align_decorator_ok(ab):
-                b.add(f"@align({ab})")
-                if decl.size_bytes % ab != 0:
-                    b.add(
-                        "# FFI: array stride follows size_of[T](); only T[0] is guaranteed "
-                        "align_of[T]-aligned; pad struct size to a multiple of alignment for per-element alignment."
-                    )
-            elif ab > 1 and not _mojo_align_decorator_ok(ab):
-                b.add(
-                    f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
-                )
-        b.add("@fieldwise_init")
-        b.add(f"struct {name}{traits}:")
-        b.indent()
-        for i, f in enumerate(decl.fields):
-            b.extend(self._emit_field_lines(f, i, name))
-        b.dedent()
-        b.add("")
-        return b.render()
-
     def _emit_enum(self, decl: Enum) -> str:
         """Emit C enum as a register-passable struct with `value` + comptime enumerants."""
         base = lower_primitive(decl.underlying)
@@ -798,7 +831,7 @@ class MojoModuleEmitter:
         """Emit ``comptime name = …`` unless the typedef name duplicates a struct/enum alias."""
         if mojo_ident(decl.name) in emitted_struct_enum_names:
             return ""
-        tstr = self._types.canonical(decl.canonical)
+        tstr = self._ctx.types.canonical(decl.canonical)
         return f"comptime {mojo_ident(decl.name)} = {tstr}\n\n"
 
     def _emit_const(self, decl: Const) -> str:
@@ -826,10 +859,10 @@ class MojoModuleEmitter:
         is_void: bool,
         ret_list: str,
     ) -> str:
-        bracket_inner = _function_type_param_list(fn, ret_list, self._types)
+        bracket_inner = self._ctx.types.function_type_param_list(fn, ret_list)
         name = mojo_ident(fn.name)
         b = CodeBuilder()
-        if self._opts.linking == "external_call":
+        if self._ctx.opts.linking == "external_call":
             if is_void:
                 b.add(f'def {name}({args_sig}) abi("C") -> None:')
                 b.indent()
@@ -854,25 +887,25 @@ class MojoModuleEmitter:
         return b.render() + "\n"
 
     def _emit_function(self, fn: Function) -> str:
-        ret_t = self._types.signature(fn.ret)
+        ret_t = self._ctx.types.signature(fn.ret)
         params = fn.params
-        pnames = _param_names(params)
+        pnames = self._ctx.types.param_names(params)
         arg_decls = [
-            f"{pname}: {self._types.signature(p.type)}" for pname, p in zip(pnames, params)
+            f"{pname}: {self._ctx.types.signature(p.type)}" for pname, p in zip(pnames, params)
         ]
         args_sig = ", ".join(arg_decls)
         if fn.is_variadic:
             return self._emit_function_variadic(fn, ret_t, args_sig)
 
         call_args = ", ".join(pnames)
-        ret_abi = self._types.canonical(fn.ret)
+        ret_abi = self._ctx.types.canonical(fn.ret)
         is_void = ret_abi == "NoneType"
         ret_list = "NoneType" if is_void else ret_abi
 
         ret_u = _peel_typeref(fn.ret)
         if isinstance(ret_u, StructRef):
-            rs = self._struct_by_name.get(mojo_ident(ret_u.name.strip()))
-            if rs is not None and not _struct_decl_register_passable(rs, self._struct_by_name):
+            rs = self._ctx.struct_by_name.get(mojo_ident(ret_u.name.strip()))
+            if rs is not None and not _struct_decl_register_passable(rs, self._ctx.struct_by_name):
                 return self._emit_function_non_register_return(fn, ret_t, args_sig)
 
         return self._emit_function_thin_wrapper(
