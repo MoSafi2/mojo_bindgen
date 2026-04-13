@@ -1,6 +1,7 @@
-"""Value-embedding struct dependency order (tests / future tooling only).
+"""Value-embedding struct dependency ordering for code generation.
 
-Not used by :mod:`mojo_bindgen.mojo_emit`; emitted structs follow IR declaration order.
+These helpers compute an emission order for structs that embed other structs
+by value, so referenced layouts appear before the records that depend on them.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ def struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
     edges: list[tuple[str, str]] = []
 
     def walk(ty: Type) -> None:
+        """Collect by-value struct dependencies reachable from ``ty``."""
         if isinstance(ty, TypeRef):
             walk(ty.canonical)
             return
@@ -43,11 +45,17 @@ def struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
 
 
 def toposort_structs(structs: list[Struct]) -> list[Struct]:
-    """Order structs so value-embedded :class:`~mojo_bindgen.ir.StructRef` predecessors come first."""
+    """Return structs in an order suitable for emission.
+
+    Value-embedded :class:`~mojo_bindgen.ir.StructRef` dependencies are emitted
+    before the records that use them. Cycles fall back to the original input
+    order once the acyclic portion of the graph is exhausted.
+    """
     if not structs:
         return []
 
     def name_of(s: Struct) -> str:
+        """Return the sanitized emitted name for ``s``."""
         return mojo_ident(s.name.strip() or s.c_name.strip())
 
     names = [name_of(s) for s in structs]

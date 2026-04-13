@@ -1,8 +1,14 @@
-"""Code generation analysis and emission modules."""
+"""Public Mojo code generation API.
 
-from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_unit
+Import from this package when you want the stable, higher-level codegen
+surface rather than the individual implementation modules.
+"""
+
+from mojo_bindgen.codegen.generator import MojoGenerator, generate_mojo
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 __all__ = [
+    "MojoGenerator",
     "MojoEmitOptions",
-    "emit_unit",
+    "generate_mojo",
 ]

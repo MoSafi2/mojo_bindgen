@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`mojo_bindgen.codegen.mojo_analyze` (no libclang)."""
+"""Unit tests for :mod:`mojo_bindgen.codegen.analysis` (no libclang)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from mojo_bindgen.ir import (
 
 def _f32() -> Primitive:
     return Primitive(name="float", kind=PrimitiveKind.FLOAT, is_signed=True, size_bytes=4)
-from mojo_bindgen.codegen.mojo_analyze import analyze_unit
+from mojo_bindgen.codegen.analysis import analyze_unit
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
@@ -98,7 +98,7 @@ def test_analyze_typedef_skipped_when_name_collides_with_struct() -> None:
 
 
 def test_analyze_eligible_union_gets_comptime_block() -> None:
-    """Members must lower to unique Mojo types for UnsafeUnion comptime."""
+    """Members must lower to unique Mojo types for UnsafeUnion."""
     i32 = _i32()
     f32 = _f32()
     u = Struct(
@@ -114,12 +114,9 @@ def test_analyze_eligible_union_gets_comptime_block() -> None:
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", decls=[u])
     au = analyze_unit(unit, MojoEmitOptions())
-    assert len(au.union_blocks) == 1
-    ub = au.union_blocks[0]
-    assert ub.comptime is not None
-    assert "UnsafeUnion" in ub.comptime
-    assert "Int32" in ub.comment_block
-    assert "Float32" in ub.comment_block
+    assert len(au.unions) == 1
+    assert au.unions[0].uses_unsafe_union is True
+    assert "U_Union" in au.unsafe_union_names
 
 
 def test_analyze_precomputes_struct_align_and_passability() -> None:
@@ -134,8 +131,8 @@ def test_analyze_precomputes_struct_align_and_passability() -> None:
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
     au = analyze_unit(unit, MojoEmitOptions(emit_align=True))
-    assert len(au.sorted_structs) == 1
-    s = au.sorted_structs[0]
+    assert len(au.ordered_structs) == 1
+    s = au.ordered_structs[0]
     assert s.register_passable is True
     assert s.align_decorator == 8
     assert s.align_stride_warning is True
@@ -158,4 +155,5 @@ def test_analyze_typedef_name_in_function_signature_when_typedef_emitted() -> No
     assert len(au.tail_decls) == 2
     af = au.tail_decls[1]
     assert af.kind == "wrapper"
-    assert "my_size_t" in af.args_sig
+    assert af.param_names == ("n",)
+    assert "my_size_t" in au.emitted_typedef_mojo_names

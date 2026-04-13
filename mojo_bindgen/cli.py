@@ -6,7 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_unit
+from mojo_bindgen.codegen.generator import MojoGenerator
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.parsing.parser import ClangParser, ParseError
 
 
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             library_path_hint=args.library_path_hint,
             emit_align=args.emit_align,
         )
-        text = emit_unit(unit, opts)
+        text = MojoGenerator(opts).generate(unit)
 
     if args.output is None:
         sys.stdout.write(text)

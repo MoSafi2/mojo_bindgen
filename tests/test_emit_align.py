@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from mojo_bindgen.ir import Field, Primitive, PrimitiveKind, Struct
-from mojo_bindgen.codegen.mojo_analyze import analyzed_struct_for_test, struct_by_mojo_name
-from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_struct, mojo_ident
+from mojo_bindgen.codegen.analysis import analyzed_struct_for_test, struct_by_mojo_name
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.lowering import mojo_ident
+from mojo_bindgen.codegen.render import render_struct
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -51,9 +53,8 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
         patched,
         options=opts,
         struct_by_name=struct_by_name,
-        unsafe_union_comptime=None,
     )
-    text = emit_struct(opts, analyzed)
+    text = render_struct(analyzed, opts)
     assert "@align(16)" in text
     assert "FFI: array stride" in text
 
@@ -80,9 +81,8 @@ def test_align_omitted_comment_for_invalid_c_align_bytes() -> None:
         bad,
         options=opts,
         struct_by_name={mojo_ident(bad.name.strip() or bad.c_name.strip()): bad},
-        unsafe_union_comptime=None,
     )
-    text = emit_struct(opts, analyzed)
+    text = render_struct(analyzed, opts)
     assert "@align(" not in text
     assert "align_bytes=3" in text
     assert "omitted" in text

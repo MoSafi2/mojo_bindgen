@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.codegen.mojo_emit import MojoEmitOptions, emit_unit
+from mojo_bindgen.codegen.generator import MojoGenerator
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.parsing.parser import ClangParser
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -66,7 +67,7 @@ def test_emit_everything_matches_golden() -> None:
         link_name="everything",
     )
     unit = parser.run()
-    out = emit_unit(unit, MojoEmitOptions())
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
     expected = golden_path.read_text(encoding="utf-8")
     assert _normalize_source_line(out) == _normalize_source_line(expected)
 
@@ -83,7 +84,7 @@ def test_emit_everything_without_align_matches_golden() -> None:
         link_name="everything",
     )
     unit = parser.run()
-    out = emit_unit(unit, MojoEmitOptions(emit_align=False))
+    out = MojoGenerator(MojoEmitOptions(emit_align=False)).generate(unit)
     expected = golden_path.read_text(encoding="utf-8")
     assert _normalize_source_line(out) == _normalize_source_line(expected)
 

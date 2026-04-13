@@ -1,7 +1,8 @@
-"""IR → Mojo type strings (canonical and typedef-aware signatures).
+"""IR -> Mojo type strings and identifier lowering helpers.
 
-Used by :mod:`mojo_bindgen.mojo_analyze` (signatures, struct fields) and
-:mod:`mojo_bindgen.mojo_emit` (consistent ABI lowering across the pipeline).
+This module contains pure lowering logic shared by analysis and rendering.
+It does not decide what to emit; it only converts IR concepts into the Mojo
+names and type strings needed by later stages.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from mojo_bindgen.ir import (
 )
 
 FFIOriginStyle = Literal["external", "any"]
+"""Pointer provenance styles supported by the generated Mojo bindings."""
 
 # Mojo keywords and reserved — append underscore if collision.
 _MOJO_RESERVED = frozenset(
@@ -119,13 +121,13 @@ class TypeLowerer:
         self,
         *,
         ffi_origin: FFIOriginStyle,
-        unsafe_union_comptime: dict[str, list[str]] | None,
+        unsafe_union_names: frozenset[str] | None,
         typedef_mojo_names: frozenset[str] | None = None,
     ) -> None:
-        """Configure pointer origins, optional ``UnsafeUnion`` comptime keys, and typedef aliases for ``signature``."""
+        """Configure pointer origins, optional ``UnsafeUnion`` names, and typedef aliases for ``signature``."""
         self._ffi_origin = ffi_origin
         self._origin = pointer_origin_names(ffi_origin)
-        self._unsafe_union_comptime = unsafe_union_comptime
+        self._unsafe_union_names = unsafe_union_names or frozenset()
         self._typedef_mojo_names = typedef_mojo_names or frozenset()
 
     def signature(self, t: Type) -> str:
@@ -194,18 +196,21 @@ class TypeLowerer:
         return self._canonical_struct_ref(t)
 
     def _canonical_struct_ref(self, t: StructRef) -> str:
+        """Lower a struct reference, dispatching unions to their storage strategy."""
         if t.is_union:
             return self._canonical_union_struct_ref(t)
         return self._canonical_record_struct_ref(t)
 
     def _canonical_union_struct_ref(self, t: StructRef) -> str:
+        """Lower a union reference to an ``UnsafeUnion`` alias or byte storage."""
         mid = mojo_ident(t.name.strip())
         uq = f"{mid}_Union"
-        if self._unsafe_union_comptime is not None and uq in self._unsafe_union_comptime:
+        if uq in self._unsafe_union_names:
             return uq
         return f"InlineArray[UInt8, {t.size_bytes}]"
 
     def _canonical_record_struct_ref(self, t: StructRef) -> str:
+        """Lower a non-union record reference to its emitted Mojo identifier."""
         return mojo_ident(t.name.strip())
 
     def function_ptr_canonical_signature_parts(self, fp: FunctionPtr) -> list[str]:
@@ -246,11 +251,11 @@ def lower_type(
     t: Type,
     *,
     ffi_origin: FFIOriginStyle = "external",
-    unsafe_union_comptime: dict[str, list[str]] | None = None,
+    unsafe_union_names: frozenset[str] | None = None,
 ) -> str:
     """Lower IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
     return TypeLowerer(
         ffi_origin=ffi_origin,
-        unsafe_union_comptime=unsafe_union_comptime,
+        unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=frozenset(),
     ).canonical(t)

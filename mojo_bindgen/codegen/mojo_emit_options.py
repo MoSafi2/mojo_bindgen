@@ -1,4 +1,4 @@
-"""Options for Mojo FFI module emission."""
+"""Options that configure Mojo code generation and rendering."""
 
 from __future__ import annotations
 
@@ -8,11 +8,16 @@ from typing import Literal
 from mojo_bindgen.codegen.lowering import FFIOriginStyle
 
 LinkingMode = Literal["external_call", "owned_dl_handle"]
+"""Supported linking strategies for generated wrappers."""
 
 
 @dataclass
 class MojoEmitOptions:
-    """Controls FFI linking and naming of generated output."""
+    """Controls Mojo code generation and rendering behavior.
+
+    The options are shared by analysis and rendering. They shape link strategy,
+    pointer provenance, generated comments, and alignment emission policy.
+    """
 
     linking: LinkingMode = "external_call"
     """external_call: link C symbols at mojo build time; emitted wrappers use ``abi("C")``.
