@@ -46,8 +46,10 @@ class FieldBuilder:
         else:
             field = Field(
                 name=field_name,
+                source_name=field_name,
                 type=self._resolve_type(),
                 byte_offset=byte_offset,
+                is_anonymous=not bool(field_name),
             )
 
         return FieldBuildResult(field=field, nested=self.nested)
@@ -65,8 +67,10 @@ class FieldBuilder:
             return None
         return Field(
             name=name,
+            source_name=name,
             type=backing,
             byte_offset=byte_offset,
+            is_anonymous=not bool(name),
             is_bitfield=True,
             bit_offset=max(bit_offset, 0),
             bit_width=self.cursor.get_bitfield_width(),
@@ -93,8 +97,10 @@ class FieldBuilder:
 
         self.nested.append(inner)
         return StructRef(
+            decl_id=inner.decl_id,
             name=inner.name,
             c_name=inner.c_name,
             is_union=inner.is_union,
             size_bytes=inner.size_bytes,
+            is_anonymous=inner.is_anonymous,
         )

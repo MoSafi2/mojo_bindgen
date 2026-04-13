@@ -35,6 +35,7 @@ from mojo_bindgen.ir import (
     Enum,
     Enumerant,
     Function,
+    IRDiagnostic,
     Param,
     Primitive,
     PrimitiveKind,
@@ -250,6 +251,14 @@ class ClangParser:
             )
         )
 
+    @staticmethod
+    def _decl_id(cursor: cx.Cursor) -> str:
+        usr = cursor.get_usr()
+        if usr:
+            return usr
+        loc = cursor.location
+        return f"{loc.file}:{loc.line}:{loc.column}:{cursor.kind}:{cursor.spelling}"
+
     # ── public entry point ────────────────────────────────────────────────────
 
     def run(self) -> Unit:
@@ -291,6 +300,16 @@ class ClangParser:
             library=self.library,
             link_name=self.link_name,
             decls=self._decls,
+            diagnostics=[
+                IRDiagnostic(
+                    severity=d.severity,
+                    message=d.message,
+                    file=d.file,
+                    line=d.line,
+                    col=d.col,
+                )
+                for d in self.diagnostics
+            ],
         )
 
     # ── parsing ───────────────────────────────────────────────────────────────
@@ -432,11 +451,13 @@ class ClangParser:
             )
 
         return Function(
+            decl_id=self._decl_id(cursor),
             name=cursor.spelling,
             link_name=cursor.spelling,
             ret=ret_ir,
             params=params,
             is_variadic=is_variadic,
+            calling_convention=self._type_builder._calling_convention(fn_type),
         )
 
     # ── struct / union ────────────────────────────────────────────────────────
@@ -525,6 +546,7 @@ class ClangParser:
             ))
 
         return Enum(
+            decl_id=self._decl_id(cursor),
             name=c_name,
             c_name=c_name,
             underlying=underlying,
@@ -545,7 +567,12 @@ class ClangParser:
         ut = cursor.underlying_typedef_type
         aliased = self._type_builder.build(ut, TypeContext.TYPEDEF)
         canonical = self._type_builder.build(ut.get_canonical(), TypeContext.TYPEDEF)
-        return Typedef(name=name, aliased=aliased, canonical=canonical)
+        return Typedef(
+            decl_id=self._decl_id(cursor),
+            name=name,
+            aliased=aliased,
+            canonical=canonical,
+        )
 
     # ── top-level const variable ───────────────────────────────────────────────
 

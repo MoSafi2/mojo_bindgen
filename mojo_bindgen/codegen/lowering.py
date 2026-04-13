@@ -166,18 +166,18 @@ class TypeLowerer:
     def _(self, t: Pointer) -> str:
         o = self._origin
         if t.pointee is None:
-            if t.is_const:
+            if t.qualifiers.is_const:
                 return f"ImmutOpaquePointer[{o.immut}]"
             return f"MutOpaquePointer[{o.mut}]"
         inner = self.canonical(t.pointee)
-        if t.is_const:
+        if t.qualifiers.is_const:
             return f"UnsafePointer[{inner}, {o.immut}]"
         return f"UnsafePointer[{inner}, {o.mut}]"
 
     @canonical.register
     def _(self, t: Array) -> str:
         o = self._origin
-        if t.size is None:
+        if t.array_kind != "fixed" or t.size is None:
             inner = self.canonical(t.element)
             return f"UnsafePointer[{inner}, {o.mut}]"
         inner = self.canonical(t.element)

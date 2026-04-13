@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Callable, Self, Union
+from typing import Any, Callable, Literal, Self, Union
 
 
 class PrimitiveKind(StrEnum):
@@ -14,6 +14,34 @@ class PrimitiveKind(StrEnum):
     FLOAT = "FLOAT"
     BOOL = "BOOL"
     VOID = "VOID"
+
+
+ArrayKind = Literal["fixed", "incomplete", "flexible", "variable"]
+"""Array-shape categories that matter for ABI-faithful lowering."""
+
+
+@dataclass(frozen=True)
+class Qualifiers:
+    """C type qualifiers preserved on pointee types and other referenced types."""
+
+    is_const: bool = False
+    is_volatile: bool = False
+    is_restrict: bool = False
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "is_const": self.is_const,
+            "is_volatile": self.is_volatile,
+            "is_restrict": self.is_restrict,
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            is_const=d.get("is_const", False),
+            is_volatile=d.get("is_volatile", False),
+            is_restrict=d.get("is_restrict", False),
+        )
 
 
 def _expect_kind(d: dict[str, Any], kind: str) -> None:
@@ -68,17 +96,17 @@ class Primitive:
 @dataclass
 class Pointer:
     """
-    T* or const T*.
+    T* or qualified T*.
     pointee=None means void* → emit OpaquePointer directly.
     """
     pointee: Type | None  # None == void*
-    is_const: bool = False  # const T* (read-only pointee)
+    qualifiers: Qualifiers = field(default_factory=Qualifiers)
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Pointer",
             "pointee": None if self.pointee is None else self.pointee.to_json_dict(),
-            "is_const": self.is_const,
+            "qualifiers": self.qualifiers.to_json_dict(),
         }
 
     @classmethod
@@ -87,24 +115,31 @@ class Pointer:
         pointee = d.get("pointee")
         return cls(
             pointee=None if pointee is None else type_from_json(pointee),
-            is_const=d["is_const"],
+            qualifiers=Qualifiers.from_json_dict(
+                d.get("qualifiers", {"is_const": d.get("is_const", False)})
+            ),
         )
 
 
 @dataclass
 class Array:
     """
-    Fixed-size array T[N] → InlineArray[T, N].
-    If size is None the original C was T[] or T* decay — emit UnsafePointer[T].
+    Fixed-size, incomplete, flexible, or variable array.
+
+    ``array_kind`` distinguishes the source construct so later phases do not
+    need to infer whether ``size=None`` came from a flexible array member,
+    incomplete array, or VLA-like construct.
     """
     element: Type
-    size: int | None        # None for unsized / pointer-decay
+    size: int | None
+    array_kind: ArrayKind = "fixed"
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Array",
             "element": self.element.to_json_dict(),
             "size": self.size,
+            "array_kind": self.array_kind,
         }
 
     @classmethod
@@ -113,6 +148,7 @@ class Array:
         return cls(
             element=type_from_json(d["element"]),
             size=d.get("size"),
+            array_kind=d.get("array_kind", "fixed"),
         )
 
 
@@ -125,6 +161,8 @@ class FunctionPtr:
     ret: Type
     params: list[Type]
     is_variadic: bool = False
+    calling_convention: str | None = None
+    is_noreturn: bool = False
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -132,6 +170,8 @@ class FunctionPtr:
             "ret": self.ret.to_json_dict(),
             "params": [p.to_json_dict() for p in self.params],
             "is_variadic": self.is_variadic,
+            "calling_convention": self.calling_convention,
+            "is_noreturn": self.is_noreturn,
         }
 
     @classmethod
@@ -141,6 +181,8 @@ class FunctionPtr:
             ret=type_from_json(d["ret"]),
             params=[type_from_json(p) for p in d["params"]],
             is_variadic=d.get("is_variadic", False),
+            calling_convention=d.get("calling_convention"),
+            is_noreturn=d.get("is_noreturn", False),
         )
 
 
@@ -175,28 +217,34 @@ class StructRef:
     Unions carry ``is_union=True`` and ``size_bytes`` so the emitter can lower
     by-value unions to ``InlineArray[UInt8, size]`` without a separate lookup.
     """
+    decl_id: str
     name: str
     c_name: str
     is_union: bool = False
     size_bytes: int = 0
+    is_anonymous: bool = False
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "StructRef",
+            "decl_id": self.decl_id,
             "name": self.name,
             "c_name": self.c_name,
             "is_union": self.is_union,
             "size_bytes": self.size_bytes,
+            "is_anonymous": self.is_anonymous,
         }
 
     @classmethod
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "StructRef")
         return cls(
+            decl_id=d.get("decl_id", d["name"]),
             name=d["name"],
             c_name=d["c_name"],
             is_union=d.get("is_union", False),
             size_bytes=d.get("size_bytes", 0),
+            is_anonymous=d.get("is_anonymous", False),
         )
 
 
@@ -204,6 +252,7 @@ class StructRef:
 class EnumRef:
     """Reference to a named enum declaration with its integer ABI type."""
 
+    decl_id: str
     name: str
     c_name: str
     underlying: Primitive
@@ -211,6 +260,7 @@ class EnumRef:
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "EnumRef",
+            "decl_id": self.decl_id,
             "name": self.name,
             "c_name": self.c_name,
             "underlying": self.underlying.to_json_dict(),
@@ -220,6 +270,7 @@ class EnumRef:
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "EnumRef")
         return cls(
+            decl_id=d.get("decl_id", d["name"]),
             name=d["name"],
             c_name=d["c_name"],
             underlying=type_from_json(d["underlying"]),  # type: ignore[arg-type]
@@ -236,12 +287,14 @@ class TypeRef:
     typedef ``name`` preserves the C API spelling for readable emission.
     """
 
+    decl_id: str
     name: str
     canonical: Type
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "TypeRef",
+            "decl_id": self.decl_id,
             "name": self.name,
             "canonical": self.canonical.to_json_dict(),
         }
@@ -250,6 +303,7 @@ class TypeRef:
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "TypeRef")
         return cls(
+            decl_id=d.get("decl_id", d["name"]),
             name=d["name"],
             canonical=type_from_json(d["canonical"]),
         )
@@ -284,26 +338,35 @@ class Function:
     ret: Type
     params: list[Param]
     is_variadic: bool = False
+    decl_id: str = ""
+    calling_convention: str | None = None
+    is_noreturn: bool = False
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Function",
+            "decl_id": self.decl_id,
             "name": self.name,
             "link_name": self.link_name,
             "ret": self.ret.to_json_dict(),
             "params": [p.to_json_dict() for p in self.params],
             "is_variadic": self.is_variadic,
+            "calling_convention": self.calling_convention,
+            "is_noreturn": self.is_noreturn,
         }
 
     @classmethod
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "Function")
         return cls(
+            decl_id=d.get("decl_id", d["name"]),
             name=d["name"],
             link_name=d["link_name"],
             ret=type_from_json(d["ret"]),
             params=[Param.from_json_dict(p) for p in d["params"]],
             is_variadic=d.get("is_variadic", False),
+            calling_convention=d.get("calling_convention"),
+            is_noreturn=d.get("is_noreturn", False),
         )
 
 
@@ -311,8 +374,10 @@ class Function:
 class Field:
     """One member of a struct or union."""
     name: str
+    source_name: str
     type: Type
     byte_offset: int    # from clang Type.get_offset(field_name) // 8
+    is_anonymous: bool = False
     is_bitfield: bool = False
     """If True, ``type`` is the backing integer :class:`Primitive` only."""
     bit_offset: int = 0
@@ -323,8 +388,10 @@ class Field:
     def to_json_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
             "name": self.name,
+            "source_name": self.source_name,
             "type": self.type.to_json_dict(),
             "byte_offset": self.byte_offset,
+            "is_anonymous": self.is_anonymous,
         }
         if self.is_bitfield:
             out["is_bitfield"] = True
@@ -336,8 +403,10 @@ class Field:
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         return cls(
             name=d["name"],
+            source_name=d.get("source_name", d["name"]),
             type=type_from_json(d["type"]),
             byte_offset=d["byte_offset"],
+            is_anonymous=d.get("is_anonymous", False),
             is_bitfield=d.get("is_bitfield", False),
             bit_offset=d.get("bit_offset", 0),
             bit_width=d.get("bit_width", 0),
@@ -351,34 +420,49 @@ class Struct:
     is_union=True means all fields share offset 0; size is the largest member.
     Fields are in declaration order (clang cursor order).
     """
+    decl_id: str
     name: str           # Mojo name
     c_name: str         # original C name for cross-reference
     fields: list[Field]
     size_bytes: int
     align_bytes: int
     is_union: bool = False
+    is_anonymous: bool = False
+    is_complete: bool = True
+    is_packed: bool = False
+    requested_align_bytes: int | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Struct",
+            "decl_id": self.decl_id,
             "name": self.name,
             "c_name": self.c_name,
             "fields": [f.to_json_dict() for f in self.fields],
             "size_bytes": self.size_bytes,
             "align_bytes": self.align_bytes,
             "is_union": self.is_union,
+            "is_anonymous": self.is_anonymous,
+            "is_complete": self.is_complete,
+            "is_packed": self.is_packed,
+            "requested_align_bytes": self.requested_align_bytes,
         }
 
     @classmethod
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "Struct")
         return cls(
+            decl_id=d.get("decl_id", d["name"]),
             name=d["name"],
             c_name=d["c_name"],
             fields=[Field.from_json_dict(f) for f in d["fields"]],
             size_bytes=d["size_bytes"],
             align_bytes=d["align_bytes"],
             is_union=d.get("is_union", False),
+            is_anonymous=d.get("is_anonymous", False),
+            is_complete=d.get("is_complete", True),
+            is_packed=d.get("is_packed", False),
+            requested_align_bytes=d.get("requested_align_bytes"),
         )
 
 
@@ -418,6 +502,7 @@ class Enum:
             comptime MEMBER = Self(<underlying>(value))
     underlying is always Primitive with kind INT (C enum base type is integer).
     """
+    decl_id: str
     name: str
     c_name: str
     underlying: Primitive
@@ -426,6 +511,7 @@ class Enum:
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Enum",
+            "decl_id": self.decl_id,
             "name": self.name,
             "c_name": self.c_name,
             "underlying": self.underlying.to_json_dict(),
@@ -436,6 +522,7 @@ class Enum:
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
         _expect_kind(d, "Enum")
         return cls(
+            decl_id=d.get("decl_id", d["name"]),
             name=d["name"],
             c_name=d["c_name"],
             underlying=type_from_json(d["underlying"]),  # type: ignore[arg-type]
@@ -454,6 +541,7 @@ class Typedef:
     ``canonical`` is the fully unrolled type for ABI layout and for lowering
     inside compound positions (struct fields, function pointer signatures).
     """
+    decl_id: str
     name: str
     aliased: Type
     canonical: Type
@@ -461,6 +549,7 @@ class Typedef:
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Typedef",
+            "decl_id": self.decl_id,
             "name": self.name,
             "aliased": self.aliased.to_json_dict(),
             "canonical": self.canonical.to_json_dict(),
@@ -471,7 +560,12 @@ class Typedef:
         _expect_kind(d, "Typedef")
         aliased = type_from_json(d["aliased"])
         canonical = type_from_json(d["canonical"]) if "canonical" in d else aliased
-        return cls(name=d["name"], aliased=aliased, canonical=canonical)
+        return cls(
+            decl_id=d.get("decl_id", d["name"]),
+            name=d["name"],
+            aliased=aliased,
+            canonical=canonical,
+        )
 
 
 @dataclass
@@ -503,6 +597,39 @@ class Const:
         )
 
 
+@dataclass(frozen=True)
+class IRDiagnostic:
+    """Parser-side note about a recognized construct that cannot be modeled fully."""
+
+    severity: str
+    message: str
+    file: str | None = None
+    line: int | None = None
+    col: int | None = None
+    decl_id: str | None = None
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "severity": self.severity,
+            "message": self.message,
+            "file": self.file,
+            "line": self.line,
+            "col": self.col,
+            "decl_id": self.decl_id,
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            severity=d["severity"],
+            message=d["message"],
+            file=d.get("file"),
+            line=d.get("line"),
+            col=d.get("col"),
+            decl_id=d.get("decl_id"),
+        )
+
+
 Decl = Union[
     Function,
     Struct,
@@ -518,6 +645,7 @@ class Unit:
     library: str            # e.g. "zlib"
     link_name: str          # e.g. "z"  (used in DLHandle)
     decls: list[Decl] = field(default_factory=list)
+    diagnostics: list[IRDiagnostic] = field(default_factory=list)
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -526,6 +654,7 @@ class Unit:
             "library": self.library,
             "link_name": self.link_name,
             "decls": [d.to_json_dict() for d in self.decls],
+            "diagnostics": [d.to_json_dict() for d in self.diagnostics],
         }
 
     @classmethod
@@ -536,6 +665,7 @@ class Unit:
             library=data["library"],
             link_name=data["link_name"],
             decls=[decl_from_json(x) for x in data["decls"]],
+            diagnostics=[IRDiagnostic.from_json_dict(x) for x in data.get("diagnostics", [])],
         )
 
     def to_json(self, *, indent: int | None = 2) -> str:

@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from enum import Enum, auto
+import hashlib
 
 import clang.cindex as cx
 
 from mojo_bindgen.ir import (
     Array,
+    ArrayKind,
     EnumRef,
     FunctionPtr,
     Opaque,
     Pointer,
     Primitive,
     PrimitiveKind,
+    Qualifiers,
     StructRef,
     Type,
     TypeRef,
@@ -40,6 +43,57 @@ class TypeBuilder:
         if t.kind == cx.TypeKind.ELABORATED:
             return self._normalize(t.get_named_type())
         return t
+
+    @staticmethod
+    def _decl_id_for_cursor(cursor: cx.Cursor) -> str:
+        usr = cursor.get_usr()
+        if usr:
+            return usr
+        loc = cursor.location
+        loc_key = f"{loc.file}:{loc.line}:{loc.column}:{cursor.kind}:{cursor.spelling}"
+        digest = hashlib.sha256(loc_key.encode("utf-8")).hexdigest()[:16]
+        return f"anon:{digest}"
+
+    @staticmethod
+    def _qualifiers(t: cx.Type) -> Qualifiers:
+        return Qualifiers(
+            is_const=t.is_const_qualified(),
+            is_volatile=t.is_volatile_qualified(),
+            is_restrict=t.is_restrict_qualified(),
+        )
+
+    @staticmethod
+    def _calling_convention(t: cx.Type) -> str | None:
+        if hasattr(t, "get_canonical"):
+            t = t.get_canonical()
+        getter = getattr(t, "get_calling_conv", None)
+        if getter is None:
+            getter = getattr(t, "calling_conv", None)
+        if getter is None:
+            return None
+        try:
+            value = getter() if callable(getter) else getter
+        except Exception:
+            return None
+        if value is None:
+            return None
+        name = getattr(value, "name", None)
+        if isinstance(name, str) and name:
+            return name
+        try:
+            return str(value)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _array_kind(t: cx.Type, ctx: TypeContext) -> ArrayKind:
+        if t.kind == cx.TypeKind.CONSTANTARRAY:
+            return "fixed"
+        if t.kind == cx.TypeKind.INCOMPLETEARRAY:
+            return "flexible" if ctx == TypeContext.FIELD else "incomplete"
+        if t.kind in (cx.TypeKind.VARIABLEARRAY, cx.TypeKind.DEPENDENTSIZEDARRAY):
+            return "variable"
+        return "incomplete"
 
     def _lower(self, t: cx.Type, ctx: TypeContext) -> Type:
         tk = t.kind
@@ -84,16 +138,20 @@ class TypeBuilder:
         name = decl.spelling or t.spelling
         canonical = self.build(t.get_canonical(), ctx)
         if ctx in (TypeContext.PARAM, TypeContext.RETURN, TypeContext.TYPEDEF):
-            return TypeRef(name=name, canonical=canonical)
+            return TypeRef(
+                decl_id=self._decl_id_for_cursor(decl),
+                name=name,
+                canonical=canonical,
+            )
         return canonical
 
     def _lower_pointer(self, t: cx.Type, ctx: TypeContext) -> Type:
         raw_pointee = t.get_pointee()
-        is_const = raw_pointee.is_const_qualified()
+        qualifiers = self._qualifiers(raw_pointee)
         pointee = self._normalize(raw_pointee)
 
         if pointee.kind == cx.TypeKind.VOID:
-            return Pointer(pointee=None, is_const=is_const)
+            return Pointer(pointee=None, qualifiers=qualifiers)
 
         canonical_pointee = self._normalize(pointee.get_canonical())
         if canonical_pointee.kind in (
@@ -102,19 +160,29 @@ class TypeBuilder:
         ):
             return self._lower_fnptr(canonical_pointee, ctx)
 
-        return Pointer(pointee=self.build(pointee, ctx), is_const=is_const)
+        return Pointer(pointee=self.build(pointee, ctx), qualifiers=qualifiers)
 
     def _lower_array(self, t: cx.Type, *, sized: bool, ctx: TypeContext) -> Type:
         element = self.build(t.get_array_element_type(), ctx)
         size = t.get_array_size() if sized else None
-        return Array(element=element, size=size)
+        return Array(element=element, size=size, array_kind=self._array_kind(t, ctx))
 
-    def _make_struct_ref(self, struct_name: str, c_name: str, is_union: bool, size_bytes: int) -> StructRef:
+    def _make_struct_ref(
+        self,
+        decl_id: str,
+        struct_name: str,
+        c_name: str,
+        is_union: bool,
+        size_bytes: int,
+        is_anonymous: bool,
+    ) -> StructRef:
         return StructRef(
+            decl_id=decl_id,
             name=struct_name,
             c_name=c_name,
             is_union=is_union,
             size_bytes=size_bytes,
+            is_anonymous=is_anonymous,
         )
 
     def _lower_record(self, t: cx.Type) -> Type:
@@ -124,24 +192,30 @@ class TypeBuilder:
 
         if usr in self.resolver.type_cache:
             s = self.resolver.type_cache[usr]
-            return self._make_struct_ref(s.name, s.c_name, s.is_union, s.size_bytes)
+            return self._make_struct_ref(
+                s.decl_id, s.name, s.c_name, s.is_union, s.size_bytes, s.is_anonymous
+            )
 
         # Break self-recursive record cycles (e.g. struct node { struct node* next; }).
         # Named definitions are emitted by top-level traversal, so we can return a ref
         # directly without recursively materializing the same definition here.
         if c_name and c_name in self.resolver.defined_structs:
             return self._make_struct_ref(
+                decl_id=self._decl_id_for_cursor(decl),
                 struct_name=c_name,
                 c_name=c_name,
                 is_union=(decl.kind == cx.CursorKind.UNION_DECL),
                 size_bytes=max(0, t.get_size()),
+                is_anonymous=False,
             )
 
         if decl.is_definition():
             s = self.resolver._build_struct(decl.get_definition(), None)
             if s is not None:
                 self.resolver.type_cache[usr] = s
-                return self._make_struct_ref(s.name, s.c_name, s.is_union, s.size_bytes)
+                return self._make_struct_ref(
+                    s.decl_id, s.name, s.c_name, s.is_union, s.size_bytes, s.is_anonymous
+                )
 
         if c_name:
             return Opaque(name=c_name)
@@ -150,9 +224,10 @@ class TypeBuilder:
     def _lower_enum(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
         name = decl.spelling
+        decl_id = self._decl_id_for_cursor(decl)
         underlying = self.resolver.resolve_primitive(decl.enum_type)
         if name and underlying is not None:
-            return EnumRef(name=name, c_name=name, underlying=underlying)
+            return EnumRef(decl_id=decl_id, name=name, c_name=name, underlying=underlying)
         if underlying is not None:
             return underlying
         return Primitive(
@@ -170,7 +245,12 @@ class TypeBuilder:
             for arg in t.argument_types():
                 params.append(self.build(arg, ctx))
             is_variadic = t.is_function_variadic()
-        return FunctionPtr(ret=ret, params=params, is_variadic=is_variadic)
+        return FunctionPtr(
+            ret=ret,
+            params=params,
+            is_variadic=is_variadic,
+            calling_convention=self._calling_convention(t),
+        )
 
     def _lower_primitive(self, t: cx.Type) -> Type:
         prim = self.resolver.resolve_primitive(t)

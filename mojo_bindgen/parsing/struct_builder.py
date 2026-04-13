@@ -42,16 +42,18 @@ class StructBuilder:
         self.nested: list[Struct] = []
 
     def build(self) -> StructBuildResult:
-        c_name, name, _ = self._resolve_identity()
+        decl_id, c_name, name, is_anonymous = self._resolve_identity()
         size_bytes, align_bytes = self._compute_layout()
         fields = self._build_fields()
         struct = Struct(
+            decl_id=decl_id,
             name=name,
             c_name=c_name,
             fields=fields,
             size_bytes=size_bytes,
             align_bytes=align_bytes,
             is_union=(self.cursor.kind == cx.CursorKind.UNION_DECL),
+            is_anonymous=is_anonymous,
         )
         self._apply_attributes(struct)
         if self.validate_layout:
@@ -59,14 +61,19 @@ class StructBuilder:
         self._trace(struct)
         return StructBuildResult(struct=struct, nested=self.nested)
 
-    def _resolve_identity(self) -> tuple[str, str, bool]:
+    def _resolve_identity(self) -> tuple[str, str, str, bool]:
+        usr0 = self.cursor.get_usr()
         c_name_raw = self.cursor.spelling
         if c_name_raw:
-            return c_name_raw, c_name_raw, False
-        usr0 = self.cursor.get_usr()
-        digest = hashlib.sha256(usr0.encode("utf-8")).hexdigest()[:16]
+            return usr0 or c_name_raw, c_name_raw, c_name_raw, False
+        loc = self.cursor.location
+        identity_seed = (
+            usr0
+            or f"{loc.file}:{loc.line}:{loc.column}:{self.cursor.kind}:{self.cursor.spelling}"
+        )
+        digest = hashlib.sha256(identity_seed.encode("utf-8")).hexdigest()[:16]
         synth = f"__bindgen_anon_{digest}"
-        return synth, synth, True
+        return f"anon:{digest}", synth, synth, True
 
     def _compute_layout(self) -> tuple[int, int]:
         t = self.cursor.type
@@ -89,7 +96,16 @@ class StructBuilder:
         return fields
 
     def _apply_attributes(self, _struct: Struct) -> None:
-        """Extension point for packed/aligned/target-specific attributes."""
+        """Capture packed/aligned attributes that affect ABI-sensitive rendering."""
+        packed = False
+        requested_align: int | None = None
+        for child in self.cursor.get_children():
+            if child.kind == cx.CursorKind.PACKED_ATTR:
+                packed = True
+            elif child.kind == cx.CursorKind.ALIGNED_ATTR:
+                requested_align = _struct.align_bytes
+        _struct.is_packed = packed
+        _struct.requested_align_bytes = requested_align
 
     def _validate_layout(self, struct: Struct) -> None:
         for field in struct.fields:

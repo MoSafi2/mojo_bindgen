@@ -54,12 +54,12 @@ def mojo_align_decorator_ok(align_bytes: int) -> bool:
     return _is_power_of_two(align_bytes)
 
 
-def struct_by_mojo_name(unit: Unit) -> dict[str, Struct]:
-    """Map Mojo struct names to non-union struct declarations."""
+def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
+    """Map struct declaration ids to non-union struct declarations."""
     out: dict[str, Struct] = {}
     for d in unit.decls:
         if isinstance(d, Struct) and not d.is_union:
-            out[mojo_ident(d.name.strip() or d.c_name.strip())] = d
+            out[d.decl_id] = d
     return out
 
 
@@ -141,48 +141,51 @@ def eligible_unsafe_union_names(unit: Unit, ffi_origin: FFIOriginStyle) -> froze
 
 def _type_ok_for_register_passable_field(
     t: Type,
-    struct_by_name: dict[str, Struct],
+    struct_by_id: dict[str, Struct],
     visiting: set[str] | None = None,
 ) -> bool:
     """Recursively test whether ``t`` is safe to treat as ``RegisterPassable``."""
     if visiting is None:
         visiting = set()
     if isinstance(t, TypeRef):
-        return _type_ok_for_register_passable_field(t.canonical, struct_by_name, visiting)
+        return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
     if isinstance(t, (Primitive, EnumRef, Opaque, FunctionPtr)):
         return True
     if isinstance(t, StructRef):
-        mid = mojo_ident(t.name.strip())
-        if mid in visiting:
+        if t.decl_id in visiting:
             return False
-        s = struct_by_name.get(mid)
+        s = struct_by_id.get(t.decl_id)
         if s is None or s.is_union:
             return False
-        visiting.add(mid)
+        visiting.add(t.decl_id)
         try:
             return all(
-                _type_ok_for_register_passable_field(f.type, struct_by_name, visiting) for f in s.fields
+                _type_ok_for_register_passable_field(f.type, struct_by_id, visiting) for f in s.fields
             )
         finally:
-            visiting.remove(mid)
+            visiting.remove(t.decl_id)
     if isinstance(t, Pointer):
         if t.pointee is None:
             return True
-        return _type_ok_for_register_passable_field(t.pointee, struct_by_name, visiting)
+        return _type_ok_for_register_passable_field(t.pointee, struct_by_id, visiting)
     if isinstance(t, Array):
-        return t.size is None and _type_ok_for_register_passable_field(t.element, struct_by_name, visiting)
+        return t.array_kind != "fixed" and _type_ok_for_register_passable_field(
+            t.element, struct_by_id, visiting
+        )
     return False
 
 
-def struct_decl_register_passable(decl: Struct, struct_by_name: dict[str, Struct]) -> bool:
+def struct_decl_register_passable(decl: Struct, struct_by_id: dict[str, Struct]) -> bool:
     """Return whether ``decl`` can be emitted with ``RegisterPassable``."""
     if decl.is_union:
         return False
-    return all(_type_ok_for_register_passable_field(f.type, struct_by_name, None) for f in decl.fields)
+    return all(_type_ok_for_register_passable_field(f.type, struct_by_id, None) for f in decl.fields)
 
 
 def _field_mojo_name(f: Field, index: int) -> str:
     """Return the emitted Mojo field name, synthesizing one for anonymous fields."""
+    if f.source_name:
+        return mojo_ident(f.source_name)
     if f.name:
         return mojo_ident(f.name)
     return f"_anon_{index}"
@@ -368,6 +371,11 @@ def _analyze_struct(decl: Struct, struct_map: dict[str, Struct], opts: MojoEmitO
             align_omit_comment = (
                 f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
             )
+    if decl.is_packed:
+        packed_comment = "# packed record: verify Mojo layout against the target C ABI."
+        align_omit_comment = (
+            packed_comment if align_omit_comment is None else f"{align_omit_comment} {packed_comment[2:]}"
+        )
     fields = tuple(
         AnalyzedField(field=f, index=i, mojo_name=_field_mojo_name(f, i))
         for i, f in enumerate(decl.fields)
@@ -393,7 +401,7 @@ def _analyze_function(
         return AnalyzedFunction(decl=fn, kind="variadic_stub", param_names=param_names)
     ret_u = peel_typeref(fn.ret)
     if isinstance(ret_u, StructRef):
-        rs = struct_map.get(mojo_ident(ret_u.name.strip()))
+        rs = struct_map.get(ret_u.decl_id)
         if rs is not None and not struct_decl_register_passable(rs, struct_map):
             return AnalyzedFunction(decl=fn, kind="non_register_return_stub", param_names=param_names)
     return AnalyzedFunction(decl=fn, kind="wrapper", param_names=param_names)
@@ -418,7 +426,7 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls)
     emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
     unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
-    struct_map = struct_by_mojo_name(unit)
+    struct_map = struct_by_decl_id(unit)
     type_lowerer = TypeLowerer(
         ffi_origin=options.ffi_origin,
         unsafe_union_names=unsafe_union_names,
