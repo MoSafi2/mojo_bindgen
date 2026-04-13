@@ -83,6 +83,65 @@ struct ev_aligned_data(Copyable, Movable, RegisterPassable):
 @fieldwise_init
 struct ev_matrix(Copyable, Movable):
     var transform: InlineArray[InlineArray[Float32, 4], 4]
+# struct ev_node — size=16 align=8 (verify packed/aligned ABI)
+@align(8)
+@fieldwise_init
+struct ev_node(Copyable, Movable):
+    var next: UnsafePointer[ev_node, MutExternalOrigin]
+    var prev: UnsafePointer[ev_node, MutExternalOrigin]
+# struct ev_a — size=8 align=8 (verify packed/aligned ABI)
+@align(8)
+@fieldwise_init
+struct ev_a(Copyable, Movable):
+    var next: UnsafePointer[ev_a, MutExternalOrigin]
+# struct ev_bf — size=4 align=4 (verify packed/aligned ABI)
+@align(4)
+@fieldwise_init
+struct ev_bf(Copyable, Movable, RegisterPassable):
+    # bitfield: C bits 0..2 (3 bits) on unsigned char
+    # ABI: verify bitfield layout matches target C compiler.
+    var a: UInt8
+    # bitfield: C bits 3..7 (5 bits) on int
+    # ABI: verify bitfield layout matches target C compiler.
+    var b: Int32
+    # bitfield: C bits 8..8 (1 bits) on _Bool
+    # ABI: verify bitfield layout matches target C compiler.
+    var c: Bool
+# struct ev_bf2 — size=8 align=4 (verify packed/aligned ABI)
+@align(4)
+@fieldwise_init
+struct ev_bf2(Copyable, Movable, RegisterPassable):
+    # bitfield: C bits 0..19 (20 bits) on unsigned int
+    # ABI: verify bitfield layout matches target C compiler.
+    var a: UInt32
+    # bitfield: C bits 32..51 (20 bits) on unsigned int
+    # ABI: verify bitfield layout matches target C compiler.
+    var b: UInt32
+# struct ev_bf3 — size=8 align=4 (verify packed/aligned ABI)
+@align(4)
+@fieldwise_init
+struct ev_bf3(Copyable, Movable, RegisterPassable):
+    # bitfield: C bits 0..0 (1 bits) on unsigned int
+    # ABI: verify bitfield layout matches target C compiler.
+    var a: UInt32
+    # bitfield: C bits 0..-1 (0 bits) on unsigned int
+    # ABI: verify bitfield layout matches target C compiler.
+    var _anon_1: UInt32
+    # bitfield: C bits 32..32 (1 bits) on unsigned int
+    # ABI: verify bitfield layout matches target C compiler.
+    var b: UInt32
+# struct ev_pad — size=12 align=4 (verify packed/aligned ABI)
+@align(4)
+@fieldwise_init
+struct ev_pad(Copyable, Movable, RegisterPassable):
+    var a: Int8
+    var b: Int32
+    var c: Int8
+# struct ev_event — size=16 align=8 (verify packed/aligned ABI)
+@align(8)
+@fieldwise_init
+struct ev_event(Copyable, Movable, RegisterPassable):
+    var type: Int32
 # struct ev_stat — size=48 align=8 (verify packed/aligned ABI)
 @align(8)
 @fieldwise_init
@@ -167,6 +226,22 @@ def ev_atomic_add(counter: UnsafePointer[Int32, MutExternalOrigin], amount: Int3
 
 def ev_memory_copy(dest: MutOpaquePointer[MutExternalOrigin], src: ImmutOpaquePointer[ImmutExternalOrigin], n: UInt64) abi("C") -> None:
     external_call["ev_memory_copy", NoneType, MutOpaquePointer[MutExternalOrigin], ImmutOpaquePointer[ImmutExternalOrigin], UInt64](dest, src, n)
+
+# enum ev_big — underlying unsigned long → UInt64 (verify C ABI)
+@fieldwise_init
+struct ev_big(Copyable, Movable, RegisterPassable):
+    var value: UInt64
+    comptime EV_BIG = Self(UInt64(9223372036854775807))
+def ev_legacy(a: Int32, b: Float64) abi("C") -> Int32:
+    return external_call["ev_legacy", Int32, Int32, Float64](a, b)
+
+def ev_inline(x: Int32) abi("C") -> Int32:
+    return external_call["ev_inline", Int32, Int32](x)
+
+def ev_extern_inline(x: Int32) abi("C") -> Int32:
+    return external_call["ev_extern_inline", Int32, Int32](x)
+
+comptime ev_dynamic_t = Int32
 
 comptime EV_VERSION_MAJOR = Int32(4)
 
