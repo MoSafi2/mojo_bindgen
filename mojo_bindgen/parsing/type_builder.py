@@ -10,9 +10,10 @@ import clang.cindex as cx
 from mojo_bindgen.ir import (
     Array,
     ArrayKind,
+    ComplexType,
     EnumRef,
     FunctionPtr,
-    Opaque,
+    OpaqueRecordRef,
     Pointer,
     Primitive,
     PrimitiveKind,
@@ -20,6 +21,8 @@ from mojo_bindgen.ir import (
     StructRef,
     Type,
     TypeRef,
+    UnsupportedType,
+    VectorType,
 )
 from mojo_bindgen.parsing.type_resolver import TypeResolver
 
@@ -100,10 +103,27 @@ class TypeBuilder:
 
         if tk == cx.TypeKind.INVALID:
             self.resolver._append_type_kind_warning(t, "invalid type (INVALID)")
-            return Opaque(name="invalid")
+            return UnsupportedType(
+                category="invalid",
+                spelling=t.spelling or "invalid",
+                reason="clang reported INVALID type kind",
+            )
         if tk == cx.TypeKind.UNEXPOSED:
             self.resolver._append_type_kind_warning(t, "unexposed type (UNEXPOSED)")
-            return Opaque(name=t.spelling or "unexposed")
+            return UnsupportedType(
+                category="unexposed",
+                spelling=t.spelling or "unexposed",
+                reason="clang reported UNEXPOSED type kind",
+                size_bytes=max(0, t.get_size()) or None,
+                align_bytes=max(0, t.get_align()) or None,
+            )
+        if tk == getattr(cx.TypeKind, "COMPLEX", object()):
+            return self._lower_complex(t)
+        if tk in (
+            getattr(cx.TypeKind, "VECTOR", object()),
+            getattr(cx.TypeKind, "EXTVECTOR", object()),
+        ):
+            return self._lower_vector(t, is_ext_vector=(tk == getattr(cx.TypeKind, "EXTVECTOR", object())))
 
         if tk == cx.TypeKind.TYPEDEF:
             return self._lower_typedef(t, ctx)
@@ -218,8 +238,17 @@ class TypeBuilder:
                 )
 
         if c_name:
-            return Opaque(name=c_name)
-        return Opaque(name="__anonymous_record")
+            return OpaqueRecordRef(
+                decl_id=self._decl_id_for_cursor(decl),
+                name=c_name,
+                c_name=c_name,
+                is_union=(decl.kind == cx.CursorKind.UNION_DECL),
+            )
+        return UnsupportedType(
+            category="unsupported_extension",
+            spelling="__anonymous_record",
+            reason="anonymous incomplete record reference cannot be named",
+        )
 
     def _lower_enum(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
@@ -252,8 +281,42 @@ class TypeBuilder:
             calling_convention=self._calling_convention(t),
         )
 
+    def _lower_complex(self, t: cx.Type) -> Type:
+        element = self.resolver.resolve_primitive(t.get_element_type())
+        if element is None:
+            return UnsupportedType(
+                category="complex",
+                spelling=t.spelling or "complex",
+                reason="complex element type is not a primitive scalar",
+                size_bytes=max(0, t.get_size()) or None,
+                align_bytes=max(0, t.get_align()) or None,
+            )
+        return ComplexType(element=element, size_bytes=max(0, t.get_size()))
+
+    def _lower_vector(self, t: cx.Type, *, is_ext_vector: bool) -> Type:
+        element = self.build(t.get_element_type(), TypeContext.FIELD)
+        count_getter = getattr(t, "get_num_elements", None)
+        count: int | None = None
+        if callable(count_getter):
+            try:
+                count = count_getter()
+            except Exception:
+                count = None
+        return VectorType(
+            element=element,
+            count=count if isinstance(count, int) and count >= 0 else None,
+            size_bytes=max(0, t.get_size()),
+            is_ext_vector=is_ext_vector,
+        )
+
     def _lower_primitive(self, t: cx.Type) -> Type:
         prim = self.resolver.resolve_primitive(t)
         if prim is not None:
             return prim
-        return Opaque(name=t.spelling or "unknown")
+        return UnsupportedType(
+            category="unknown",
+            spelling=t.spelling or "unknown",
+            reason="type is neither scalar nor otherwise modeled",
+            size_bytes=max(0, t.get_size()) or None,
+            align_bytes=max(0, t.get_align()) or None,
+        )

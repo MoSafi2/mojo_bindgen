@@ -13,10 +13,11 @@ from typing import Literal
 
 from mojo_bindgen.ir import (
     Array,
+    ComplexType,
     EnumRef,
     Function,
     FunctionPtr,
-    Opaque,
+    OpaqueRecordRef,
     Param,
     Pointer,
     Primitive,
@@ -24,6 +25,8 @@ from mojo_bindgen.ir import (
     StructRef,
     Type,
     TypeRef,
+    UnsupportedType,
+    VectorType,
 )
 
 FFIOriginStyle = Literal["external", "any"]
@@ -188,8 +191,26 @@ class TypeLowerer:
         return f"MutOpaquePointer[{self._origin.mut}]"
 
     @canonical.register
-    def _(self, t: Opaque) -> str:
+    def _(self, t: OpaqueRecordRef) -> str:
         return f"MutOpaquePointer[{self._origin.mut}]"
+
+    @canonical.register
+    def _(self, t: UnsupportedType) -> str:
+        if t.size_bytes is not None and t.size_bytes > 0:
+            return f"InlineArray[UInt8, {t.size_bytes}]"
+        return f"MutOpaquePointer[{self._origin.mut}]"
+
+    @canonical.register
+    def _(self, t: ComplexType) -> str:
+        inner = self.canonical(t.element)
+        return f"InlineArray[{inner}, 2]"
+
+    @canonical.register
+    def _(self, t: VectorType) -> str:
+        if t.count is not None:
+            inner = self.canonical(t.element)
+            return f"InlineArray[{inner}, {t.count}]"
+        return f"InlineArray[UInt8, {t.size_bytes}]"
 
     @canonical.register
     def _(self, t: StructRef) -> str:

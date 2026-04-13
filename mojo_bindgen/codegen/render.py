@@ -7,7 +7,19 @@ declarations referenced from that analysis and emits a single Mojo source file.
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Const, Enum, FunctionPtr
+from mojo_bindgen.ir import (
+    CharLiteral,
+    Const,
+    Enum,
+    FloatLiteral,
+    FunctionPtr,
+    GlobalVar,
+    IntLiteral,
+    NullPtrLiteral,
+    Primitive,
+    RefExpr,
+    StringLiteral,
+)
 from mojo_bindgen.codegen.analysis import (
     AnalyzedField,
     AnalyzedFunction,
@@ -245,9 +257,39 @@ class MojoRenderer:
 
     @staticmethod
     def _emit_const(decl: Const) -> str:
-        """Render one constant declaration."""
-        t = lower_primitive(decl.type)
-        return f"comptime {mojo_ident(decl.name)} = {t}({decl.value})\n\n"
+        """Render one constant declaration from the supported ``ConstExpr`` subset.
+
+        Unsupported or pointer-like constant forms are emitted as comments so
+        the generated module stays honest about what still requires manual work.
+        """
+        expr = decl.expr
+        name = mojo_ident(decl.name)
+        if isinstance(expr, IntLiteral) and isinstance(decl.type, Primitive):
+            t = lower_primitive(decl.type)
+            return f"comptime {name} = {t}({expr.value})\n\n"
+        if isinstance(expr, StringLiteral):
+            value = expr.value.replace("\\", "\\\\").replace('"', '\\"')
+            return f'comptime {name} = "{value}"\n\n'
+        if isinstance(expr, CharLiteral):
+            value = expr.value.replace("\\", "\\\\").replace("'", "\\'")
+            return f"comptime {name} = '{value}'\n\n"
+        if isinstance(expr, FloatLiteral):
+            return f"comptime {name} = {expr.value}\n\n"
+        if isinstance(expr, RefExpr):
+            return f"comptime {name} = {mojo_ident(expr.name)}\n\n"
+        if isinstance(expr, NullPtrLiteral):
+            return f"# constant {decl.name}: null pointer macro is not emitted directly\n\n"
+        return f"# constant {decl.name}: unsupported constant expression form\n\n"
+
+    def _emit_global_var(self, decl: GlobalVar) -> str:
+        """Render a reference stub for a top-level global variable.
+
+        Global variables remain part of the IR surface even though thin Mojo
+        bindings do not yet generate direct accessors for them.
+        """
+        ty = self._types.signature(decl.type)
+        const_kw = "const " if decl.is_const else ""
+        return f"# global variable {decl.link_name}: {const_kw}{ty} (manual binding required)\n\n"
 
     def _function_signature(self, analyzed: AnalyzedFunction) -> tuple[str, str, str, bool, str]:
         """Build derived signature fragments used by function rendering."""
@@ -324,6 +366,8 @@ class MojoRenderer:
             return self._emit_typedef(decl, self._types)
         if isinstance(decl, Const):
             return self._emit_const(decl)
+        if isinstance(decl, GlobalVar):
+            return self._emit_global_var(decl)
         if isinstance(decl, AnalyzedFunction):
             return self._emit_function(decl)
         raise TypeError(f"unexpected tail decl {type(decl)!r}")

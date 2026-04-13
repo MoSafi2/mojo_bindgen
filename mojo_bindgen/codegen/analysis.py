@@ -18,12 +18,14 @@ from typing import Literal
 from mojo_bindgen.ir import (
     Array,
     Const,
+    GlobalVar,
     Enum,
     EnumRef,
+    ComplexType,
     Field,
     Function,
     FunctionPtr,
-    Opaque,
+    OpaqueRecordRef,
     Pointer,
     Primitive,
     Struct,
@@ -31,7 +33,9 @@ from mojo_bindgen.ir import (
     Type,
     TypeRef,
     Typedef,
+    UnsupportedType,
     Unit,
+    VectorType,
 )
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.lowering import FFIOriginStyle, TypeLowerer, mojo_ident, peel_typeref
@@ -58,7 +62,7 @@ def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
     """Map struct declaration ids to non-union struct declarations."""
     out: dict[str, Struct] = {}
     for d in unit.decls:
-        if isinstance(d, Struct) and not d.is_union:
+        if isinstance(d, Struct) and not d.is_union and d.is_complete:
             out[d.decl_id] = d
     return out
 
@@ -77,7 +81,7 @@ def _type_needs_opaque_pointer_import(t: Type) -> bool:
         return _type_needs_opaque_pointer_import(t.element)
     if isinstance(t, FunctionPtr):
         return True
-    if isinstance(t, Opaque):
+    if isinstance(t, (OpaqueRecordRef, UnsupportedType)):
         return True
     return False
 
@@ -98,6 +102,9 @@ def unit_needs_opaque_imports(unit: Unit) -> bool:
         elif isinstance(d, Typedef):
             if _type_needs_opaque_pointer_import(d.canonical):
                 return True
+        elif isinstance(d, GlobalVar):
+            if _type_needs_opaque_pointer_import(d.type):
+                return True
     return False
 
 
@@ -106,7 +113,7 @@ def _type_ok_for_unsafe_union_member(t: Type) -> bool:
     u = peel_typeref(t)
     if isinstance(u, TypeRef):
         u = u.canonical
-    return isinstance(u, (Primitive, Pointer, FunctionPtr, Opaque))
+    return isinstance(u, (Primitive, Pointer, FunctionPtr, OpaqueRecordRef))
 
 
 def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> list[str] | None:
@@ -149,8 +156,10 @@ def _type_ok_for_register_passable_field(
         visiting = set()
     if isinstance(t, TypeRef):
         return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
-    if isinstance(t, (Primitive, EnumRef, Opaque, FunctionPtr)):
+    if isinstance(t, (Primitive, EnumRef, OpaqueRecordRef, FunctionPtr)):
         return True
+    if isinstance(t, (UnsupportedType, VectorType, ComplexType)):
+        return False
     if isinstance(t, StructRef):
         if t.decl_id in visiting:
             return False
@@ -292,7 +301,7 @@ class AnalyzedUnion:
     uses_unsafe_union: bool
 
 
-TailDecl = Enum | Const | AnalyzedTypedef | AnalyzedFunction
+TailDecl = Enum | Const | GlobalVar | AnalyzedTypedef | AnalyzedFunction
 
 
 @dataclass(frozen=True)
@@ -331,7 +340,9 @@ class AnalyzedUnit:
 
 def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     """Return non-union structs in dependency-safe emission order."""
-    struct_decls = [d for d in unit.decls if isinstance(d, Struct) and not d.is_union]
+    struct_decls = [
+        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
+    ]
     return tuple(toposort_structs(struct_decls))
 
 
@@ -454,7 +465,7 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
             )
         elif isinstance(d, Function):
             tail_decls.append(_analyze_function(d, struct_map, type_lowerer))
-        elif isinstance(d, (Enum, Const)):
+        elif isinstance(d, (Enum, Const, GlobalVar)):
             tail_decls.append(d)
 
     return AnalyzedUnit(

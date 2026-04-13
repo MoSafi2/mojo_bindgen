@@ -7,7 +7,7 @@ Responsibilities:
   - Walk top-level cursors that originate from the primary file
   - Convert every supported C construct to the corresponding IR node
   - Resolve typedef chains and detect opaque (incomplete) types
-  - Extract plain integer/hex #define macros as Const nodes
+  - Extract a practical subset of constant macros and top-level globals
   - Collect diagnostics and surface fatal parse errors
 
 NOT responsible for:
@@ -30,15 +30,22 @@ import clang.cindex as cx
 
 from mojo_bindgen.utils import build_c_parse_args
 from mojo_bindgen.ir import (
+    CharLiteral,
     Const,
+    ConstExpr,
     Decl,
     Enum,
     Enumerant,
     Function,
+    GlobalVar,
+    IntLiteral,
     IRDiagnostic,
+    NullPtrLiteral,
     Param,
     Primitive,
     PrimitiveKind,
+    RefExpr,
+    StringLiteral,
     Struct,
     Typedef,
     Unit,
@@ -387,7 +394,7 @@ class ClangParser:
 
         if k in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
             # Only emit if the cursor IS the definition; forward declarations
-            # are picked up lazily when they appear as field/param types.
+            # that stay incomplete in this translation unit become declarations.
             if cursor.is_definition() and cursor.spelling:
                 nested: list[Struct] = []
                 s = self._build_struct(cursor, nested)
@@ -396,6 +403,17 @@ class ClangParser:
                 if nested:
                     return nested + [s]
                 return s
+            if cursor.spelling and cursor.spelling not in self._resolver.defined_structs:
+                return Struct(
+                    decl_id=self._decl_id(cursor),
+                    name=cursor.spelling,
+                    c_name=cursor.spelling,
+                    fields=[],
+                    size_bytes=0,
+                    align_bytes=0,
+                    is_union=(k == cx.CursorKind.UNION_DECL),
+                    is_complete=False,
+                )
             return None
 
         if k == cx.CursorKind.ENUM_DECL:
@@ -410,8 +428,7 @@ class ClangParser:
             return self._build_typedef(cursor)
 
         if k == cx.CursorKind.VAR_DECL:
-            # Top-level const variables (rare in C headers but legal)
-            return self._build_var_const(cursor)
+            return self._build_global_var(cursor)
 
         # Everything else (includes, macro expansions, class templates …)
         # is silently ignored at the top level.
@@ -507,7 +524,7 @@ class ClangParser:
                 Const(
                     name=child.spelling,
                     type=underlying,
-                    value=child.enum_value,
+                    expr=IntLiteral(child.enum_value),
                 )
             )
         return out
@@ -574,32 +591,30 @@ class ClangParser:
             canonical=canonical,
         )
 
-    # ── top-level const variable ───────────────────────────────────────────────
+    # ── top-level global variable ─────────────────────────────────────────────
 
-    def _build_var_const(self, cursor: cx.Cursor) -> Const | None:
+    def _build_global_var(self, cursor: cx.Cursor) -> GlobalVar | None:
+        """Build a top-level variable declaration.
+
+        The initializer is preserved only when it fits the small constant
+        expression subset supported by this parser layer.
         """
-        Top-level VAR_DECL with a constant initialiser → Const.
-        Only integer types are supported; anything else is skipped.
-        """
-        if cursor.type.is_const_qualified():
-            prim = self._resolver.resolve_primitive(cursor.type)
-            if prim is not None and prim.kind not in (
-                PrimitiveKind.FLOAT,
-                PrimitiveKind.VOID,
-            ):
-                # Try to extract the integer value via the token stream.
-                val = self._try_eval_integer_tokens(cursor)
-                if val is not None:
-                    return Const(name=cursor.spelling, type=prim, value=val)
-        return None
+        return GlobalVar(
+            decl_id=self._decl_id(cursor),
+            name=cursor.spelling,
+            link_name=cursor.spelling,
+            type=self._type_builder.build(cursor.type, TypeContext.PARAM),
+            is_const=cursor.type.is_const_qualified(),
+            initializer=self._try_parse_var_initializer(cursor),
+        )
 
     # ── macro extraction ──────────────────────────────────────────────────────
 
     def _collect_macros(self) -> list[Const]:
         """
         Walk all MACRO_DEFINITION cursors in the TU and build Const nodes for
-        simple integer / hex literal #defines.  Multi-token, string, float,
-        and function-like macros are silently skipped.
+        a practical literal/reference subset of macros. Function-like and
+        complex-expression macros are silently skipped.
 
         Call after the main AST walk so callers can append macro Consts after
         struct/enum/function declarations — matching the logical header structure.
@@ -609,59 +624,44 @@ class ClangParser:
         for cursor in self._tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
-            # Function-like and expression macros are skipped by _try_parse_macro_literal
-            # (requires exactly two tokens: name + one integer literal).
+            # Function-like and complex expression macros are skipped by
+            # _try_parse_macro_expr.
             # Must originate from the primary file
             loc = cursor.location
             if not loc.file or Path(loc.file.name).resolve() != self.header:
                 continue
 
-            val, suffix = self._try_parse_macro_literal(cursor)
-            if val is None:
+            parsed = self._try_parse_macro_expr(cursor)
+            if parsed is None:
                 continue
-
-            prim = self._resolver.primitive_for_integer_literal_suffix(suffix)
+            expr, prim = parsed
             out.append(
                 Const(
                     name=cursor.spelling,
                     type=prim,
-                    value=val,
+                    expr=expr,
                 )
             )
         return out
 
-    def _try_parse_macro_literal(
+    def _try_parse_macro_expr(
         self, cursor: cx.Cursor
-    ) -> tuple[int | None, str]:
-        """
-        Tokenise the macro definition and attempt to parse a single integer
-        literal token.
+    ) -> tuple[ConstExpr, Primitive] | None:
+        """Parse a simple macro expression and its best-effort primitive type.
 
-        Returns (value, suffix) on success, (None, "") on failure.
-
-        Token layout for  #define FOO 42u  is:
-          tokens[0] = "FOO"  (IDENTIFIER)
-          tokens[1] = "42u"  (LITERAL)
-
-        We require exactly 2 tokens (name + one literal).
+        This intentionally supports only leaf-like literal and reference forms
+        used by common C headers, leaving more complex macros unmodeled.
         """
         tokens = list(cursor.get_tokens())
-        if len(tokens) != 2:
-            return None, ""
-        _name_tok, val_tok = tokens
-        if val_tok.kind != cx.TokenKind.LITERAL:
-            return None, ""
+        if len(tokens) < 2:
+            return None
+        return self._parse_const_expr_tokens([t.spelling for t in tokens[1:]])
 
-        raw = val_tok.spelling.strip()
-        value, suffix = _match_int_literal(raw)
-        if value is None:
-            return None, ""
-        return value, suffix
+    def _try_parse_var_initializer(self, cursor: cx.Cursor) -> ConstExpr | None:
+        """Parse a practical subset of top-level variable initializers.
 
-    def _try_eval_integer_tokens(self, cursor: cx.Cursor) -> int | None:
-        """
-        For VAR_DECL cursors: accept only ``= <literal>`` or ``= - <literal>``
-        before ``;`` (same integer rules as simple #define macros).
+        This mirrors macro parsing so globals and constant-like declarations use
+        the same expression subset.
         """
         tokens = list(cursor.get_tokens())
         try:
@@ -671,16 +671,40 @@ class ClangParser:
         after_eq = tokens[eq_i + 1 :]
         if after_eq and after_eq[-1].spelling == ";":
             after_eq = after_eq[:-1]
-        if len(after_eq) == 1 and after_eq[0].kind == cx.TokenKind.LITERAL:
-            val, _ = _match_int_literal(after_eq[0].spelling.strip())
-            return val
-        if (
-            len(after_eq) == 2
-            and after_eq[0].spelling == "-"
-            and after_eq[1].kind == cx.TokenKind.LITERAL
-        ):
-            val, _ = _match_int_literal(after_eq[1].spelling.strip())
-            if val is None:
-                return None
-            return -val
+        parsed = self._parse_const_expr_tokens([t.spelling for t in after_eq])
+        if parsed is None:
+            return None
+        expr, _ = parsed
+        return expr
+
+    def _parse_const_expr_tokens(
+        self, tokens: list[str]
+    ) -> tuple[ConstExpr, Primitive] | None:
+        """Parse a small constant-expression subset used by macros and globals.
+
+        The return value includes a best-effort primitive type so callers can
+        preserve both the expression tree and a usable ABI-level type.
+        """
+        if not tokens:
+            return None
+        if len(tokens) == 1:
+            raw = tokens[0].strip()
+            value, suffix = _match_int_literal(raw)
+            if value is not None:
+                return IntLiteral(value), self._resolver.primitive_for_integer_literal_suffix(suffix)
+            if raw.startswith('"') and raw.endswith('"'):
+                return StringLiteral(raw[1:-1]), Primitive("char", PrimitiveKind.CHAR, True, 1)
+            if raw.startswith("'") and raw.endswith("'"):
+                return CharLiteral(raw[1:-1]), Primitive("char", PrimitiveKind.CHAR, True, 1)
+            if raw == "NULL":
+                return NullPtrLiteral(), Primitive("void", PrimitiveKind.VOID, False, 0)
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", raw):
+                return RefExpr(raw), Primitive("int", PrimitiveKind.INT, True, 4)
+            return None
+        if len(tokens) == 2 and tokens[0] == "-":
+            value, suffix = _match_int_literal(tokens[1].strip())
+            if value is not None:
+                return IntLiteral(-value), self._resolver.primitive_for_integer_literal_suffix(suffix)
+        if tokens == ["(", "void", "*", ")", "0"] or tokens == ["(", "void", "*", ")", "NULL"]:
+            return NullPtrLiteral(), Primitive("void", PrimitiveKind.VOID, False, 0)
         return None

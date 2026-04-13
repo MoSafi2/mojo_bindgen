@@ -16,6 +16,19 @@ class PrimitiveKind(StrEnum):
     VOID = "VOID"
 
 
+UnsupportedTypeCategory = Literal[
+    "unexposed",
+    "vector",
+    "complex",
+    "block",
+    "objc",
+    "unsupported_extension",
+    "invalid",
+    "unknown",
+]
+"""Categories for types recognized by the parser but not fully modeled."""
+
+
 ArrayKind = Literal["fixed", "incomplete", "flexible", "variable"]
 """Array-shape categories that matter for ABI-faithful lowering."""
 
@@ -187,21 +200,135 @@ class FunctionPtr:
 
 
 @dataclass
-class Opaque:
+class OpaqueRecordRef:
+    """Reference to a declared-but-incomplete struct or union type.
+
+    This node represents intentionally opaque record handles such as
+    ``struct FILE`` or public forward-declared library types. It is distinct
+    from :class:`UnsupportedType`, which means the parser saw a type it could
+    not model faithfully.
     """
-    A struct/union type that was declared but never defined in this translation unit.
-    e.g.  struct FILE;   typedef struct _IO_FILE FILE;
-    Emitted as:  alias FILE = OpaquePointer
-    """
-    name: str   # C name of the incomplete type
+
+    decl_id: str
+    name: str
+    c_name: str
+    is_union: bool = False
 
     def to_json_dict(self) -> dict[str, Any]:
-        return {"kind": "Opaque", "name": self.name}
+        return {
+            "kind": "OpaqueRecordRef",
+            "decl_id": self.decl_id,
+            "name": self.name,
+            "c_name": self.c_name,
+            "is_union": self.is_union,
+        }
 
     @classmethod
     def from_json_dict(cls, d: dict[str, Any]) -> Self:
-        _expect_kind(d, "Opaque")
-        return cls(name=d["name"])
+        _expect_kind(d, "OpaqueRecordRef")
+        return cls(
+            decl_id=d.get("decl_id", d["name"]),
+            name=d["name"],
+            c_name=d.get("c_name", d["name"]),
+            is_union=d.get("is_union", False),
+        )
+
+
+@dataclass
+class UnsupportedType:
+    """A type that the parser recognized but cannot model faithfully yet.
+
+    Unlike :class:`OpaqueRecordRef`, this means the source type is known but
+    unsupported for precise lowering. The category and reason fields make the
+    fallback explicit for later diagnostics and renderer policy.
+    """
+
+    category: UnsupportedTypeCategory
+    spelling: str
+    reason: str
+    size_bytes: int | None = None
+    align_bytes: int | None = None
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "UnsupportedType",
+            "category": self.category,
+            "spelling": self.spelling,
+            "reason": self.reason,
+            "size_bytes": self.size_bytes,
+            "align_bytes": self.align_bytes,
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "UnsupportedType")
+        return cls(
+            category=d["category"],
+            spelling=d["spelling"],
+            reason=d["reason"],
+            size_bytes=d.get("size_bytes"),
+            align_bytes=d.get("align_bytes"),
+        )
+
+
+@dataclass
+class ComplexType:
+    """C complex scalar modeled as two primitive lanes.
+
+    The element primitive captures the ABI lane type, while ``size_bytes``
+    preserves the exact layout width reported by clang.
+    """
+
+    element: Primitive
+    size_bytes: int
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "ComplexType",
+            "element": self.element.to_json_dict(),
+            "size_bytes": self.size_bytes,
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "ComplexType")
+        return cls(
+            element=type_from_json(d["element"]),  # type: ignore[arg-type]
+            size_bytes=d["size_bytes"],
+        )
+
+
+@dataclass
+class VectorType:
+    """SIMD or compiler-extension vector type.
+
+    This preserves extension vector shapes as structured IR instead of
+    collapsing them into unsupported opaque blobs.
+    """
+
+    element: Type
+    count: int | None
+    size_bytes: int
+    is_ext_vector: bool = False
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "VectorType",
+            "element": self.element.to_json_dict(),
+            "count": self.count,
+            "size_bytes": self.size_bytes,
+            "is_ext_vector": self.is_ext_vector,
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "VectorType")
+        return cls(
+            element=type_from_json(d["element"]),
+            count=d.get("count"),
+            size_bytes=d["size_bytes"],
+            is_ext_vector=d.get("is_ext_vector", False),
+        )
 
 
 @dataclass(frozen=True)
@@ -472,11 +599,197 @@ Type = Union[
     Pointer,
     Array,
     FunctionPtr,
-    Opaque,
+    OpaqueRecordRef,
+    UnsupportedType,
+    ComplexType,
+    VectorType,
     StructRef,
     EnumRef,
     TypeRef,
 ]
+
+
+@dataclass(frozen=True)
+class IntLiteral:
+    """Integer constant expression leaf."""
+
+    value: int
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "IntLiteral", "value": self.value}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "IntLiteral")
+        return cls(value=d["value"])
+
+
+@dataclass(frozen=True)
+class FloatLiteral:
+    """Floating-point constant expression leaf, preserved as source text."""
+
+    value: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "FloatLiteral", "value": self.value}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "FloatLiteral")
+        return cls(value=d["value"])
+
+
+@dataclass(frozen=True)
+class StringLiteral:
+    """String-literal constant expression leaf without surrounding quotes."""
+
+    value: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "StringLiteral", "value": self.value}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "StringLiteral")
+        return cls(value=d["value"])
+
+
+@dataclass(frozen=True)
+class CharLiteral:
+    """Character-literal constant expression leaf without surrounding quotes."""
+
+    value: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "CharLiteral", "value": self.value}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "CharLiteral")
+        return cls(value=d["value"])
+
+
+@dataclass(frozen=True)
+class NullPtrLiteral:
+    """Null-pointer constant expression leaf."""
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "NullPtrLiteral"}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "NullPtrLiteral")
+        return cls()
+
+
+@dataclass(frozen=True)
+class RefExpr:
+    """Reference to another constant-like symbol in a constant expression."""
+
+    name: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "RefExpr", "name": self.name}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "RefExpr")
+        return cls(name=d["name"])
+
+
+@dataclass(frozen=True)
+class UnaryExpr:
+    """Unary constant expression such as ``-x`` or ``~x``."""
+
+    op: str
+    operand: ConstExpr
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "UnaryExpr", "op": self.op, "operand": self.operand.to_json_dict()}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "UnaryExpr")
+        return cls(op=d["op"], operand=const_expr_from_json(d["operand"]))
+
+
+@dataclass(frozen=True)
+class BinaryExpr:
+    """Binary constant expression such as ``a | b`` or ``x << 2``."""
+
+    op: str
+    lhs: ConstExpr
+    rhs: ConstExpr
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "BinaryExpr",
+            "op": self.op,
+            "lhs": self.lhs.to_json_dict(),
+            "rhs": self.rhs.to_json_dict(),
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "BinaryExpr")
+        return cls(
+            op=d["op"],
+            lhs=const_expr_from_json(d["lhs"]),
+            rhs=const_expr_from_json(d["rhs"]),
+        )
+
+
+@dataclass(frozen=True)
+class CastExpr:
+    """Cast applied inside a constant expression."""
+
+    target: Type
+    expr: ConstExpr
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "CastExpr",
+            "target": self.target.to_json_dict(),
+            "expr": self.expr.to_json_dict(),
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "CastExpr")
+        return cls(
+            target=type_from_json(d["target"]),
+            expr=const_expr_from_json(d["expr"]),
+        )
+
+
+@dataclass(frozen=True)
+class SizeOfExpr:
+    """``sizeof(T)`` constant expression."""
+
+    target: Type
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"kind": "SizeOfExpr", "target": self.target.to_json_dict()}
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "SizeOfExpr")
+        return cls(target=type_from_json(d["target"]))
+
+
+ConstExpr = Union[
+    IntLiteral,
+    FloatLiteral,
+    StringLiteral,
+    CharLiteral,
+    NullPtrLiteral,
+    RefExpr,
+    UnaryExpr,
+    BinaryExpr,
+    CastExpr,
+    SizeOfExpr,
+]
+"""Structured constant-expression subset used by macros, enums, and globals."""
 
 @dataclass
 class Enumerant:
@@ -571,20 +884,22 @@ class Typedef:
 @dataclass
 class Const:
     """
-    Integer or hex #define macros only.
-    type is always Primitive.  value is a Python int.
-    Emitted as:  alias NAME = MojoType(value)
+    Top-level C constant or macro-like declaration with an unevaluated or partly
+    evaluated constant expression.
+
+    The ``type`` field is the best-effort declared or inferred type; ``expr``
+    preserves the expression shape when full evaluation is not desirable.
     """
     name: str
-    type: Primitive
-    value: int          # Python int, handles hex fine
+    type: Type
+    expr: ConstExpr
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "kind": "Const",
             "name": self.name,
             "type": self.type.to_json_dict(),
-            "value": self.value,
+            "expr": self.expr.to_json_dict(),
         }
 
     @classmethod
@@ -592,8 +907,49 @@ class Const:
         _expect_kind(d, "Const")
         return cls(
             name=d["name"],
-            type=type_from_json(d["type"]),  # type: ignore[arg-type]
-            value=d["value"],
+            type=type_from_json(d["type"]),
+            expr=const_expr_from_json(d["expr"]),
+        )
+
+
+@dataclass
+class GlobalVar:
+    """Top-level variable declaration exposed by the bound library.
+
+    This covers exported globals and ``extern const`` declarations that should
+    remain part of the binding surface even when they are not reducible to a
+    compile-time constant.
+    """
+
+    decl_id: str
+    name: str
+    link_name: str
+    type: Type
+    is_const: bool = False
+    initializer: ConstExpr | None = None
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "GlobalVar",
+            "decl_id": self.decl_id,
+            "name": self.name,
+            "link_name": self.link_name,
+            "type": self.type.to_json_dict(),
+            "is_const": self.is_const,
+            "initializer": None if self.initializer is None else self.initializer.to_json_dict(),
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "GlobalVar")
+        init = d.get("initializer")
+        return cls(
+            decl_id=d.get("decl_id", d["name"]),
+            name=d["name"],
+            link_name=d["link_name"],
+            type=type_from_json(d["type"]),
+            is_const=d.get("is_const", False),
+            initializer=None if init is None else const_expr_from_json(init),
         )
 
 
@@ -636,11 +992,14 @@ Decl = Union[
     Enum,
     Typedef,
     Const,
+    GlobalVar,
 ]
 
 
 @dataclass
 class Unit:
+    """One parsed header translation unit plus its declarations and diagnostics."""
+
     source_header: str
     library: str            # e.g. "zlib"
     link_name: str          # e.g. "z"  (used in DLHandle)
@@ -678,7 +1037,10 @@ _TYPE_FROM_JSON: dict[str, Callable[[dict[str, Any]], Type]] = {
     "Pointer": Pointer.from_json_dict,
     "Array": Array.from_json_dict,
     "FunctionPtr": FunctionPtr.from_json_dict,
-    "Opaque": Opaque.from_json_dict,
+    "OpaqueRecordRef": OpaqueRecordRef.from_json_dict,
+    "UnsupportedType": UnsupportedType.from_json_dict,
+    "ComplexType": ComplexType.from_json_dict,
+    "VectorType": VectorType.from_json_dict,
     "StructRef": StructRef.from_json_dict,
     "EnumRef": EnumRef.from_json_dict,
     "TypeRef": TypeRef.from_json_dict,
@@ -697,12 +1059,39 @@ def type_from_json(d: dict[str, Any]) -> Type:
     return deser(d)
 
 
+_CONST_EXPR_FROM_JSON: dict[str, Callable[[dict[str, Any]], ConstExpr]] = {
+    "IntLiteral": IntLiteral.from_json_dict,
+    "FloatLiteral": FloatLiteral.from_json_dict,
+    "StringLiteral": StringLiteral.from_json_dict,
+    "CharLiteral": CharLiteral.from_json_dict,
+    "NullPtrLiteral": NullPtrLiteral.from_json_dict,
+    "RefExpr": RefExpr.from_json_dict,
+    "UnaryExpr": UnaryExpr.from_json_dict,
+    "BinaryExpr": BinaryExpr.from_json_dict,
+    "CastExpr": CastExpr.from_json_dict,
+    "SizeOfExpr": SizeOfExpr.from_json_dict,
+}
+
+
+def const_expr_from_json(d: dict[str, Any]) -> ConstExpr:
+    """Deserialize one JSON-encoded constant-expression node."""
+    kind = d.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"unknown ConstExpr kind: {kind!r}")
+    try:
+        deser = _CONST_EXPR_FROM_JSON[kind]
+    except KeyError:
+        raise ValueError(f"unknown ConstExpr kind: {kind!r}") from None
+    return deser(d)
+
+
 _DECL_FROM_JSON: dict[str, Callable[[dict[str, Any]], Decl]] = {
     "Function": Function.from_json_dict,
     "Struct": Struct.from_json_dict,
     "Enum": Enum.from_json_dict,
     "Typedef": Typedef.from_json_dict,
     "Const": Const.from_json_dict,
+    "GlobalVar": GlobalVar.from_json_dict,
 }
 
 
