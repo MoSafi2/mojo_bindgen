@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from collections.abc import Set
 from dataclasses import dataclass
+from functools import singledispatchmethod
 from typing import Literal
 
 from mojo_bindgen.ir import (
@@ -154,20 +155,30 @@ def lower_primitive(p: Primitive) -> str:
     return "Int32"
 
 
-class _TypeContext:
-    """Tracks struct references while lowering types."""
+class CodeBuilder:
+    """Indented line buffer for Mojo source emission."""
 
     def __init__(self) -> None:
-        self.struct_refs: set[str] = set()
-        self.needs_opaque_pointer = False
-        self.needs_unsafe_pointer = False
-        self.needs_inline_array = False
-        self.needs_mut_opaque = False
-        self.needs_immut_opaque = False
+        self._lines: list[str] = []
+        self._level = 0
 
+    def indent(self) -> None:
+        self._level += 1
 
-def _new_ctx() -> _TypeContext:
-    return _TypeContext()
+    def dedent(self) -> None:
+        self._level = max(0, self._level - 1)
+
+    def add(self, line: str) -> None:
+        self._lines.append("    " * self._level + line)
+
+    def extend(self, lines: list[str]) -> None:
+        for ln in lines:
+            self.add(ln)
+
+    def render(self) -> str:
+        if not self._lines:
+            return ""
+        return "\n".join(self._lines) + "\n"
 
 
 def _peel_typeref(t: Type) -> Type:
@@ -182,102 +193,139 @@ def _ffi_origin_names(style: FFIOriginStyle) -> tuple[str, str]:
     return ("MutAnyOrigin", "ImmutAnyOrigin")
 
 
+class TypeLowerer:
+    """Canonical and signature Mojo type lowering from IR :class:`~mojo_bindgen.ir.Type`."""
+
+    def __init__(
+        self,
+        *,
+        ffi_origin: FFIOriginStyle,
+        unsafe_union_comptime_names: frozenset[str] | None,
+        typedef_mojo_names: frozenset[str] | None = None,
+    ) -> None:
+        self._ffi_origin = ffi_origin
+        self._unsafe_union_comptime_names = unsafe_union_comptime_names
+        self._typedef_mojo_names = typedef_mojo_names or frozenset()
+
+    def signature(self, t: Type) -> str:
+        """
+        Lower for top-level function ``def`` signatures: typedef alias name when
+        this module emits a matching ``comptime`` typedef.
+        """
+        if isinstance(t, TypeRef):
+            mid = mojo_ident(t.name.strip())
+            if mid in self._typedef_mojo_names:
+                return mid
+            return self.canonical(t.canonical)
+        return self.canonical(t)
+
+    @singledispatchmethod
+    def canonical(self, t: Type) -> str:
+        raise TypeError(f"unsupported type: {type(t)!r}")
+
+    @canonical.register
+    def _(self, t: TypeRef) -> str:
+        return self.canonical(t.canonical)
+
+    @canonical.register
+    def _(self, t: Primitive) -> str:
+        return lower_primitive(t)
+
+    @canonical.register
+    def _(self, t: EnumRef) -> str:
+        return mojo_ident(t.name.strip())
+
+    @canonical.register
+    def _(self, t: Pointer) -> str:
+        mut_o, immut_o = _ffi_origin_names(self._ffi_origin)
+        if t.pointee is None:
+            if t.is_const:
+                return f"ImmutOpaquePointer[{immut_o}]"
+            return f"MutOpaquePointer[{mut_o}]"
+        inner = self.canonical(t.pointee)
+        if t.is_const:
+            return f"UnsafePointer[{inner}, {immut_o}]"
+        return f"UnsafePointer[{inner}, {mut_o}]"
+
+    @canonical.register
+    def _(self, t: Array) -> str:
+        mut_o, _immut_o = _ffi_origin_names(self._ffi_origin)
+        if t.size is None:
+            inner = self.canonical(t.element)
+            return f"UnsafePointer[{inner}, {mut_o}]"
+        inner = self.canonical(t.element)
+        return f"InlineArray[{inner}, {t.size}]"
+
+    @canonical.register
+    def _(self, t: FunctionPtr) -> str:
+        mut_o, _immut_o = _ffi_origin_names(self._ffi_origin)
+        return f"MutOpaquePointer[{mut_o}]"
+
+    @canonical.register
+    def _(self, t: Opaque) -> str:
+        mut_o, _immut_o = _ffi_origin_names(self._ffi_origin)
+        return f"MutOpaquePointer[{mut_o}]"
+
+    @canonical.register
+    def _(self, t: StructRef) -> str:
+        if t.is_union:
+            mid = mojo_ident(t.name.strip())
+            uq = f"{mid}_Union"
+            if self._unsafe_union_comptime_names is not None and uq in self._unsafe_union_comptime_names:
+                return uq
+            return f"InlineArray[UInt8, {t.size_bytes}]"
+        return mojo_ident(t.name.strip())
+
+
 def lower_type(
     t: Type,
-    ctx: _TypeContext,
     *,
     ffi_origin: FFIOriginStyle = "external",
     unsafe_union_comptime_names: frozenset[str] | None = None,
 ) -> str:
     """Lower IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
-    mut_o, immut_o = _ffi_origin_names(ffi_origin)
-    if isinstance(t, TypeRef):
-        return lower_type(
-            t.canonical,
-            ctx,
-            ffi_origin=ffi_origin,
-            unsafe_union_comptime_names=unsafe_union_comptime_names,
-        )
-    if isinstance(t, Primitive):
-        return lower_primitive(t)
-    if isinstance(t, EnumRef):
-        return mojo_ident(t.name.strip())
-    if isinstance(t, Pointer):
-        ctx.needs_unsafe_pointer = True
-        if t.pointee is None:
-            if t.is_const:
-                ctx.needs_immut_opaque = True
-                return f"ImmutOpaquePointer[{immut_o}]"
-            ctx.needs_mut_opaque = True
-            return f"MutOpaquePointer[{mut_o}]"
-        inner = lower_type(
-            t.pointee, ctx, ffi_origin=ffi_origin, unsafe_union_comptime_names=unsafe_union_comptime_names
-        )
-        if t.is_const:
-            return f"UnsafePointer[{inner}, {immut_o}]"
-        return f"UnsafePointer[{inner}, {mut_o}]"
-    if isinstance(t, Array):
-        if t.size is None:
-            ctx.needs_unsafe_pointer = True
-            inner = lower_type(
-                t.element, ctx, ffi_origin=ffi_origin, unsafe_union_comptime_names=unsafe_union_comptime_names
-            )
-            return f"UnsafePointer[{inner}, {mut_o}]"
-        ctx.needs_inline_array = True
-        inner = lower_type(
-            t.element, ctx, ffi_origin=ffi_origin, unsafe_union_comptime_names=unsafe_union_comptime_names
-        )
-        return f"InlineArray[{inner}, {t.size}]"
-    if isinstance(t, FunctionPtr):
-        ctx.needs_unsafe_pointer = True
-        ctx.needs_mut_opaque = True
-        return f"MutOpaquePointer[{mut_o}]"
-    if isinstance(t, Opaque):
-        ctx.needs_unsafe_pointer = True
-        ctx.needs_mut_opaque = True
-        return f"MutOpaquePointer[{mut_o}]"
-    if isinstance(t, StructRef):
-        if t.is_union:
-            mid = mojo_ident(t.name.strip())
-            uq = f"{mid}_Union"
-            if unsafe_union_comptime_names is not None and uq in unsafe_union_comptime_names:
-                return uq
-            ctx.needs_inline_array = True
-            return f"InlineArray[UInt8, {t.size_bytes}]"
-        mid = mojo_ident(t.name.strip())
-        ctx.struct_refs.add(mid)
-        return mid
-    raise TypeError(f"unsupported type: {type(t)!r}")
-
-
-def _lower_type_signature(
-    t: Type,
-    ctx: _TypeContext,
-    *,
-    typedef_mojo_names: frozenset[str],
-    ffi_origin: FFIOriginStyle = "external",
-    unsafe_union_comptime_names: frozenset[str] | None = None,
-) -> str:
-    """
-    Lower a type for top-level function ``def`` signatures: use a typedef alias
-    name when this module emits a matching ``comptime`` typedef.
-    """
-    if isinstance(t, TypeRef):
-        mid = mojo_ident(t.name.strip())
-        if mid in typedef_mojo_names:
-            return mid
-        return lower_type(
-            t.canonical,
-            ctx,
-            ffi_origin=ffi_origin,
-            unsafe_union_comptime_names=unsafe_union_comptime_names,
-        )
-    return lower_type(
-        t,
-        ctx,
+    return TypeLowerer(
         ffi_origin=ffi_origin,
         unsafe_union_comptime_names=unsafe_union_comptime_names,
-    )
+        typedef_mojo_names=frozenset(),
+    ).canonical(t)
+
+
+def _type_needs_opaque_pointer_import(t: Type) -> bool:
+    """Whether lowered type uses ``MutOpaquePointer`` / ``ImmutOpaquePointer`` (imports)."""
+    if isinstance(t, TypeRef):
+        return _type_needs_opaque_pointer_import(t.canonical)
+    if isinstance(t, EnumRef):
+        return False
+    if isinstance(t, Pointer):
+        if t.pointee is None:
+            return True
+        return _type_needs_opaque_pointer_import(t.pointee)
+    if isinstance(t, Array):
+        return _type_needs_opaque_pointer_import(t.element)
+    if isinstance(t, FunctionPtr):
+        return True
+    if isinstance(t, Opaque):
+        return True
+    return False
+
+
+def _unit_needs_opaque_imports(unit: Unit) -> bool:
+    for d in unit.decls:
+        if isinstance(d, Struct) and not d.is_union:
+            for f in d.fields:
+                if _type_needs_opaque_pointer_import(f.type):
+                    return True
+        elif isinstance(d, Function):
+            if _type_needs_opaque_pointer_import(d.ret):
+                return True
+            for p in d.params:
+                if _type_needs_opaque_pointer_import(p.type):
+                    return True
+        elif isinstance(d, Typedef):
+            if _type_needs_opaque_pointer_import(d.canonical):
+                return True
+    return False
 
 
 def _type_ok_for_unsafe_union_member(t: Type) -> bool:

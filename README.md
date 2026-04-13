@@ -65,6 +65,20 @@ mojo-bindgen include/me.h --compile-arg=-std=c99 -o out.mojo
 
 By default, `--library` and `--link-name` are the header file stem (e.g. `me` for `me.h`). See `mojo-bindgen --help` for `--linking`, `--library-path-hint`, and other options.
 
+## Limitations  & Rough Edges
+
+- **Macros:** Only simple integer `#define` literals (name + one literal token) become constants. Float, string, multi-token, and expression macros are skipped.
+- **Globals:** Non-`const` `extern` variables are not modeled; only top-level `const` variables with integer literal initializers may be captured similarly to macros.
+- **Variadic functions:** No thin callable wrapper is emitted; output is a comment noting that varargs are not modeled for FFI.
+- **Function pointers:** Fields and typedefs to function types are lowered to opaque pointers plus a comment describing the C signature (details are lossy).
+
+- **Enums:** Underlying backing type is not always inferred correctly.
+- **Bitfields:** Mixed backing types and wide bitfields produce wrong layouts. several edge cases related to bitfields are not handled correctly in the IR.
+- **Pointer-to-array vs array-of-pointers** at file scope: some forms are not represented in IR at all.
+- **Anonymous union inside struct:** Anonymous nested unions may not be captured as distinct union members.
+- **`inline`:** May be emitted like a normal extern symbol; linkage and availability can differ from real C `inline` (possible symbol mismatch).
+-  qualifiers as `inline` / `extern inline` / `volatile` / `restrict`  are stripped and not emitted in the IR.
+
 ## Development
 
 ```bash
