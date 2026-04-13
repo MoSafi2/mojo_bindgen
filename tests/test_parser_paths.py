@@ -35,30 +35,23 @@ def test_relative_via_cwd_without_dev() -> None:
             os.chdir(old)
 
 
-def test_repo_relative_requires_dev_flag() -> None:
+def test_relative_header_resolves_from_cwd_only() -> None:
+    """Relative paths are resolved against the process cwd (no repo-root magic)."""
     rel = "tests/fixtures/everything.h"
     repo_file = _REPO_ROOT / rel
     assert repo_file.is_file()
     old_cwd = os.getcwd()
-    old_dev = os.environ.get("MOJO_BINDGEN_DEV")
     try:
         with tempfile.TemporaryDirectory() as td:
             os.chdir(td)
-            if "MOJO_BINDGEN_DEV" in os.environ:
-                del os.environ["MOJO_BINDGEN_DEV"]
             with pytest.raises(FileNotFoundError) as exc_info:
                 _resolve_header_path(rel)
-            assert "MOJO_BINDGEN_DEV" in str(exc_info.value)
+            assert "header not found" in str(exc_info.value)
 
-            os.environ["MOJO_BINDGEN_DEV"] = "1"
-            r = _resolve_header_path(rel)
+            r = _resolve_header_path(repo_file)
             assert r.resolve() == repo_file.resolve()
     finally:
         os.chdir(old_cwd)
-        if old_dev is None:
-            os.environ.pop("MOJO_BINDGEN_DEV", None)
-        else:
-            os.environ["MOJO_BINDGEN_DEV"] = old_dev
 
 
 def test_returns_list_starting_with_usr_include() -> None:

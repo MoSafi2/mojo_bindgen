@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from mojo_bindgen.ir import Field, Primitive, PrimitiveKind, Struct
-from mojo_bindgen.mojo_emit import MojoEmitOptions, _emit_struct
+from mojo_bindgen.mojo_analyze import analyzed_struct_for_test, struct_by_mojo_name
+from mojo_bindgen.mojo_emit import MojoEmitOptions, emit_struct, mojo_ident
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,12 +44,16 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
         align_bytes=16,
         is_union=orig.is_union,
     )
-    text = _emit_struct(
+    struct_by_name = dict(struct_by_mojo_name(unit))
+    struct_by_name[mojo_ident(patched.name.strip() or patched.c_name.strip())] = patched
+    opts = MojoEmitOptions(emit_align=True, warn_abi=False)
+    analyzed = analyzed_struct_for_test(
         patched,
-        MojoEmitOptions(emit_align=True, warn_abi=False),
-        {},
-        None,
+        options=opts,
+        struct_by_name=struct_by_name,
+        unsafe_union_comptime=None,
     )
+    text = emit_struct(opts, analyzed)
     assert "@align(16)" in text
     assert "FFI: array stride" in text
 
@@ -70,12 +75,14 @@ def test_align_omitted_comment_for_invalid_c_align_bytes() -> None:
         align_bytes=3,
         is_union=False,
     )
-    text = _emit_struct(
+    opts = MojoEmitOptions(emit_align=True, warn_abi=False)
+    analyzed = analyzed_struct_for_test(
         bad,
-        MojoEmitOptions(emit_align=True, warn_abi=False),
-        {},
-        None,
+        options=opts,
+        struct_by_name={mojo_ident(bad.name.strip() or bad.c_name.strip()): bad},
+        unsafe_union_comptime=None,
     )
+    text = emit_struct(opts, analyzed)
     assert "@align(" not in text
     assert "align_bytes=3" in text
     assert "omitted" in text

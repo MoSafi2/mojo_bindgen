@@ -24,6 +24,13 @@ struct ev_io(Copyable, Movable, RegisterPassable):
     var data: MutOpaquePointer[MutExternalOrigin]
     var fd: Int32
     var events: Int32
+# struct ev_stat — size=48 align=8 (verify packed/aligned ABI)
+@fieldwise_init
+struct ev_stat(Copyable, Movable, RegisterPassable):
+    var prev: ev_tstamp_pair
+    var curr: ev_tstamp_pair
+    var path: UnsafePointer[Int8, ImmutExternalOrigin]
+    var interval: UInt32
 # struct ev_flags — size=4 align=4 (verify packed/aligned ABI)
 @fieldwise_init
 struct ev_flags(Copyable, Movable, RegisterPassable):
@@ -127,13 +134,6 @@ struct ev_pad(Copyable, Movable, RegisterPassable):
 @fieldwise_init
 struct ev_event(Copyable, Movable, RegisterPassable):
     var type: Int32
-# struct ev_stat — size=48 align=8 (verify packed/aligned ABI)
-@fieldwise_init
-struct ev_stat(Copyable, Movable, RegisterPassable):
-    var prev: ev_tstamp_pair
-    var curr: ev_tstamp_pair
-    var path: UnsafePointer[Int8, ImmutExternalOrigin]
-    var interval: UInt32
 # enum ev_backend — underlying unsigned int → UInt32 (verify C ABI)
 @fieldwise_init
 struct ev_backend(Copyable, Movable, RegisterPassable):

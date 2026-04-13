@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from mojo_bindgen.ir import Pointer, Primitive, PrimitiveKind, Struct, StructRef, Field
-from mojo_bindgen.mojo_emit import _toposort_structs, mojo_ident
+from mojo_bindgen._struct_order import toposort_structs
+from mojo_bindgen.lowering import mojo_ident
 
 
 def _i32() -> Primitive:
@@ -28,7 +29,7 @@ def test_toposort_pointer_to_struct_does_not_force_pointee_first() -> None:
         size_bytes=8,
         align_bytes=8,
     )
-    ordered = _toposort_structs([struct_a, struct_b])
+    ordered = toposort_structs([struct_a, struct_b])
     assert [mojo_ident(s.name.strip() or s.c_name.strip()) for s in ordered] == ["A", "B"]
 
 
@@ -50,5 +51,5 @@ def test_toposort_value_embed_orders_pointee_before_container() -> None:
         size_bytes=4,
         align_bytes=4,
     )
-    ordered = _toposort_structs([struct_a, struct_b])
+    ordered = toposort_structs([struct_a, struct_b])
     assert [mojo_ident(s.name.strip() or s.c_name.strip()) for s in ordered] == ["B", "A"]
