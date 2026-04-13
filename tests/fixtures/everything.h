@@ -225,4 +225,98 @@ static inline int ev_fast_check(int x) {
 void ev_atomic_add(volatile int *counter, int amount);
 void ev_memory_copy(void *restrict dest, const void *restrict src, size_t n);
 
+// ── 21. INCOMPLETE TYPE RESOLUTION EDGE CASES ────────────────────────────────
+// Stress fixpoint type resolution with self-reference and typedef recursion.
+
+struct ev_node {
+    struct ev_node *next;
+    struct ev_node *prev;
+};
+
+typedef struct ev_a ev_a;
+struct ev_a {
+    ev_a *next;
+};
+
+// ── 22. ENUM EDGE CASES ───────────────────────────────────────────────────────
+
+// Large enum value crossing signed int boundary.
+enum ev_big {
+    EV_BIG = 0x7FFFFFFFFFFFFFFFLL
+};
+
+
+// ── 23. BITFIELD EDGE CASES ───────────────────────────────────────────────────
+// Mix backing types, packing boundaries, and zero-width alignment reset.
+
+struct ev_bf {
+    unsigned char a : 3;
+    signed int b : 5;
+    _Bool c : 1;
+};
+
+struct ev_bf2 {
+    unsigned int a : 20;
+    unsigned int b : 20;
+};
+
+struct ev_bf3 {
+    unsigned int a : 1;
+    unsigned int : 0; // forces alignment reset
+    unsigned int b : 1;
+};
+
+// ── 24. POINTER-TO-ARRAY VS ARRAY-OF-POINTERS ────────────────────────────────
+
+int (*ev_ptr_to_array)[10];  // pointer to array[10] of int
+int *ev_array_of_ptrs[10];   // array[10] of pointer to int
+
+// ── 25. K&R / OLD-STYLE FUNCTION DECLARATION ─────────────────────────────────
+// Legacy syntax still seen in older system headers.
+
+int ev_legacy(a, b)
+int a;
+double b;
+{
+    (void)b;
+    return a;
+}
+
+// ── 26. INLINE + EXTERN INLINE DECLARATIONS ──────────────────────────────────
+// Important for symbol/linkage behavior differences vs static inline.
+
+inline int ev_inline(int x);
+extern inline int ev_extern_inline(int x);
+
+// ── 27. MACRO-EXPANDED TYPE IN TYPEDEF ───────────────────────────────────────
+// Validates macro expansion before typedef type resolution.
+
+#define EV_TYPE int
+typedef EV_TYPE ev_dynamic_t;
+
+// ── 28. STATIC + EXTERN GLOBAL LINKAGE CASES ─────────────────────────────────
+
+static int ev_internal_state;
+extern const struct ev_loop *ev_default_loop;
+
+// ── 29. ABI PADDING / LAYOUT STRESS ──────────────────────────────────────────
+// Classic alignment/padding layout: char + int + char.
+
+struct ev_pad {
+    char a;
+    int b;
+    char c;
+};
+
+// ── 30. ANONYMOUS UNION INSIDE STRUCT ────────────────────────────────────────
+// C11 supports anonymous unions (also accepted by common compilers in C mode).
+
+struct ev_event {
+    int type;
+    union {
+        int fd;
+        void *ptr;
+    };
+};
+
 #endif
