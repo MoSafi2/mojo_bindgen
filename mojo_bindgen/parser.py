@@ -570,9 +570,9 @@ class ClangParser:
         underlying = self._resolver.resolve_primitive(underlying_clang)
         if underlying is None:
             underlying = Primitive(
-                "unsigned int",
+                "int",
                 kind=PrimitiveKind.INT,
-                is_signed=False,
+                is_signed=True,
                 size_bytes=4,
             )
         out: list[Const] = []
@@ -596,7 +596,7 @@ class ClangParser:
         :meth:`_anonymous_enum_as_consts`.
 
         The underlying integer type comes from clang's ``enum_type`` on the
-        cursor (new enough libclang) or falls back to a fixed unsigned int.
+        cursor (new enough libclang) or falls back to a fixed int.
         """
         c_name = cursor.spelling
         if not c_name:
@@ -605,9 +605,9 @@ class ClangParser:
         underlying = self._resolver.resolve_primitive(underlying_clang)
         if underlying is None:
             underlying = Primitive(
-                "unsigned int",
+                "int",
                 kind=PrimitiveKind.INT,
-                is_signed=False,
+                is_signed=True,
                 size_bytes=4,
             )
 
