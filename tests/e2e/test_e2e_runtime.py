@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_GOLDEN_ROOT = _REPO_ROOT / "tests" / "e2e" / "golden"
+_GOLDEN_ROOT = _REPO_ROOT / "tests" / "e2e" / "fixtures"
 
 _PHASES = (
     "bindgen_external",
