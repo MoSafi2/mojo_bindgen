@@ -120,10 +120,22 @@ class TypeBuilder:
     def _lower_record(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
         usr = decl.get_usr()
+        c_name = decl.spelling
 
         if usr in self.resolver.type_cache:
             s = self.resolver.type_cache[usr]
             return self._make_struct_ref(s.name, s.c_name, s.is_union, s.size_bytes)
+
+        # Break self-recursive record cycles (e.g. struct node { struct node* next; }).
+        # Named definitions are emitted by top-level traversal, so we can return a ref
+        # directly without recursively materializing the same definition here.
+        if c_name and c_name in self.resolver.defined_structs:
+            return self._make_struct_ref(
+                struct_name=c_name,
+                c_name=c_name,
+                is_union=(decl.kind == cx.CursorKind.UNION_DECL),
+                size_bytes=max(0, t.get_size()),
+            )
 
         if decl.is_definition():
             s = self.resolver._build_struct(decl.get_definition(), None)
@@ -131,8 +143,8 @@ class TypeBuilder:
                 self.resolver.type_cache[usr] = s
                 return self._make_struct_ref(s.name, s.c_name, s.is_union, s.size_bytes)
 
-        if decl.spelling:
-            return Opaque(name=decl.spelling)
+        if c_name:
+            return Opaque(name=c_name)
         return Opaque(name="__anonymous_record")
 
     def _lower_enum(self, t: cx.Type) -> Type:
