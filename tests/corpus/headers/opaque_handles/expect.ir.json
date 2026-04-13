@@ -1,0 +1,55 @@
+{
+  "decl_kind_counts": {
+    "Struct": 2,
+    "Typedef": 1,
+    "Function": 2
+  },
+  "decls": [
+    {
+      "kind": "Struct",
+      "name": "foo",
+      "attrs": {
+        "is_complete": false,
+        "is_union": false
+      }
+    },
+    {
+      "kind": "Struct",
+      "name": "bar",
+      "attrs": {
+        "is_complete": false,
+        "is_union": true
+      }
+    },
+    {
+      "kind": "Typedef",
+      "name": "foo_t",
+      "attrs": {}
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "open_foo"
+      },
+      "path": "ret.pointee.canonical",
+      "attrs": {
+        "kind": "OpaqueRecordRef",
+        "name": "foo"
+      }
+    },
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "peek_bar"
+      },
+      "path": "ret.pointee",
+      "attrs": {
+        "kind": "OpaqueRecordRef",
+        "name": "bar",
+        "is_union": true
+      }
+    }
+  ]
+}

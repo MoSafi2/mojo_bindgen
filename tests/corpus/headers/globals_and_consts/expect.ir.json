@@ -1,0 +1,81 @@
+{
+  "decl_kind_counts": {
+    "GlobalVar": 2,
+    "Const": 3
+  },
+  "decls": [
+    {
+      "kind": "GlobalVar",
+      "name": "global_counter",
+      "attrs": {
+        "is_const": false
+      }
+    },
+    {
+      "kind": "GlobalVar",
+      "name": "global_name",
+      "attrs": {
+        "is_const": false
+      }
+    },
+    {
+      "kind": "Const",
+      "name": "DEFAULT_LIMIT",
+      "attrs": {}
+    },
+    {
+      "kind": "Const",
+      "name": "LIB_NAME",
+      "attrs": {}
+    },
+    {
+      "kind": "Const",
+      "name": "DEFAULT_ALIAS",
+      "attrs": {}
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "GlobalVar",
+        "name": "global_name"
+      },
+      "path": "type",
+      "attrs": {
+        "kind": "Pointer"
+      }
+    },
+    {
+      "selector": {
+        "kind": "GlobalVar",
+        "name": "global_name"
+      },
+      "path": "type.qualifiers",
+      "attrs": {
+        "is_const": true
+      }
+    },
+    {
+      "selector": {
+        "kind": "Const",
+        "name": "LIB_NAME"
+      },
+      "path": "expr",
+      "attrs": {
+        "kind": "StringLiteral",
+        "value": "bindgen"
+      }
+    },
+    {
+      "selector": {
+        "kind": "Const",
+        "name": "DEFAULT_ALIAS"
+      },
+      "path": "expr",
+      "attrs": {
+        "kind": "RefExpr",
+        "name": "DEFAULT_LIMIT"
+      }
+    }
+  ]
+}

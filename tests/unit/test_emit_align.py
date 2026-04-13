@@ -11,7 +11,7 @@ from mojo_bindgen.codegen.analysis import analyzed_struct_for_test, struct_by_de
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.render import render_struct
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _has_libclang() -> bool:

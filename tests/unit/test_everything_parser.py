@@ -17,7 +17,7 @@ from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.parsing.parser import ClangParser
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Parser emits an absolute path; golden uses a stable relative form.
 _CANON_SOURCE = "# source: tests/fixtures/everything.h"

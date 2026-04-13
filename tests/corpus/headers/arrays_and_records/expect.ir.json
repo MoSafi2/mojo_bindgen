@@ -1,0 +1,59 @@
+{
+  "decl_kind_counts": {
+    "Struct": 2,
+    "Function": 1
+  },
+  "decls": [
+    {
+      "kind": "Struct",
+      "name": "payload",
+      "attrs": {
+        "is_complete": true
+      }
+    },
+    {
+      "kind": "Struct",
+      "name": "holder",
+      "attrs": {
+        "size_bytes": 16
+      }
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "payload"
+      },
+      "path": "fields.1.type",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "flexible"
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "holder"
+      },
+      "path": "fields.0.type",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "fixed",
+        "size": 4
+      }
+    },
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "take_ptr_to_array"
+      },
+      "path": "params.0.type.pointee",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "fixed",
+        "size": 4
+      }
+    }
+  ]
+}

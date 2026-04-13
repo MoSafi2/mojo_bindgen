@@ -12,7 +12,7 @@ import pytest
 from mojo_bindgen.utils import build_c_parse_args, normalize_std_flag
 from mojo_bindgen.parsing.parser import _default_system_compile_args, _resolve_header_path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_absolute_path() -> None:

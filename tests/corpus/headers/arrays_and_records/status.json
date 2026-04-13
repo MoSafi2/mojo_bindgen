@@ -1,0 +1,5 @@
+{
+  "parse": "pass",
+  "ir": "pass",
+  "emit": "not_required"
+}
