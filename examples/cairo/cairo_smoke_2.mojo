@@ -309,11 +309,11 @@ from cairo_bindings import (
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-comptime OK = _cairo_status.CAIRO_STATUS_SUCCESS.value
+comptime OK = _cairo_status.CAIRO_STATUS_SUCCESS
 
-def _ok(label: String, status: UInt32) raises:
-    if status != OK:
-        raise Error(label + " → cairo status " + String(status))
+def _ok(label: String, status: _cairo_status) raises:
+    if status.value != OK.value:
+        raise Error(label + " → cairo status " + String(status.value))
     print(label + "|ok")
 
 def _assert(label: String, cond: Bool) raises:
@@ -345,14 +345,14 @@ def test_version() raises:
 
 def test_image_surface() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 128, 96
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 128, 96
     )
     _ok("image_surface_create", cairo_surface_status(surf))
     _assert("image_surface_width", cairo_image_surface_get_width(surf) == 128)
     _assert("image_surface_height", cairo_image_surface_get_height(surf) == 96)
 
     var sim = cairo_surface_create_similar(
-        surf, _cairo_content.CAIRO_CONTENT_COLOR_ALPHA.value, 32, 32
+        surf, materialize[_cairo_content.CAIRO_CONTENT_COLOR_ALPHA](), 32, 32
     )
     _ok("surface_create_similar", cairo_surface_status(sim))
     cairo_surface_destroy(sim)
@@ -369,7 +369,7 @@ def test_image_surface() raises:
 
 def test_context_state() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surf)
     _ok("context_create", cairo_status(cr))
@@ -381,7 +381,7 @@ def test_context_state() raises:
     _assert("cr_refcount_back_1", cairo_get_reference_count(cr) == 1)
 
     # status_to_string must not crash
-    var s = cairo_status_to_string(OK)
+    var s = cairo_status_to_string(materialize[OK]())
     _assert("status_to_string_nonnull", s != UnsafePointer[Int8, ImmutExternalOrigin]())
     print("status_to_string|ok")
 
@@ -393,36 +393,36 @@ def test_context_state() raises:
     _assert("line_width_restored", _approx_eq(cairo_get_line_width(cr), 2.0))
 
     # operator round-trip
-    cairo_set_operator(cr, _cairo_operator.CAIRO_OPERATOR_XOR.value)
+    cairo_set_operator(cr, materialize[_cairo_operator.CAIRO_OPERATOR_XOR]())
     _assert("operator_roundtrip",
-        cairo_get_operator(cr) == _cairo_operator.CAIRO_OPERATOR_XOR.value)
-    cairo_set_operator(cr, _cairo_operator.CAIRO_OPERATOR_OVER.value)
+        cairo_get_operator(cr).value == _cairo_operator.CAIRO_OPERATOR_XOR.value)
+    cairo_set_operator(cr, materialize[_cairo_operator.CAIRO_OPERATOR_OVER]())
 
     # tolerance round-trip
     cairo_set_tolerance(cr, 0.123)
     _assert("tolerance_roundtrip", _approx_eq(cairo_get_tolerance(cr), 0.123))
 
     # antialias round-trip
-    cairo_set_antialias(cr, _cairo_antialias.CAIRO_ANTIALIAS_NONE.value)
+    cairo_set_antialias(cr, materialize[_cairo_antialias.CAIRO_ANTIALIAS_NONE]())
     _assert("antialias_roundtrip",
-        cairo_get_antialias(cr) == _cairo_antialias.CAIRO_ANTIALIAS_NONE.value)
-    cairo_set_antialias(cr, _cairo_antialias.CAIRO_ANTIALIAS_DEFAULT.value)
+        cairo_get_antialias(cr).value == _cairo_antialias.CAIRO_ANTIALIAS_NONE.value)
+    cairo_set_antialias(cr, materialize[_cairo_antialias.CAIRO_ANTIALIAS_DEFAULT]())
 
     # fill rule round-trip
-    cairo_set_fill_rule(cr, _cairo_fill_rule.CAIRO_FILL_RULE_EVEN_ODD.value)
+    cairo_set_fill_rule(cr, materialize[_cairo_fill_rule.CAIRO_FILL_RULE_EVEN_ODD]())
     _assert("fill_rule_roundtrip",
-        cairo_get_fill_rule(cr) == _cairo_fill_rule.CAIRO_FILL_RULE_EVEN_ODD.value)
-    cairo_set_fill_rule(cr, _cairo_fill_rule.CAIRO_FILL_RULE_WINDING.value)
+        cairo_get_fill_rule(cr).value == _cairo_fill_rule.CAIRO_FILL_RULE_EVEN_ODD.value)
+    cairo_set_fill_rule(cr, materialize[_cairo_fill_rule.CAIRO_FILL_RULE_WINDING]())
 
     # line cap round-trip
-    cairo_set_line_cap(cr, _cairo_line_cap.CAIRO_LINE_CAP_ROUND.value)
+    cairo_set_line_cap(cr, materialize[_cairo_line_cap.CAIRO_LINE_CAP_ROUND]())
     _assert("line_cap_roundtrip",
-        cairo_get_line_cap(cr) == _cairo_line_cap.CAIRO_LINE_CAP_ROUND.value)
+        cairo_get_line_cap(cr).value == _cairo_line_cap.CAIRO_LINE_CAP_ROUND.value)
 
     # line join round-trip
-    cairo_set_line_join(cr, _cairo_line_join.CAIRO_LINE_JOIN_BEVEL.value)
+    cairo_set_line_join(cr, materialize[_cairo_line_join.CAIRO_LINE_JOIN_BEVEL]())
     _assert("line_join_roundtrip",
-        cairo_get_line_join(cr) == _cairo_line_join.CAIRO_LINE_JOIN_BEVEL.value)
+        cairo_get_line_join(cr).value == _cairo_line_join.CAIRO_LINE_JOIN_BEVEL.value)
 
     # miter limit round-trip
     cairo_set_miter_limit(cr, 5.5)
@@ -449,7 +449,7 @@ def test_context_state() raises:
 
 def test_paths() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 128, 128
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 128, 128
     )
     var cr = cairo_create(surf)
 
@@ -477,7 +477,7 @@ def test_paths() raises:
 
 def test_drawing_ops() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surf)
 
@@ -511,7 +511,7 @@ def test_drawing_ops() raises:
 
     # in_stroke with a fresh path + set_source_surface
     var surf2 = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 8, 8
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 8, 8
     )
     cairo_set_source_surface(cr, surf2, 0.0, 0.0)
     cairo_move_to(cr, 0.0, 0.0)
@@ -538,7 +538,7 @@ def test_drawing_ops() raises:
 
 def test_clip() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surf)
 
@@ -563,7 +563,7 @@ def test_clip() raises:
 
 def test_transforms() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surf)
 
@@ -587,7 +587,7 @@ def test_patterns() raises:
     var solid = cairo_pattern_create_rgb(0.1, 0.2, 0.3)
     _ok("pattern_create_rgb", cairo_pattern_status(solid))
     _assert("solid_type",
-        cairo_pattern_get_type(solid) == _cairo_pattern_type.CAIRO_PATTERN_TYPE_SOLID.value)
+        cairo_pattern_get_type(solid).value == _cairo_pattern_type.CAIRO_PATTERN_TYPE_SOLID.value)
 
     # reference count
     var ref2 = cairo_pattern_reference(solid)
@@ -603,20 +603,20 @@ def test_patterns() raises:
 
     # ── 8c  surface pattern ────────────────────────────────────────────────
     var tile = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 4, 4
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 4, 4
     )
     var spat = cairo_pattern_create_for_surface(tile)
     _ok("pattern_create_for_surface", cairo_pattern_status(spat))
     _assert("surface_pattern_type",
-        cairo_pattern_get_type(spat) == _cairo_pattern_type.CAIRO_PATTERN_TYPE_SURFACE.value)
+        cairo_pattern_get_type(spat).value == _cairo_pattern_type.CAIRO_PATTERN_TYPE_SURFACE.value)
 
     # extend / filter round-trips
-    cairo_pattern_set_extend(spat, _cairo_extend.CAIRO_EXTEND_REPEAT.value)
+    cairo_pattern_set_extend(spat, materialize[_cairo_extend.CAIRO_EXTEND_REPEAT]())
     _assert("extend_roundtrip",
-        cairo_pattern_get_extend(spat) == _cairo_extend.CAIRO_EXTEND_REPEAT.value)
-    cairo_pattern_set_filter(spat, _cairo_filter.CAIRO_FILTER_BILINEAR.value)
+        cairo_pattern_get_extend(spat).value == _cairo_extend.CAIRO_EXTEND_REPEAT.value)
+    cairo_pattern_set_filter(spat, materialize[_cairo_filter.CAIRO_FILTER_BILINEAR]())
     _assert("filter_roundtrip",
-        cairo_pattern_get_filter(spat) == _cairo_filter.CAIRO_FILTER_BILINEAR.value)
+        cairo_pattern_get_filter(spat).value == _cairo_filter.CAIRO_FILTER_BILINEAR.value)
 
     cairo_pattern_destroy(spat)
     cairo_surface_destroy(tile)
@@ -625,7 +625,7 @@ def test_patterns() raises:
     var lin = cairo_pattern_create_linear(0.0, 0.0, 100.0, 0.0)
     _ok("pattern_create_linear", cairo_pattern_status(lin))
     _assert("linear_type",
-        cairo_pattern_get_type(lin) == _cairo_pattern_type.CAIRO_PATTERN_TYPE_LINEAR.value)
+        cairo_pattern_get_type(lin).value == _cairo_pattern_type.CAIRO_PATTERN_TYPE_LINEAR.value)
 
     cairo_pattern_add_color_stop_rgb(lin, 0.0, 1.0, 0.0, 0.0)
     cairo_pattern_add_color_stop_rgba(lin, 1.0, 0.0, 0.0, 1.0, 1.0)
@@ -644,7 +644,7 @@ def test_patterns() raises:
     var mesh = cairo_pattern_create_mesh()
     _ok("pattern_create_mesh", cairo_pattern_status(mesh))
     _assert("mesh_type",
-        cairo_pattern_get_type(mesh) == _cairo_pattern_type.CAIRO_PATTERN_TYPE_MESH.value)
+        cairo_pattern_get_type(mesh).value == _cairo_pattern_type.CAIRO_PATTERN_TYPE_MESH.value)
 
     cairo_mesh_pattern_begin_patch(mesh)
     cairo_mesh_pattern_move_to(mesh, 0.0, 0.0)
@@ -663,7 +663,7 @@ def test_patterns() raises:
 
     # use the mesh pattern to paint
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 100, 100
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 100, 100
     )
     var ctx = cairo_create(surf)
     cairo_set_source(ctx, mesh)
@@ -681,7 +681,7 @@ def test_patterns() raises:
 
 def test_groups() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surf)
 
@@ -699,7 +699,7 @@ def test_groups() raises:
     cairo_pattern_destroy(group_pat)
 
     # push_group_with_content / pop_group_to_source
-    cairo_push_group_with_content(cr, _cairo_content.CAIRO_CONTENT_COLOR.value)
+    cairo_push_group_with_content(cr, materialize[_cairo_content.CAIRO_CONTENT_COLOR]())
     cairo_set_source_rgb(cr, 0.0, 1.0, 0.0)
     cairo_paint(cr)
     cairo_pop_group_to_source(cr)
@@ -741,32 +741,32 @@ def test_font_options() raises:
     _assert("font_options_hash_nonzero", h != 0)
 
     # antialias
-    cairo_font_options_set_antialias(opts, _cairo_antialias.CAIRO_ANTIALIAS_GRAY.value)
+    cairo_font_options_set_antialias(opts, materialize[_cairo_antialias.CAIRO_ANTIALIAS_GRAY]())
     _assert("font_opts_antialias",
         cairo_font_options_get_antialias(
             rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](opts)
-        ) == _cairo_antialias.CAIRO_ANTIALIAS_GRAY.value)
+        ).value == _cairo_antialias.CAIRO_ANTIALIAS_GRAY.value)
 
     # subpixel order
-    cairo_font_options_set_subpixel_order(opts, _cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB.value)
+    cairo_font_options_set_subpixel_order(opts, materialize[_cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB]())
     _assert("font_opts_subpixel",
         cairo_font_options_get_subpixel_order(
             rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](opts)
-        ) == _cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB.value)
+        ).value == _cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB.value)
 
     # hint style
-    cairo_font_options_set_hint_style(opts, _cairo_hint_style.CAIRO_HINT_STYLE_FULL.value)
+    cairo_font_options_set_hint_style(opts, materialize[_cairo_hint_style.CAIRO_HINT_STYLE_FULL]())
     _assert("font_opts_hint_style",
         cairo_font_options_get_hint_style(
             rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](opts)
-        ) == _cairo_hint_style.CAIRO_HINT_STYLE_FULL.value)
+        ).value == _cairo_hint_style.CAIRO_HINT_STYLE_FULL.value)
 
     # hint metrics
-    cairo_font_options_set_hint_metrics(opts, _cairo_hint_metrics.CAIRO_HINT_METRICS_ON.value)
+    cairo_font_options_set_hint_metrics(opts, materialize[_cairo_hint_metrics.CAIRO_HINT_METRICS_ON]())
     _assert("font_opts_hint_metrics",
         cairo_font_options_get_hint_metrics(
             rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](opts)
-        ) == _cairo_hint_metrics.CAIRO_HINT_METRICS_ON.value)
+        ).value == _cairo_hint_metrics.CAIRO_HINT_METRICS_ON.value)
 
     cairo_font_options_destroy(opts2)
     cairo_font_options_destroy(opts)
@@ -778,7 +778,7 @@ def test_font_options() raises:
 
 def test_fonts_and_text() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 200, 100
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 200, 100
     )
     var cr = cairo_create(surf)
 
@@ -787,8 +787,8 @@ def test_fonts_and_text() raises:
     cairo_select_font_face(
         cr,
         rebind[UnsafePointer[Int8, ImmutExternalOrigin]](family_str.unsafe_ptr()),
-        _cairo_font_slant.CAIRO_FONT_SLANT_NORMAL.value,
-        _cairo_font_weight.CAIRO_FONT_WEIGHT_BOLD.value
+        materialize[_cairo_font_slant.CAIRO_FONT_SLANT_NORMAL](),
+        materialize[_cairo_font_weight.CAIRO_FONT_WEIGHT_BOLD]()
     )
     cairo_set_font_size(cr, 20.0)
 
@@ -798,7 +798,7 @@ def test_fonts_and_text() raises:
         ff != UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]())
     _ok("font_face_status", cairo_font_face_status(ff))
     _assert("font_face_type_toy",
-        cairo_font_face_get_type(ff) == _cairo_font_type.CAIRO_FONT_TYPE_TOY.value)
+        cairo_font_face_get_type(ff).value == _cairo_font_type.CAIRO_FONT_TYPE_TOY.value)
 
     var ff2 = cairo_font_face_reference(ff)
     _assert("font_face_refcount_ge_2", cairo_font_face_get_reference_count(ff) >= 2)
@@ -807,21 +807,21 @@ def test_fonts_and_text() raises:
     # toy_font_face_create / getters
     var tf = cairo_toy_font_face_create(
         rebind[UnsafePointer[Int8, ImmutExternalOrigin]](family_str.unsafe_ptr()),
-        _cairo_font_slant.CAIRO_FONT_SLANT_ITALIC.value,
-        _cairo_font_weight.CAIRO_FONT_WEIGHT_NORMAL.value
+        materialize[_cairo_font_slant.CAIRO_FONT_SLANT_ITALIC](),
+        materialize[_cairo_font_weight.CAIRO_FONT_WEIGHT_NORMAL]()
     )
     _ok("toy_font_face_create", cairo_font_face_status(tf))
     _assert("toy_font_slant",
-        cairo_toy_font_face_get_slant(tf) == _cairo_font_slant.CAIRO_FONT_SLANT_ITALIC.value)
+        cairo_toy_font_face_get_slant(tf).value == _cairo_font_slant.CAIRO_FONT_SLANT_ITALIC.value)
     _assert("toy_font_weight",
-        cairo_toy_font_face_get_weight(tf) == _cairo_font_weight.CAIRO_FONT_WEIGHT_NORMAL.value)
+        cairo_toy_font_face_get_weight(tf).value == _cairo_font_weight.CAIRO_FONT_WEIGHT_NORMAL.value)
     var fam_ptr = cairo_toy_font_face_get_family(tf)
     _assert("toy_font_family_nonnull", fam_ptr != UnsafePointer[Int8, ImmutExternalOrigin]())
     cairo_font_face_destroy(tf)
 
     # set_font_options / get_font_options round-trip
     var fo = cairo_font_options_create()
-    cairo_font_options_set_antialias(fo, _cairo_antialias.CAIRO_ANTIALIAS_BEST.value)
+    cairo_font_options_set_antialias(fo, materialize[_cairo_antialias.CAIRO_ANTIALIAS_BEST]())
     cairo_set_font_options(cr,
         rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](fo))
     var fo2 = cairo_font_options_create()
@@ -829,7 +829,7 @@ def test_fonts_and_text() raises:
     _assert("get_font_options_antialias",
         cairo_font_options_get_antialias(
             rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](fo2)
-        ) == _cairo_antialias.CAIRO_ANTIALIAS_BEST.value)
+        ).value == _cairo_antialias.CAIRO_ANTIALIAS_BEST.value)
     cairo_font_options_destroy(fo2)
     cairo_font_options_destroy(fo)
 
@@ -940,7 +940,7 @@ def test_regions() raises:
 def test_recording_surface() raises:
     # unbounded recording surface
     var rec = cairo_recording_surface_create(
-        _cairo_content.CAIRO_CONTENT_COLOR_ALPHA.value,
+        materialize[_cairo_content.CAIRO_CONTENT_COLOR_ALPHA](),
         UnsafePointer[_cairo_rectangle, ImmutExternalOrigin]()  # null = unbounded
     )
     _ok("recording_surface_create", cairo_surface_status(rec))
@@ -962,7 +962,7 @@ def test_recording_surface() raises:
 
 def test_mask() raises:
     var surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surf)
 
@@ -975,7 +975,7 @@ def test_mask() raises:
 
     # cairo_mask_surface
     var alpha_surf = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_A8.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_A8](), 64, 64
     )
     var alpha_cr = cairo_create(alpha_surf)
     cairo_set_source_rgba(alpha_cr, 0.0, 0.0, 0.0, 1.0)
@@ -999,7 +999,7 @@ def test_png_roundtrip() raises:
     var out_path = CStringSlice("/tmp/mojo_bindgen_cairo_full_smoke.png\0")
 
     var surface = cairo_image_surface_create(
-        _cairo_format.CAIRO_FORMAT_ARGB32.value, 64, 64
+        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 64, 64
     )
     var cr = cairo_create(surface)
 
