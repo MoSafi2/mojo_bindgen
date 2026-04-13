@@ -8,6 +8,7 @@
 # Expected output: a series of "ok|" lines and a final "ALL TESTS PASSED" line.
 
 from std.ffi import CStringSlice
+from std.memory import alloc
 from cairo_bindings import (
     # ── version ──────────────────────────────────────────────────────────────
     cairo_version,
@@ -880,9 +881,15 @@ def test_regions() raises:
     ) == 0)
     cairo_region_destroy(empty)
 
-    # create from rectangle
-    var _ = _cairo_rectangle_int(10, 10, 50, 50)
-    var reg = cairo_region_create_rectangle(UnsafePointer[_cairo_rectangle_int, ImmutExternalOrigin]())
+    # cairo_region_create_rectangle reads *rectangle; a default UnsafePointer() is null.
+    # Heap-allocate one struct so C sees stable, initialized bytes (stack `to=` on this
+    # RegisterPassable type produced invalid reads here).
+    var rect_storage = alloc[_cairo_rectangle_int](1)
+    rect_storage[0] = _cairo_rectangle_int(10, 10, 50, 50)
+    var reg = cairo_region_create_rectangle(
+        rebind[UnsafePointer[_cairo_rectangle_int, ImmutExternalOrigin]](rect_storage)
+    )
+    rect_storage.free()
     _ok("region_create_rectangle", cairo_region_status(
         rebind[UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin]](reg)
     ))
@@ -1058,7 +1065,7 @@ def main() raises:
     test_groups()
     test_font_options()
     test_fonts_and_text()
-    #test_regions()
+    test_regions()
     test_recording_surface()
     test_mask()
     test_png_roundtrip()
