@@ -669,7 +669,7 @@ class RecordLowerer:
                 field, nested_defs = self._lower_direct_anonymous_record_field(cursor.type, child)
             else:
                 continue
-            nested.extend(nested_defs)
+            self._extend_unique_structs(nested, nested_defs)
             if field is not None:
                 fields.append(field)
         struct.fields = fields
@@ -709,6 +709,15 @@ class RecordLowerer:
         )
         return field, nested
 
+    @staticmethod
+    def _extend_unique_structs(target: list[Struct], defs: list[Struct]) -> None:
+        seen = {decl.decl_id for decl in target}
+        for decl in defs:
+            if decl.decl_id in seen:
+                continue
+            target.append(decl)
+            seen.add(decl.decl_id)
+
     def _lower_direct_anonymous_record_field(
         self,
         parent_type: cx.Type,
@@ -738,9 +747,10 @@ class RecordLowerer:
         )
 
     def _lower_field_type(self, cursor: cx.Cursor) -> tuple[Type, list[Struct]]:
+        nested_defs = self._field_named_nested_record_defs(cursor)
         ft = cursor.type.get_canonical()
         if ft.kind != cx.TypeKind.RECORD:
-            return self.context.type_lowerer.lower(cursor.type, TypeContext.FIELD), []
+            return self.context.type_lowerer.lower(cursor.type, TypeContext.FIELD), nested_defs
 
         decl = ft.get_declaration()
         definition = decl.get_definition()
@@ -750,9 +760,10 @@ class RecordLowerer:
             and definition.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
         )
         if not is_anon_record:
-            return self.context.type_lowerer.lower(cursor.type, TypeContext.FIELD), []
+            return self.context.type_lowerer.lower(cursor.type, TypeContext.FIELD), nested_defs
 
-        nested_defs, inner = self.lower_record_definition(definition)
+        anon_nested_defs, inner = self.lower_record_definition(definition)
+        self._extend_unique_structs(nested_defs, anon_nested_defs + [inner])
         return (
             StructRef(
                 decl_id=inner.decl_id,
@@ -762,8 +773,23 @@ class RecordLowerer:
                 size_bytes=inner.size_bytes,
                 is_anonymous=inner.is_anonymous,
             ),
-            nested_defs + [inner],
+            nested_defs,
         )
+
+    def _field_named_nested_record_defs(self, cursor: cx.Cursor) -> list[Struct]:
+        """Return named inline record defs attached to one field declaration."""
+        nested: list[Struct] = []
+        for child in cursor.get_children():
+            if child.kind not in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
+                continue
+            if not child.is_definition():
+                continue
+            _, _, _, is_anonymous = self.context.registry.record_identity(child)
+            if is_anonymous:
+                continue
+            child_nested, struct = self.lower_record_definition(child)
+            self._extend_unique_structs(nested, child_nested + [struct])
+        return nested
 
     def _find_implicit_record_field(self, parent_type: cx.Type, record: cx.Cursor) -> cx.Cursor | None:
         """Find the implicit field cursor that stores a direct anonymous record member."""

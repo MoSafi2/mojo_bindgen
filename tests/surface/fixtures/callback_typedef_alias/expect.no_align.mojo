@@ -8,5 +8,5 @@ from std.memory import ImmutOpaquePointer, MutOpaquePointer
 comptime cta_cb_t = def (arg0: Int32) abi("C") -> Int32
 
 def cta_install(cb: UnsafePointer[cta_cb_t, MutExternalOrigin]) abi("C") -> None:
-    external_call["cta_install", NoneType, MutOpaquePointer[MutExternalOrigin]](cb)
+    external_call["cta_install", NoneType, UnsafePointer[cta_cb_t, MutExternalOrigin]](cb)
 

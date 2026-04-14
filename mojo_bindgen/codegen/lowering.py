@@ -332,11 +332,22 @@ class TypeLowerer:
                 out.append(f"a{i}")
         return out
 
-    def function_type_param_list(self, fn: Function, ret_list: str) -> str:
+    def function_type_param_list(
+        self,
+        fn: Function,
+        ret_list: str,
+        *,
+        ret_callback_alias_name: str | None = None,
+        param_callback_alias_names: tuple[str | None, ...] = (),
+    ) -> str:
         """Comma-separated ``external_call`` / ``OwnedDLHandle.call`` bracket contents (link name, ret, params)."""
-        type_params = [f'"{fn.link_name}"', ret_list]
-        for p in fn.params:
-            type_params.append(self.canonical(p.type))
+        type_params = [
+            f'"{fn.link_name}"',
+            self.callback_pointer_type(ret_callback_alias_name) if ret_callback_alias_name is not None else ret_list,
+        ]
+        for i, p in enumerate(fn.params):
+            alias = param_callback_alias_names[i] if i < len(param_callback_alias_names) else None
+            type_params.append(self.callback_pointer_type(alias) if alias is not None else self.canonical(p.type))
         return ", ".join(type_params)
 
 

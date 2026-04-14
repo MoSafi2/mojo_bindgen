@@ -203,3 +203,94 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
     assert isinstance(next_field.type, Pointer)
     assert isinstance(next_field.type.pointee, StructRef)
     assert next_field.type.pointee.name == "node"
+
+
+def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_path: Path) -> None:
+    header = tmp_path / "record_lowering_named_nested_ptr.h"
+    header.write_text(
+        (
+            "struct outer {\n"
+            "  struct inner {\n"
+            "    int x;\n"
+            "  } *p;\n"
+            "  struct inner *q;\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
+    inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner")
+
+    p_field = next(f for f in outer.fields if f.name == "p")
+    q_field = next(f for f in outer.fields if f.name == "q")
+    assert isinstance(p_field.type, Pointer)
+    assert isinstance(p_field.type.pointee, StructRef)
+    assert p_field.type.pointee.decl_id == inner.decl_id
+    assert isinstance(q_field.type, Pointer)
+    assert isinstance(q_field.type.pointee, StructRef)
+    assert q_field.type.pointee.decl_id == inner.decl_id
+
+
+def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_path: Path) -> None:
+    header = tmp_path / "record_lowering_named_nested_value.h"
+    header.write_text(
+        (
+            "struct outer {\n"
+            "  struct inner_value {\n"
+            "    int y;\n"
+            "  } value;\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
+    inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_value")
+
+    value_field = next(f for f in outer.fields if f.name == "value")
+    assert isinstance(value_field.type, StructRef)
+    assert value_field.type.decl_id == inner.decl_id
+
+
+def test_codegen_emits_named_nested_record_defs_before_parent(tmp_path: Path) -> None:
+    header = tmp_path / "record_codegen_named_nested.h"
+    header.write_text(
+        (
+            "struct sqlite3_index_info {\n"
+            "  struct sqlite3_index_constraint { int iColumn; } *aConstraint;\n"
+            "  struct sqlite3_index_orderby { int desc; } *aOrderBy;\n"
+            "  struct sqlite3_index_constraint_usage { int argvIndex; } *aConstraintUsage;\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+
+    assert "struct sqlite3_index_constraint" in out
+    assert "struct sqlite3_index_orderby" in out
+    assert "struct sqlite3_index_constraint_usage" in out
+    assert "struct sqlite3_index_info" in out
+    assert out.index("struct sqlite3_index_constraint") < out.index("struct sqlite3_index_info")
+    assert "var aConstraint: UnsafePointer[sqlite3_index_constraint, MutExternalOrigin]" in out
+    assert "var aOrderBy: UnsafePointer[sqlite3_index_orderby, MutExternalOrigin]" in out
+    assert "var aConstraintUsage: UnsafePointer[sqlite3_index_constraint_usage, MutExternalOrigin]" in out

@@ -292,9 +292,13 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         'def pfr_select_add_direct() abi("C") -> '
         'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:'
     ) in external_out
-    assert 'return external_call["pfr_select_add", MutOpaquePointer[MutExternalOrigin]]()' in external_out
     assert (
-        'return external_call["pfr_select_add_direct", MutOpaquePointer[MutExternalOrigin]]()'
+        'return external_call["pfr_select_add", UnsafePointer[pfr_binary_op_t, MutExternalOrigin]]()'
+        in external_out
+    )
+    assert (
+        'return external_call["pfr_select_add_direct", '
+        'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()'
         in external_out
     )
     assert (
@@ -302,7 +306,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         in external_out
     )
     assert (
-        'return external_call["pfr_call", Int32, MutOpaquePointer[MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
+        'return external_call["pfr_call", Int32, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
         in external_out
     )
 
@@ -318,10 +322,17 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         "def pfr_select_add_direct() raises -> "
         "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:"
     ) in dl_out
-    assert 'return _bindgen_dl().call["pfr_select_add", MutOpaquePointer[MutExternalOrigin]]()' in dl_out
-    assert 'return _bindgen_dl().call["pfr_select_add_direct", MutOpaquePointer[MutExternalOrigin]]()' in dl_out
     assert (
-        'return _bindgen_dl().call["pfr_call", Int32, MutOpaquePointer[MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
+        'return _bindgen_dl().call["pfr_select_add", UnsafePointer[pfr_binary_op_t, MutExternalOrigin]]()'
+        in dl_out
+    )
+    assert (
+        'return _bindgen_dl().call["pfr_select_add_direct", '
+        'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()'
+        in dl_out
+    )
+    assert (
+        'return _bindgen_dl().call["pfr_call", Int32, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
         in dl_out
     )
 
@@ -393,3 +404,82 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
     assert "var xCreate: UnsafePointer[sqlite3_module_xCreate_cb, MutExternalOrigin]" in out
     assert "var xConnect: UnsafePointer[sqlite3_module_xConnect_cb, MutExternalOrigin]" in out
     assert "# function pointer (fixed):" not in out
+
+
+def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
+    i32 = _i32()
+    opaque = Pointer(pointee=None)
+    cmp_cb = FunctionPtr(
+        ret=i32,
+        params=[opaque, i32, Pointer(pointee=None), i32, Pointer(pointee=None)],
+        param_names=["ctx", "lhs_len", "lhs", "rhs_len", "rhs"],
+        is_variadic=False,
+    )
+    destroy_cb = FunctionPtr(
+        ret=Primitive(name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0),
+        params=[opaque],
+        param_names=["ctx"],
+        is_variadic=False,
+    )
+    db = Pointer(
+        pointee=StructRef(
+            decl_id="struct:sqlite3",
+            name="sqlite3",
+            c_name="sqlite3",
+            size_bytes=0,
+        )
+    )
+    create = Function(
+        decl_id="fn:sqlite3_create_collation_v2",
+        name="sqlite3_create_collation_v2",
+        link_name="sqlite3_create_collation_v2",
+        ret=i32,
+        params=[
+            Param(name="db", type=db),
+            Param(name="zName", type=Pointer(pointee=Primitive("char", PrimitiveKind.CHAR, True, 1))),
+            Param(name="eTextRep", type=i32),
+            Param(name="ctx", type=opaque),
+            Param(name="xCompare", type=cmp_cb),
+            Param(name="xDestroy", type=destroy_cb),
+        ],
+        is_variadic=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(
+            source_header="t.h",
+            library="sqlite",
+            link_name="sqlite",
+            decls=[
+                Struct(
+                    decl_id="struct:sqlite3",
+                    name="sqlite3",
+                    c_name="sqlite3",
+                    fields=[],
+                    size_bytes=0,
+                    align_bytes=8,
+                    is_complete=False,
+                ),
+                create,
+            ],
+        )
+    )
+    assert "comptime sqlite3_create_collation_v2_xCompare_cb = def (" in out
+    assert "comptime sqlite3_create_collation_v2_xDestroy_cb = def (" in out
+    assert (
+        "def sqlite3_create_collation_v2("
+        "db: UnsafePointer[sqlite3, MutExternalOrigin], "
+        "zName: UnsafePointer[Int8, MutExternalOrigin], "
+        "eTextRep: Int32, "
+        "ctx: MutOpaquePointer[MutExternalOrigin], "
+        "xCompare: UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], "
+        "xDestroy: UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]"
+        ') abi("C") -> Int32:'
+    ) in out
+    assert (
+        'return external_call["sqlite3_create_collation_v2", Int32, '
+        'UnsafePointer[sqlite3, MutExternalOrigin], '
+        'UnsafePointer[Int8, MutExternalOrigin], Int32, MutOpaquePointer[MutExternalOrigin], '
+        'UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], '
+        'UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]]'
+        "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
+    ) in out

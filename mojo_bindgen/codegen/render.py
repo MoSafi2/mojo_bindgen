@@ -425,7 +425,12 @@ class MojoRenderer:
         """Render a callable thin-FFI wrapper for one supported function."""
         fn = analyzed.decl
         ret_t, args_sig, call_args, is_void, ret_list = self._function_signature(analyzed)
-        bracket_inner = self._types.function_type_param_list(fn, ret_list)
+        bracket_inner = self._types.function_type_param_list(
+            fn,
+            ret_list,
+            ret_callback_alias_name=analyzed.ret_callback_alias_name,
+            param_callback_alias_names=analyzed.param_callback_alias_names,
+        )
         name = mojo_ident(fn.name)
         b = CodeBuilder()
         if self._a.opts.linking == "external_call":
