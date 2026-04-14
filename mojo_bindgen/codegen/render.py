@@ -283,6 +283,17 @@ class MojoRenderer:
         """
         body = " ".join(decl.tokens)
         if decl.kind == "object_like_supported" and decl.expr is not None and decl.type is not None:
+            if isinstance(decl.expr, RefExpr):
+                reason = "identifier reference macro is not emitted directly; only literal macros are currently supported"
+                if body:
+                    return (
+                        f"# macro {decl.name}: {reason}\n"
+                        f"# define {decl.name} {body}\n\n"
+                    )
+                return (
+                    f"# macro {decl.name}: {reason}\n"
+                    f"# define {decl.name}\n\n"
+                )
             rendered = MojoRenderer._render_const_expr(decl.expr, decl.type)
             if rendered is not None:
                 return f"comptime {mojo_ident(decl.name)} = {rendered}\n\n"

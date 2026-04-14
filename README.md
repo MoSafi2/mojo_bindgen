@@ -71,16 +71,16 @@ By default, `--library` and `--link-name` are the header file stem (e.g. `me` fo
 
 Parsing / IR:
 
-- **Macros and constant expressions:** The parser only captures a small token-based subset of constant expressions. Simple integer, string, char, identifier-reference, and null-pointer forms are supported; multi-token arithmetic, `sizeof`, most casts, and function-like macros are still skipped.
+- **Macros and constant expressions:** The parser only captures a small token-based subset of constant expressions. Simple integer, string, char, identifier-reference, and null-pointer forms are supported; multi-token arithmetic, `sizeof`, most casts, and function-like macros are skipped and emitted as comments in the mojo code.
 - **Bitfields:** Basic bitfields are modeled, but some C edge cases are still lossy, especially mixed backing types and unusual layout-sensitive patterns.
-- **Hard declaration shapes:** A few difficult C forms are still known parser/bindgen gaps, notably pointer-to-array declarations, functions returning function pointers, and anonymous nested struct/union combinations.
+- **Hard declaration shapes:** A few difficult C forms are still known parser/bindgen gaps, notably pointer-to-array declarations and anonymous nested struct/union combinations.
 - **Anonymous and extension-heavy constructs:** The parser preserves more of these than before, but some compiler-extension or unusual anonymous record cases still degrade to `UnsupportedType` or require manual review.
 - **C storage/linkage qualifiers:** Type qualifiers on pointers are preserved, but C declaration-level linkage/storage semantics such as `inline` / `extern inline` still are not modeled precisely enough to guarantee symbol availability.
 
 Mojo lowering / runtime:
 
 - **Variadic functions:** No thin callable wrapper is emitted; output is a comment noting that varargs are not modeled for FFI.
-- **Function pointers:** Function pointer types are preserved in IR, but Mojo lowering still treats them as opaque pointer ABI values and emits comments for the semantic signature instead of generating callable wrappers.
+**Function pointers:** Function-pointer types are preserved in IR and lowered as opaque pointer ABI values in Mojo. Returned/parameter fnptr values can be passed through thin FFI, but callable wrappers for invoking function-pointer values are not generated yet; semantic signature comments are emitted where applicable (notably struct fields).
 - **Globals:** Top-level globals are modeled in IR, but the emitter currently produces comment stubs rather than direct Mojo accessors, so these still require manual binding.
 - **Non-`RegisterPassable` by-value returns:** Functions whose return types cannot be lowered through thin FFI are emitted as comment stubs rather than callable wrappers.
 - **`inline` / non-standard linkage:** The generated bindings may still treat declarations as normal extern symbols even when C linkage rules are more subtle, which can produce symbol mismatches at runtime.

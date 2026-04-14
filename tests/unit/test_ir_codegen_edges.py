@@ -21,6 +21,7 @@ from mojo_bindgen.ir import (
     Pointer,
     Primitive,
     PrimitiveKind,
+    RefExpr,
     StringLiteral,
     Struct,
     TypeRef,
@@ -113,6 +114,13 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
                 kind="object_like_unsupported",
                 diagnostic="unsupported macro replacement list",
             ),
+            MacroDecl(
+                name="MACRO_REF",
+                tokens=["MACRO_OK"],
+                kind="object_like_supported",
+                expr=RefExpr("MACRO_OK"),
+                type=i32,
+            ),
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
@@ -126,6 +134,11 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert "# macro MACRO_NULL: null pointer macro is not emitted directly" in out
     assert "# define MACRO_NULL ( void * ) 0" in out
     assert "# macro MACRO_GENERIC: unsupported macro replacement list" in out
+    assert (
+        "# macro MACRO_REF: identifier reference macro is not emitted directly; "
+        "only literal macros are currently supported"
+    ) in out
+    assert "# define MACRO_REF MACRO_OK" in out
 
 
 def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:
