@@ -1,0 +1,38 @@
+{
+  "decl_kind_counts": {
+    "GlobalVar": 1,
+    "Struct": 1
+  },
+  "decls": [
+    {
+      "kind": "GlobalVar",
+      "name": "asf_counter",
+      "attrs": {
+        "type": {
+          "kind": "UnsupportedType",
+          "spelling": "_Atomic(int)"
+        }
+      }
+    },
+    {
+      "kind": "Struct",
+      "name": "asf_state",
+      "attrs": {
+        "size_bytes": 8
+      }
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "asf_state"
+      },
+      "path": "fields.0.type",
+      "attrs": {
+        "kind": "UnsupportedType",
+        "spelling": "_Atomic(uint64_t)"
+      }
+    }
+  ]
+}

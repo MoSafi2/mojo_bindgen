@@ -1,0 +1,28 @@
+{
+  "decl_kind_counts": {
+    "Function": 2
+  },
+  "decls": [
+    {
+      "kind": "Function",
+      "name": "il_inline"
+    },
+    {
+      "kind": "Function",
+      "name": "il_extern_inline"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "il_inline"
+      },
+      "path": "params.0.type",
+      "attrs": {
+        "kind": "Primitive",
+        "name": "int"
+      }
+    }
+  ]
+}

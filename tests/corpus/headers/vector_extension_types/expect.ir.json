@@ -1,0 +1,43 @@
+{
+  "decl_kind_counts": {
+    "Typedef": 1,
+    "Struct": 1
+  },
+  "decls": [
+    {
+      "kind": "Typedef",
+      "name": "vet_float4"
+    },
+    {
+      "kind": "Struct",
+      "name": "vet_payload",
+      "attrs": {
+        "align_bytes": 16
+      }
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Typedef",
+        "name": "vet_float4"
+      },
+      "path": "canonical",
+      "attrs": {
+        "kind": "VectorType",
+        "size_bytes": 16
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "vet_payload"
+      },
+      "path": "fields.0.type",
+      "attrs": {
+        "kind": "VectorType",
+        "size_bytes": 16
+      }
+    }
+  ]
+}

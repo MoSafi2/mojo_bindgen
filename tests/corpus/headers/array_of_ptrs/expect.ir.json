@@ -1,0 +1,35 @@
+{
+  "decl_kind_counts": {
+    "GlobalVar": 1
+  },
+  "decls": [
+    {
+      "kind": "GlobalVar",
+      "name": "aop_slots"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "GlobalVar",
+        "name": "aop_slots"
+      },
+      "path": "type",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "fixed",
+        "size": 4
+      }
+    },
+    {
+      "selector": {
+        "kind": "GlobalVar",
+        "name": "aop_slots"
+      },
+      "path": "type.element",
+      "attrs": {
+        "kind": "Pointer"
+      }
+    }
+  ]
+}

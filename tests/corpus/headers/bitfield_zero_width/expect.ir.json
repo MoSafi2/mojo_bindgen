@@ -1,0 +1,51 @@
+{
+  "decl_kind_counts": {
+    "Struct": 1
+  },
+  "decls": [
+    {
+      "kind": "Struct",
+      "name": "bfw_flags",
+      "attrs": {
+        "size_bytes": 8
+      }
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "bfw_flags"
+      },
+      "path": "fields.0",
+      "attrs": {
+        "is_bitfield": true,
+        "bit_width": 1
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "bfw_flags"
+      },
+      "path": "fields.1",
+      "attrs": {
+        "is_bitfield": true,
+        "is_anonymous": true,
+        "bit_width": 0
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "bfw_flags"
+      },
+      "path": "fields.2",
+      "attrs": {
+        "is_bitfield": true,
+        "bit_width": 5,
+        "byte_offset": 4
+      }
+    }
+  ]
+}

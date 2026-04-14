@@ -1,0 +1,35 @@
+{
+  "decl_kind_counts": {
+    "GlobalVar": 1
+  },
+  "decls": [
+    {
+      "kind": "GlobalVar",
+      "name": "ptas_slot"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "GlobalVar",
+        "name": "ptas_slot"
+      },
+      "path": "type",
+      "attrs": {
+        "kind": "Pointer"
+      }
+    },
+    {
+      "selector": {
+        "kind": "GlobalVar",
+        "name": "ptas_slot"
+      },
+      "path": "type.pointee",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "fixed",
+        "size": 4
+      }
+    }
+  ]
+}

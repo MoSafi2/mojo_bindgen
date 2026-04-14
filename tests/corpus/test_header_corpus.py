@@ -11,7 +11,7 @@ import pytest
 
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.parsing.parser import ClangParser
+from mojo_bindgen.parsing.parser import ClangParser, ParseError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_ROOT = _REPO_ROOT / "tests" / "corpus" / "headers"
@@ -65,6 +65,10 @@ def _resolve_path(value: Any, path: str) -> Any:
     return cur
 
 
+def _expect_phase_pass(status: str) -> bool:
+    return status == "pass"
+
+
 @pytest.mark.parametrize("case_dir", _case_dirs(), ids=lambda p: p.name)
 def test_header_corpus_case(case_dir: Path) -> None:
     status = json.loads((case_dir / "status.json").read_text(encoding="utf-8"))
@@ -72,11 +76,19 @@ def test_header_corpus_case(case_dir: Path) -> None:
 
     header = case_dir / "input.h"
     parser = ClangParser(header, library=case_dir.name, link_name=case_dir.name)
-    unit = parser.run()
-    data = unit.to_json_dict()
+    try:
+        unit = parser.run()
+    except ParseError:
+        if _expect_phase_pass(status["parse"]):
+            raise
+        pytest.xfail(f"parse is expected to stay {status['parse']}")
 
-    assert status["parse"] == "pass"
-    assert status["ir"] == "pass"
+    if not _expect_phase_pass(status["parse"]):
+        pytest.fail(f"unexpected parse success for case marked {status['parse']}")
+
+    data = unit.to_json_dict()
+    if not _expect_phase_pass(status["ir"]):
+        pytest.fail(f"unexpected IR success for case marked {status['ir']}")
 
     kind_counts = Counter(decl["kind"] for decl in data["decls"])
     assert dict(kind_counts) == expect["decl_kind_counts"]
@@ -93,7 +105,17 @@ def test_header_corpus_case(case_dir: Path) -> None:
         actual = _resolve_path(decl, path_expect["path"])
         _subset_match(actual, path_expect["attrs"])
 
-    if status["emit"] == "pass":
-        generated = MojoGenerator(MojoEmitOptions()).generate(unit)
-        assert generated.strip()
+    if status["emit"] == "not_required":
+        return
 
+    try:
+        generated = MojoGenerator(MojoEmitOptions()).generate(unit)
+    except Exception:
+        if _expect_phase_pass(status["emit"]):
+            raise
+        pytest.xfail(f"emit is expected to stay {status['emit']}")
+
+    if not _expect_phase_pass(status["emit"]):
+        pytest.fail(f"unexpected emit success for case marked {status['emit']}")
+
+    assert generated.strip()

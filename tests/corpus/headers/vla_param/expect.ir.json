@@ -1,0 +1,24 @@
+{
+  "decl_kind_counts": {
+    "Function": 1
+  },
+  "decls": [
+    {
+      "kind": "Function",
+      "name": "vla_fill"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "vla_fill"
+      },
+      "path": "params.1.type",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "variable"
+      }
+    }
+  ]
+}

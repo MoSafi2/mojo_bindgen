@@ -82,6 +82,16 @@ Each case under `tests/corpus/headers/<case>/` contains:
 `expect.ir.json` is intentionally partial. It should assert the important IR
 facts for the case instead of snapshotting the entire serialized `Unit`.
 
+Corpus authoring rules:
+
+- Keep each case focused on one primary declaration shape or policy edge.
+- Prefer tiny headers: usually 5-20 lines and at most 3 top-level declarations,
+  excluding helper typedefs/macros needed to express the shape.
+- Use `known_fail` / `unsupported` when a parser or emitter gap is intentional
+  and should stay visible in CI.
+- Do not use corpus cases for exact emitted Mojo shape; use surface fixtures for
+  that.
+
 ## Surface Cases
 
 Each case under `tests/surface/fixtures/<case>/` contains:
@@ -91,6 +101,13 @@ Each case under `tests/surface/fixtures/<case>/` contains:
 - `expect.no_align.mojo`
 
 These are parser-driven goldens for representative emitted bindings.
+
+Surface authoring rules:
+
+- Keep one primary codegen behavior per fixture.
+- Prefer tiny headers over broad composite examples.
+- Comment-stub output is a valid golden when the current intended behavior is to
+  surface an unsupported shape honestly rather than emit a callable wrapper.
 
 ## Prior Art
 

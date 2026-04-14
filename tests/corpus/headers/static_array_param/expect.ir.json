@@ -1,0 +1,25 @@
+{
+  "decl_kind_counts": {
+    "Function": 1
+  },
+  "decls": [
+    {
+      "kind": "Function",
+      "name": "sap_take"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "sap_take"
+      },
+      "path": "params.0.type",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "fixed",
+        "size": 4
+      }
+    }
+  ]
+}

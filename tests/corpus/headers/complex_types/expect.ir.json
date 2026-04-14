@@ -1,0 +1,35 @@
+{
+  "decl_kind_counts": {
+    "Function": 1
+  },
+  "decls": [
+    {
+      "kind": "Function",
+      "name": "cplx_add"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "cplx_add"
+      },
+      "path": "ret",
+      "attrs": {
+        "kind": "ComplexType",
+        "size_bytes": 8
+      }
+    },
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "cplx_add"
+      },
+      "path": "params.0.type",
+      "attrs": {
+        "kind": "ComplexType",
+        "size_bytes": 8
+      }
+    }
+  ]
+}

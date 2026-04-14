@@ -1,0 +1,28 @@
+{
+  "decl_kind_counts": {
+    "Struct": 1
+  },
+  "decls": [
+    {
+      "kind": "Struct",
+      "name": "zla_packet",
+      "attrs": {
+        "size_bytes": 4
+      }
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "zla_packet"
+      },
+      "path": "fields.1.type",
+      "attrs": {
+        "kind": "Array",
+        "array_kind": "fixed",
+        "size": 0
+      }
+    }
+  ]
+}
