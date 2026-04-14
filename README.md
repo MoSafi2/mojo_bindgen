@@ -71,19 +71,19 @@ By default, `--library` and `--link-name` are the header file stem (e.g. `me` fo
 
 Parsing / IR:
 
-- **Macros:** Only simple integer `#define` literals (name + one literal token) become constants. Float, string, multi-token, and expression macros are skipped.
-- **Globals:** Non-`const` `extern` variables are not modeled; only top-level `const` variables with integer literal initializers may be captured similarly to macros.
-- **Enums:** Underlying backing type is not always inferred correctly.
-- **Bitfields:** Mixed backing types and wide bitfields produce wrong layouts; several edge cases are still lossy in the IR.
-- **Pointer-to-array vs array-of-pointers** at file scope: some forms are not represented in IR at all.
-- **Anonymous union inside struct:** Anonymous nested unions may not be captured as distinct union members.
-- Qualifiers such as `inline`, `extern inline`, `volatile`, and `restrict` are currently stripped from the IR.
+- **Macros and constant expressions:** The parser only captures a small token-based subset of constant expressions. Simple integer, string, char, identifier-reference, and null-pointer forms are supported; multi-token arithmetic, `sizeof`, most casts, and function-like macros are still skipped.
+- **Bitfields:** Basic bitfields are modeled, but some C edge cases are still lossy, especially mixed backing types and unusual layout-sensitive patterns.
+- **Hard declaration shapes:** A few difficult C forms are still known parser/bindgen gaps, notably pointer-to-array declarations, functions returning function pointers, and anonymous nested struct/union combinations.
+- **Anonymous and extension-heavy constructs:** The parser preserves more of these than before, but some compiler-extension or unusual anonymous record cases still degrade to `UnsupportedType` or require manual review.
+- **C storage/linkage qualifiers:** Type qualifiers on pointers are preserved, but C declaration-level linkage/storage semantics such as `inline` / `extern inline` still are not modeled precisely enough to guarantee symbol availability.
 
 Mojo lowering / runtime:
 
 - **Variadic functions:** No thin callable wrapper is emitted; output is a comment noting that varargs are not modeled for FFI.
-- **Function pointers:** Fields and typedefs to function types are lowered to opaque pointers plus a comment describing the C signature.
-- **`inline`:** May be emitted like a normal extern symbol; linkage and availability can differ from real C `inline` and may produce symbol mismatches.
+- **Function pointers:** Function pointer types are preserved in IR, but Mojo lowering still treats them as opaque pointer ABI values and emits comments for the semantic signature instead of generating callable wrappers.
+- **Globals:** Top-level globals are modeled in IR, but the emitter currently produces comment stubs rather than direct Mojo accessors, so these still require manual binding.
+- **Non-`RegisterPassable` by-value returns:** Functions whose return types cannot be lowered through thin FFI are emitted as comment stubs rather than callable wrappers.
+- **`inline` / non-standard linkage:** The generated bindings may still treat declarations as normal extern symbols even when C linkage rules are more subtle, which can produce symbol mismatches at runtime.
 
 ## Development
 
