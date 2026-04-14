@@ -7,9 +7,8 @@ from pathlib import Path
 import pytest
 
 from mojo_bindgen.ir import EnumRef, Function, Pointer, Primitive, Struct, StructRef, TypeRef
-from mojo_bindgen.parsing.field_builder import FieldBuildResult
+from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
-from mojo_bindgen.parsing.struct_builder import StructBuildResult
 
 
 def _has_libclang() -> bool:
@@ -25,15 +24,11 @@ pytestmark = pytest.mark.skipif(
     reason="libclang not available (use pixi run)",
 )
 
-
-def test_builder_result_contracts_are_internal_and_simple() -> None:
-    s = Struct(decl_id="struct:x", name="x", c_name="x", fields=[], size_bytes=0, align_bytes=1)
-    fb = FieldBuildResult(field=None, nested=[s])
-    sb = StructBuildResult(struct=s, nested=[s])
-    assert fb.field is None
-    assert fb.nested[0].name == "x"
-    assert sb.struct.c_name == "x"
-    assert sb.nested[0].align_bytes == 1
+def test_type_context_enum_is_stable() -> None:
+    assert isinstance(TypeContext.FIELD, TypeContext)
+    assert isinstance(TypeContext.PARAM, TypeContext)
+    assert isinstance(TypeContext.RETURN, TypeContext)
+    assert isinstance(TypeContext.TYPEDEF, TypeContext)
 
 
 def test_type_context_field_param_return_typedef(tmp_path: Path) -> None:
