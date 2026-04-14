@@ -104,3 +104,46 @@ def test_macro_stress_fixture_preserves_supported_and_skips_unsupported() -> Non
         "MACRO_STR",
         "MACRO_GENERIC",
     }.isdisjoint(const_names)
+
+
+def test_weird_stress_fixture_preserves_selected_hard_declarations() -> None:
+    from mojo_bindgen.ir import Enum, Function, GlobalVar, Struct, Typedef
+    from mojo_bindgen.parsing.parser import ClangParser
+
+    header = _REPO_ROOT / "tests" / "stress" / "weird" / "stress_weird_input.h"
+    unit = ClangParser(header, library="stress_weird", link_name="stress_weird").run()
+
+    names = {decl.name for decl in unit.decls if isinstance(decl, (Struct, Function, GlobalVar, Enum, Typedef))}
+
+    assert {
+        "ev_flex_old",
+        "ev_nested_anon",
+        "ev_only_bits",
+        "ev_cacheline",
+        "ev_fp_returning_arr",
+        "ev_dispatch_table",
+        "ev_fp_ptr",
+        "ev_cv_ptr",
+        "ev_const_ptr",
+        "ev_const_both",
+        "ev_atomic_int",
+        "ev_atomic_u64",
+        "ev_concurrent",
+        "ev_signed_enum",
+        "ev_computed",
+        "ev_sparse",
+        "ev_die",
+        "ev_exported",
+        "ev_old",
+        "ev_nonnull",
+        "ev_pair",
+        "ev_cstring",
+        "ev_vreg",
+        "ev_log",
+        "ev_vla_fn",
+        "ev_static_arr",
+        "ev_defaults",
+        "ev_default_event",
+        "ev_default_event_value",
+        "ev_typeof_ptr",
+    } <= names
