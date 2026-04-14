@@ -1,0 +1,91 @@
+{
+  "decl_kind_counts": {
+    "Const": 2,
+    "Struct": 2,
+    "Typedef": 1
+  },
+  "decls": [
+    {
+      "kind": "Const",
+      "name": "AC_MODE_READ"
+    },
+    {
+      "kind": "Const",
+      "name": "AC_MODE_WRITE"
+    },
+    {
+      "kind": "Struct",
+      "name": "anon_packet",
+      "attrs": {
+        "is_complete": true,
+        "size_bytes": 24
+      }
+    },
+    {
+      "kind": "Typedef",
+      "name": "anon_packet"
+    }
+  ],
+  "paths": [
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "anon_packet"
+      },
+      "path": "fields.1",
+      "attrs": {
+        "name": "",
+        "is_anonymous": true,
+        "byte_offset": 8
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "anon_packet"
+      },
+      "path": "fields.1.type",
+      "attrs": {
+        "kind": "StructRef",
+        "is_union": true,
+        "is_anonymous": true,
+        "size_bytes": 8
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "anon_packet"
+      },
+      "path": "fields.2",
+      "attrs": {
+        "name": "parts",
+        "byte_offset": 16
+      }
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "anon_packet"
+      },
+      "path": "fields.2.type",
+      "attrs": {
+        "kind": "StructRef",
+        "is_union": false,
+        "is_anonymous": true,
+        "size_bytes": 4
+      }
+    },
+    {
+      "selector": {
+        "kind": "Typedef",
+        "name": "anon_packet"
+      },
+      "path": "canonical",
+      "attrs": {
+        "kind": "StructRef",
+        "size_bytes": 24
+      }
+    }
+  ]
+}

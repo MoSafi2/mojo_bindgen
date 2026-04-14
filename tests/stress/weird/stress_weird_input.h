@@ -70,15 +70,6 @@ enum ev_big {
     EV_BIG = 0x7FFFFFFFFFFFFFFFLL
 };
 
-// Tests anonymous union nested directly inside a struct.
-struct ev_event {
-    int type;
-    union {
-        int fd;
-        void *ptr;
-    };
-};
-
 // Tests GCC zero-length array as FAM precursor.
 struct ev_flex_old {
     int len;
@@ -91,6 +82,32 @@ struct ev_nested_anon {
     union {
         struct { int x; int y; };
         struct { float u; float v; };
+    };
+};
+
+// Tests multi-layer anonymous struct/union nesting with mixed record carriers.
+struct ev_anon_matryoshka {
+    int kind;
+    union {
+        struct {
+            union {
+                struct { int x; int y; };
+                struct { float u; float v; };
+            };
+        };
+        uint64_t raw;
+    };
+};
+
+// Tests anonymous union + anonymous bitfield record interaction.
+struct ev_anon_bits {
+    union {
+        struct {
+            unsigned int a : 3;
+            unsigned int : 0;
+            unsigned int b : 5;
+        };
+        uint32_t raw;
     };
 };
 

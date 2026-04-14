@@ -142,6 +142,8 @@ def test_weird_stress_fixture_preserves_selected_hard_declarations() -> None:
     assert {
         "ev_flex_old",
         "ev_nested_anon",
+        "ev_anon_matryoshka",
+        "ev_anon_bits",
         "ev_only_bits",
         "ev_cacheline",
         "ev_fp_returning_arr",

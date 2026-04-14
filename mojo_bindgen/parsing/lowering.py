@@ -833,7 +833,7 @@ class DeclLowerer:
         if k == cx.CursorKind.ENUM_DECL:
             if not cursor.is_definition():
                 return None
-            if not cursor.spelling:
+            if self._is_anonymous_enum(cursor):
                 return self._anonymous_enum_as_consts(cursor)
             return self._build_enum(cursor)
         if k == cx.CursorKind.TYPEDEF_DECL:
@@ -933,6 +933,11 @@ class DeclLowerer:
             aliased=aliased,
             canonical=canonical,
         )
+
+    @staticmethod
+    def _is_anonymous_enum(cursor: cx.Cursor) -> bool:
+        spelling = cursor.spelling
+        return not spelling or "(unnamed at " in spelling or "(anonymous at " in spelling
 
     def _build_global_var(self, cursor: cx.Cursor) -> GlobalVar:
         parsed = self.context.const_expr_parser.parse_initializer(cursor)

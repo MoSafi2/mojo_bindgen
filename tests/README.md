@@ -57,6 +57,12 @@ Useful commands:
   output for a representative header.
 - Add a corpus case when a header shape should parse and round-trip in IR even
   if codegen/runtime support is incomplete.
+- Prefer corpus cases for common, representative C constructs that should work
+  normally, including anonymous-member patterns that are part of the supported
+  surface.
+- Use stress fixtures for pathological or extension-heavy anonymous-member
+  shapes, especially deeply nested or mixed-layout forms that are easy to
+  regress and may still be partially supported.
 - Add an e2e fixture only when compiled/runtime ABI behavior matters.
 
 ## Corpus Cases
