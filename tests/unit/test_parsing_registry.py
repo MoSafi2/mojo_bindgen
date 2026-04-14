@@ -8,7 +8,7 @@ import pytest
 import clang.cindex as cx
 
 from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig
-from mojo_bindgen.parsing.registry import DeclRegistry
+from mojo_bindgen.parsing.index import DeclIndex
 
 
 def _has_libclang() -> bool:
@@ -37,7 +37,7 @@ def test_registry_unifies_forward_decl_and_definition(tmp_path: Path) -> None:
 
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
-    registry = DeclRegistry.build_from_translation_unit(tu, frontend)
+    registry =  DeclIndex.build_from_translation_unit(tu, frontend)
 
     records = [
         cursor
@@ -58,7 +58,7 @@ def test_registry_synthesizes_anonymous_record_identity(tmp_path: Path) -> None:
 
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
-    registry = DeclRegistry.build_from_translation_unit(tu, frontend)
+    registry = DeclIndex.build_from_translation_unit(tu, frontend)
 
     outer = next(
         cursor
