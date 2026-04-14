@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 
 from mojo_bindgen.ir import BinaryExpr, FloatLiteral, IntLiteral, NullPtrLiteral, RefExpr, StringLiteral
-from mojo_bindgen.parsing.const_expr import ConstExprParser
-from mojo_bindgen.parsing.lowering import PrimitiveResolver
+from mojo_bindgen.parsing.lowering import ConstExprParser, PrimitiveResolver
 
 
 def _has_libclang() -> bool:

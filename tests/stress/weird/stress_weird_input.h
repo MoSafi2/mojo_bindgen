@@ -77,6 +77,7 @@ struct ev_flex_old {
 };
 
 // Tests anonymous union containing anonymous structs.
+// TODO: FIX: the emitted IR completly removed the second anonymous struct
 struct ev_nested_anon {
     int kind;
     union {

@@ -1,10 +1,18 @@
-"""Public parser facade for C header to IR translation."""
+"""Public parser facade and pipeline orchestration for C header parsing.
+
+This module owns the parser package entrypoint. It validates user-facing input,
+runs the staged parser pipeline, and returns the final Unit. Parsing policy
+lives in dedicated frontend, indexing, lowering, and diagnostics modules.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import dataclass
 
 from mojo_bindgen.ir import Decl, Unit
+from mojo_bindgen.parsing.compat import ClangCompat
+from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
     ClangFrontend,
     ClangFrontendConfig,
@@ -12,8 +20,26 @@ from mojo_bindgen.parsing.frontend import (
     _default_system_compile_args,
     _resolve_header_path,
 )
-from mojo_bindgen.parsing.lowering import DeclLowerer, LoweringContext, PrimitiveResolver
-from mojo_bindgen.parsing.registry import DeclRegistry
+from mojo_bindgen.parsing.index import DeclIndex
+from mojo_bindgen.parsing.lowering import (
+    ConstExprParser,
+    DeclLowerer,
+    PrimitiveResolver,
+    RecordLowerer,
+    TypeLowerer,
+)
+
+
+@dataclass(frozen=True)
+class ParseSession:
+    """Immutable per-run parser session shared across pipeline stages."""
+
+    frontend: ClangFrontend
+    tu: object
+    index: DeclIndex
+    header: str
+    library: str
+    link_name: str
 
 
 class ParseError(RuntimeError):
@@ -51,28 +77,53 @@ class ClangParser:
             )
         )
         tu = frontend.parse_translation_unit()
-        self.diagnostics = frontend.collect_diagnostics(tu)
+        frontend_diagnostics = frontend.collect_diagnostics(tu)
+        self.diagnostics = frontend_diagnostics
 
         fatal = [d for d in self.diagnostics if d.severity in ("error", "fatal")]
         if fatal and self.raise_on_error:
             message = "\n".join(str(d) for d in fatal)
             raise ParseError(f"libclang reported errors parsing {self.header}:\n{message}")
 
-        registry = DeclRegistry.build_from_translation_unit(tu, frontend)
-        context = LoweringContext(
+        index = DeclIndex.build_from_translation_unit(tu, frontend)
+        session = ParseSession(
             frontend=frontend,
-            registry=registry,
             tu=tu,
+            index=index,
             header=str(self.header),
             library=self.library,
             link_name=self.link_name,
-            diagnostics=list(self.diagnostics),
-            primitive_resolver=PrimitiveResolver(self.compile_args),
+        )
+        diagnostics = ParserDiagnosticSink()
+        diagnostics.add_frontend_diagnostics(frontend_diagnostics)
+        primitive_resolver = PrimitiveResolver(self.compile_args)
+        compat = ClangCompat()
+        type_lowerer = TypeLowerer(
+            index=session.index,
+            diagnostics=diagnostics,
+            primitive_resolver=primitive_resolver,
+            compat=compat,
+        )
+        record_lowerer = RecordLowerer(
+            index=session.index,
+            diagnostics=diagnostics,
+            type_lowerer=type_lowerer,
+        )
+        type_lowerer.bind_record_lowerer(record_lowerer)
+        decl_lowerer = DeclLowerer(
+            frontend=session.frontend,
+            tu=session.tu,
+            index=session.index,
+            diagnostics=diagnostics,
+            primitive_resolver=primitive_resolver,
+            type_lowerer=type_lowerer,
+            record_lowerer=record_lowerer,
+            const_expr_parser=ConstExprParser(primitive_resolver),
+            compat=compat,
         )
 
         decls: list[Decl] = []
-        decl_lowerer: DeclLowerer = context.decl_lowerer
-        for cursor in frontend.iter_primary_cursors(tu):
+        for cursor in session.index.top_level_cursors():
             lowered = decl_lowerer.lower_top_level_decl(cursor)
             if lowered is None:
                 continue
@@ -83,13 +134,13 @@ class ClangParser:
 
         decls.extend(decl_lowerer.collect_macros())
 
-        self.diagnostics = context.diagnostics
+        self.diagnostics = diagnostics.diagnostics
         return Unit(
-            source_header=str(self.header),
-            library=self.library,
-            link_name=self.link_name,
+            source_header=session.header,
+            library=session.library,
+            link_name=session.link_name,
             decls=decls,
-            diagnostics=context.to_ir_diagnostics(),
+            diagnostics=diagnostics.to_ir_diagnostics(),
         )
 
 

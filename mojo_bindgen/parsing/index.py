@@ -1,10 +1,16 @@
-"""Translation-unit declaration registry and identity services."""
+"""Declaration indexing and identity services for one translation unit.
+
+This module owns source-graph metadata for the parser package: stable
+declaration identities, record definition lookups, top-level cursor ordering,
+and anonymous record naming policy. It does not lower anything into IR.
+"""
 
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 import clang.cindex as cx
 
@@ -21,15 +27,15 @@ def _is_anonymous_record_spelling(spelling: str) -> bool:
 
 
 @dataclass
-class DeclRegistry:
+class DeclIndex:
     """Identity and declaration index for one translation unit."""
 
     header: Path
+    primary_cursors_in_order: tuple[cx.Cursor, ...]
     decl_id_by_usr: dict[str, str]
     decl_id_by_location: dict[str, str]
     cursor_by_decl_id: dict[str, cx.Cursor]
     top_level_decl_ids: list[str]
-    primary_decl_ids_in_order: list[str]
     record_definition_by_decl_id: dict[str, cx.Cursor]
     record_forward_decl_by_decl_id: dict[str, cx.Cursor]
 
@@ -38,14 +44,16 @@ class DeclRegistry:
         cls,
         tu: cx.TranslationUnit,
         frontend: ClangFrontend,
-    ) -> DeclRegistry:
-        registry = cls(
+    ) -> DeclIndex:
+        """Build a declaration index for primary-file cursors in one TU."""
+        primary = tuple(frontend.iter_primary_cursors(tu))
+        index = cls(
             header=frontend.header,
+            primary_cursors_in_order=primary,
             decl_id_by_usr={},
             decl_id_by_location={},
             cursor_by_decl_id={},
             top_level_decl_ids=[],
-            primary_decl_ids_in_order=[],
             record_definition_by_decl_id={},
             record_forward_decl_by_decl_id={},
         )
@@ -53,21 +61,24 @@ class DeclRegistry:
         for cursor in tu.cursor.walk_preorder():
             if not frontend.is_primary_file_cursor(cursor):
                 continue
-            decl_id = registry.decl_id_for_cursor(cursor)
-            registry.cursor_by_decl_id.setdefault(decl_id, cursor)
+            decl_id = index.decl_id_for_cursor(cursor)
+            index.cursor_by_decl_id.setdefault(decl_id, cursor)
             if cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
                 if cursor.is_definition():
-                    registry.record_definition_by_decl_id[decl_id] = cursor
+                    index.record_definition_by_decl_id[decl_id] = cursor
                 else:
-                    registry.record_forward_decl_by_decl_id.setdefault(decl_id, cursor)
+                    index.record_forward_decl_by_decl_id.setdefault(decl_id, cursor)
 
-        for cursor in frontend.iter_primary_cursors(tu):
-            decl_id = registry.decl_id_for_cursor(cursor)
-            registry.top_level_decl_ids.append(decl_id)
-            registry.primary_decl_ids_in_order.append(decl_id)
-            registry.cursor_by_decl_id.setdefault(decl_id, cursor)
+        for cursor in primary:
+            decl_id = index.decl_id_for_cursor(cursor)
+            index.top_level_decl_ids.append(decl_id)
+            index.cursor_by_decl_id.setdefault(decl_id, cursor)
 
-        return registry
+        return index
+
+    def top_level_cursors(self) -> Iterable[cx.Cursor]:
+        """Yield top-level primary-file cursors in source order."""
+        return self.primary_cursors_in_order
 
     def decl_id_for_cursor(self, cursor: cx.Cursor) -> str:
         """Return the stable declaration identity for a clang cursor."""
@@ -99,27 +110,9 @@ class DeclRegistry:
             self.decl_id_by_location[loc_key] = decl_id
         return decl_id
 
-    def decl_id_for_type_record(self, t: cx.Type) -> str | None:
-        """Return the record declaration id for a clang record type."""
-        decl = t.get_declaration()
-        if decl.kind not in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
-            return None
-        return self.decl_id_for_cursor(decl)
-
-    def cursor_for_decl_id(self, decl_id: str) -> cx.Cursor | None:
-        """Return the indexed cursor for a declaration id, if any."""
-        return self.cursor_by_decl_id.get(decl_id)
-
     def record_definition_for_cursor(self, cursor: cx.Cursor) -> cx.Cursor | None:
         """Return the complete definition cursor for a record declaration."""
         decl_id = self.decl_id_for_cursor(cursor)
-        return self.record_definition_by_decl_id.get(decl_id)
-
-    def record_definition_for_type(self, t: cx.Type) -> cx.Cursor | None:
-        """Return the complete definition cursor for a record type."""
-        decl_id = self.decl_id_for_type_record(t)
-        if decl_id is None:
-            return None
         return self.record_definition_by_decl_id.get(decl_id)
 
     def is_complete_record_decl(self, cursor: cx.Cursor) -> bool:
@@ -128,7 +121,7 @@ class DeclRegistry:
             return False
         return self.record_definition_for_cursor(cursor) is not None
 
-    def is_primary_file_cursor(self, cursor: cx.Cursor) -> bool:
+    def is_primary(self, cursor: cx.Cursor) -> bool:
         """Return whether a cursor originates from the configured header."""
         loc = cursor.location
         return bool(loc.file and Path(loc.file.name).resolve() == self.header)

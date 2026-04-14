@@ -1,4 +1,9 @@
-"""Token-based constant-expression parsing for macros and globals."""
+"""Token-based constant-expression parsing for macros and globals.
+
+This module owns the parser's supported constant-expression subset. It parses
+token streams from macros and initializers and relies only on a small literal
+primitive typing interface rather than the full lowering pipeline.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +28,7 @@ from mojo_bindgen.ir import (
 )
 
 if TYPE_CHECKING:
-    from mojo_bindgen.parsing.lowering import PrimitiveResolver
+    from mojo_bindgen.parsing.interfaces import LiteralPrimitiveResolver
 
 
 _INT_LITERAL_RE = re.compile(
@@ -122,7 +127,7 @@ class ParsedMacro:
 class ConstExprParser:
     """Parse the small constant-expression subset supported by the parser."""
 
-    def __init__(self, primitive_resolver: PrimitiveResolver) -> None:
+    def __init__(self, primitive_resolver: LiteralPrimitiveResolver) -> None:
         self.primitive_resolver = primitive_resolver
 
     def parse_macro(self, cursor: cx.Cursor) -> ParsedMacro:
