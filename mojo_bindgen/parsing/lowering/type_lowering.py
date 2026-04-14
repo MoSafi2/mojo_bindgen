@@ -67,6 +67,12 @@ class TypeLowerer:
             return self._normalize(t.get_named_type())
         return t
 
+    def _lower(self, t: cx.Type, ctx: TypeContext) -> Type:
+        handler = self._dispatch_by_kind.get(t.kind)
+        if handler is not None:
+            return handler(t, ctx)
+        return self._lower_primitive(t)
+
     @staticmethod
     def _qualifiers(t: cx.Type) -> Qualifiers:
         return Qualifiers(
@@ -112,11 +118,6 @@ class TypeLowerer:
             dispatch[ext_vector_kind] = self._lower_ext_vector_type
         return dispatch
 
-    def _lower(self, t: cx.Type, ctx: TypeContext) -> Type:
-        handler = self._dispatch_by_kind.get(t.kind)
-        if handler is not None:
-            return handler(t, ctx)
-        return self._lower_primitive(t)
 
     def _lower_invalid(self, t: cx.Type, _ctx: TypeContext) -> Type:
         self.diagnostics.add_type_diag("warning", t, "invalid type (INVALID)")
