@@ -16,6 +16,7 @@ from mojo_bindgen.ir import (
     FunctionPtr,
     GlobalVar,
     IntLiteral,
+    MacroDecl,
     NullPtrLiteral,
     Primitive,
     RefExpr,
@@ -274,6 +275,35 @@ class MojoRenderer:
         return f"comptime {name} = {rendered}\n\n"
 
     @staticmethod
+    def _emit_macro(decl: MacroDecl) -> str:
+        """Render one preserved macro declaration.
+
+        Supported object-like macros emit as ``comptime`` constants. All other
+        macro forms remain visible as comments with their original token text.
+        """
+        body = " ".join(decl.tokens)
+        if decl.kind == "object_like_supported" and decl.expr is not None and decl.type is not None:
+            rendered = MojoRenderer._render_const_expr(decl.expr, decl.type)
+            if rendered is not None:
+                return f"comptime {mojo_ident(decl.name)} = {rendered}\n\n"
+            if isinstance(decl.expr, NullPtrLiteral):
+                reason = "null pointer macro is not emitted directly"
+            else:
+                reason = "parsed macro expression is not emitted directly"
+        else:
+            reason = decl.diagnostic or decl.kind.replace("_", " ")
+
+        if body:
+            return (
+                f"# macro {decl.name}: {reason}\n"
+                f"# define {decl.name} {body}\n\n"
+            )
+        return (
+            f"# macro {decl.name}: {reason}\n"
+            f"# define {decl.name}\n\n"
+        )
+
+    @staticmethod
     def _render_const_expr(expr: object, decl_type: Primitive | object) -> str | None:
         """Render the supported constant-expression subset to Mojo source."""
         if isinstance(expr, IntLiteral) and isinstance(decl_type, Primitive):
@@ -389,6 +419,8 @@ class MojoRenderer:
             return self._emit_typedef(decl, self._types)
         if isinstance(decl, Const):
             return self._emit_const(decl)
+        if isinstance(decl, MacroDecl):
+            return self._emit_macro(decl)
         if isinstance(decl, GlobalVar):
             return self._emit_global_var(decl)
         if isinstance(decl, AnalyzedFunction):

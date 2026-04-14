@@ -41,6 +41,24 @@ _FLOAT_LITERAL_RE = re.compile(
     r"([fFlL]*)$"
 )
 
+_PREDEFINED_MACRO_NAMES = {
+    "__FILE__",
+    "__LINE__",
+    "__DATE__",
+    "__TIME__",
+    "__STDC__",
+    "__STDC_VERSION__",
+    "__STDC_HOSTED__",
+    "__STDC_IEC_559__",
+    "__STDC_IEC_559_COMPLEX__",
+    "__STDC_ISO_10646__",
+    "__STDC_MB_MIGHT_NEQ_WC__",
+    "__STDC_ANALYZABLE__",
+    "__STDC_LIB_EXT1__",
+    "__STDC_ALLOC_LIB__",
+    "__COUNTER__",
+}
+
 
 def _match_int_literal(raw: str) -> tuple[int | None, str]:
     """Parse a single integer literal token and its suffix."""
@@ -68,6 +86,19 @@ def _match_float_literal(raw: str) -> tuple[str | None, str]:
     return stripped, m.group(1) or ""
 
 
+def _is_predefined_macro_name(name: str) -> bool:
+    """Return whether ``name`` is a standard/compiler predefined macro token."""
+    if name in _PREDEFINED_MACRO_NAMES:
+        return True
+    if name.startswith("__STDC_NO_"):
+        return True
+    if name.startswith("__STDC_IEC_60559_"):
+        return True
+    if re.match(r"^__STDC_VERSION_[A-Z0-9_]+_H__$", name):
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class ParsedConstExpr:
     """A parsed constant expression plus best-effort primitive typing."""
@@ -77,18 +108,89 @@ class ParsedConstExpr:
     diagnostic: str | None = None
 
 
+@dataclass(frozen=True)
+class ParsedMacro:
+    """Classification result for one macro definition."""
+
+    tokens: list[str]
+    kind: str
+    expr: ConstExpr | None = None
+    primitive: Primitive | None = None
+    diagnostic: str | None = None
+
+
 class ConstExprParser:
     """Parse the small constant-expression subset supported by the parser."""
 
     def __init__(self, primitive_resolver: PrimitiveResolver) -> None:
         self.primitive_resolver = primitive_resolver
 
-    def parse_macro(self, cursor: cx.Cursor) -> ParsedConstExpr | None:
-        """Parse a macro definition cursor into a supported constant expression."""
+    def parse_macro(self, cursor: cx.Cursor) -> ParsedMacro:
+        """Classify a macro definition, preserving unsupported forms."""
         tokens = list(cursor.get_tokens())
-        if len(tokens) < 2:
-            return None
-        return self.parse_tokens([t.spelling for t in tokens[1:]])
+        body = [t.spelling for t in tokens[1:]]
+        if not body:
+            return ParsedMacro(tokens=[], kind="empty", diagnostic="empty macro body")
+
+        if len(body) == 1 and _is_predefined_macro_name(body[0]):
+            return ParsedMacro(
+                tokens=body,
+                kind="predefined",
+                diagnostic="predefined macro preserved without evaluation",
+            )
+
+        is_function_like = getattr(cursor, "is_macro_function_like", None)
+        if (callable(is_function_like) and is_function_like()) or (
+            is_function_like is not None and not callable(is_function_like) and bool(is_function_like)
+        ) or self._looks_function_like_body(body):
+            return ParsedMacro(
+                tokens=body,
+                kind="function_like_unsupported",
+                diagnostic="function-like macros are preserved but not parsed",
+            )
+
+        parsed = self.parse_tokens(body)
+        if parsed is None:
+            return ParsedMacro(
+                tokens=body,
+                kind="object_like_unsupported",
+                diagnostic="unsupported macro replacement list",
+            )
+        return ParsedMacro(
+            tokens=body,
+            kind="object_like_supported",
+            expr=parsed.expr,
+            primitive=parsed.primitive,
+            diagnostic=parsed.diagnostic,
+        )
+
+    @staticmethod
+    def _looks_function_like_body(tokens: list[str]) -> bool:
+        """Heuristically detect a function-like macro from raw macro tokens."""
+        if not tokens or tokens[0] != "(":
+            return False
+        depth = 0
+        end_index: int | None = None
+        for index, tok in enumerate(tokens):
+            if tok == "(":
+                depth += 1
+            elif tok == ")":
+                depth -= 1
+                if depth == 0:
+                    end_index = index
+                    break
+        if end_index is None:
+            return False
+        inner = tokens[1:end_index]
+        if not inner:
+            return True
+        for tok in inner:
+            if tok in {",", "..."}:
+                continue
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", tok):
+                continue
+            return False
+        return True
 
     def parse_initializer(self, cursor: cx.Cursor) -> ParsedConstExpr | None:
         """Parse a top-level variable initializer into a supported expression."""

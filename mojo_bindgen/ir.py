@@ -33,6 +33,17 @@ ArrayKind = Literal["fixed", "incomplete", "flexible", "variable"]
 """Array-shape categories that matter for ABI-faithful lowering."""
 
 
+MacroDeclKind = Literal[
+    "object_like_supported",
+    "object_like_unsupported",
+    "function_like_unsupported",
+    "empty",
+    "predefined",
+    "invalid",
+]
+"""Classification of preserved preprocessor macro declarations."""
+
+
 @dataclass(frozen=True)
 class Qualifiers:
     """C type qualifiers preserved on pointee types and other referenced types."""
@@ -913,6 +924,49 @@ class Const:
 
 
 @dataclass
+class MacroDecl:
+    """Top-level preprocessor macro preserved from the primary header.
+
+    Macros are preserved even when their replacement list cannot be lowered to
+    the supported :class:`ConstExpr` subset. ``tokens`` keeps the original
+    replacement spelling, while ``expr`` and ``type`` are populated only for
+    macros the parser can structurally understand today.
+    """
+
+    name: str
+    tokens: list[str]
+    kind: MacroDeclKind
+    expr: ConstExpr | None = None
+    type: Type | None = None
+    diagnostic: str | None = None
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "MacroDecl",
+            "name": self.name,
+            "tokens": self.tokens,
+            "macro_kind": self.kind,
+            "expr": None if self.expr is None else self.expr.to_json_dict(),
+            "type": None if self.type is None else self.type.to_json_dict(),
+            "diagnostic": self.diagnostic,
+        }
+
+    @classmethod
+    def from_json_dict(cls, d: dict[str, Any]) -> Self:
+        _expect_kind(d, "MacroDecl")
+        expr = d.get("expr")
+        ty = d.get("type")
+        return cls(
+            name=d["name"],
+            tokens=list(d.get("tokens", [])),
+            kind=d["macro_kind"],
+            expr=None if expr is None else const_expr_from_json(expr),
+            type=None if ty is None else type_from_json(ty),
+            diagnostic=d.get("diagnostic"),
+        )
+
+
+@dataclass
 class GlobalVar:
     """Top-level variable declaration exposed by the bound library.
 
@@ -992,6 +1046,7 @@ Decl = Union[
     Enum,
     Typedef,
     Const,
+    MacroDecl,
     GlobalVar,
 ]
 
@@ -1091,6 +1146,7 @@ _DECL_FROM_JSON: dict[str, Callable[[dict[str, Any]], Decl]] = {
     "Enum": Enum.from_json_dict,
     "Typedef": Typedef.from_json_dict,
     "Const": Const.from_json_dict,
+    "MacroDecl": MacroDecl.from_json_dict,
     "GlobalVar": GlobalVar.from_json_dict,
 }
 

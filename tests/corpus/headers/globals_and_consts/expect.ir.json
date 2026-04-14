@@ -1,7 +1,7 @@
 {
   "decl_kind_counts": {
     "GlobalVar": 2,
-    "Const": 4
+    "MacroDecl": 4
   },
   "decls": [
     {
@@ -19,24 +19,32 @@
       }
     },
     {
-      "kind": "Const",
+      "kind": "MacroDecl",
       "name": "DEFAULT_LIMIT",
-      "attrs": {}
+      "attrs": {
+        "macro_kind": "object_like_supported"
+      }
     },
     {
-      "kind": "Const",
+      "kind": "MacroDecl",
       "name": "LIB_NAME",
-      "attrs": {}
+      "attrs": {
+        "macro_kind": "object_like_supported"
+      }
     },
     {
-      "kind": "Const",
+      "kind": "MacroDecl",
       "name": "DEFAULT_ALIAS",
-      "attrs": {}
+      "attrs": {
+        "macro_kind": "object_like_supported"
+      }
     },
     {
-      "kind": "Const",
+      "kind": "MacroDecl",
       "name": "NULL_HANDLE",
-      "attrs": {}
+      "attrs": {
+        "macro_kind": "object_like_supported"
+      }
     }
   ],
   "paths": [
@@ -62,7 +70,7 @@
     },
     {
       "selector": {
-        "kind": "Const",
+        "kind": "MacroDecl",
         "name": "LIB_NAME"
       },
       "path": "expr",
@@ -73,7 +81,7 @@
     },
     {
       "selector": {
-        "kind": "Const",
+        "kind": "MacroDecl",
         "name": "DEFAULT_ALIAS"
       },
       "path": "expr",
@@ -84,7 +92,7 @@
     },
     {
       "selector": {
-        "kind": "Const",
+        "kind": "MacroDecl",
         "name": "NULL_HANDLE"
       },
       "path": "expr",

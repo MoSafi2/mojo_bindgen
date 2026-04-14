@@ -25,14 +25,28 @@
 #define MACRO_FWD_REF MACRO_LATER
 // Tests later target of a forward macro reference.
 #define MACRO_LATER 17
-// Tests predefined __LINE__ token, preservation as a ref-like macro.
+// Tests predefined __LINE__ token, preservation as a predefined macro.
 #define MACRO_LINE __LINE__
-// Tests predefined __FILE__ token, preservation as a ref-like macro.
+// Tests predefined __FILE__ token, preservation as a predefined macro.
 #define MACRO_FILE __FILE__
-// Tests predefined __DATE__ token, preservation as a ref-like macro.
+// Tests predefined __DATE__ token, preservation as a predefined macro.
 #define MACRO_DATE __DATE__
-// Tests predefined __COUNTER__ token, preservation as a ref-like macro.
+// Tests predefined __TIME__ token, preservation as a predefined macro.
+#define MACRO_TIME __TIME__
+// Tests predefined __COUNTER__ token, preservation as a predefined macro.
 #define MACRO_COUNTER __COUNTER__
+// Tests standard predefined __STDC__ token, preservation as a predefined macro.
+#define MACRO_STDC __STDC__
+// Tests standard predefined __STDC_VERSION__ token, preservation as a predefined macro.
+#define MACRO_STDC_VERSION __STDC_VERSION__
+// Tests standard predefined __STDC_HOSTED__ token, preservation as a predefined macro.
+#define MACRO_STDC_HOSTED __STDC_HOSTED__
+// Tests feature-test predefined __STDC_NO_ATOMICS__ token, preservation as a predefined macro.
+#define MACRO_STDC_NO_ATOMICS __STDC_NO_ATOMICS__
+// Tests IEC 60559 predefined macro family preservation.
+#define MACRO_STDC_IEC_60559_BFP __STDC_IEC_60559_BFP__
+// Tests header version predefined macro family preservation.
+#define MACRO_STDC_VERSION_STDIO_H __STDC_VERSION_STDIO_H__
 // Tests self-referential macro handling without recursive expansion.
 #define MACRO_SELF MACRO_SELF
 // Tests unary minus over an integer literal.
@@ -50,7 +64,7 @@
 
 // Unsupported today: sizeof, casts, ternary, function-like, token pasting,
 // stringification.
-// Tests empty macro definition being ignored.
+// Tests empty macro definition being preserved.
 #define MACRO_EMPTY
 // Tests macro body that expands to a type / keywords.
 #define MACRO_TYPE unsigned int

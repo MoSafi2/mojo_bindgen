@@ -23,6 +23,7 @@ from mojo_bindgen.ir import (
     GlobalVar,
     IRDiagnostic,
     IntLiteral,
+    MacroDecl,
     OpaqueRecordRef,
     Param,
     Pointer,
@@ -766,18 +767,25 @@ class DeclLowerer:
             return self._build_global_var(cursor)
         return None
 
-    def collect_macros(self) -> list[Const]:
-        """Lower supported primary-file macro definitions into `Const` nodes."""
-        out: list[Const] = []
+    def collect_macros(self) -> list[Decl]:
+        """Lower all primary-file macro definitions into preserved IR nodes."""
+        out: list[Decl] = []
         for cursor in self.context.tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
             if not self.context.frontend.is_primary_file_cursor(cursor):
                 continue
             parsed = self.context.const_expr_parser.parse_macro(cursor)
-            if parsed is None or parsed.primitive is None:
-                continue
-            out.append(Const(name=cursor.spelling, type=parsed.primitive, expr=parsed.expr))
+            out.append(
+                MacroDecl(
+                    name=cursor.spelling,
+                    tokens=parsed.tokens,
+                    kind=parsed.kind,
+                    expr=parsed.expr,
+                    type=parsed.primitive,
+                    diagnostic=parsed.diagnostic,
+                )
+            )
         return out
 
     def _build_function(self, cursor: cx.Cursor) -> Function:

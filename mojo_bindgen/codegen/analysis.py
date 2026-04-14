@@ -25,6 +25,7 @@ from mojo_bindgen.ir import (
     Field,
     Function,
     FunctionPtr,
+    MacroDecl,
     OpaqueRecordRef,
     Pointer,
     Primitive,
@@ -301,7 +302,7 @@ class AnalyzedUnion:
     uses_unsafe_union: bool
 
 
-TailDecl = Enum | Const | GlobalVar | AnalyzedTypedef | AnalyzedFunction
+TailDecl = Enum | Const | MacroDecl | GlobalVar | AnalyzedTypedef | AnalyzedFunction
 
 
 @dataclass(frozen=True)
@@ -465,7 +466,7 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
             )
         elif isinstance(d, Function):
             tail_decls.append(_analyze_function(d, struct_map, type_lowerer))
-        elif isinstance(d, (Enum, Const, GlobalVar)):
+        elif isinstance(d, (Enum, Const, MacroDecl, GlobalVar)):
             tail_decls.append(d)
 
     return AnalyzedUnit(

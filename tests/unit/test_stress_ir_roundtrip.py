@@ -51,14 +51,14 @@ def test_stress_fixture_json_stable(rel_path: str, library: str, link_name: str)
     assert d0 == d2
 
 
-def test_macro_stress_fixture_preserves_supported_and_skips_unsupported() -> None:
-    from mojo_bindgen.ir import Const
+def test_macro_stress_fixture_preserves_supported_and_unsupported() -> None:
+    from mojo_bindgen.ir import MacroDecl
     from mojo_bindgen.parsing.parser import ClangParser
 
     header = _REPO_ROOT / "tests" / "stress" / "weird" / "stress_macros_input.h"
     unit = ClangParser(header, library="stress_macros", link_name="stress_macros").run()
 
-    const_names = {decl.name for decl in unit.decls if isinstance(decl, Const)}
+    macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
 
     assert {
         "MACRO_INT",
@@ -74,7 +74,14 @@ def test_macro_stress_fixture_preserves_supported_and_skips_unsupported() -> Non
         "MACRO_LINE",
         "MACRO_FILE",
         "MACRO_DATE",
+        "MACRO_TIME",
         "MACRO_COUNTER",
+        "MACRO_STDC",
+        "MACRO_STDC_VERSION",
+        "MACRO_STDC_HOSTED",
+        "MACRO_STDC_NO_ATOMICS",
+        "MACRO_STDC_IEC_60559_BFP",
+        "MACRO_STDC_VERSION_STDIO_H",
         "MACRO_SELF",
         "MACRO_NEG",
         "MACRO_NOT",
@@ -82,7 +89,7 @@ def test_macro_stress_fixture_preserves_supported_and_skips_unsupported() -> Non
         "MACRO_SHIFT",
         "MACRO_COMPLEX_INT",
         "MACRO_ADD3",
-    } <= const_names
+    } <= macros.keys()
 
     assert {
         "MACRO_EMPTY",
@@ -103,7 +110,24 @@ def test_macro_stress_fixture_preserves_supported_and_skips_unsupported() -> Non
         "MACRO_CAT",
         "MACRO_STR",
         "MACRO_GENERIC",
-    }.isdisjoint(const_names)
+    } <= macros.keys()
+
+    assert macros["MACRO_INT"].kind == "object_like_supported"
+    assert macros["MACRO_INT"].expr is not None
+    assert macros["MACRO_FILE"].kind == "predefined"
+    assert macros["MACRO_FILE"].expr is None
+    assert macros["MACRO_FILE"].tokens == ["__FILE__"]
+    assert macros["MACRO_STDC_VERSION"].kind == "predefined"
+    assert macros["MACRO_STDC_VERSION"].tokens == ["__STDC_VERSION__"]
+    assert macros["MACRO_STDC_NO_ATOMICS"].kind == "predefined"
+    assert macros["MACRO_STDC_IEC_60559_BFP"].kind == "predefined"
+    assert macros["MACRO_STDC_VERSION_STDIO_H"].kind == "predefined"
+    assert macros["MACRO_EMPTY"].kind == "empty"
+    assert macros["MACRO_EMPTY"].tokens == []
+    assert macros["MACRO_FUNC"].kind == "function_like_unsupported"
+    assert macros["MACRO_FUNC"].diagnostic is not None
+    assert macros["MACRO_GENERIC"].kind == "object_like_unsupported"
+    assert macros["MACRO_GENERIC"].diagnostic is not None
 
 
 def test_weird_stress_fixture_preserves_selected_hard_declarations() -> None:

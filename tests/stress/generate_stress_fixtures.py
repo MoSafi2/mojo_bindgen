@@ -23,6 +23,7 @@ from mojo_bindgen.ir import (
     Field,
     Function,
     GlobalVar,
+    MacroDecl,
     OpaqueRecordRef,
     Struct,
     Type,
@@ -116,7 +117,9 @@ def _decl_comment(decl: object) -> str:
     if isinstance(decl, Enum):
         return f"enum declaration with {len(decl.enumerants)} enumerant(s)"
     if isinstance(decl, Const):
-        return "constant or macro-like declaration"
+        return "constant declaration"
+    if isinstance(decl, MacroDecl):
+        return f"macro declaration kind={decl.kind}"
     if isinstance(decl, GlobalVar):
         return "global variable declaration"
     return type(decl).__name__
@@ -158,6 +161,13 @@ def _iter_jsonc_lines(unit: Unit, data: dict[str, Any]) -> list[str]:
                 lines.append(f"    // param {param.name or '(anonymous)'}: {_type_comment(param.type)}")
         elif isinstance(decl, Const):
             lines.append(f"    // const expr kind: {type(decl.expr).__name__}")
+        elif isinstance(decl, MacroDecl):
+            body = " ".join(decl.tokens) if decl.tokens else "(empty)"
+            lines.append(f"    // macro body: {body}")
+            if decl.expr is not None:
+                lines.append(f"    // macro expr kind: {type(decl.expr).__name__}")
+            if decl.diagnostic is not None:
+                lines.append(f"    // macro diagnostic: {decl.diagnostic}")
         elif isinstance(decl, GlobalVar):
             lines.append(f"    // global type: {_type_comment(decl.type)}")
     lines.append("  ],")

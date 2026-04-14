@@ -55,3 +55,41 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
 def test_const_expr_parser_rejects_still_unsupported_expression_subset() -> None:
     parser = ConstExprParser(PrimitiveResolver([]))
     assert parser.parse_tokens(["sizeof", "(", "int", ")"]) is None
+
+
+def test_const_expr_parser_classifies_broader_predefined_and_function_like_macros() -> None:
+    parser = ConstExprParser(PrimitiveResolver([]))
+
+    class _Token:
+        def __init__(self, spelling: str) -> None:
+            self.spelling = spelling
+
+    class _Cursor:
+        def __init__(self, spelling: str, body: list[str], *, function_like: bool = False) -> None:
+            self.spelling = spelling
+            self._tokens = [_Token(spelling), *[_Token(tok) for tok in body]]
+            self._function_like = function_like
+
+        def get_tokens(self) -> list[_Token]:
+            return self._tokens
+
+        def is_macro_function_like(self) -> bool:
+            return self._function_like
+
+    predefined = parser.parse_macro(_Cursor("MACRO_FILE", ["__FILE__"]))
+    stdc_version = parser.parse_macro(_Cursor("MACRO_STDC_VERSION", ["__STDC_VERSION__"]))
+    stdc_no_atomics = parser.parse_macro(_Cursor("MACRO_STDC_NO_ATOMICS", ["__STDC_NO_ATOMICS__"]))
+    header_version = parser.parse_macro(_Cursor("MACRO_STDIO_VERSION", ["__STDC_VERSION_STDIO_H__"]))
+    function_like = parser.parse_macro(_Cursor("MACRO_FUNC", ["x", "(", "x", ")", "+", "1"], function_like=True))
+
+    assert predefined.kind == "predefined"
+    assert predefined.tokens == ["__FILE__"]
+    assert predefined.expr is None
+    assert stdc_version.kind == "predefined"
+    assert stdc_version.tokens == ["__STDC_VERSION__"]
+    assert stdc_no_atomics.kind == "predefined"
+    assert stdc_no_atomics.tokens == ["__STDC_NO_ATOMICS__"]
+    assert header_version.kind == "predefined"
+    assert header_version.tokens == ["__STDC_VERSION_STDIO_H__"]
+    assert function_like.kind == "function_like_unsupported"
+    assert function_like.expr is None
