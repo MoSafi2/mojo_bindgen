@@ -13,6 +13,7 @@ build-sdist = "python -m build --sdist"
 clean-dist = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in (Path('build'), Path('dist'))]; [shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True) for p in Path('.').glob('*.egg-info')]\""
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
+example-libpng = "bash examples/libpng/generate.sh"
 
 [dependencies]
 mojo = ">=0.26.3.0.dev2026041205,<0.27"

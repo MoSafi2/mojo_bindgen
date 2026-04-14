@@ -17,8 +17,22 @@ def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutExternalOrigin]:
 
 
 def main() raises:
-    _ = zlibVersion()
-    print("zlib.compress_bound_256|", compressBound(256))
+    var version_ptr = zlibVersion()
+    if not version_ptr:
+        raise Error("zlibVersion returned null")
+
+    var bound_0 = compressBound(0)
+    var bound_256 = compressBound(256)
+    var bound_1024 = compressBound(1024)
+    if bound_0 <= 0:
+        raise Error("compressBound(0) must be positive")
+    if bound_1024 < bound_256:
+        raise Error("compressBound should be monotonic for larger payloads")
+
+    print("zlib.version_ptr_nonnull|", 1)
+    print("zlib.compress_bound_0|", bound_0)
+    print("zlib.compress_bound_256|", bound_256)
+    print("zlib.compress_bound_1024|", bound_1024)
     print("zlib.compile_flags|", zlibCompileFlags())
 
     var payload = "hello-zlib-ffi-roundtrip"

@@ -103,6 +103,7 @@ ZLIB_H="$(find_zlib_h)" || {
   exit 1
 }
 
+
 "${BG[@]}" "$ZLIB_H" --library z --link-name z -o zlib_bindings.mojo
 "${MOJO[@]}" build zlib_bindings.mojo -Xlinker -lz --emit object -o zlib_bindings.o
 

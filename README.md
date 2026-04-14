@@ -81,7 +81,7 @@ Parsing / IR:
 
 - **Macros and constant expressions:** The parser only captures a small token-based subset of constant expressions. Simple integer, string, char, identifier-reference, and null-pointer forms are supported; multi-token arithmetic, `sizeof`, most casts, and function-like macros are skipped and emitted as comments in the mojo code.
 - **Bitfields:** Basic bitfields are modeled, but some C edge cases are still lossy, especially mixed backing types and unusual layout-sensitive patterns.
-- **Hard declaration shapes:** A few difficult C forms are still known parser/bindgen gaps, notably pointer-to-array declarations.
+- **Hard declaration shapes:** A few difficult C declarator shapes and compiler-extension-heavy signatures may still require manual review, especially when mixed with unusual attributes or unsupported macro-driven spellings.
 - **Anonymous and extension-heavy constructs:** Anonymous enums are emitted as top-level constants, and anonymous struct/union members are preserved as synthetic storage fields; some compiler-extension or unusual anonymous record cases still degrade to `UnsupportedType` or require manual review.
 - **C storage/linkage qualifiers:** Type qualifiers on pointers are preserved, but C declaration-level linkage/storage semantics such as `inline` / `extern inline` still are not modeled precisely enough to guarantee symbol availability.
 
