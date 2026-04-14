@@ -10,11 +10,14 @@ from mojo_bindgen.ir import (
     BinaryExpr,
     Const,
     Field,
+    Function,
+    FunctionPtr,
     GlobalVar,
     IntLiteral,
     MacroDecl,
     NullPtrLiteral,
     OpaqueRecordRef,
+    Param,
     Pointer,
     Primitive,
     PrimitiveKind,
@@ -174,3 +177,83 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
     assert "var value: my_uint" in out
     assert "var ptr: my_uint_ptr" in out
     assert "# global variable global_ptr: my_uint_ptr (manual binding required)" in out
+
+
+def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() -> None:
+    i32 = _i32()
+    fp = FunctionPtr(ret=i32, params=[i32, i32], is_variadic=False)
+    fp_typedef = Typedef(
+        decl_id="typedef:pfr_binary_op_t",
+        name="pfr_binary_op_t",
+        aliased=fp,
+        canonical=fp,
+    )
+    fp_typedef_ref = TypeRef(
+        decl_id=fp_typedef.decl_id,
+        name="pfr_binary_op_t",
+        canonical=fp,
+    )
+    choose = Function(
+        decl_id="fn:pfr_select_add",
+        name="pfr_select_add",
+        link_name="pfr_select_add",
+        ret=fp_typedef_ref,
+        params=[],
+        is_variadic=False,
+    )
+    choose_direct = Function(
+        decl_id="fn:pfr_select_add_direct",
+        name="pfr_select_add_direct",
+        link_name="pfr_select_add_direct",
+        ret=fp,
+        params=[],
+        is_variadic=False,
+    )
+    call = Function(
+        decl_id="fn:pfr_call",
+        name="pfr_call",
+        link_name="pfr_call",
+        ret=i32,
+        params=[
+            Param(name="op", type=fp_typedef_ref),
+            Param(name="lhs", type=i32),
+            Param(name="rhs", type=i32),
+        ],
+        is_variadic=False,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="pfr",
+        link_name="pfr",
+        decls=[fp_typedef, choose, choose_direct, call],
+    )
+
+    external_out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "comptime pfr_binary_op_t = MutOpaquePointer[MutExternalOrigin]" in external_out
+    assert 'def pfr_select_add() abi("C") -> pfr_binary_op_t:' in external_out
+    assert 'def pfr_select_add_direct() abi("C") -> MutOpaquePointer[MutExternalOrigin]:' in external_out
+    assert 'return external_call["pfr_select_add", MutOpaquePointer[MutExternalOrigin]]()' in external_out
+    assert (
+        'return external_call["pfr_select_add_direct", MutOpaquePointer[MutExternalOrigin]]()'
+        in external_out
+    )
+    assert (
+        'return external_call["pfr_call", Int32, MutOpaquePointer[MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
+        in external_out
+    )
+
+    dl_out = MojoGenerator(
+        MojoEmitOptions(
+            linking="owned_dl_handle",
+            library_path_hint="/tmp/libpfr.so",
+        )
+    ).generate(unit)
+    assert "comptime pfr_binary_op_t = MutOpaquePointer[MutExternalOrigin]" in dl_out
+    assert "def pfr_select_add() raises -> pfr_binary_op_t:" in dl_out
+    assert "def pfr_select_add_direct() raises -> MutOpaquePointer[MutExternalOrigin]:" in dl_out
+    assert 'return _bindgen_dl().call["pfr_select_add", MutOpaquePointer[MutExternalOrigin]]()' in dl_out
+    assert 'return _bindgen_dl().call["pfr_select_add_direct", MutOpaquePointer[MutExternalOrigin]]()' in dl_out
+    assert (
+        'return _bindgen_dl().call["pfr_call", Int32, MutOpaquePointer[MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
+        in dl_out
+    )

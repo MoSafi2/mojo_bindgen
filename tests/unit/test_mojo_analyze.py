@@ -6,6 +6,7 @@ from mojo_bindgen.ir import (
     Array,
     Field,
     Function,
+    FunctionPtr,
     Param,
     Primitive,
     PrimitiveKind,
@@ -19,7 +20,7 @@ from mojo_bindgen.ir import (
 
 def _f32() -> Primitive:
     return Primitive(name="float", kind=PrimitiveKind.FLOAT, is_signed=True, size_bytes=4)
-from mojo_bindgen.codegen.analysis import analyze_unit
+from mojo_bindgen.codegen.analysis import AnalyzedFunction, analyze_unit
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
@@ -171,3 +172,42 @@ def test_analyze_typedef_name_in_function_signature_when_typedef_emitted() -> No
     assert af.kind == "wrapper"
     assert af.param_names == ("n",)
     assert "my_size_t" in au.emitted_typedef_mojo_names
+
+
+def test_analyze_function_pointer_returns_use_wrapper_kind() -> None:
+    i32 = _i32()
+    fp = FunctionPtr(ret=i32, params=[i32, i32], is_variadic=False)
+    fp_typedef = Typedef(
+        decl_id="typedef:my_binary_op_t",
+        name="my_binary_op_t",
+        aliased=fp,
+        canonical=fp,
+    )
+    fp_typedef_ref = TypeRef(decl_id=fp_typedef.decl_id, name="my_binary_op_t", canonical=fp)
+    fn_direct = Function(
+        decl_id="fn:select_direct",
+        name="select_direct",
+        link_name="select_direct",
+        ret=fp,
+        params=[],
+        is_variadic=False,
+    )
+    fn_typedef = Function(
+        decl_id="fn:select_typedef",
+        name="select_typedef",
+        link_name="select_typedef",
+        ret=fp_typedef_ref,
+        params=[],
+        is_variadic=False,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[fp_typedef, fn_direct, fn_typedef],
+    )
+    au = analyze_unit(unit, MojoEmitOptions())
+    wrappers = [d for d in au.tail_decls if isinstance(d, AnalyzedFunction)]
+    assert len(wrappers) == 2
+    assert all(w.kind == "wrapper" for w in wrappers)
+    assert "my_binary_op_t" in au.emitted_typedef_mojo_names

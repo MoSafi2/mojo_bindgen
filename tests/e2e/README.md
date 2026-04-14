@@ -73,7 +73,7 @@ Each golden case has a `status.json` with per-phase status. The summary below re
 | `p1_opaque_forward` | Forward-declared opaque `union` + `struct` pointer signatures and callability. | pass | n/a |
 | `p1_const_array_decay` | `const T arr[N]` parameter decay semantics and wrapper emission/runtime behavior. | pass | n/a |
 | `p0_ptr_to_array` | Pointer-to-array declarations (`int (*p)[N]`) from upstream bindgen edge cases. | known_fail_bindgen | Current bindgen path does not yet fully support pointer-to-array declarations for wrapper generation. |
-| `p0_fnptr_return` | Function returning function-pointer (`fn -> fnptr`) lowering and wrapper generation. | known_fail_bindgen | Current bindgen path does not yet fully support function-pointer return type lowering. |
+| `p0_fnptr_return` | Function returning function-pointer (`fn -> fnptr`) lowering and wrapper generation. | pass | n/a |
 | `p1_anon_struct_union` | Anonymous struct-inside-union nesting and field resolution. | known_fail_bindgen | Current bindgen path does not yet fully support anonymous nested union/struct field lowering. |
 
 ## Surface-Only Policy Coverage
