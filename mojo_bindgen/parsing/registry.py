@@ -16,6 +16,10 @@ def _location_key(cursor: cx.Cursor) -> str:
     return f"{loc.file}:{loc.line}:{loc.column}:{cursor.kind}:{cursor.spelling}"
 
 
+def _is_anonymous_record_spelling(spelling: str) -> bool:
+    return not spelling or "(unnamed at " in spelling
+
+
 @dataclass
 class DeclRegistry:
     """Identity and declaration index for one translation unit."""
@@ -132,7 +136,7 @@ class DeclRegistry:
     def record_identity(self, cursor: cx.Cursor) -> tuple[str, str, str, bool]:
         """Return stable identity fields for a lowered record declaration."""
         decl_id = self.decl_id_for_cursor(cursor)
-        if cursor.spelling:
+        if not _is_anonymous_record_spelling(cursor.spelling):
             return decl_id, cursor.spelling, cursor.spelling, False
         suffix = decl_id.split(":", 1)[-1]
         synth = f"__bindgen_anon_{suffix}"

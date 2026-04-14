@@ -1,4 +1,4 @@
-"""Tests for primitive suffix probe parse-arg composition."""
+"""Tests for primitive suffix-probe parse-arg composition."""
 
 from __future__ import annotations
 

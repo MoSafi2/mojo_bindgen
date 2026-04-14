@@ -1,4 +1,4 @@
-"""Tests for context-aware type lowering through ClangParser."""
+"""Tests for context-aware parser type lowering through `ClangParser`."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ pytestmark = pytest.mark.skipif(
     reason="libclang not available (use pixi run)",
 )
 
+
 def test_type_context_enum_is_stable() -> None:
     assert isinstance(TypeContext.FIELD, TypeContext)
     assert isinstance(TypeContext.PARAM, TypeContext)
@@ -31,8 +32,8 @@ def test_type_context_enum_is_stable() -> None:
     assert isinstance(TypeContext.TYPEDEF, TypeContext)
 
 
-def test_type_context_field_param_return_typedef(tmp_path: Path) -> None:
-    header = tmp_path / "type_builder_ctx.h"
+def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
+    header = tmp_path / "type_lowering_ctx.h"
     header.write_text(
         (
             "typedef unsigned int my_uint;\n"
@@ -45,24 +46,21 @@ def test_type_context_field_param_return_typedef(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    parser = ClangParser(
+    unit = ClangParser(
         header=header,
         library="ctx",
         link_name="ctx",
         compile_args=[],
-    )
-    unit = parser.run()
+    ).run()
 
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "take_mode")
 
-    # FIELD context: typedefs lower to canonical representation.
     assert isinstance(payload.fields[0].type, Primitive)
     assert payload.fields[0].type.name == "unsigned int"
     assert isinstance(payload.fields[1].type, EnumRef)
     assert payload.fields[1].type.name == "mode_t"
 
-    # PARAM / RETURN context: typedef names are preserved as TypeRef.
     assert isinstance(fn.ret, TypeRef)
     assert fn.ret.name == "mode_t"
     assert isinstance(fn.ret.canonical, EnumRef)
@@ -71,8 +69,8 @@ def test_type_context_field_param_return_typedef(tmp_path: Path) -> None:
     assert isinstance(fn.params[0].type.canonical, Primitive)
 
 
-def test_struct_builder_handles_nested_anon_and_bitfields(tmp_path: Path) -> None:
-    header = tmp_path / "struct_builder_nested.h"
+def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> None:
+    header = tmp_path / "record_lowering_nested.h"
     header.write_text(
         (
             "struct outer_t {\n"
@@ -113,8 +111,8 @@ def test_struct_builder_handles_nested_anon_and_bitfields(tmp_path: Path) -> Non
     assert zero_width.bit_width == 0
 
 
-def test_struct_builder_handles_recursive_pointer_to_self(tmp_path: Path) -> None:
-    header = tmp_path / "struct_builder_recursive.h"
+def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> None:
+    header = tmp_path / "record_lowering_recursive.h"
     header.write_text(
         (
             "struct node {\n"

@@ -19,6 +19,36 @@ ABI behavior fail in different places.
   End-to-end runtime fixtures that compile C code, generate Mojo bindings, build
   Mojo runners, and compare runtime outputs.
 
+## Markers
+
+Tests are marked automatically by directory:
+
+- `unit`
+  Applied to files under `tests/unit/`.
+- `surface`
+  Applied to files under `tests/surface/`.
+- `corpus`
+  Applied to files under `tests/corpus/`.
+- `e2e`
+  Applied to files under `tests/e2e/`.
+- `integration`
+  Applied to `surface`, `corpus`, and `e2e` tests.
+- `slow`
+  Applied to `e2e` tests.
+- `expensive`
+  Applied to `e2e` tests.
+
+Useful commands:
+
+- `pixi run pytest -q -m unit`
+  Run only fast unit tests.
+- `pixi run pytest -q -m "not expensive"`
+  Skip the expensive runtime/toolchain tests.
+- `pixi run pytest -q -m "surface or corpus"`
+  Run parser/IR and emit-oriented integration checks without e2e runtime tests.
+- `pixi run pytest -q -m e2e`
+  Run only the expensive runtime suite.
+
 ## Choosing The Right Test
 
 - Add a unit test under `tests/unit/` when the behavior can be expressed with

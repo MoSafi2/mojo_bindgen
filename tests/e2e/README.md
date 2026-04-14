@@ -10,6 +10,14 @@ From the repo root:
 pixi run pytest tests/e2e -v -s
 ```
 
+The `tests/e2e` suite is also marked as `e2e`, `slow`, and `expensive`, so you
+can select or exclude it from broader runs:
+
+```bash
+pixi run pytest -q -m e2e
+pixi run pytest -q -m "not expensive"
+```
+
 Run only the new golden runtime suite:
 
 ```bash
