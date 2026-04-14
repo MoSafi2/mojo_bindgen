@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import dataclass
+from clang import cindex as cx
 
 from mojo_bindgen.ir import Decl, Unit
 from mojo_bindgen.parsing.compat import ClangCompat
@@ -26,6 +27,8 @@ from mojo_bindgen.parsing.lowering import (
     DeclLowerer,
     PrimitiveResolver,
     RecordLowerer,
+    RecordRepository,
+    RecordTypeResolver,
     TypeLowerer,
 )
 
@@ -35,7 +38,7 @@ class ParseSession:
     """Immutable per-run parser session shared across pipeline stages."""
 
     frontend: ClangFrontend
-    tu: object
+    tu: cx.TranslationUnit
     index: DeclIndex
     header: str
     library: str
@@ -66,10 +69,23 @@ class ClangParser:
             else list(compile_args)
         )
         self.raise_on_error = raise_on_error
-        self.diagnostics: list[FrontendDiagnostic] = []
+        self.diagnostics: ParserDiagnosticSink = ParserDiagnosticSink()
 
     def run(self) -> Unit:
         """Parse the configured header into IR."""
+        session = self._build_parser_session()
+        decl_lowerer = self._build_decl_lowerer(session)
+        decls = self._collect_decls(session, decl_lowerer)
+        return Unit(
+            source_header=session.header,
+            library=session.library,
+            link_name=session.link_name,
+            decls=decls,
+            diagnostics=self.diagnostics.to_ir_diagnostics(),
+        )
+
+    def _build_parser_session(self) -> ParseSession:
+        """Create frontend artifacts, collect diagnostics, and index declarations."""
         frontend = ClangFrontend(
             ClangFrontendConfig(
                 header=self.header,
@@ -78,15 +94,11 @@ class ClangParser:
         )
         tu = frontend.parse_translation_unit()
         frontend_diagnostics = frontend.collect_diagnostics(tu)
-        self.diagnostics = frontend_diagnostics
-
-        fatal = [d for d in self.diagnostics if d.severity in ("error", "fatal")]
-        if fatal and self.raise_on_error:
-            message = "\n".join(str(d) for d in fatal)
-            raise ParseError(f"libclang reported errors parsing {self.header}:\n{message}")
+        self.diagnostics.add_frontend_diagnostics(frontend_diagnostics)
+        _handle_frontend_errors(self.header, frontend_diagnostics, self.raise_on_error)
 
         index = DeclIndex.build_from_translation_unit(tu, frontend)
-        session = ParseSession(
+        return ParseSession(
             frontend=frontend,
             tu=tu,
             index=index,
@@ -94,27 +106,35 @@ class ClangParser:
             library=self.library,
             link_name=self.link_name,
         )
-        diagnostics = ParserDiagnosticSink()
-        diagnostics.add_frontend_diagnostics(frontend_diagnostics)
+
+    def _build_decl_lowerer(self, session: ParseSession) -> DeclLowerer:
+        """Build and wire lowering collaborators for this parsing session."""
         primitive_resolver = PrimitiveResolver(self.compile_args)
         compat = ClangCompat()
+        record_repository = RecordRepository()
+        record_types = RecordTypeResolver(
+            index=session.index,
+            repository=record_repository,
+        )
         type_lowerer = TypeLowerer(
             index=session.index,
-            diagnostics=diagnostics,
+            diagnostics=self.diagnostics,
             primitive_resolver=primitive_resolver,
+            record_types=record_types,
             compat=compat,
         )
         record_lowerer = RecordLowerer(
             index=session.index,
-            diagnostics=diagnostics,
+            diagnostics=self.diagnostics,
             type_lowerer=type_lowerer,
+            repository=record_repository,
         )
-        type_lowerer.bind_record_lowerer(record_lowerer)
-        decl_lowerer = DeclLowerer(
+        record_types.bind_definition_lowerer(record_lowerer.lower_record_definition)
+        return DeclLowerer(
             frontend=session.frontend,
             tu=session.tu,
             index=session.index,
-            diagnostics=diagnostics,
+            diagnostics=self.diagnostics,
             primitive_resolver=primitive_resolver,
             type_lowerer=type_lowerer,
             record_lowerer=record_lowerer,
@@ -122,6 +142,10 @@ class ClangParser:
             compat=compat,
         )
 
+    def _collect_decls(
+        self, session: ParseSession, decl_lowerer: DeclLowerer
+    ) -> list[Decl]:
+        """Lower top-level cursors and append macro declarations."""
         decls: list[Decl] = []
         for cursor in session.index.top_level_cursors():
             lowered = decl_lowerer.lower_top_level_decl(cursor)
@@ -131,17 +155,17 @@ class ClangParser:
                 decls.extend(lowered)
             else:
                 decls.append(lowered)
-
         decls.extend(decl_lowerer.collect_macros())
+        return decls
 
-        self.diagnostics = diagnostics.diagnostics
-        return Unit(
-            source_header=session.header,
-            library=session.library,
-            link_name=session.link_name,
-            decls=decls,
-            diagnostics=diagnostics.to_ir_diagnostics(),
-        )
+
+def _handle_frontend_errors(
+    header: Path, frontend_diagnostics: list[FrontendDiagnostic], raise_on_error: bool
+) -> None:
+    fatal = [d for d in frontend_diagnostics if d.severity in ("error", "fatal")]
+    if fatal and raise_on_error:
+        message = "\n".join(str(d) for d in fatal)
+        raise ParseError(f"libclang reported errors parsing {header}:\n{message}")
 
 
 __all__ = [

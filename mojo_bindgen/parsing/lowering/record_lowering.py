@@ -11,6 +11,7 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import Field, Primitive, Struct, StructRef, Type
 from mojo_bindgen.parsing.interfaces import DeclarationIndex, DiagnosticSink
+from mojo_bindgen.parsing.lowering.record_types import RecordRepository
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 
 
@@ -22,14 +23,16 @@ class RecordLowerer:
         index: DeclarationIndex,
         diagnostics: DiagnosticSink,
         type_lowerer: TypeLowerer,
+        repository: RecordRepository,
     ) -> None:
         self.index = index
         self.diagnostics = diagnostics
         self.type_lowerer = type_lowerer
+        self.repository = repository
 
     def make_struct_ref(self, struct: Struct) -> StructRef:
         """Build a stable StructRef from one lowered Struct."""
-        return self.type_lowerer.make_struct_ref(struct)
+        return self.repository.make_struct_ref(struct)
 
     def lower_top_level_record(self, cursor: cx.Cursor) -> list[Struct] | Struct | None:
         """Lower a top-level record declaration from the primary file."""
@@ -57,7 +60,7 @@ class RecordLowerer:
     def lower_record_definition(self, cursor: cx.Cursor) -> tuple[list[Struct], Struct]:
         """Lower a complete struct/union definition and nested anonymous records."""
         decl_id, c_name, name, is_anonymous = self.index.record_identity(cursor)
-        cached = self.type_lowerer.record_cache_by_decl_id.get(decl_id)
+        cached = self.repository.get(decl_id)
         if cached is not None:
             return [], cached
 
@@ -71,7 +74,7 @@ class RecordLowerer:
             is_union=(cursor.kind == cx.CursorKind.UNION_DECL),
             is_anonymous=is_anonymous,
         )
-        self.type_lowerer.record_cache_by_decl_id[decl_id] = struct
+        self.repository.store(struct)
 
         nested: list[Struct] = []
         fields: list[Field] = []

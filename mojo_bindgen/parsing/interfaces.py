@@ -19,6 +19,7 @@ class DeclarationIndex(Protocol):
     """Index source declarations and answer identity/definition lookups."""
 
     header: Path
+    top_level_decl_ids: list[str]
 
     def decl_id_for_cursor(self, cursor: cx.Cursor) -> str: ...
 
@@ -63,3 +64,9 @@ class RecordLowering(Protocol):
     def lower_record_definition(self, cursor: cx.Cursor) -> tuple[list[Struct], Struct]: ...
 
     def make_struct_ref(self, struct: Struct) -> StructRef: ...
+
+
+class RecordTypeResolving(Protocol):
+    """Resolve clang record types through a record-focused collaboration point."""
+
+    def lower_record_type(self, clang_type: cx.Type) -> Type: ...

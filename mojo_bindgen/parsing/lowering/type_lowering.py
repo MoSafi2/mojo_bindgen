@@ -19,20 +19,17 @@ from mojo_bindgen.ir import (
     ComplexType,
     EnumRef,
     FunctionPtr,
-    OpaqueRecordRef,
     Pointer,
     Primitive,
     PrimitiveKind,
     Qualifiers,
-    Struct,
-    StructRef,
     Type,
     TypeRef,
     UnsupportedType,
     VectorType,
 )
 from mojo_bindgen.parsing.compat import ClangCompat
-from mojo_bindgen.parsing.interfaces import DeclarationIndex, DiagnosticSink, RecordLowering
+from mojo_bindgen.parsing.interfaces import DeclarationIndex, DiagnosticSink, RecordTypeResolving
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
 
 
@@ -50,9 +47,8 @@ class TypeLowerer:
     index: DeclarationIndex
     diagnostics: DiagnosticSink
     primitive_resolver: PrimitiveResolver
+    record_types: RecordTypeResolving
     compat: ClangCompat = field(default_factory=ClangCompat)
-    record_cache_by_decl_id: dict[str, Struct] = field(default_factory=dict)
-    _record_lowerer: RecordLowering | None = None
     _dispatch_by_kind: dict[object, Callable[[cx.Type, TypeContext], Type]] = field(
         init=False,
         repr=False,
@@ -61,25 +57,10 @@ class TypeLowerer:
     def __post_init__(self) -> None:
         self._dispatch_by_kind = self._build_type_dispatch()
 
-    def bind_record_lowerer(self, record_lowerer: RecordLowering) -> None:
-        """Attach the record lowerer used for record type definitions."""
-        self._record_lowerer = record_lowerer
-
     def lower(self, clang_type: cx.Type, ctx: TypeContext) -> Type:
         """Lower a clang type in the given semantic context."""
         t = self._normalize(clang_type)
         return self._lower(t, ctx)
-
-    def make_struct_ref(self, struct: Struct) -> StructRef:
-        """Build a stable StructRef from one lowered Struct."""
-        return StructRef(
-            decl_id=struct.decl_id,
-            name=struct.name,
-            c_name=struct.c_name,
-            is_union=struct.is_union,
-            size_bytes=struct.size_bytes,
-            is_anonymous=struct.is_anonymous,
-        )
 
     def _normalize(self, t: cx.Type) -> cx.Type:
         if t.kind == cx.TypeKind.ELABORATED:
@@ -207,45 +188,8 @@ class TypeLowerer:
         size = t.get_array_size() if sized else None
         return Array(element=element, size=size, array_kind=self._array_kind(t, ctx))
 
-    def _require_record_lowerer(self) -> RecordLowering:
-        if self._record_lowerer is None:
-            raise RuntimeError("TypeLowerer record lowerer has not been bound")
-        return self._record_lowerer
-
     def _lower_record(self, t: cx.Type) -> Type:
-        decl = t.get_declaration()
-        decl_id = self.index.decl_id_for_cursor(decl)
-
-        cached = self.record_cache_by_decl_id.get(decl_id)
-        if cached is not None:
-            return self.make_struct_ref(cached)
-
-        definition = self.index.record_definition_for_cursor(decl)
-        if definition is not None:
-            if decl.spelling and decl_id in self.index.top_level_decl_ids:
-                return StructRef(
-                    decl_id=decl_id,
-                    name=decl.spelling,
-                    c_name=decl.spelling,
-                    is_union=(definition.kind == cx.CursorKind.UNION_DECL),
-                    size_bytes=max(0, t.get_size()),
-                    is_anonymous=False,
-                )
-            _, struct = self._require_record_lowerer().lower_record_definition(definition)
-            return self.make_struct_ref(struct)
-
-        if decl.spelling:
-            return OpaqueRecordRef(
-                decl_id=decl_id,
-                name=decl.spelling,
-                c_name=decl.spelling,
-                is_union=(decl.kind == cx.CursorKind.UNION_DECL),
-            )
-        return UnsupportedType(
-            category="unsupported_extension",
-            spelling="__anonymous_record",
-            reason="anonymous incomplete record reference cannot be named",
-        )
+        return self.record_types.lower_record_type(t)
 
     def _lower_enum(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
