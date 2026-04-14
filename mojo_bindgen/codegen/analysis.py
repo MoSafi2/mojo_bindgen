@@ -39,7 +39,12 @@ from mojo_bindgen.ir import (
     VectorType,
 )
 from mojo_bindgen.codegen._struct_order import toposort_structs
-from mojo_bindgen.codegen.lowering import FFIOriginStyle, TypeLowerer, mojo_ident, peel_typeref
+from mojo_bindgen.codegen.lowering import (
+    FFIOriginStyle,
+    TypeLowerer,
+    mojo_ident,
+    peel_typeref,
+)
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
@@ -218,6 +223,7 @@ class AnalyzedField:
     field: Field
     index: int
     mojo_name: str
+    callback_alias_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -262,6 +268,7 @@ class AnalyzedTypedef:
 
     decl: Typedef
     skip_duplicate: bool
+    callback_alias_name: str | None = None
 
 
 FunctionKind = Literal["wrapper", "variadic_stub", "non_register_return_stub"]
@@ -284,6 +291,16 @@ class AnalyzedFunction:
     decl: Function
     kind: FunctionKind
     param_names: tuple[str, ...]
+    ret_callback_alias_name: str | None = None
+    param_callback_alias_names: tuple[str | None, ...] = ()
+
+
+@dataclass(frozen=True)
+class CallbackAlias:
+    """Generated callback signature alias for a surfaced function-pointer type."""
+
+    name: str
+    fp: FunctionPtr
 
 
 @dataclass(frozen=True)
@@ -321,6 +338,10 @@ class AnalyzedUnit:
         Names of union aliases that are emitted as ``UnsafeUnion``.
     emitted_typedef_mojo_names
         Typedef names preserved in top-level emitted signatures.
+    callback_aliases
+        Generated callback signature aliases for function-pointer surfaces.
+    callback_signature_names
+        Names that lower to callback-signature aliases in surface type rendering.
     ordered_structs
         Struct declarations in emission order, annotated with derived metadata.
     unions
@@ -334,6 +355,9 @@ class AnalyzedUnit:
     needs_opaque_imports: bool
     unsafe_union_names: frozenset[str]
     emitted_typedef_mojo_names: frozenset[str]
+    callback_aliases: tuple[CallbackAlias, ...]
+    callback_signature_names: frozenset[str]
+    global_callback_aliases: dict[str, str]
     ordered_structs: tuple[AnalyzedStruct, ...]
     unions: tuple[AnalyzedUnion, ...]
     tail_decls: tuple[TailDecl, ...]
@@ -367,7 +391,12 @@ def _emitted_typedef_mojo_names(unit: Unit, emitted_struct_enum_names: frozenset
     )
 
 
-def _analyze_struct(decl: Struct, struct_map: dict[str, Struct], opts: MojoEmitOptions) -> AnalyzedStruct:
+def _analyze_struct(
+    decl: Struct,
+    struct_map: dict[str, Struct],
+    opts: MojoEmitOptions,
+    field_callback_aliases: dict[tuple[str, int], str] | None = None,
+) -> AnalyzedStruct:
     """Analyze one struct declaration and compute rendering decisions for it."""
     register_passable = struct_decl_register_passable(decl, struct_map)
     align_decorator: int | None = None
@@ -389,7 +418,12 @@ def _analyze_struct(decl: Struct, struct_map: dict[str, Struct], opts: MojoEmitO
             packed_comment if align_omit_comment is None else f"{align_omit_comment} {packed_comment[2:]}"
         )
     fields = tuple(
-        AnalyzedField(field=f, index=i, mojo_name=_field_mojo_name(f, i))
+        AnalyzedField(
+            field=f,
+            index=i,
+            mojo_name=_field_mojo_name(f, i),
+            callback_alias_name=None if field_callback_aliases is None else field_callback_aliases.get((decl.decl_id, i)),
+        )
         for i, f in enumerate(decl.fields)
     )
     return AnalyzedStruct(
@@ -406,17 +440,140 @@ def _analyze_function(
     fn: Function,
     struct_map: dict[str, Struct],
     type_lowerer: TypeLowerer,
+    ret_callback_alias_name: str | None = None,
+    param_callback_alias_names: tuple[str | None, ...] = (),
 ) -> AnalyzedFunction:
     """Analyze one function declaration and choose its wrapper strategy."""
     param_names = tuple(type_lowerer.param_names(fn.params))
     if fn.is_variadic:
-        return AnalyzedFunction(decl=fn, kind="variadic_stub", param_names=param_names)
+        return AnalyzedFunction(
+            decl=fn,
+            kind="variadic_stub",
+            param_names=param_names,
+            ret_callback_alias_name=ret_callback_alias_name,
+            param_callback_alias_names=param_callback_alias_names,
+        )
     ret_u = peel_typeref(fn.ret)
     if isinstance(ret_u, StructRef):
         rs = struct_map.get(ret_u.decl_id)
         if rs is not None and not struct_decl_register_passable(rs, struct_map):
-            return AnalyzedFunction(decl=fn, kind="non_register_return_stub", param_names=param_names)
-    return AnalyzedFunction(decl=fn, kind="wrapper", param_names=param_names)
+            return AnalyzedFunction(
+                decl=fn,
+                kind="non_register_return_stub",
+                param_names=param_names,
+                ret_callback_alias_name=ret_callback_alias_name,
+                param_callback_alias_names=param_callback_alias_names,
+            )
+    return AnalyzedFunction(
+        decl=fn,
+        kind="wrapper",
+        param_names=param_names,
+        ret_callback_alias_name=ret_callback_alias_name,
+        param_callback_alias_names=param_callback_alias_names,
+    )
+
+
+def _supports_callback_alias(fp: FunctionPtr) -> bool:
+    """Return whether ``fp`` can be surfaced as a Mojo callback signature alias."""
+    if fp.is_variadic:
+        return False
+    if fp.calling_convention is None:
+        return True
+    return fp.calling_convention.lower() in {"c", "cdecl", "default"}
+
+
+def _function_ptr_from_type(t: Type) -> FunctionPtr | None:
+    """Unwrap a direct or typedef-backed function-pointer type."""
+    u = peel_typeref(t)
+    return u if isinstance(u, FunctionPtr) else None
+
+
+def _unique_callback_alias(base: str, used: set[str]) -> str:
+    """Return a collision-free generated callback alias name."""
+    candidate = mojo_ident(base)
+    if candidate not in used:
+        used.add(candidate)
+        return candidate
+    i = 2
+    while True:
+        named = f"{candidate}_{i}"
+        if named not in used:
+            used.add(named)
+            return named
+        i += 1
+
+
+def _collect_callback_aliases(
+    unit: Unit,
+    emitted_typedef_names: frozenset[str],
+) -> tuple[
+    tuple[CallbackAlias, ...],
+    frozenset[str],
+    dict[tuple[str, int], str],
+    dict[str, str],
+    dict[tuple[str, int], str],
+    dict[str, str],
+    dict[str, str],
+]:
+    """Collect generated callback aliases and use-site mappings."""
+    aliases: list[CallbackAlias] = []
+    alias_names: set[str] = set()
+    field_aliases: dict[tuple[str, int], str] = {}
+    typedef_aliases: dict[str, str] = {}
+    fn_param_aliases: dict[tuple[str, int], str] = {}
+    fn_ret_aliases: dict[str, str] = {}
+    global_aliases: dict[str, str] = {}
+
+    def ensure_alias(fp: FunctionPtr, preferred: str) -> str:
+        alias = _unique_callback_alias(preferred, alias_names)
+        aliases.append(CallbackAlias(name=alias, fp=fp))
+        return alias
+
+    for d in unit.decls:
+        if isinstance(d, Typedef):
+            fp = _function_ptr_from_type(d.aliased)
+            if fp is not None and _supports_callback_alias(fp) and mojo_ident(d.name) in emitted_typedef_names:
+                typedef_aliases[d.decl_id] = ensure_alias(fp, d.name)
+        elif isinstance(d, Struct) and not d.is_union:
+            base = d.name.strip() or d.c_name.strip()
+            for i, field in enumerate(d.fields):
+                fp = _function_ptr_from_type(field.type)
+                if fp is not None and _supports_callback_alias(fp):
+                    field_name = field.source_name or field.name or f"field_{i}"
+                    suffix = field_name if field_name.endswith("cb") else f"{field_name}_cb"
+                    field_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{base}_{suffix}")
+        elif isinstance(d, Function):
+            fp = _function_ptr_from_type(d.ret)
+            if fp is not None and _supports_callback_alias(fp):
+                if isinstance(d.ret, TypeRef) and mojo_ident(d.ret.name) in emitted_typedef_names:
+                    fn_ret_aliases[d.decl_id] = mojo_ident(d.ret.name)
+                else:
+                    fn_ret_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_return_cb")
+            for i, param in enumerate(d.params):
+                fp = _function_ptr_from_type(param.type)
+                if fp is not None and _supports_callback_alias(fp):
+                    if isinstance(param.type, TypeRef) and mojo_ident(param.type.name) in emitted_typedef_names:
+                        fn_param_aliases[(d.decl_id, i)] = mojo_ident(param.type.name)
+                    else:
+                        pname = param.name or f"arg{i}"
+                        fn_param_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{d.name}_{pname}_cb")
+        elif isinstance(d, GlobalVar):
+            fp = _function_ptr_from_type(d.type)
+            if fp is not None and _supports_callback_alias(fp):
+                if isinstance(d.type, TypeRef) and mojo_ident(d.type.name) in emitted_typedef_names:
+                    global_aliases[d.decl_id] = mojo_ident(d.type.name)
+                else:
+                    global_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_cb")
+
+    return (
+        tuple(aliases),
+        frozenset(alias_names),
+        field_aliases,
+        typedef_aliases,
+        fn_param_aliases,
+        fn_ret_aliases,
+        global_aliases,
+    )
 
 
 def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
@@ -437,16 +594,26 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     ordered_struct_decls = _ordered_struct_decls(unit)
     emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls)
     emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
+    (
+        callback_aliases,
+        callback_signature_names,
+        field_callback_aliases,
+        typedef_callback_aliases,
+        fn_param_callback_aliases,
+        fn_ret_callback_aliases,
+        global_callback_aliases,
+    ) = _collect_callback_aliases(unit, emitted_typedef_names)
     unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
     struct_map = struct_by_decl_id(unit)
     type_lowerer = TypeLowerer(
         ffi_origin=options.ffi_origin,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=emitted_typedef_names,
+        callback_signature_names=callback_signature_names,
     )
 
     ordered_structs = tuple(
-        _analyze_struct(decl, struct_map, options) for decl in ordered_struct_decls
+        _analyze_struct(decl, struct_map, options, field_callback_aliases) for decl in ordered_struct_decls
     )
 
     unions = tuple(
@@ -462,10 +629,24 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     for d in unit.decls:
         if isinstance(d, Typedef):
             tail_decls.append(
-                AnalyzedTypedef(decl=d, skip_duplicate=mojo_ident(d.name) in emitted_names)
+                AnalyzedTypedef(
+                    decl=d,
+                    skip_duplicate=mojo_ident(d.name) in emitted_names,
+                    callback_alias_name=typedef_callback_aliases.get(d.decl_id),
+                )
             )
         elif isinstance(d, Function):
-            tail_decls.append(_analyze_function(d, struct_map, type_lowerer))
+            tail_decls.append(
+                _analyze_function(
+                    d,
+                    struct_map,
+                    type_lowerer,
+                    ret_callback_alias_name=fn_ret_callback_aliases.get(d.decl_id),
+                    param_callback_alias_names=tuple(
+                        fn_param_callback_aliases.get((d.decl_id, i)) for i in range(len(d.params))
+                    ),
+                )
+            )
         elif isinstance(d, (Enum, Const, MacroDecl, GlobalVar)):
             tail_decls.append(d)
 
@@ -475,6 +656,9 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
         needs_opaque_imports=unit_needs_opaque_imports(unit),
         unsafe_union_names=unsafe_union_names,
         emitted_typedef_mojo_names=emitted_typedef_names,
+        callback_aliases=callback_aliases,
+        callback_signature_names=callback_signature_names,
+        global_callback_aliases=global_callback_aliases,
         ordered_structs=ordered_structs,
         unions=unions,
         tail_decls=tuple(tail_decls),
@@ -492,4 +676,4 @@ def analyzed_struct_for_test(
     This helper keeps isolated struct-rendering tests independent from full
     unit analysis.
     """
-    return _analyze_struct(decl, struct_by_name, options)
+    return _analyze_struct(decl, struct_by_name, options, None)

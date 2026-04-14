@@ -24,6 +24,7 @@ from mojo_bindgen.ir import (
     UnaryExpr,
 )
 from mojo_bindgen.codegen.analysis import (
+    CallbackAlias,
     AnalyzedField,
     AnalyzedFunction,
     AnalyzedStruct,
@@ -73,11 +74,13 @@ class MojoRenderer:
             ffi_origin=analyzed.opts.ffi_origin,
             unsafe_union_names=analyzed.unsafe_union_names,
             typedef_mojo_names=analyzed.emitted_typedef_mojo_names,
+            callback_signature_names=analyzed.callback_signature_names,
         )
         self._union_member_types = TypeLowerer(
             ffi_origin=analyzed.opts.ffi_origin,
             unsafe_union_names=frozenset(),
             typedef_mojo_names=frozenset(),
+            callback_signature_names=frozenset(),
         )
 
     @staticmethod
@@ -94,11 +97,15 @@ class MojoRenderer:
                 f"# bitfield: C bits {field.bit_offset}..{field.bit_offset + field.bit_width - 1} "
                 f"({field.bit_width} bits) on {field.type.name}"
             )
-        if isinstance(field.type, FunctionPtr):
+        if analyzed_field.callback_alias_name is None and isinstance(field.type, FunctionPtr):
             b.add(f"# {types.function_ptr_comment(field.type)}")
         if opts.warn_abi and field.is_bitfield:
             b.add("# ABI: verify bitfield layout matches target C compiler.")
-        b.add(f"var {analyzed_field.mojo_name}: {types.surface(field.type)}")
+        if analyzed_field.callback_alias_name is not None:
+            lowered = types.callback_pointer_type(analyzed_field.callback_alias_name)
+        else:
+            lowered = types.surface(field.type)
+        b.add(f"var {analyzed_field.mojo_name}: {lowered}")
 
     def render_struct(self, analyzed: AnalyzedStruct) -> str:
         """Render a single analyzed non-union struct declaration."""
@@ -141,6 +148,7 @@ class MojoRenderer:
             chunks.append(self._module_header())
         chunks.append(self._import_block())
         chunks.append(self._dl_handle_helpers())
+        chunks.append(self._emit_callback_alias_section())
         for d in self._a.tail_decls:
             if isinstance(d, (Const, MacroDecl)):
                 chunks.append(self._emit_tail_decl(d))
@@ -254,10 +262,28 @@ class MojoRenderer:
         b.add("")
         return b.render()
 
+    def _emit_callback_alias(self, alias: CallbackAlias) -> str:
+        """Render one surfaced function-pointer callback signature alias."""
+        expr = self._types.callback_signature_alias_expr(alias.fp)
+        if expr is None:
+            return (
+                f"# callback alias {alias.name}: unsupported callback signature shape\n"
+                f"# {self._types.function_ptr_comment(alias.fp)}\n\n"
+            )
+        return f"comptime {alias.name} = {expr}\n\n"
+
+    def _emit_callback_alias_section(self) -> str:
+        """Render collected callback aliases before the declaration body."""
+        if not self._a.callback_aliases:
+            return ""
+        return "".join(self._emit_callback_alias(alias) for alias in self._a.callback_aliases)
+
     @staticmethod
     def _emit_typedef(analyzed: AnalyzedTypedef, types: TypeLowerer) -> str:
         """Render one typedef alias unless it is suppressed by analysis."""
         if analyzed.skip_duplicate:
+            return ""
+        if analyzed.callback_alias_name is not None:
             return ""
         name = mojo_ident(analyzed.decl.name)
         rhs = types.surface(analyzed.decl.aliased)
@@ -356,17 +382,22 @@ class MojoRenderer:
         Global variables remain part of the IR surface even though thin Mojo
         bindings do not yet generate direct accessors for them.
         """
-        ty = self._types.surface(decl.type)
+        callback_alias = self._a.global_callback_aliases.get(decl.decl_id)
+        ty = self._types.callback_pointer_type(callback_alias) if callback_alias is not None else self._types.surface(decl.type)
         const_kw = "const " if decl.is_const else ""
         return f"# global variable {decl.link_name}: {const_kw}{ty} (manual binding required)\n\n"
 
     def _function_signature(self, analyzed: AnalyzedFunction) -> tuple[str, str, str, bool, str]:
         """Build derived signature fragments used by function rendering."""
         fn = analyzed.decl
-        ret_t = self._types.signature(fn.ret)
+        ret_t = (
+            self._types.callback_pointer_type(analyzed.ret_callback_alias_name)
+            if analyzed.ret_callback_alias_name is not None
+            else self._types.signature(fn.ret)
+        )
         args_sig = ", ".join(
-            f"{name}: {self._types.signature(param.type)}"
-            for name, param in zip(analyzed.param_names, fn.params)
+            f"{name}: {self._types.callback_pointer_type(alias) if alias is not None else self._types.signature(param.type)}"
+            for name, param, alias in zip(analyzed.param_names, fn.params, analyzed.param_callback_alias_names)
         )
         call_args = ", ".join(analyzed.param_names)
         ret_abi = self._types.canonical(fn.ret)
@@ -458,6 +489,9 @@ def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
         needs_opaque_imports=False,
         unsafe_union_names=frozenset(),
         emitted_typedef_mojo_names=frozenset(),
+        callback_aliases=tuple(),
+        callback_signature_names=frozenset(),
+        global_callback_aliases={},
         ordered_structs=(analyzed,),
         unions=tuple(),
         tail_decls=tuple(),

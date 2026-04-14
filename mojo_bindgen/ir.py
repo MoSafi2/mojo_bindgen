@@ -184,6 +184,7 @@ class FunctionPtr:
     """
     ret: Type
     params: list[Type]
+    param_names: list[str] | None = None
     is_variadic: bool = False
     calling_convention: str | None = None
     is_noreturn: bool = False
@@ -193,6 +194,7 @@ class FunctionPtr:
             "kind": "FunctionPtr",
             "ret": self.ret.to_json_dict(),
             "params": [p.to_json_dict() for p in self.params],
+            "param_names": self.param_names,
             "is_variadic": self.is_variadic,
             "calling_convention": self.calling_convention,
             "is_noreturn": self.is_noreturn,
@@ -204,6 +206,7 @@ class FunctionPtr:
         return cls(
             ret=type_from_json(d["ret"]),
             params=[type_from_json(p) for p in d["params"]],
+            param_names=d.get("param_names"),
             is_variadic=d.get("is_variadic", False),
             calling_convention=d.get("calling_convention"),
             is_noreturn=d.get("is_noreturn", False),

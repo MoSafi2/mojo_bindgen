@@ -24,6 +24,7 @@ from mojo_bindgen.ir import (
     RefExpr,
     StringLiteral,
     Struct,
+    StructRef,
     TypeRef,
     Typedef,
     Unit,
@@ -237,7 +238,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
 
 def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() -> None:
     i32 = _i32()
-    fp = FunctionPtr(ret=i32, params=[i32, i32], is_variadic=False)
+    fp = FunctionPtr(ret=i32, params=[i32, i32], param_names=["a", "b"], is_variadic=False)
     fp_typedef = Typedef(
         decl_id="typedef:pfr_binary_op_t",
         name="pfr_binary_op_t",
@@ -285,12 +286,19 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     )
 
     external_out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "comptime pfr_binary_op_t = MutOpaquePointer[MutExternalOrigin]" in external_out
-    assert 'def pfr_select_add() abi("C") -> pfr_binary_op_t:' in external_out
-    assert 'def pfr_select_add_direct() abi("C") -> MutOpaquePointer[MutExternalOrigin]:' in external_out
+    assert 'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32' in external_out
+    assert 'def pfr_select_add() abi("C") -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:' in external_out
+    assert (
+        'def pfr_select_add_direct() abi("C") -> '
+        'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:'
+    ) in external_out
     assert 'return external_call["pfr_select_add", MutOpaquePointer[MutExternalOrigin]]()' in external_out
     assert (
         'return external_call["pfr_select_add_direct", MutOpaquePointer[MutExternalOrigin]]()'
+        in external_out
+    )
+    assert (
+        'def pfr_call(op: UnsafePointer[pfr_binary_op_t, MutExternalOrigin], lhs: Int32, rhs: Int32) abi("C") -> Int32:'
         in external_out
     )
     assert (
@@ -304,12 +312,84 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
             library_path_hint="/tmp/libpfr.so",
         )
     ).generate(unit)
-    assert "comptime pfr_binary_op_t = MutOpaquePointer[MutExternalOrigin]" in dl_out
-    assert "def pfr_select_add() raises -> pfr_binary_op_t:" in dl_out
-    assert "def pfr_select_add_direct() raises -> MutOpaquePointer[MutExternalOrigin]:" in dl_out
+    assert 'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32' in dl_out
+    assert "def pfr_select_add() raises -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:" in dl_out
+    assert (
+        "def pfr_select_add_direct() raises -> "
+        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:"
+    ) in dl_out
     assert 'return _bindgen_dl().call["pfr_select_add", MutOpaquePointer[MutExternalOrigin]]()' in dl_out
     assert 'return _bindgen_dl().call["pfr_select_add_direct", MutOpaquePointer[MutExternalOrigin]]()' in dl_out
     assert (
         'return _bindgen_dl().call["pfr_call", Int32, MutOpaquePointer[MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
         in dl_out
     )
+
+
+def test_generator_emits_struct_field_callback_aliases() -> None:
+    i32 = _i32()
+    sqlite3 = Struct(
+        decl_id="struct:sqlite3",
+        name="sqlite3",
+        c_name="sqlite3",
+        fields=[],
+        size_bytes=0,
+        align_bytes=8,
+        is_complete=False,
+    )
+    vtab = Struct(
+        decl_id="struct:sqlite3_vtab",
+        name="sqlite3_vtab",
+        c_name="sqlite3_vtab",
+        fields=[],
+        size_bytes=0,
+        align_bytes=8,
+        is_complete=False,
+    )
+    sqlite3_ref = Pointer(
+        pointee=StructRef(
+            decl_id="struct:sqlite3",
+            name="sqlite3",
+            c_name="sqlite3",
+            size_bytes=0,
+        )
+    )
+    vtab_out = Pointer(
+        pointee=Pointer(
+            pointee=StructRef(
+                decl_id="struct:sqlite3_vtab",
+                name="sqlite3_vtab",
+                c_name="sqlite3_vtab",
+                size_bytes=0,
+            )
+        )
+    )
+    argv = Pointer(pointee=Pointer(pointee=Primitive("char", PrimitiveKind.CHAR, True, 1)))
+    err = Pointer(pointee=Pointer(pointee=Primitive("char", PrimitiveKind.CHAR, True, 1)))
+    cb = FunctionPtr(
+        ret=i32,
+        params=[sqlite3_ref, Pointer(pointee=None), i32, argv, vtab_out, err],
+        param_names=["db", "pAux", "argc", "argv", "ppVTab", "errmsg_out"],
+        is_variadic=False,
+    )
+    module = Struct(
+        decl_id="struct:sqlite3_module",
+        name="sqlite3_module",
+        c_name="sqlite3_module",
+        fields=[
+            Field(name="iVersion", source_name="iVersion", type=i32, byte_offset=0),
+            Field(name="xCreate", source_name="xCreate", type=cb, byte_offset=8),
+            Field(name="xConnect", source_name="xConnect", type=cb, byte_offset=16),
+        ],
+        size_bytes=24,
+        align_bytes=8,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="sqlite", link_name="sqlite", decls=[sqlite3, vtab, module])
+    )
+    assert "comptime sqlite3_module_xCreate_cb = def (" in out
+    assert "comptime sqlite3_module_xConnect_cb = def (" in out
+    assert "var xCreate: UnsafePointer[sqlite3_module_xCreate_cb, MutExternalOrigin]" in out
+    assert "var xConnect: UnsafePointer[sqlite3_module_xConnect_cb, MutExternalOrigin]" in out
+    assert "# function pointer (fixed):" not in out

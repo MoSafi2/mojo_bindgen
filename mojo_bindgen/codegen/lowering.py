@@ -7,6 +7,7 @@ names and type strings needed by later stages.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from functools import singledispatchmethod
 from typing import Literal
@@ -126,12 +127,14 @@ class TypeLowerer:
         ffi_origin: FFIOriginStyle,
         unsafe_union_names: frozenset[str] | None,
         typedef_mojo_names: frozenset[str] | None = None,
+        callback_signature_names: frozenset[str] | None = None,
     ) -> None:
         """Configure pointer origins, optional ``UnsafeUnion`` names, and typedef aliases for ``signature``."""
         self._ffi_origin = ffi_origin
         self._origin = pointer_origin_names(ffi_origin)
         self._unsafe_union_names = unsafe_union_names or frozenset()
         self._typedef_mojo_names = typedef_mojo_names or frozenset()
+        self._callback_signature_names = callback_signature_names or frozenset()
 
     def signature(self, t: Type) -> str:
         """
@@ -144,6 +147,8 @@ class TypeLowerer:
         """Lower for public-facing generated API text while preserving emitted typedef aliases."""
         if isinstance(t, TypeRef):
             mid = mojo_ident(t.name.strip())
+            if mid in self._callback_signature_names:
+                return self.callback_pointer_type(mid)
             if mid in self._typedef_mojo_names:
                 return mid
             return self.surface(t.canonical)
@@ -164,6 +169,28 @@ class TypeLowerer:
         if isinstance(t, EnumRef):
             return mojo_ident(t.name.strip())
         return self.canonical(t)
+
+    def callback_pointer_type(self, alias_name: str) -> str:
+        """Return the stored pointer type used for a generated callback signature alias."""
+        return f"UnsafePointer[{alias_name}, {self._origin.mut}]"
+
+    def callback_signature_alias_expr(self, fp: FunctionPtr) -> str | None:
+        """Return a Mojo function-signature alias expression for ``fp`` when representable."""
+        if fp.is_variadic:
+            return None
+        if fp.calling_convention is not None:
+            cc = fp.calling_convention.lower()
+            if cc not in {"c", "cdecl", "default"}:
+                return None
+        names = list(fp.param_names or ())
+        while len(names) < len(fp.params):
+            names.append(f"arg{len(names)}")
+        params = ", ".join(
+            f"{mojo_ident(name, fallback=f'arg{i}')}: {self.surface(param)}"
+            for i, (name, param) in enumerate(zip(names, fp.params))
+        )
+        ret = self.surface(fp.ret)
+        return f'def ({params}) abi("C") -> {ret}'
 
     def _surface_pointer(self, t: Pointer) -> str:
         o = self._origin
@@ -324,4 +351,10 @@ def lower_type(
         ffi_origin=ffi_origin,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=frozenset(),
+        callback_signature_names=frozenset(),
     ).canonical(t)
+
+
+def function_ptr_key(fp: FunctionPtr) -> str:
+    """Return a stable serialization key for a function-pointer signature."""
+    return json.dumps(fp.to_json_dict(), sort_keys=True, separators=(",", ":"))
