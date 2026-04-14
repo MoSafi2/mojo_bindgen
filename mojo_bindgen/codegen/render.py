@@ -141,10 +141,15 @@ class MojoRenderer:
             chunks.append(self._module_header())
         chunks.append(self._import_block())
         chunks.append(self._dl_handle_helpers())
+        for d in self._a.tail_decls:
+            if isinstance(d, (Const, MacroDecl)):
+                chunks.append(self._emit_tail_decl(d))
         chunks.append(self._emit_union_section())
         for s in self._a.ordered_structs:
             chunks.append(self.render_struct(s))
         for d in self._a.tail_decls:
+            if isinstance(d, (Const, MacroDecl)):
+                continue
             chunks.append(self._emit_tail_decl(d))
         return "".join(chunks)
 

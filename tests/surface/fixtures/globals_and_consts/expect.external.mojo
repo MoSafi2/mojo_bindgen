@@ -4,6 +4,8 @@
 # FFI mode: external_call
 from std.ffi import external_call
 
+comptime DEFAULT_LIMIT = UInt32(42)
+
 # struct point - size=8 align=4 (verify packed/aligned ABI)
 @align(4)
 @fieldwise_init
@@ -11,6 +13,4 @@ struct point(Copyable, Movable, RegisterPassable):
     var x: Int32
     var y: Int32
 # global variable global_counter: Int32 (manual binding required)
-
-comptime DEFAULT_LIMIT = UInt32(42)
 

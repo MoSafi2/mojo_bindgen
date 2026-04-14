@@ -141,6 +141,49 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert "# define MACRO_REF MACRO_OK" in out
 
 
+def test_generator_emits_macro_and_const_before_global_and_function_sections() -> None:
+    i32 = _i32()
+    fn = Function(
+        decl_id="fn:do_work",
+        name="do_work",
+        link_name="do_work",
+        ret=i32,
+        params=[],
+        is_variadic=False,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[
+            GlobalVar(
+                decl_id="var:global_counter",
+                name="global_counter",
+                link_name="global_counter",
+                type=i32,
+            ),
+            fn,
+            MacroDecl(
+                name="MACRO_OK",
+                tokens=["1"],
+                kind="object_like_supported",
+                expr=IntLiteral(1),
+                type=i32,
+            ),
+            Const(name="LIMIT", type=i32, expr=IntLiteral(7)),
+        ],
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    macro_pos = out.index("comptime MACRO_OK = Int32(1)")
+    const_pos = out.index("comptime LIMIT = Int32(7)")
+    global_pos = out.index("# global variable global_counter: Int32 (manual binding required)")
+    fn_pos = out.index('def do_work() abi("C") -> Int32:')
+    assert macro_pos < global_pos
+    assert const_pos < global_pos
+    assert macro_pos < fn_pos
+    assert const_pos < fn_pos
+
+
 def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:
     i32 = _i32()
     my_uint = Typedef(decl_id="typedef:my_uint", name="my_uint", aliased=i32, canonical=i32)
