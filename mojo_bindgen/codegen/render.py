@@ -8,6 +8,7 @@ declarations referenced from that analysis and emits a single Mojo source file.
 from __future__ import annotations
 
 from mojo_bindgen.ir import (
+    BinaryExpr,
     CharLiteral,
     Const,
     Enum,
@@ -19,6 +20,7 @@ from mojo_bindgen.ir import (
     Primitive,
     RefExpr,
     StringLiteral,
+    UnaryExpr,
 )
 from mojo_bindgen.codegen.analysis import (
     AnalyzedField,
@@ -264,22 +266,43 @@ class MojoRenderer:
         """
         expr = decl.expr
         name = mojo_ident(decl.name)
-        if isinstance(expr, IntLiteral) and isinstance(decl.type, Primitive):
-            t = lower_primitive(decl.type)
-            return f"comptime {name} = {t}({expr.value})\n\n"
+        rendered = MojoRenderer._render_const_expr(expr, decl.type)
+        if rendered is None:
+            if isinstance(expr, NullPtrLiteral):
+                return f"# constant {decl.name}: null pointer macro is not emitted directly\n\n"
+            return f"# constant {decl.name}: unsupported constant expression form\n\n"
+        return f"comptime {name} = {rendered}\n\n"
+
+    @staticmethod
+    def _render_const_expr(expr: object, decl_type: Primitive | object) -> str | None:
+        """Render the supported constant-expression subset to Mojo source."""
+        if isinstance(expr, IntLiteral) and isinstance(decl_type, Primitive):
+            t = lower_primitive(decl_type)
+            return f"{t}({expr.value})"
         if isinstance(expr, StringLiteral):
             value = expr.value.replace("\\", "\\\\").replace('"', '\\"')
-            return f'comptime {name} = "{value}"\n\n'
+            return f'"{value}"'
         if isinstance(expr, CharLiteral):
             value = expr.value.replace("\\", "\\\\").replace("'", "\\'")
-            return f"comptime {name} = '{value}'\n\n"
+            return f"'{value}'"
         if isinstance(expr, FloatLiteral):
-            return f"comptime {name} = {expr.value}\n\n"
+            return expr.value
         if isinstance(expr, RefExpr):
-            return f"comptime {name} = {mojo_ident(expr.name)}\n\n"
+            return mojo_ident(expr.name)
+        if isinstance(expr, UnaryExpr):
+            operand = MojoRenderer._render_const_expr(expr.operand, decl_type)
+            if operand is None:
+                return None
+            return f"{expr.op}({operand})"
+        if isinstance(expr, BinaryExpr):
+            lhs = MojoRenderer._render_const_expr(expr.lhs, decl_type)
+            rhs = MojoRenderer._render_const_expr(expr.rhs, decl_type)
+            if lhs is None or rhs is None:
+                return None
+            return f"({lhs} {expr.op} {rhs})"
         if isinstance(expr, NullPtrLiteral):
-            return f"# constant {decl.name}: null pointer macro is not emitted directly\n\n"
-        return f"# constant {decl.name}: unsupported constant expression form\n\n"
+            return None
+        return None
 
     def _emit_global_var(self, decl: GlobalVar) -> str:
         """Render a reference stub for a top-level global variable.

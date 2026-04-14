@@ -76,6 +76,13 @@ CASES = (
         link_name="stress_extensions",
         emit=False,
     ),
+    StressCase(
+        key="weird/stress_macros",
+        header=STRESS_ROOT / "weird" / "stress_macros_input.h",
+        library="stress_macros",
+        link_name="stress_macros",
+        emit=False,
+    ),
 )
 
 

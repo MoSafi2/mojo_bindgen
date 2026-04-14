@@ -7,6 +7,7 @@ from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.lowering import lower_type
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    BinaryExpr,
     Const,
     GlobalVar,
     IntLiteral,
@@ -72,9 +73,15 @@ def test_generator_renders_global_var_stub_and_string_const() -> None:
                 expr=StringLiteral("bindgen"),
             ),
             Const(name="LIMIT", type=i32, expr=IntLiteral(7)),
+            Const(
+                name="FLAGS",
+                type=i32,
+                expr=BinaryExpr(op="|", lhs=IntLiteral(1), rhs=IntLiteral(2)),
+            ),
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "# global variable global_counter: Int32 (manual binding required)" in out
     assert 'comptime LIB_NAME = "bindgen"' in out
     assert "comptime LIMIT = Int32(7)" in out
+    assert "comptime FLAGS = (Int32(1) | Int32(2))" in out
