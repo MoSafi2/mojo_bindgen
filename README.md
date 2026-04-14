@@ -39,6 +39,12 @@ You also need a **system libclang** shared library compatible with the `libclang
 
 ## CLI
 
+Inspect all options and examples:
+
+```bash
+mojo-bindgen --help
+```
+
 Emit Mojo FFI (default):
 
 ```bash
@@ -65,7 +71,9 @@ mojo-bindgen include/me.h --compile-arg=-std=c99 -o out.mojo
 
 `--compile-arg` standard flags accept `-std=...`, `--std=...`, and `std=...` forms. If no standard is provided, `-std=gnu11` is used by default.
 
-By default, `--library` and `--link-name` are the header file stem (e.g. `me` for `me.h`). See `mojo-bindgen --help` for `--linking`, `--library-path-hint`, and other options.
+By default, `--library` and `--link-name` are the header file stem (e.g. `me` for `me.h`).
+`--compile-arg` is repeatable, and `--emit-align` is enabled by default (`--no-emit-align` disables it).
+Use `mojo-bindgen --help` for full option details.
 
 ## Limitations & Rough Edges
 
