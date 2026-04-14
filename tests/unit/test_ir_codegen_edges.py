@@ -9,15 +9,19 @@ from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     BinaryExpr,
     Const,
+    Field,
     GlobalVar,
     IntLiteral,
     MacroDecl,
     NullPtrLiteral,
     OpaqueRecordRef,
+    Pointer,
     Primitive,
     PrimitiveKind,
     StringLiteral,
     Struct,
+    TypeRef,
+    Typedef,
     Unit,
     UnsupportedType,
 )
@@ -119,3 +123,54 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert "# macro MACRO_NULL: null pointer macro is not emitted directly" in out
     assert "# define MACRO_NULL ( void * ) 0" in out
     assert "# macro MACRO_GENERIC: unsupported macro replacement list" in out
+
+
+def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:
+    i32 = _i32()
+    my_uint = Typedef(decl_id="typedef:my_uint", name="my_uint", aliased=i32, canonical=i32)
+    my_uint_ref = TypeRef(decl_id=my_uint.decl_id, name="my_uint", canonical=i32)
+    my_uint_ptr = Typedef(
+        decl_id="typedef:my_uint_ptr",
+        name="my_uint_ptr",
+        aliased=Pointer(pointee=my_uint_ref),
+        canonical=Pointer(pointee=i32),
+    )
+    my_uint_ptr_ref = TypeRef(
+        decl_id=my_uint_ptr.decl_id,
+        name="my_uint_ptr",
+        canonical=Pointer(pointee=i32),
+    )
+    holder = Struct(
+        decl_id="struct:holder",
+        name="holder",
+        c_name="holder",
+        fields=[
+            Field(name="value", source_name="value", type=my_uint_ref, byte_offset=0),
+            Field(name="ptr", source_name="ptr", type=my_uint_ptr_ref, byte_offset=8),
+        ],
+        size_bytes=16,
+        align_bytes=8,
+        is_union=False,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[
+            my_uint,
+            my_uint_ptr,
+            holder,
+            GlobalVar(
+                decl_id="var:global_ptr",
+                name="global_ptr",
+                link_name="global_ptr",
+                type=my_uint_ptr_ref,
+            ),
+        ],
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "comptime my_uint = Int32" in out
+    assert "comptime my_uint_ptr = UnsafePointer[my_uint, MutExternalOrigin]" in out
+    assert "var value: my_uint" in out
+    assert "var ptr: my_uint_ptr" in out
+    assert "# global variable global_ptr: my_uint_ptr (manual binding required)" in out

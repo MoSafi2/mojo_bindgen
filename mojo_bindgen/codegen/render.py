@@ -98,7 +98,7 @@ class MojoRenderer:
             b.add(f"# {types.function_ptr_comment(field.type)}")
         if opts.warn_abi and field.is_bitfield:
             b.add("# ABI: verify bitfield layout matches target C compiler.")
-        b.add(f"var {analyzed_field.mojo_name}: {types.canonical(field.type)}")
+        b.add(f"var {analyzed_field.mojo_name}: {types.surface(field.type)}")
 
     def render_struct(self, analyzed: AnalyzedStruct) -> str:
         """Render a single analyzed non-union struct declaration."""
@@ -255,7 +255,7 @@ class MojoRenderer:
         if analyzed.skip_duplicate:
             return ""
         name = mojo_ident(analyzed.decl.name)
-        rhs = types.canonical(analyzed.decl.canonical)
+        rhs = types.surface(analyzed.decl.aliased)
         return f"comptime {name} = {rhs}\n\n"
 
     @staticmethod
@@ -340,7 +340,7 @@ class MojoRenderer:
         Global variables remain part of the IR surface even though thin Mojo
         bindings do not yet generate direct accessors for them.
         """
-        ty = self._types.signature(decl.type)
+        ty = self._types.surface(decl.type)
         const_kw = "const " if decl.is_const else ""
         return f"# global variable {decl.link_name}: {const_kw}{ty} (manual binding required)\n\n"
 

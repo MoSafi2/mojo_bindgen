@@ -69,6 +69,7 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     assert isinstance(fn.params[0].type.canonical, Primitive)
 
 
+
 def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_nested.h"
     header.write_text(

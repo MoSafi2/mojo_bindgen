@@ -138,12 +138,51 @@ class TypeLowerer:
         Lower for top-level function ``def`` signatures: typedef alias name when
         this module emits a matching ``comptime`` typedef.
         """
+        return self.surface(t)
+
+    def surface(self, t: Type) -> str:
+        """Lower for public-facing generated API text while preserving emitted typedef aliases."""
         if isinstance(t, TypeRef):
             mid = mojo_ident(t.name.strip())
             if mid in self._typedef_mojo_names:
                 return mid
-            return self.canonical(t.canonical)
+            return self.surface(t.canonical)
+        if isinstance(t, Pointer):
+            return self._surface_pointer(t)
+        if isinstance(t, Array):
+            return self._surface_array(t)
+        if isinstance(t, ComplexType):
+            inner = self.surface(t.element)
+            return f"InlineArray[{inner}, 2]"
+        if isinstance(t, VectorType):
+            if t.count is not None:
+                inner = self.surface(t.element)
+                return f"InlineArray[{inner}, {t.count}]"
+            return self.canonical(t)
+        if isinstance(t, StructRef):
+            return self._canonical_struct_ref(t)
+        if isinstance(t, EnumRef):
+            return mojo_ident(t.name.strip())
         return self.canonical(t)
+
+    def _surface_pointer(self, t: Pointer) -> str:
+        o = self._origin
+        if t.pointee is None:
+            if t.qualifiers.is_const:
+                return f"ImmutOpaquePointer[{o.immut}]"
+            return f"MutOpaquePointer[{o.mut}]"
+        inner = self.surface(t.pointee)
+        if t.qualifiers.is_const:
+            return f"UnsafePointer[{inner}, {o.immut}]"
+        return f"UnsafePointer[{inner}, {o.mut}]"
+
+    def _surface_array(self, t: Array) -> str:
+        o = self._origin
+        if t.array_kind != "fixed" or t.size is None:
+            inner = self.surface(t.element)
+            return f"UnsafePointer[{inner}, {o.mut}]"
+        inner = self.surface(t.element)
+        return f"InlineArray[{inner}, {t.size}]"
 
     @singledispatchmethod
     def canonical(self, t: Type) -> str:
@@ -240,13 +279,19 @@ class TypeLowerer:
         parts.extend(self.canonical(p) for p in fp.params)
         return parts
 
+    def function_ptr_surface_signature_parts(self, fp: FunctionPtr) -> list[str]:
+        """Typedef-preserving ret and param types for user-facing function-pointer comments."""
+        parts = [self.surface(fp.ret)]
+        parts.extend(self.surface(p) for p in fp.params)
+        return parts
+
     def function_ptr_canonical_signature(self, fp: FunctionPtr) -> str:
         """Comma-separated lowered ret and param types (semantic signature, not wire pointer type)."""
         return ", ".join(self.function_ptr_canonical_signature_parts(fp))
 
     def function_ptr_comment(self, fp: FunctionPtr) -> str:
         """Human-readable comment line for a function-pointer field (fixed vs varargs)."""
-        inner = self.function_ptr_canonical_signature(fp)
+        inner = ", ".join(self.function_ptr_surface_signature_parts(fp))
         var = "varargs" if fp.is_variadic else "fixed"
         return f"function pointer ({var}): ({inner})"
 
