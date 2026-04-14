@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from mojo_bindgen.codegen.generator import MojoGenerator
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import EnumRef, Function, Pointer, Primitive, Struct, StructRef, TypeRef
 from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
@@ -110,6 +112,71 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
     zero_width = next(f for f in outer.fields if f.name == "")
     assert zero_width.is_bitfield
     assert zero_width.bit_width == 0
+
+
+def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Path) -> None:
+    header = tmp_path / "record_lowering_direct_anon.h"
+    header.write_text(
+        (
+            "struct outer_t {\n"
+            "  int tag;\n"
+            "  union {\n"
+            "    struct { int x; int y; };\n"
+            "    int flat;\n"
+            "  };\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
+    anon_union = next(f for f in outer.fields if f.is_anonymous and isinstance(f.type, StructRef))
+    assert anon_union.byte_offset == 4
+    assert anon_union.type.is_union is True
+    assert anon_union.type.is_anonymous is True
+
+    inner_union = next(d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_union.type.decl_id)
+    anon_struct = next(f for f in inner_union.fields if f.is_anonymous and isinstance(f.type, StructRef))
+    assert anon_struct.byte_offset == 0
+    assert anon_struct.type.is_union is False
+    assert anon_struct.type.is_anonymous is True
+
+    leaf_struct = next(d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_struct.type.decl_id)
+    assert [f.name for f in leaf_struct.fields] == ["x", "y"]
+
+
+def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path: Path) -> None:
+    header = tmp_path / "record_codegen_direct_anon.h"
+    header.write_text(
+        (
+            "typedef struct outer_t {\n"
+            "  int tag;\n"
+            "  union {\n"
+            "    int value;\n"
+            "  };\n"
+            "} outer_t;\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+
+    assert "struct outer_t" in out
+    assert "var tag: Int32" in out
+    assert "var _anon_1: " in out
+    assert "struct __bindgen_anon_" not in out
 
 
 def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> None:

@@ -658,9 +658,17 @@ class RecordLowerer:
         nested: list[Struct] = []
         fields: list = []
         for child in cursor.get_children():
-            if child.kind != cx.CursorKind.FIELD_DECL:
+            if child.kind == cx.CursorKind.FIELD_DECL:
+                field, nested_defs = self._lower_field(cursor.type, child)
+            elif (
+                child.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
+                and child.is_definition()
+                and self.context.registry.record_identity(child)[3]
+                and not self._has_explicit_field_for_record(cursor, child)
+            ):
+                field, nested_defs = self._lower_direct_anonymous_record_field(cursor.type, child)
+            else:
                 continue
-            field, nested_defs = self._lower_field(cursor.type, child)
             nested.extend(nested_defs)
             if field is not None:
                 fields.append(field)
@@ -670,7 +678,7 @@ class RecordLowerer:
 
     def _lower_field(self, parent_type: cx.Type, cursor: cx.Cursor):
         field_name = cursor.spelling
-        bit_offset = parent_type.get_offset(field_name) if field_name else -1
+        bit_offset = self._field_bit_offset(parent_type, cursor)
         byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
 
         if cursor.is_bitfield():
@@ -701,6 +709,34 @@ class RecordLowerer:
         )
         return field, nested
 
+    def _lower_direct_anonymous_record_field(
+        self,
+        parent_type: cx.Type,
+        cursor: cx.Cursor,
+    ) -> tuple[Field, list[Struct]]:
+        """Lower a direct anonymous ``struct { ... };`` / ``union { ... };`` member."""
+        implicit_field = self._find_implicit_record_field(parent_type, cursor)
+        bit_offset = implicit_field.get_field_offsetof() if implicit_field is not None else -1
+        byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
+        nested_defs, inner = self.lower_record_definition(cursor)
+        return (
+            Field(
+                name="",
+                source_name="",
+                type=StructRef(
+                    decl_id=inner.decl_id,
+                    name=inner.name,
+                    c_name=inner.c_name,
+                    is_union=inner.is_union,
+                    size_bytes=inner.size_bytes,
+                    is_anonymous=inner.is_anonymous,
+                ),
+                byte_offset=byte_offset,
+                is_anonymous=True,
+            ),
+            nested_defs + [inner],
+        )
+
     def _lower_field_type(self, cursor: cx.Cursor) -> tuple[Type, list[Struct]]:
         ft = cursor.type.get_canonical()
         if ft.kind != cx.TypeKind.RECORD:
@@ -728,6 +764,45 @@ class RecordLowerer:
             ),
             nested_defs + [inner],
         )
+
+    def _find_implicit_record_field(self, parent_type: cx.Type, record: cx.Cursor) -> cx.Cursor | None:
+        """Find the implicit field cursor that stores a direct anonymous record member."""
+        record_decl_id = self.context.registry.decl_id_for_cursor(record)
+        for field_cursor in parent_type.get_fields():
+            definition = field_cursor.type.get_canonical().get_declaration().get_definition()
+            if definition is None:
+                continue
+            if self.context.registry.decl_id_for_cursor(definition) == record_decl_id:
+                return field_cursor
+        return None
+
+    def _has_explicit_field_for_record(self, parent: cx.Cursor, record: cx.Cursor) -> bool:
+        """Return whether ``record`` already has an explicit ``FIELD_DECL`` in ``parent``."""
+        record_decl_id = self.context.registry.decl_id_for_cursor(record)
+        for child in parent.get_children():
+            if child.kind != cx.CursorKind.FIELD_DECL:
+                continue
+            definition = child.type.get_canonical().get_declaration().get_definition()
+            if definition is None:
+                continue
+            if self.context.registry.decl_id_for_cursor(definition) == record_decl_id:
+                return True
+        return False
+
+    @staticmethod
+    def _field_bit_offset(parent_type: cx.Type, cursor: cx.Cursor) -> int:
+        """Return a field bit offset across named, anonymous, and implicit field cursors."""
+        if cursor.spelling:
+            bit_offset = parent_type.get_offset(cursor.spelling)
+            if bit_offset >= 0:
+                return bit_offset
+        getter = getattr(cursor, "get_field_offsetof", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return -1
+        return -1
 
     @staticmethod
     def _apply_attributes(struct: Struct, cursor: cx.Cursor) -> None:

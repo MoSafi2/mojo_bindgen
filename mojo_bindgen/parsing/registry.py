@@ -17,7 +17,7 @@ def _location_key(cursor: cx.Cursor) -> str:
 
 
 def _is_anonymous_record_spelling(spelling: str) -> bool:
-    return not spelling or "(unnamed at " in spelling
+    return not spelling or "(unnamed at " in spelling or "(anonymous at " in spelling
 
 
 @dataclass
