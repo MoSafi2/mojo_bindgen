@@ -8,7 +8,7 @@ context object. These are internal contracts for the parser package.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Protocol
 
 import clang.cindex as cx
 
@@ -22,8 +22,6 @@ class DeclarationIndex(Protocol):
     top_level_decl_ids: list[str]
 
     def decl_id_for_cursor(self, cursor: cx.Cursor) -> str: ...
-
-    def top_level_cursors(self) -> Iterable[cx.Cursor]: ...
 
     def record_definition_for_cursor(self, cursor: cx.Cursor) -> cx.Cursor | None: ...
 

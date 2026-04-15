@@ -74,6 +74,7 @@ class ClangParser:
     def run(self) -> Unit:
         """Parse the configured header into IR."""
         session = self._build_parser_session()
+        self.session = session
         decl_lowerer = self._build_decl_lowerer(session)
         decls = self._collect_decls(session, decl_lowerer)
         return Unit(
@@ -147,7 +148,7 @@ class ClangParser:
     ) -> list[Decl]:
         """Lower top-level cursors and append macro declarations."""
         decls: list[Decl] = []
-        for cursor in session.index.top_level_cursors():
+        for cursor in session.frontend.iter_primary_cursors(session.tu):
             lowered = decl_lowerer.lower_top_level_decl(cursor)
             if lowered is None:
                 continue
