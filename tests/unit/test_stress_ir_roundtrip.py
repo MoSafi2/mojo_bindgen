@@ -173,3 +173,34 @@ def test_weird_stress_fixture_preserves_selected_hard_declarations() -> None:
         "ev_default_event_value",
         "ev_typeof_ptr",
     } <= names
+
+
+def test_weird_stress_fixture_preserves_distinct_nested_anonymous_structs() -> None:
+    from mojo_bindgen.ir import Struct
+    from mojo_bindgen.parsing.parser import ClangParser
+
+    header = _REPO_ROOT / "tests" / "stress" / "weird" / "stress_weird_input.h"
+    unit = ClangParser(header, library="stress_weird", link_name="stress_weird").run()
+
+    structs = {decl.decl_id: decl for decl in unit.decls if isinstance(decl, Struct)}
+    outer = next(
+        decl for decl in unit.decls if isinstance(decl, Struct) and decl.name == "ev_nested_anon"
+    )
+    anon_union_ref = next(field.type for field in outer.fields if field.is_anonymous)
+    anon_union = structs[anon_union_ref.decl_id]
+
+    assert anon_union.is_union is True
+    assert len(anon_union.fields) == 2
+    assert all(field.is_anonymous for field in anon_union.fields)
+
+    first_ref = anon_union.fields[0].type
+    second_ref = anon_union.fields[1].type
+    assert first_ref.decl_id != second_ref.decl_id
+    assert anon_union.name == "ev_nested_anon__anon_union_1"
+    assert first_ref.name == "ev_nested_anon__anon_union_1__anon_struct_1"
+    assert second_ref.name == "ev_nested_anon__anon_union_1__anon_struct_2"
+
+    first_struct = structs[first_ref.decl_id]
+    second_struct = structs[second_ref.decl_id]
+    assert [field.name for field in first_struct.fields] == ["x", "y"]
+    assert [field.name for field in second_struct.fields] == ["u", "v"]

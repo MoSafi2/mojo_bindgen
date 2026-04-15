@@ -353,7 +353,7 @@ class StructRef:
     Full :class:`Struct` definitions live only on :class:`Unit` as declarations;
     field and parameter types use ``StructRef`` so :class:`Type` does not embed
     layouts. ``name`` and ``c_name`` are usually the same C tag; anonymous
-    record bodies use a stable ``__bindgen_anon_<hash>`` synthetic name (see parser).
+    record bodies use a stable parent-scoped synthetic name from the parser.
 
     Unions carry ``is_union=True`` and ``size_bytes`` so the emitter can lower
     by-value unions to ``InlineArray[UInt8, size]`` without a separate lookup.
