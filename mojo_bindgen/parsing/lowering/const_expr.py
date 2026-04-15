@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import clang.cindex as cx
 
@@ -26,9 +25,7 @@ from mojo_bindgen.ir import (
     StringLiteral,
     UnaryExpr,
 )
-
-if TYPE_CHECKING:
-    from mojo_bindgen.parsing.interfaces import LiteralPrimitiveResolver
+from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
 
 
 _INT_LITERAL_RE = re.compile(
@@ -127,7 +124,7 @@ class ParsedMacro:
 class ConstExprParser:
     """Parse the small constant-expression subset supported by the parser."""
 
-    def __init__(self, primitive_resolver: LiteralPrimitiveResolver) -> None:
+    def __init__(self, primitive_resolver: PrimitiveResolver) -> None:
         self.primitive_resolver = primitive_resolver
 
     def parse_macro(self, cursor: cx.Cursor) -> ParsedMacro:

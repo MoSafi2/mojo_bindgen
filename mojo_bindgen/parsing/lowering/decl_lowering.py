@@ -23,7 +23,8 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.parsing.compat import ClangCompat
 from mojo_bindgen.parsing.frontend import ClangFrontend
-from mojo_bindgen.parsing.interfaces import DeclarationIndex, DiagnosticSink
+from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.index import DeclIndex
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
@@ -38,8 +39,8 @@ class DeclLowerer:
         *,
         frontend: ClangFrontend,
         tu: cx.TranslationUnit,
-        index: DeclarationIndex,
-        diagnostics: DiagnosticSink,
+        index: DeclIndex,
+        diagnostics: ParserDiagnosticSink,
         primitive_resolver: PrimitiveResolver,
         type_lowerer: TypeLowerer,
         record_lowerer: RecordLowerer,

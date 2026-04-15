@@ -77,25 +77,6 @@ _PRIMITIVE_SPELLINGS: dict[str, BuiltinPrimitiveSpelling] = {
 }
 
 
-def default_signed_int_primitive() -> Primitive:
-    """Return the parser's default signed int primitive fallback."""
-    return Primitive("int", kind=PrimitiveKind.INT, is_signed=True, size_bytes=4)
-
-
-def _c_integer_spelling_for_literal_suffix(suffix: str) -> str:
-    """Map a C integer literal suffix to a canonical integer spelling."""
-    if not suffix:
-        return "int"
-    s = suffix.lower()
-    has_u = "u" in s
-    l_count = s.count("l")
-    if l_count >= 2:
-        return "unsigned long long" if has_u else "long long"
-    if l_count == 1:
-        return "unsigned long" if has_u else "long"
-    return "unsigned int" if has_u else "int"
-
-
 _LITERAL_SUFFIX_PREWARM: frozenset[str] = frozenset(
     {
         "",
@@ -123,6 +104,70 @@ _LITERAL_SUFFIX_PREWARM: frozenset[str] = frozenset(
         "ULL",
     }
 )
+
+
+SCALAR_KINDS = {
+    cx.TypeKind.BOOL,
+    cx.TypeKind.CHAR_U,
+    cx.TypeKind.UCHAR,
+    cx.TypeKind.CHAR16,
+    cx.TypeKind.CHAR32,
+    cx.TypeKind.USHORT,
+    cx.TypeKind.UINT,
+    cx.TypeKind.ULONG,
+    cx.TypeKind.ULONGLONG,
+    cx.TypeKind.UINT128,
+    cx.TypeKind.CHAR_S,
+    cx.TypeKind.SCHAR,
+    cx.TypeKind.WCHAR,
+    cx.TypeKind.SHORT,
+    cx.TypeKind.INT,
+    cx.TypeKind.LONG,
+    cx.TypeKind.LONGLONG,
+    cx.TypeKind.INT128,
+    cx.TypeKind.FLOAT,
+    cx.TypeKind.DOUBLE,
+    cx.TypeKind.LONGDOUBLE,
+    cx.TypeKind.HALF,
+}
+
+
+SIGNED_INT_KINDS = {
+    cx.TypeKind.CHAR_S,
+    cx.TypeKind.SCHAR,
+    cx.TypeKind.SHORT,
+    cx.TypeKind.INT,
+    cx.TypeKind.LONG,
+    cx.TypeKind.LONGLONG,
+    cx.TypeKind.INT128,
+}
+
+
+FLOAT_KINDS = {
+    cx.TypeKind.FLOAT,
+    cx.TypeKind.DOUBLE,
+    cx.TypeKind.LONGDOUBLE,
+    cx.TypeKind.HALF,
+}
+
+
+def default_signed_int_primitive() -> Primitive:
+    """Return the parser's default signed int primitive fallback."""
+    return Primitive("int", kind=PrimitiveKind.INT, is_signed=True, size_bytes=4)
+
+
+def _c_integer_spelling_for_literal_suffix(suffix: str) -> str:
+    """Map a C integer literal suffix to a canonical integer spelling."""
+    if not suffix:
+        return "int"
+    s = suffix.lower()
+    has_u = "u" in s
+    l_count = s.count("l")
+    if l_count >= 2:
+        return "unsigned long long" if has_u else "long long"
+    if l_count == 1:
+        return "unsigned long" if has_u else "long"
+    return "unsigned int" if has_u else "int"
 
 
 def _suffix_probe_parse_args(compile_args: list[str]) -> list[str]:
@@ -154,7 +199,10 @@ class PrimitiveResolver:
         )
         prim: Primitive | None = None
         for cursor in tu.cursor.get_children():
-            if cursor.kind == cx.CursorKind.VAR_DECL and cursor.spelling == "__bindgen_m":
+            if (
+                cursor.kind == cx.CursorKind.VAR_DECL
+                and cursor.spelling == "__bindgen_m"
+            ):
                 prim = self.make_primitive_from_kind(cursor.type)
                 break
         if prim is None:
@@ -184,12 +232,7 @@ class PrimitiveResolver:
             if tk == cx.TypeKind.BOOL:
                 kind = PrimitiveKind.BOOL
                 is_signed = False
-            elif tk in (
-                cx.TypeKind.FLOAT,
-                cx.TypeKind.DOUBLE,
-                cx.TypeKind.LONGDOUBLE,
-                cx.TypeKind.HALF,
-            ):
+            elif tk in FLOAT_KINDS:
                 kind = PrimitiveKind.FLOAT
                 is_signed = False
             elif tk in (cx.TypeKind.CHAR_S, cx.TypeKind.CHAR_U) and norm == "char":
@@ -197,16 +240,7 @@ class PrimitiveResolver:
                 is_signed = tk == cx.TypeKind.CHAR_S
             else:
                 kind = PrimitiveKind.INT
-                is_signed = tk in (
-                    cx.TypeKind.CHAR_S,
-                    cx.TypeKind.SCHAR,
-                    cx.TypeKind.SHORT,
-                    cx.TypeKind.INT,
-                    cx.TypeKind.LONG,
-                    cx.TypeKind.LONGLONG,
-                    cx.TypeKind.INT128,
-                    cx.TypeKind.WCHAR,
-                )
+                is_signed = tk in SIGNED_INT_KINDS
 
         size_raw = canonical.get_size()
         size_bytes = size_raw if size_raw > 0 else 0
@@ -221,30 +255,6 @@ class PrimitiveResolver:
         """Return a primitive for scalar clang types, else ``None``."""
         canonical = clang_type.get_canonical()
         tk = canonical.kind
-        scalar_kinds = {
-            cx.TypeKind.BOOL,
-            cx.TypeKind.CHAR_U,
-            cx.TypeKind.UCHAR,
-            cx.TypeKind.CHAR16,
-            cx.TypeKind.CHAR32,
-            cx.TypeKind.USHORT,
-            cx.TypeKind.UINT,
-            cx.TypeKind.ULONG,
-            cx.TypeKind.ULONGLONG,
-            cx.TypeKind.UINT128,
-            cx.TypeKind.CHAR_S,
-            cx.TypeKind.SCHAR,
-            cx.TypeKind.WCHAR,
-            cx.TypeKind.SHORT,
-            cx.TypeKind.INT,
-            cx.TypeKind.LONG,
-            cx.TypeKind.LONGLONG,
-            cx.TypeKind.INT128,
-            cx.TypeKind.FLOAT,
-            cx.TypeKind.DOUBLE,
-            cx.TypeKind.LONGDOUBLE,
-            cx.TypeKind.HALF,
-        }
-        if tk not in scalar_kinds:
+        if tk not in SCALAR_KINDS:
             return None
         return self.make_primitive_from_kind(clang_type)

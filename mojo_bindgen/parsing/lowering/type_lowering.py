@@ -1,10 +1,3 @@
-"""Clang type to IR type lowering.
-
-This module owns `cx.Type -> ir.Type` conversion. It may consult declaration
-index lookups, diagnostics, primitive typing, and record lowering helpers, but
-it does not assemble top-level declarations or iterate source cursors.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,7 +8,6 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import (
     Array,
-    ArrayKind,
     ComplexType,
     EnumRef,
     FunctionPtr,
@@ -29,8 +21,13 @@ from mojo_bindgen.ir import (
     VectorType,
 )
 from mojo_bindgen.parsing.compat import ClangCompat
-from mojo_bindgen.parsing.interfaces import DeclarationIndex, DiagnosticSink, RecordTypeResolving
-from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
+from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.index import DeclIndex
+from mojo_bindgen.parsing.lowering.primitive import (
+    PrimitiveResolver,
+    default_signed_int_primitive,
+)
+from mojo_bindgen.parsing.lowering.record_types import RecordTypeResolver
 
 
 class TypeContext(PyEnum):
@@ -40,38 +37,65 @@ class TypeContext(PyEnum):
     TYPEDEF = auto()
 
 
+_TYPEREF_CONTEXTS = {TypeContext.PARAM, TypeContext.RETURN, TypeContext.TYPEDEF}
+
+
 @dataclass
 class TypeLowerer:
-    """Lower clang types into IR types through explicit collaborators."""
-
-    index: DeclarationIndex
-    diagnostics: DiagnosticSink
+    index: DeclIndex
+    diagnostics: ParserDiagnosticSink
     primitive_resolver: PrimitiveResolver
-    record_types: RecordTypeResolving
+    record_types: RecordTypeResolver
     compat: ClangCompat = field(default_factory=ClangCompat)
     _dispatch_by_kind: dict[object, Callable[[cx.Type, TypeContext], Type]] = field(
-        init=False,
-        repr=False,
+        init=False, repr=False
     )
 
     def __post_init__(self) -> None:
         self._dispatch_by_kind = self._build_type_dispatch()
 
     def lower(self, clang_type: cx.Type, ctx: TypeContext) -> Type:
-        """Lower a clang type in the given semantic context."""
         t = self._normalize(clang_type)
-        return self._lower(t, ctx)
-
-    def _normalize(self, t: cx.Type) -> cx.Type:
-        if t.kind == cx.TypeKind.ELABORATED:
-            return self._normalize(t.get_named_type())
-        return t
-
-    def _lower(self, t: cx.Type, ctx: TypeContext) -> Type:
         handler = self._dispatch_by_kind.get(t.kind)
         if handler is not None:
             return handler(t, ctx)
         return self._lower_primitive(t)
+
+    def _build_type_dispatch(
+        self,
+    ) -> dict[object, Callable[[cx.Type, TypeContext], Type]]:
+        dispatch: dict[object, Callable[[cx.Type, TypeContext], Type]] = {
+            cx.TypeKind.INVALID: self._lower_invalid,
+            cx.TypeKind.UNEXPOSED: self._lower_unexposed,
+            cx.TypeKind.TYPEDEF: self._lower_typedef,
+            cx.TypeKind.VOID: self._lower_void,
+            cx.TypeKind.POINTER: self._lower_pointer,
+            cx.TypeKind.CONSTANTARRAY: self._lower_array,
+            cx.TypeKind.INCOMPLETEARRAY: self._lower_array,
+            cx.TypeKind.VARIABLEARRAY: self._lower_array,
+            cx.TypeKind.DEPENDENTSIZEDARRAY: self._lower_array,
+            cx.TypeKind.RECORD: lambda t, _ctx: self._lower_record(t),
+            cx.TypeKind.ENUM: lambda t, _ctx: self._lower_enum(t),
+            cx.TypeKind.FUNCTIONPROTO: self._lower_fnptr,
+            cx.TypeKind.FUNCTIONNOPROTO: self._lower_fnptr,
+        }
+        if (complex_kind := getattr(cx.TypeKind, "COMPLEX", None)) is not None:
+            dispatch[complex_kind] = lambda t, _ctx: self._lower_complex(t)
+        if (vector_kind := getattr(cx.TypeKind, "VECTOR", None)) is not None:
+            dispatch[vector_kind] = lambda t, _ctx: self._lower_vector(
+                t, is_ext_vector=False
+            )
+        if (ext_vector_kind := getattr(cx.TypeKind, "EXTVECTOR", None)) is not None:
+            dispatch[ext_vector_kind] = lambda t, _ctx: self._lower_vector(
+                t, is_ext_vector=True
+            )
+        return dispatch
+
+    @staticmethod
+    def _normalize(t: cx.Type) -> cx.Type:
+        if t.kind == cx.TypeKind.ELABORATED:
+            return TypeLowerer._normalize(t.get_named_type())
+        return t
 
     @staticmethod
     def _qualifiers(t: cx.Type) -> Qualifiers:
@@ -82,7 +106,15 @@ class TypeLowerer:
         )
 
     @staticmethod
-    def _array_kind(t: cx.Type, ctx: TypeContext) -> ArrayKind:
+    def _safe_size(t: cx.Type) -> int | None:
+        return max(0, t.get_size()) or None
+
+    @staticmethod
+    def _safe_align(t: cx.Type) -> int | None:
+        return max(0, t.get_align()) or None
+
+    @staticmethod
+    def _array_kind(t: cx.Type, ctx: TypeContext) -> str:
         if t.kind == cx.TypeKind.CONSTANTARRAY:
             return "fixed"
         if t.kind == cx.TypeKind.INCOMPLETEARRAY:
@@ -90,34 +122,6 @@ class TypeLowerer:
         if t.kind in (cx.TypeKind.VARIABLEARRAY, cx.TypeKind.DEPENDENTSIZEDARRAY):
             return "variable"
         return "incomplete"
-
-    def _build_type_dispatch(self) -> dict[object, Callable[[cx.Type, TypeContext], Type]]:
-        dispatch: dict[object, Callable[[cx.Type, TypeContext], Type]] = {
-            cx.TypeKind.INVALID: self._lower_invalid,
-            cx.TypeKind.UNEXPOSED: self._lower_unexposed,
-            cx.TypeKind.TYPEDEF: self._lower_typedef,
-            cx.TypeKind.VOID: self._lower_void,
-            cx.TypeKind.POINTER: self._lower_pointer,
-            cx.TypeKind.CONSTANTARRAY: self._lower_constant_array,
-            cx.TypeKind.INCOMPLETEARRAY: self._lower_unsized_array,
-            cx.TypeKind.VARIABLEARRAY: self._lower_unsized_array,
-            cx.TypeKind.DEPENDENTSIZEDARRAY: self._lower_unsized_array,
-            cx.TypeKind.RECORD: self._lower_record_with_ctx,
-            cx.TypeKind.ENUM: self._lower_enum_with_ctx,
-            cx.TypeKind.FUNCTIONPROTO: self._lower_fnptr,
-            cx.TypeKind.FUNCTIONNOPROTO: self._lower_fnptr,
-        }
-        complex_kind = getattr(cx.TypeKind, "COMPLEX", None)
-        if complex_kind is not None:
-            dispatch[complex_kind] = self._lower_complex_with_ctx
-        vector_kind = getattr(cx.TypeKind, "VECTOR", None)
-        if vector_kind is not None:
-            dispatch[vector_kind] = self._lower_vector_type
-        ext_vector_kind = getattr(cx.TypeKind, "EXTVECTOR", None)
-        if ext_vector_kind is not None:
-            dispatch[ext_vector_kind] = self._lower_ext_vector_type
-        return dispatch
-
 
     def _lower_invalid(self, t: cx.Type, _ctx: TypeContext) -> Type:
         self.diagnostics.add_type_diag("warning", t, "invalid type (INVALID)")
@@ -133,39 +137,20 @@ class TypeLowerer:
             category="unexposed",
             spelling=t.spelling or "unexposed",
             reason="clang reported UNEXPOSED type kind",
-            size_bytes=max(0, t.get_size()) or None,
-            align_bytes=max(0, t.get_align()) or None,
+            size_bytes=self._safe_size(t),
+            align_bytes=self._safe_align(t),
         )
 
     def _lower_void(self, _t: cx.Type, _ctx: TypeContext) -> Type:
-        return Primitive(name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0)
-
-    def _lower_constant_array(self, t: cx.Type, ctx: TypeContext) -> Type:
-        return self._lower_array(t, sized=True, ctx=ctx)
-
-    def _lower_unsized_array(self, t: cx.Type, ctx: TypeContext) -> Type:
-        return self._lower_array(t, sized=False, ctx=ctx)
-
-    def _lower_record_with_ctx(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        return self._lower_record(t)
-
-    def _lower_enum_with_ctx(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        return self._lower_enum(t)
-
-    def _lower_complex_with_ctx(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        return self._lower_complex(t)
-
-    def _lower_vector_type(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        return self._lower_vector(t, is_ext_vector=False)
-
-    def _lower_ext_vector_type(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        return self._lower_vector(t, is_ext_vector=True)
+        return Primitive(
+            name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0
+        )
 
     def _lower_typedef(self, t: cx.Type, ctx: TypeContext) -> Type:
         decl = t.get_declaration()
         name = decl.spelling or t.spelling
         canonical = self.lower(t.get_canonical(), ctx)
-        if ctx in (TypeContext.PARAM, TypeContext.RETURN, TypeContext.TYPEDEF):
+        if ctx in _TYPEREF_CONTEXTS:
             return TypeRef(
                 decl_id=self.index.decl_id_for_cursor(decl),
                 name=name,
@@ -180,13 +165,16 @@ class TypeLowerer:
         if pointee.kind == cx.TypeKind.VOID:
             return Pointer(pointee=None, qualifiers=qualifiers)
         canonical_pointee = self._normalize(pointee.get_canonical())
-        if canonical_pointee.kind in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
+        if canonical_pointee.kind in (
+            cx.TypeKind.FUNCTIONPROTO,
+            cx.TypeKind.FUNCTIONNOPROTO,
+        ):
             return self._lower_fnptr(canonical_pointee, ctx)
         return Pointer(pointee=self.lower(pointee, ctx), qualifiers=qualifiers)
 
-    def _lower_array(self, t: cx.Type, *, sized: bool, ctx: TypeContext) -> Type:
+    def _lower_array(self, t: cx.Type, ctx: TypeContext) -> Type:
         element = self.lower(t.get_array_element_type(), ctx)
-        size = t.get_array_size() if sized else None
+        size = t.get_array_size() if t.kind == cx.TypeKind.CONSTANTARRAY else None
         return Array(element=element, size=size, array_kind=self._array_kind(t, ctx))
 
     def _lower_record(self, t: cx.Type) -> Type:
@@ -209,12 +197,14 @@ class TypeLowerer:
 
     def _lower_fnptr(self, t: cx.Type, ctx: TypeContext) -> FunctionPtr:
         ret = self.lower(t.get_result(), ctx)
-        params: list[Type] = []
-        is_variadic = False
-        if t.kind == cx.TypeKind.FUNCTIONPROTO:
-            for arg in t.argument_types():
-                params.append(self.lower(arg, ctx))
-            is_variadic = t.is_function_variadic()
+        params = (
+            [self.lower(arg, ctx) for arg in t.argument_types()]
+            if t.kind == cx.TypeKind.FUNCTIONPROTO
+            else []
+        )
+        is_variadic = (
+            t.is_function_variadic() if t.kind == cx.TypeKind.FUNCTIONPROTO else False
+        )
         return FunctionPtr(
             ret=ret,
             params=params,
@@ -223,14 +213,16 @@ class TypeLowerer:
         )
 
     def _lower_complex(self, t: cx.Type) -> Type:
-        element = self.primitive_resolver.resolve_primitive(self.compat.get_element_type(t))
+        element = self.primitive_resolver.resolve_primitive(
+            self.compat.get_element_type(t)
+        )
         if element is None:
             return UnsupportedType(
                 category="complex",
                 spelling=t.spelling or "complex",
                 reason="complex element type is not a primitive scalar",
-                size_bytes=max(0, t.get_size()) or None,
-                align_bytes=max(0, t.get_align()) or None,
+                size_bytes=self._safe_size(t),
+                align_bytes=self._safe_align(t),
             )
         return ComplexType(element=element, size_bytes=max(0, t.get_size()))
 
@@ -251,6 +243,6 @@ class TypeLowerer:
             category="unknown",
             spelling=t.spelling or "unknown",
             reason="type is neither scalar nor otherwise modeled",
-            size_bytes=max(0, t.get_size()) or None,
-            align_bytes=max(0, t.get_align()) or None,
+            size_bytes=self._safe_size(t),
+            align_bytes=self._safe_align(t),
         )

@@ -10,7 +10,8 @@ from __future__ import annotations
 import clang.cindex as cx
 
 from mojo_bindgen.ir import Field, Primitive, Struct, StructRef, Type
-from mojo_bindgen.parsing.interfaces import DeclarationIndex, DiagnosticSink
+from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.index import DeclIndex
 from mojo_bindgen.parsing.lowering.record_types import RecordRepository
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 
@@ -20,8 +21,8 @@ class RecordLowerer:
 
     def __init__(
         self,
-        index: DeclarationIndex,
-        diagnostics: DiagnosticSink,
+        index: DeclIndex,
+        diagnostics: ParserDiagnosticSink,
         type_lowerer: TypeLowerer,
         repository: RecordRepository,
     ) -> None:

@@ -14,7 +14,7 @@ from typing import Callable
 import clang.cindex as cx
 
 from mojo_bindgen.ir import OpaqueRecordRef, Struct, StructRef, Type, UnsupportedType
-from mojo_bindgen.parsing.interfaces import DeclarationIndex
+from mojo_bindgen.parsing.index import DeclIndex
 
 
 @dataclass
@@ -48,7 +48,7 @@ class RecordRepository:
 class RecordTypeResolver:
     """Resolve record-typed clang nodes without lowerers owning each other."""
 
-    index: DeclarationIndex
+    index: DeclIndex
     repository: RecordRepository
     _definition_lowerer: Callable[[cx.Cursor], tuple[list[Struct], Struct]] | None = None
 
