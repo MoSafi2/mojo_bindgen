@@ -174,6 +174,9 @@ def test_weird_stress_fixture_preserves_selected_hard_declarations() -> None:
         "ev_typeof_ptr",
     } <= names
 
+    die = next(decl for decl in unit.decls if isinstance(decl, Function) and decl.name == "ev_die")
+    assert die.is_noreturn is True
+
 
 def test_weird_stress_fixture_preserves_distinct_nested_anonymous_structs() -> None:
     from mojo_bindgen.ir import Struct

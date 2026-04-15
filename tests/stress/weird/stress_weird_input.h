@@ -117,9 +117,11 @@ struct ev_only_bits {
     unsigned int : 8;
 };
 
+//TODO: FIX: ignores alignement
 // Tests over-aligned struct declaration via _Alignas.
 _Alignas(64) struct ev_cacheline {
     int val;
+    int val2
 };
 
 // Tests pointer to function returning pointer to array.

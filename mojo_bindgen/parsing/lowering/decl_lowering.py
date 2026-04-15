@@ -120,7 +120,21 @@ class DeclLowerer:
             params=params,
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(fn_type),
+            is_noreturn=self._function_is_noreturn(cursor),
         )
+
+    @staticmethod
+    def _function_is_noreturn(cursor: cx.Cursor) -> bool:
+        """Return whether a function declaration carries a noreturn attribute."""
+        for child in cursor.get_children():
+            kind_name = child.kind.name
+            if kind_name in {"C11_NO_RETURN_ATTR", "NORETURN_ATTR"}:
+                return True
+            if child.kind == cx.CursorKind.UNEXPOSED_ATTR:
+                tokens = [token.spelling for token in child.get_tokens()]
+                if tokens == ["_Noreturn"]:
+                    return True
+        return False
 
     def _anonymous_enum_as_consts(self, cursor: cx.Cursor) -> list[Const]:
         underlying = self.primitive_resolver.resolve_primitive(cursor.enum_type)
