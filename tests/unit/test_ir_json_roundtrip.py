@@ -20,19 +20,60 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_minimal_types_from_json() -> None:
-    from mojo_bindgen.ir import EnumRef, OpaqueRecordRef, Primitive, StructRef, TypeRef
+    from mojo_bindgen.ir import (
+        AtomicType,
+        EnumRef,
+        FloatType,
+        IntType,
+        OpaqueRecordRef,
+        QualifiedType,
+        StructRef,
+        TypeRef,
+        VoidType,
+    )
 
     assert isinstance(
-        Primitive.from_json_dict(
+        IntType.from_json_dict(
             {
-                "kind": "Primitive",
-                "primitive_kind": "INT",
-                "name": "int",
-                "is_signed": True,
+                "kind": "IntType",
+                "int_kind": "INT",
                 "size_bytes": 4,
             }
         ),
-        Primitive,
+        IntType,
+    )
+    assert isinstance(
+        FloatType.from_json_dict(
+            {
+                "kind": "FloatType",
+                "float_kind": "DOUBLE",
+                "size_bytes": 8,
+            }
+        ),
+        FloatType,
+    )
+    assert isinstance(
+        VoidType.from_json_dict({"kind": "VoidType"}),
+        VoidType,
+    )
+    assert isinstance(
+        QualifiedType.from_json_dict(
+            {
+                "kind": "QualifiedType",
+                "unqualified": {"kind": "VoidType"},
+                "qualifiers": {"is_const": True},
+            }
+        ),
+        QualifiedType,
+    )
+    assert isinstance(
+        AtomicType.from_json_dict(
+            {
+                "kind": "AtomicType",
+                "value_type": {"kind": "IntType", "int_kind": "UINT", "size_bytes": 4},
+            }
+        ),
+        AtomicType,
     )
     assert isinstance(
         OpaqueRecordRef.from_json_dict(
@@ -64,10 +105,8 @@ def test_minimal_types_from_json() -> None:
             "name": "mode_t",
             "c_name": "mode_t",
             "underlying": {
-                "kind": "Primitive",
-                "primitive_kind": "INT",
-                "name": "unsigned int",
-                "is_signed": False,
+                "kind": "IntType",
+                "int_kind": "UINT",
                 "size_bytes": 4,
             },
         }
@@ -80,10 +119,8 @@ def test_minimal_types_from_json() -> None:
             "decl_id": "typedef:size_t",
             "name": "size_t",
             "canonical": {
-                "kind": "Primitive",
-                "primitive_kind": "INT",
-                "name": "unsigned long",
-                "is_signed": False,
+                "kind": "IntType",
+                "int_kind": "ULONG",
                 "size_bytes": 8,
             },
         }

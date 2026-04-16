@@ -1,8 +1,4 @@
-"""Primitive classification and literal ABI probing for parser lowering.
-
-This module owns primitive-type semantics used by type lowering and
-constant-expression parsing. It does not lower declarations or records.
-"""
+"""Primitive classification and literal ABI probing for parser lowering."""
 
 from __future__ import annotations
 
@@ -11,69 +7,58 @@ from dataclasses import dataclass
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import Primitive, PrimitiveKind
+from mojo_bindgen.ir import FloatKind, FloatType, IntKind, IntType, Type, VoidType
 from mojo_bindgen.utils import build_c_parse_args
 
 
 @dataclass(frozen=True)
-class BuiltinPrimitiveSpelling:
-    """Kind metadata for canonical primitive C spellings."""
+class BuiltinScalarSpelling:
+    """Kind metadata for canonical scalar C spellings."""
 
-    kind: PrimitiveKind
-    is_signed: bool = False
+    scalar: Type
 
 
-_PS_VOID = BuiltinPrimitiveSpelling(kind=PrimitiveKind.VOID)
-_PS_BOOL = BuiltinPrimitiveSpelling(kind=PrimitiveKind.BOOL)
-_PS_CHAR = BuiltinPrimitiveSpelling(kind=PrimitiveKind.CHAR)
-_PS_SINT = BuiltinPrimitiveSpelling(kind=PrimitiveKind.INT, is_signed=True)
-_PS_UINT = BuiltinPrimitiveSpelling(kind=PrimitiveKind.INT, is_signed=False)
-_PS_FLOAT = BuiltinPrimitiveSpelling(kind=PrimitiveKind.FLOAT)
+def _int(int_kind: IntKind, size_bytes: int | None = None) -> IntType:
+    size = 0 if size_bytes is None else size_bytes
+    return IntType(int_kind=int_kind, size_bytes=size)
 
-_PRIMITIVE_SPELLINGS: dict[str, BuiltinPrimitiveSpelling] = {
-    "void": _PS_VOID,
-    "_Bool": _PS_BOOL,
-    "char": _PS_CHAR,
-    "signed char": _PS_SINT,
-    "unsigned char": _PS_UINT,
-    "short": _PS_SINT,
-    "short int": _PS_SINT,
-    "signed short": _PS_SINT,
-    "signed short int": _PS_SINT,
-    "unsigned short": _PS_UINT,
-    "unsigned short int": _PS_UINT,
-    "int": _PS_SINT,
-    "signed": _PS_SINT,
-    "signed int": _PS_SINT,
-    "unsigned": _PS_UINT,
-    "unsigned int": _PS_UINT,
-    "long": _PS_SINT,
-    "long int": _PS_SINT,
-    "signed long": _PS_SINT,
-    "unsigned long": _PS_UINT,
-    "unsigned long int": _PS_UINT,
-    "long long": _PS_SINT,
-    "long long int": _PS_SINT,
-    "signed long long": _PS_SINT,
-    "signed long long int": _PS_SINT,
-    "unsigned long long": _PS_UINT,
-    "unsigned long long int": _PS_UINT,
-    "float": _PS_FLOAT,
-    "double": _PS_FLOAT,
-    "long double": _PS_FLOAT,
-    "int8_t": _PS_SINT,
-    "int16_t": _PS_SINT,
-    "int32_t": _PS_SINT,
-    "int64_t": _PS_SINT,
-    "uint8_t": _PS_UINT,
-    "uint16_t": _PS_UINT,
-    "uint32_t": _PS_UINT,
-    "uint64_t": _PS_UINT,
-    "size_t": _PS_UINT,
-    "ssize_t": _PS_SINT,
-    "ptrdiff_t": _PS_SINT,
-    "intptr_t": _PS_SINT,
-    "uintptr_t": _PS_UINT,
+
+def _float(float_kind: FloatKind, size_bytes: int | None = None) -> FloatType:
+    size = 0 if size_bytes is None else size_bytes
+    return FloatType(float_kind=float_kind, size_bytes=size)
+
+
+_SCALAR_SPELLINGS: dict[str, BuiltinScalarSpelling] = {
+    "void": BuiltinScalarSpelling(VoidType()),
+    "_Bool": BuiltinScalarSpelling(_int(IntKind.BOOL)),
+    "char": BuiltinScalarSpelling(_int(IntKind.CHAR_S)),
+    "signed char": BuiltinScalarSpelling(_int(IntKind.SCHAR)),
+    "unsigned char": BuiltinScalarSpelling(_int(IntKind.UCHAR)),
+    "short": BuiltinScalarSpelling(_int(IntKind.SHORT)),
+    "short int": BuiltinScalarSpelling(_int(IntKind.SHORT)),
+    "signed short": BuiltinScalarSpelling(_int(IntKind.SHORT)),
+    "signed short int": BuiltinScalarSpelling(_int(IntKind.SHORT)),
+    "unsigned short": BuiltinScalarSpelling(_int(IntKind.USHORT)),
+    "unsigned short int": BuiltinScalarSpelling(_int(IntKind.USHORT)),
+    "int": BuiltinScalarSpelling(_int(IntKind.INT)),
+    "signed": BuiltinScalarSpelling(_int(IntKind.INT)),
+    "signed int": BuiltinScalarSpelling(_int(IntKind.INT)),
+    "unsigned": BuiltinScalarSpelling(_int(IntKind.UINT)),
+    "unsigned int": BuiltinScalarSpelling(_int(IntKind.UINT)),
+    "long": BuiltinScalarSpelling(_int(IntKind.LONG)),
+    "long int": BuiltinScalarSpelling(_int(IntKind.LONG)),
+    "signed long": BuiltinScalarSpelling(_int(IntKind.LONG)),
+    "unsigned long": BuiltinScalarSpelling(_int(IntKind.ULONG)),
+    "unsigned long int": BuiltinScalarSpelling(_int(IntKind.ULONG)),
+    "long long": BuiltinScalarSpelling(_int(IntKind.LONGLONG)),
+    "long long int": BuiltinScalarSpelling(_int(IntKind.LONGLONG)),
+    "signed long long": BuiltinScalarSpelling(_int(IntKind.LONGLONG)),
+    "signed long long int": BuiltinScalarSpelling(_int(IntKind.LONGLONG)),
+    "unsigned long long": BuiltinScalarSpelling(_int(IntKind.ULONGLONG)),
+    "unsigned long long int": BuiltinScalarSpelling(_int(IntKind.ULONGLONG)),
+    "float": BuiltinScalarSpelling(_float(FloatKind.FLOAT)),
+    "double": BuiltinScalarSpelling(_float(FloatKind.DOUBLE)),
+    "long double": BuiltinScalarSpelling(_float(FloatKind.LONG_DOUBLE)),
 }
 
 
@@ -151,9 +136,9 @@ FLOAT_KINDS = {
 }
 
 
-def default_signed_int_primitive() -> Primitive:
+def default_signed_int_primitive() -> IntType:
     """Return the parser's default signed int primitive fallback."""
-    return Primitive("int", kind=PrimitiveKind.INT, is_signed=True, size_bytes=4)
+    return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
 def _c_integer_spelling_for_literal_suffix(suffix: str) -> str:
@@ -176,15 +161,15 @@ def _suffix_probe_parse_args(compile_args: list[str]) -> list[str]:
 
 
 class PrimitiveResolver:
-    """Primitive classification and integer-literal ABI probing."""
+    """Scalar classification and integer-literal ABI probing."""
 
     def __init__(self, compile_args: list[str]) -> None:
         self.compile_args = list(compile_args)
-        self._literal_suffix_cache: dict[str, Primitive] = {}
+        self._literal_suffix_cache: dict[str, IntType] = {}
         for suffix in _LITERAL_SUFFIX_PREWARM:
             self.primitive_for_integer_literal_suffix(suffix)
 
-    def primitive_for_integer_literal_suffix(self, suffix: str) -> Primitive:
+    def primitive_for_integer_literal_suffix(self, suffix: str) -> IntType:
         """Map an integer literal suffix to an ABI-correct primitive."""
         if suffix in self._literal_suffix_cache:
             return self._literal_suffix_cache[suffix]
@@ -197,7 +182,7 @@ class PrimitiveResolver:
             unsaved_files=[("__bindgen_suffix_probe.c", src)],
             options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
         )
-        prim: Primitive | None = None
+        prim: IntType | None = None
         for cursor in tu.cursor.get_children():
             if (
                 cursor.kind == cx.CursorKind.VAR_DECL
@@ -207,54 +192,128 @@ class PrimitiveResolver:
                 break
         if prim is None:
             prim = default_signed_int_primitive()
-            prim.name = spelling
-            prim.is_signed = "unsigned" not in spelling.split()
+            if "unsigned" in spelling.split():
+                prim = IntType(int_kind=IntKind.UINT, size_bytes=prim.size_bytes)
         self._literal_suffix_cache[suffix] = prim
         return prim
 
-    def make_primitive_from_kind(self, clang_type: cx.Type) -> Primitive:
-        """Lower a scalar clang type to a primitive IR node."""
+    def make_primitive_from_kind(self, clang_type: cx.Type) -> IntType:
+        """Lower an integer-like clang type to an integer IR node."""
+        scalar = self.resolve_primitive(clang_type)
+        if not isinstance(scalar, IntType):
+            return default_signed_int_primitive()
+        return scalar
+
+    @staticmethod
+    def _size_and_align(canonical: cx.Type) -> tuple[int, int | None]:
+        size_raw = canonical.get_size()
+        align_raw = canonical.get_align()
+        size_bytes = size_raw if size_raw > 0 else 0
+        align_bytes = align_raw if align_raw > 0 else None
+        return size_bytes, align_bytes
+
+    @classmethod
+    def _int_kind_for_type(cls, canonical: cx.Type, norm: str) -> IntKind:
+        tk = canonical.kind
+        if tk == cx.TypeKind.BOOL:
+            return IntKind.BOOL
+        if tk == cx.TypeKind.CHAR_S and norm == "char":
+            return IntKind.CHAR_S
+        if tk == cx.TypeKind.CHAR_U and norm == "char":
+            return IntKind.CHAR_U
+        if tk == cx.TypeKind.SCHAR:
+            return IntKind.SCHAR
+        if tk == cx.TypeKind.UCHAR:
+            return IntKind.UCHAR
+        if tk == cx.TypeKind.SHORT:
+            return IntKind.SHORT
+        if tk == cx.TypeKind.USHORT:
+            return IntKind.USHORT
+        if tk == cx.TypeKind.INT:
+            return IntKind.INT
+        if tk == cx.TypeKind.UINT:
+            return IntKind.UINT
+        if tk == cx.TypeKind.LONG:
+            return IntKind.LONG
+        if tk == cx.TypeKind.ULONG:
+            return IntKind.ULONG
+        if tk == cx.TypeKind.LONGLONG:
+            return IntKind.LONGLONG
+        if tk == cx.TypeKind.ULONGLONG:
+            return IntKind.ULONGLONG
+        if tk == cx.TypeKind.INT128:
+            return IntKind.INT128
+        if tk == cx.TypeKind.UINT128:
+            return IntKind.UINT128
+        if tk == cx.TypeKind.WCHAR:
+            return IntKind.WCHAR
+        if tk == cx.TypeKind.CHAR16:
+            return IntKind.CHAR16
+        if tk == cx.TypeKind.CHAR32:
+            return IntKind.CHAR32
+        return IntKind.EXT_INT
+
+    @staticmethod
+    def _float_kind_for_type(canonical: cx.Type, norm: str) -> FloatKind:
+        tk = canonical.kind
+        if tk == cx.TypeKind.HALF:
+            return FloatKind.FLOAT16
+        if tk == cx.TypeKind.FLOAT:
+            return FloatKind.FLOAT
+        if tk == cx.TypeKind.DOUBLE:
+            return FloatKind.DOUBLE
+        if tk == cx.TypeKind.LONGDOUBLE:
+            return FloatKind.LONG_DOUBLE
+        if "__float128" in norm or "_Float128" in norm:
+            return FloatKind.FLOAT128
+        return FloatKind.DOUBLE
+
+    @staticmethod
+    def _ext_int_bits(norm: str) -> int | None:
+        match = re.search(r"(?:_BitInt|_ExtInt)\s*\(\s*(\d+)\s*\)", norm)
+        return int(match.group(1)) if match else None
+
+    def resolve_primitive(self, clang_type: cx.Type) -> Type | None:
+        """Return a scalar IR node for scalar clang types, else ``None``."""
         canonical = clang_type.get_canonical()
         spelling = canonical.spelling
         norm = re.sub(r"\b(const|volatile|restrict)\b", "", spelling).strip()
+        defaults = _SCALAR_SPELLINGS.get(norm)
+        size_bytes, align_bytes = self._size_and_align(canonical)
+        if defaults is not None:
+            scalar = defaults.scalar
+            if isinstance(scalar, VoidType):
+                return scalar
+            if isinstance(scalar, IntType):
+                int_kind = scalar.int_kind
+                if norm == "char" and canonical.kind == cx.TypeKind.CHAR_U:
+                    int_kind = IntKind.CHAR_U
+                return IntType(
+                    int_kind=int_kind,
+                    size_bytes=size_bytes,
+                    align_bytes=align_bytes,
+                )
+            if isinstance(scalar, FloatType):
+                return FloatType(
+                    float_kind=scalar.float_kind,
+                    size_bytes=size_bytes,
+                    align_bytes=align_bytes,
+                )
 
-        defaults = _PRIMITIVE_SPELLINGS.get(norm)
-        if defaults:
-            kind = defaults.kind
-            if kind == PrimitiveKind.INT:
-                is_signed = defaults.is_signed
-            elif kind == PrimitiveKind.CHAR:
-                is_signed = canonical.kind == cx.TypeKind.CHAR_S
-            else:
-                is_signed = False
-        else:
-            tk = canonical.kind
-            if tk == cx.TypeKind.BOOL:
-                kind = PrimitiveKind.BOOL
-                is_signed = False
-            elif tk in FLOAT_KINDS:
-                kind = PrimitiveKind.FLOAT
-                is_signed = False
-            elif tk in (cx.TypeKind.CHAR_S, cx.TypeKind.CHAR_U) and norm == "char":
-                kind = PrimitiveKind.CHAR
-                is_signed = tk == cx.TypeKind.CHAR_S
-            else:
-                kind = PrimitiveKind.INT
-                is_signed = tk in SIGNED_INT_KINDS
-
-        size_raw = canonical.get_size()
-        size_bytes = size_raw if size_raw > 0 else 0
-        return Primitive(
-            name=norm or spelling,
-            kind=kind,
-            is_signed=is_signed,
-            size_bytes=size_bytes,
-        )
-
-    def resolve_primitive(self, clang_type: cx.Type) -> Primitive | None:
-        """Return a primitive for scalar clang types, else ``None``."""
-        canonical = clang_type.get_canonical()
         tk = canonical.kind
-        if tk not in SCALAR_KINDS:
-            return None
-        return self.make_primitive_from_kind(clang_type)
+        if tk == cx.TypeKind.VOID:
+            return VoidType()
+        if tk in FLOAT_KINDS or "__float128" in norm or "_Float128" in norm:
+            return FloatType(
+                float_kind=self._float_kind_for_type(canonical, norm),
+                size_bytes=size_bytes,
+                align_bytes=align_bytes,
+            )
+        if tk in SCALAR_KINDS:
+            return IntType(
+                int_kind=self._int_kind_for_type(canonical, norm),
+                size_bytes=size_bytes,
+                align_bytes=align_bytes,
+                ext_bits=self._ext_int_bits(norm),
+            )
+        return None

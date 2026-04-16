@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mojo_bindgen.ir import BinaryExpr, FloatLiteral, IntLiteral, NullPtrLiteral, RefExpr, StringLiteral
+from mojo_bindgen.ir import BinaryExpr, FloatLiteral, FloatType, IntLiteral, IntType, NullPtrLiteral, RefExpr, StringLiteral
 from mojo_bindgen.parsing.lowering import ConstExprParser, PrimitiveResolver
 
 
@@ -37,8 +37,8 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
     assert int_expr.expr.value == 42
     assert isinstance(float_expr.expr, FloatLiteral)
     assert float_expr.expr.value == "3.14159265"
-    assert float_expr.primitive is not None
-    assert float_expr.primitive.kind.value == "FLOAT"
+    assert isinstance(float_expr.primitive, FloatType)
+    assert float_expr.primitive.float_kind.value == "DOUBLE"
     assert isinstance(null_expr.expr, NullPtrLiteral)
     assert isinstance(nested_null_expr.expr, NullPtrLiteral)
     assert isinstance(string_expr.expr, StringLiteral)
@@ -47,8 +47,8 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
     assert ref_expr.expr.name == "DEFAULT_VALUE"
     assert isinstance(combined_expr.expr, BinaryExpr)
     assert combined_expr.expr.op == "|"
-    assert combined_expr.primitive is not None
-    assert combined_expr.primitive.kind.value == "INT"
+    assert isinstance(combined_expr.primitive, IntType)
+    assert combined_expr.primitive.int_kind.value == "UINT"
 
 
 def test_const_expr_parser_rejects_still_unsupported_expression_subset() -> None:

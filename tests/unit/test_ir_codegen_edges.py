@@ -10,17 +10,21 @@ from mojo_bindgen.ir import (
     BinaryExpr,
     Const,
     Field,
+    FloatKind,
+    FloatType,
     Function,
     FunctionPtr,
     GlobalVar,
+    IntKind,
+    IntType,
     IntLiteral,
     MacroDecl,
     NullPtrLiteral,
     OpaqueRecordRef,
     Param,
     Pointer,
-    Primitive,
-    PrimitiveKind,
+    QualifiedType,
+    Qualifiers,
     RefExpr,
     StringLiteral,
     Struct,
@@ -29,11 +33,16 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
     UnsupportedType,
+    VoidType,
 )
 
 
-def _i32() -> Primitive:
-    return Primitive(name="int", kind=PrimitiveKind.INT, is_signed=True, size_bytes=4)
+def _i32() -> IntType:
+    return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+
+
+def _char() -> IntType:
+    return IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
 
 
 def test_lower_opaque_record_ref_as_opaque_pointer() -> None:
@@ -80,7 +89,7 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
             ),
             Const(
                 name="LIB_NAME",
-                type=Primitive(name="char", kind=PrimitiveKind.CHAR, is_signed=True, size_bytes=1),
+                type=_char(),
                 expr=StringLiteral("bindgen"),
             ),
             Const(name="LIMIT", type=i32, expr=IntLiteral(7)),
@@ -107,7 +116,7 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
                 tokens=["(", "void", "*", ")", "0"],
                 kind="object_like_supported",
                 expr=NullPtrLiteral(),
-                type=Primitive(name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0),
+                type=VoidType(),
             ),
             MacroDecl(
                 name="MACRO_GENERIC",
@@ -375,8 +384,8 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
             )
         )
     )
-    argv = Pointer(pointee=Pointer(pointee=Primitive("char", PrimitiveKind.CHAR, True, 1)))
-    err = Pointer(pointee=Pointer(pointee=Primitive("char", PrimitiveKind.CHAR, True, 1)))
+    argv = Pointer(pointee=Pointer(pointee=_char()))
+    err = Pointer(pointee=Pointer(pointee=_char()))
     cb = FunctionPtr(
         ret=i32,
         params=[sqlite3_ref, Pointer(pointee=None), i32, argv, vtab_out, err],
@@ -416,7 +425,7 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
         is_variadic=False,
     )
     destroy_cb = FunctionPtr(
-        ret=Primitive(name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0),
+        ret=VoidType(),
         params=[opaque],
         param_names=["ctx"],
         is_variadic=False,
@@ -436,7 +445,7 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
         ret=i32,
         params=[
             Param(name="db", type=db),
-            Param(name="zName", type=Pointer(pointee=Primitive("char", PrimitiveKind.CHAR, True, 1))),
+            Param(name="zName", type=Pointer(pointee=_char())),
             Param(name="eTextRep", type=i32),
             Param(name="ctx", type=opaque),
             Param(name="xCompare", type=cmp_cb),

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from mojo_bindgen.ir import (
+    AtomicType,
     Array,
     Const,
     GlobalVar,
@@ -23,12 +24,14 @@ from mojo_bindgen.ir import (
     EnumRef,
     ComplexType,
     Field,
+    FloatType,
     Function,
     FunctionPtr,
+    IntType,
     MacroDecl,
     OpaqueRecordRef,
     Pointer,
-    Primitive,
+    QualifiedType,
     Struct,
     StructRef,
     Type,
@@ -43,7 +46,7 @@ from mojo_bindgen.codegen.lowering import (
     FFIOriginStyle,
     TypeLowerer,
     mojo_ident,
-    peel_typeref,
+    peel_wrappers,
 )
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
@@ -77,6 +80,10 @@ def _type_needs_opaque_pointer_import(t: Type) -> bool:
     """Return whether lowering ``t`` requires opaque pointer imports."""
     if isinstance(t, TypeRef):
         return _type_needs_opaque_pointer_import(t.canonical)
+    if isinstance(t, QualifiedType):
+        return _type_needs_opaque_pointer_import(t.unqualified)
+    if isinstance(t, AtomicType):
+        return _type_needs_opaque_pointer_import(t.value_type)
     if isinstance(t, EnumRef):
         return False
     if isinstance(t, Pointer):
@@ -116,10 +123,8 @@ def unit_needs_opaque_imports(unit: Unit) -> bool:
 
 def _type_ok_for_unsafe_union_member(t: Type) -> bool:
     """Return whether ``t`` can participate in an emitted ``UnsafeUnion``."""
-    u = peel_typeref(t)
-    if isinstance(u, TypeRef):
-        u = u.canonical
-    return isinstance(u, (Primitive, Pointer, FunctionPtr, OpaqueRecordRef))
+    u = peel_wrappers(t)
+    return isinstance(u, (IntType, FloatType, Pointer, FunctionPtr, OpaqueRecordRef))
 
 
 def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> list[str] | None:
@@ -162,7 +167,11 @@ def _type_ok_for_register_passable_field(
         visiting = set()
     if isinstance(t, TypeRef):
         return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
-    if isinstance(t, (Primitive, EnumRef, OpaqueRecordRef, FunctionPtr)):
+    if isinstance(t, QualifiedType):
+        return _type_ok_for_register_passable_field(t.unqualified, struct_by_id, visiting)
+    if isinstance(t, AtomicType):
+        return _type_ok_for_register_passable_field(t.value_type, struct_by_id, visiting)
+    if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
         return True
     if isinstance(t, (UnsupportedType, VectorType, ComplexType)):
         return False
@@ -453,7 +462,7 @@ def _analyze_function(
             ret_callback_alias_name=ret_callback_alias_name,
             param_callback_alias_names=param_callback_alias_names,
         )
-    ret_u = peel_typeref(fn.ret)
+    ret_u = peel_wrappers(fn.ret)
     if isinstance(ret_u, StructRef):
         rs = struct_map.get(ret_u.decl_id)
         if rs is not None and not struct_decl_register_passable(rs, struct_map):
@@ -484,7 +493,7 @@ def _supports_callback_alias(fp: FunctionPtr) -> bool:
 
 def _function_ptr_from_type(t: Type) -> FunctionPtr | None:
     """Unwrap a direct or typedef-backed function-pointer type."""
-    u = peel_typeref(t)
+    u = peel_wrappers(t)
     return u if isinstance(u, FunctionPtr) else None
 
 

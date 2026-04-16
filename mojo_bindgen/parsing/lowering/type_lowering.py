@@ -7,18 +7,20 @@ from typing import Callable
 import clang.cindex as cx
 
 from mojo_bindgen.ir import (
+    AtomicType,
     Array,
     ComplexType,
     EnumRef,
+    FloatType,
     FunctionPtr,
     Pointer,
-    Primitive,
-    PrimitiveKind,
     Qualifiers,
+    QualifiedType,
     Type,
     TypeRef,
     UnsupportedType,
     VectorType,
+    VoidType,
 )
 from mojo_bindgen.parsing.compat import ClangCompat
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
@@ -89,6 +91,8 @@ class TypeLowerer:
             dispatch[ext_vector_kind] = lambda t, _ctx: self._lower_vector(
                 t, is_ext_vector=True
             )
+        if (atomic_kind := getattr(cx.TypeKind, "ATOMIC", None)) is not None:
+            dispatch[atomic_kind] = self._lower_atomic
         return dispatch
 
     @staticmethod
@@ -142,9 +146,7 @@ class TypeLowerer:
         )
 
     def _lower_void(self, _t: cx.Type, _ctx: TypeContext) -> Type:
-        return Primitive(
-            name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0
-        )
+        return VoidType()
 
     def _lower_typedef(self, t: cx.Type, ctx: TypeContext) -> Type:
         decl = t.get_declaration()
@@ -163,14 +165,19 @@ class TypeLowerer:
         qualifiers = self._qualifiers(raw_pointee)
         pointee = self._normalize(raw_pointee)
         if pointee.kind == cx.TypeKind.VOID:
-            return Pointer(pointee=None, qualifiers=qualifiers)
+            if qualifiers == Qualifiers():
+                return Pointer(pointee=None)
+            return Pointer(pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers))
         canonical_pointee = self._normalize(pointee.get_canonical())
         if canonical_pointee.kind in (
             cx.TypeKind.FUNCTIONPROTO,
             cx.TypeKind.FUNCTIONNOPROTO,
         ):
             return self._lower_fnptr(canonical_pointee, ctx)
-        return Pointer(pointee=self.lower(pointee, ctx), qualifiers=qualifiers)
+        lowered = self.lower(pointee, ctx)
+        if qualifiers != Qualifiers():
+            lowered = QualifiedType(unqualified=lowered, qualifiers=qualifiers)
+        return Pointer(pointee=lowered)
 
     def _lower_array(self, t: cx.Type, ctx: TypeContext) -> Type:
         element = self.lower(t.get_array_element_type(), ctx)
@@ -216,7 +223,7 @@ class TypeLowerer:
         element = self.primitive_resolver.resolve_primitive(
             self.compat.get_element_type(t)
         )
-        if element is None:
+        if not isinstance(element, FloatType):
             return UnsupportedType(
                 category="complex",
                 spelling=t.spelling or "complex",
@@ -233,6 +240,49 @@ class TypeLowerer:
             count=self.compat.get_num_elements(t),
             size_bytes=max(0, t.get_size()),
             is_ext_vector=is_ext_vector,
+        )
+
+    def _lower_atomic(self, t: cx.Type, ctx: TypeContext) -> Type:
+        inner = self._lower_atomic_value_type(t, ctx)
+        self.diagnostics.add_type_diag(
+            "warning",
+            t,
+            "atomic semantics are preserved in IR but erased in generated Mojo",
+        )
+        return AtomicType(value_type=inner)
+
+    def _lower_atomic_value_type(self, t: cx.Type, ctx: TypeContext) -> Type:
+        spelling = t.spelling.strip()
+        if spelling.startswith("_Atomic(") and spelling.endswith(")"):
+            inner_spelling = spelling[len("_Atomic(") : -1].strip()
+        elif spelling.startswith("_Atomic "):
+            inner_spelling = spelling[len("_Atomic ") :].strip()
+        else:
+            return UnsupportedType(
+                category="unsupported_extension",
+                spelling=spelling or "_Atomic",
+                reason="unable to recover atomic value type from clang spelling",
+                size_bytes=self._safe_size(t),
+                align_bytes=self._safe_align(t),
+            )
+
+        idx = cx.Index.create()
+        src = f"{inner_spelling} __bindgen_atomic_inner;\n"
+        tu = idx.parse(
+            "__bindgen_atomic_inner.c",
+            args=self.primitive_resolver.compile_args,
+            unsaved_files=[("__bindgen_atomic_inner.c", src)],
+            options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
+        )
+        for cursor in tu.cursor.get_children():
+            if cursor.kind == cx.CursorKind.VAR_DECL and cursor.spelling == "__bindgen_atomic_inner":
+                return self.lower(cursor.type, ctx)
+        return UnsupportedType(
+            category="unsupported_extension",
+            spelling=spelling or "_Atomic",
+            reason="failed to parse atomic value type from recovered spelling",
+            size_bytes=self._safe_size(t),
+            align_bytes=self._safe_align(t),
         )
 
     def _lower_primitive(self, t: cx.Type) -> Type:

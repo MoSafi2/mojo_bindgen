@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.ir import Field, Primitive, PrimitiveKind, Struct
+from mojo_bindgen.ir import Field, IntKind, IntType, Struct
 from mojo_bindgen.codegen.analysis import analyzed_struct_for_test, struct_by_decl_id
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.render import render_struct
@@ -65,12 +65,7 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
 
 def test_align_omitted_comment_for_invalid_c_align_bytes() -> None:
     """Non-power-of-two alignment cannot be expressed as Mojo @align."""
-    p = Primitive(
-        kind=PrimitiveKind.INT,
-        size_bytes=4,
-        is_signed=True,
-        name="int",
-    )
+    p = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
     f = Field(name="x", source_name="x", type=p, byte_offset=0)
     bad = Struct(
         decl_id="bad_align",

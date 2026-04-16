@@ -3,8 +3,9 @@ mojo-bindgen IR (intermediate representation) node definitions.
 
 IR node types (as Python classes / unions in this module):
 
-- Type nodes: `Primitive`, `Pointer`, `Array`, `FunctionPtr`, `OpaqueRecordRef`,
-  `UnsupportedType`, `ComplexType`, `VectorType`, `StructRef`, `EnumRef`, `TypeRef`
+- Type nodes: `VoidType`, `IntType`, `FloatType`, `QualifiedType`, `AtomicType`,
+  `Pointer`, `Array`, `FunctionPtr`, `OpaqueRecordRef`, `UnsupportedType`,
+  `ComplexType`, `VectorType`, `StructRef`, `EnumRef`, `TypeRef`
   (union alias: `Type`)
 - Constant-expression nodes: `IntLiteral`, `FloatLiteral`, `StringLiteral`,
   `CharLiteral`, `NullPtrLiteral`, `RefExpr`, `UnaryExpr`, `BinaryExpr`, `CastExpr`,
@@ -28,6 +29,7 @@ from typing import (
     cast,
     get_args,
     get_origin,
+    get_type_hints,
 )
 
 
@@ -131,6 +133,7 @@ class SerDeMixin:
         if kind is not None:
             _expect_kind(d, kind)
 
+        type_hints = get_type_hints(cls)
         kwargs: dict[str, Any] = {}
         for f in fields(cast(Any, cls)):
             if f.metadata.get("json_exclude", False):
@@ -155,18 +158,42 @@ class SerDeMixin:
                 except TypeError:
                     kwargs[f.name] = from_json(raw)
             else:
-                kwargs[f.name] = _decode_json_value(raw, f.type)
+                kwargs[f.name] = _decode_json_value(raw, type_hints.get(f.name, f.type))
         return cls(**kwargs)  # type: ignore[call-arg]
 
 
-class PrimitiveKind(StrEnum):
-    """Discriminant for C scalars; JSON-serializes to the enum value string."""
+class IntKind(StrEnum):
+    """Discriminant for integer-like scalars and character-width integer types."""
 
-    INT = "INT"
-    CHAR = "CHAR"
-    FLOAT = "FLOAT"
     BOOL = "BOOL"
-    VOID = "VOID"
+    CHAR_S = "CHAR_S"
+    CHAR_U = "CHAR_U"
+    SCHAR = "SCHAR"
+    UCHAR = "UCHAR"
+    SHORT = "SHORT"
+    USHORT = "USHORT"
+    INT = "INT"
+    UINT = "UINT"
+    LONG = "LONG"
+    ULONG = "ULONG"
+    LONGLONG = "LONGLONG"
+    ULONGLONG = "ULONGLONG"
+    INT128 = "INT128"
+    UINT128 = "UINT128"
+    WCHAR = "WCHAR"
+    CHAR16 = "CHAR16"
+    CHAR32 = "CHAR32"
+    EXT_INT = "EXT_INT"
+
+
+class FloatKind(StrEnum):
+    """Discriminant for floating-point scalar families."""
+
+    FLOAT16 = "FLOAT16"
+    FLOAT = "FLOAT"
+    DOUBLE = "DOUBLE"
+    LONG_DOUBLE = "LONG_DOUBLE"
+    FLOAT128 = "FLOAT128"
 
 
 UnsupportedTypeCategory = Literal[
@@ -223,46 +250,77 @@ def _expect_kind(d: dict[str, Any], kind: str) -> None:
 # ─────────────────────────────────────────────
 
 
-@dataclass
-class Primitive(SerDeMixin):
-    """
-    Any scalar C type that maps directly to a Mojo built-in.
-    size_bytes comes from clang Type.get_size() — never hardcoded.
-    Typical values are 0 (void), 1–8 for integers/bool, often 16 for
-    long double / __int128; half-precision (_Float16) uses the size the
-    target ABI reports.
+@dataclass(frozen=True)
+class VoidType(SerDeMixin):
+    """The unqualified C ``void`` type."""
 
-    kind classifies the scalar for lowering (e.g. Mojo ``char`` vs ``Int8``).
+    KIND: ClassVar[str | None] = "VoidType"
 
-    is_signed: for kind INT, signed vs unsigned integer. For kind CHAR, reflects
-    implementation-defined signedness of plain ``char`` (CHAR_S vs CHAR_U from
-    clang). Unused (False) for FLOAT, BOOL, VOID.
-    """
 
-    name: str  # canonical C spelling: "unsigned int", "long long", ...
-    kind: PrimitiveKind = field(
+@dataclass(frozen=True)
+class IntType(SerDeMixin):
+    """Explicit integer-like scalar type with ABI width metadata."""
+
+    int_kind: IntKind = field(
         metadata={
-            "json_key": "primitive_kind",
             "to_json": lambda k: k.value,
-            "from_json": lambda raw: PrimitiveKind(raw),
+            "from_json": lambda raw: IntKind(raw),
         }
     )
-    is_signed: bool
-    size_bytes: int  # from clang; often 0,1,2,4,8, or 16
-    KIND: ClassVar[str | None] = "Primitive"
+    size_bytes: int
+    align_bytes: int | None = None
+    ext_bits: int | None = None
+    KIND: ClassVar[str | None] = "IntType"
     __json_field_order__: ClassVar[list[str] | None] = [
-        "primitive_kind",
-        "name",
-        "is_signed",
+        "int_kind",
         "size_bytes",
+        "align_bytes",
+        "ext_bits",
     ]
+
+
+@dataclass(frozen=True)
+class FloatType(SerDeMixin):
+    """Explicit floating-point scalar type with ABI width metadata."""
+
+    float_kind: FloatKind = field(
+        metadata={
+            "to_json": lambda k: k.value,
+            "from_json": lambda raw: FloatKind(raw),
+        }
+    )
+    size_bytes: int
+    align_bytes: int | None = None
+    KIND: ClassVar[str | None] = "FloatType"
+    __json_field_order__: ClassVar[list[str] | None] = [
+        "float_kind",
+        "size_bytes",
+        "align_bytes",
+    ]
+
+
+@dataclass(frozen=True)
+class QualifiedType(SerDeMixin):
+    """A use-site application of C qualifiers to an underlying structural type."""
+
+    unqualified: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    qualifiers: Qualifiers = field(default_factory=Qualifiers)
+    KIND: ClassVar[str | None] = "QualifiedType"
+
+
+@dataclass(frozen=True)
+class AtomicType(SerDeMixin):
+    """A C11 ``_Atomic(T)`` wrapper around an underlying value type."""
+
+    value_type: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    KIND: ClassVar[str | None] = "AtomicType"
 
 
 @dataclass
 class Pointer(SerDeMixin):
     """
-    T* or qualified T*.
-    pointee=None means void* → emit OpaquePointer directly.
+    T*.
+    pointee=None means unqualified ``void*`` → emit OpaquePointer directly.
     """
 
     pointee: Type | None = field(
@@ -270,19 +328,7 @@ class Pointer(SerDeMixin):
             "from_json": lambda raw: None if raw is None else type_from_json(raw),
         }
     )  # None == void*
-    qualifiers: Qualifiers = field(default_factory=Qualifiers)
     KIND: ClassVar[str | None] = "Pointer"
-
-    @classmethod
-    def from_json_dict(cls, d: dict[str, Any]) -> Self:
-        _expect_kind(d, "Pointer")
-        pointee = d.get("pointee")
-        return cls(
-            pointee=None if pointee is None else type_from_json(pointee),
-            qualifiers=Qualifiers.from_json_dict(
-                d.get("qualifiers", {"is_const": d.get("is_const", False)})
-            ),
-        )
 
 
 @dataclass
@@ -361,7 +407,7 @@ class ComplexType(SerDeMixin):
     preserves the exact layout width reported by clang.
     """
 
-    element: Primitive
+    element: FloatType
     size_bytes: int
     KIND: ClassVar[str | None] = "ComplexType"
 
@@ -412,7 +458,7 @@ class EnumRef(SerDeMixin):
     name: str
     c_name: str
     KIND: ClassVar[str | None] = "EnumRef"
-    underlying: Primitive = field(
+    underlying: IntType = field(
         metadata={"from_json": lambda raw: type_from_json(raw)}  # type: ignore[arg-type]
     )
 
@@ -506,7 +552,11 @@ class Struct(SerDeMixin):
 
 # Recursive type nodes (no inline Struct/Bitfield — layouts are Struct decls + Field metadata)
 Type = Union[
-    Primitive,
+    VoidType,
+    IntType,
+    FloatType,
+    QualifiedType,
+    AtomicType,
     Pointer,
     Array,
     FunctionPtr,
@@ -644,13 +694,13 @@ class Enum(SerDeMixin):
         struct EnumName(Copyable, Movable, RegisterPassable):
             var value: <underlying Mojo int>
             comptime MEMBER = Self(<underlying>(value))
-    underlying is always Primitive with kind INT (C enum base type is integer).
+    underlying is always IntType (C enum base type is integer).
     """
 
     decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
     name: str
     c_name: str
-    underlying: Primitive
+    underlying: IntType
     enumerants: list[Enumerant]
     KIND: ClassVar[str | None] = "Enum"
 
@@ -846,7 +896,11 @@ class Unit(SerDeMixin):
 
 
 _TYPE_FROM_JSON: dict[str, Callable[[dict[str, Any]], Type]] = {
-    "Primitive": Primitive.from_json_dict,
+    "VoidType": VoidType.from_json_dict,
+    "IntType": IntType.from_json_dict,
+    "FloatType": FloatType.from_json_dict,
+    "QualifiedType": QualifiedType.from_json_dict,
+    "AtomicType": AtomicType.from_json_dict,
     "Pointer": Pointer.from_json_dict,
     "Array": Array.from_json_dict,
     "FunctionPtr": FunctionPtr.from_json_dict,

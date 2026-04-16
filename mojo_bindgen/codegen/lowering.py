@@ -13,21 +13,26 @@ from functools import singledispatchmethod
 from typing import Literal
 
 from mojo_bindgen.ir import (
+    AtomicType,
     Array,
     ComplexType,
     EnumRef,
+    FloatKind,
+    FloatType,
     Function,
     FunctionPtr,
+    IntKind,
+    IntType,
     OpaqueRecordRef,
     Param,
     Pointer,
-    Primitive,
-    PrimitiveKind,
+    QualifiedType,
     StructRef,
     Type,
     TypeRef,
     UnsupportedType,
     VectorType,
+    VoidType,
 )
 
 FFIOriginStyle = Literal["external", "any"]
@@ -78,29 +83,55 @@ def _int_type_for_size(signed: bool, size_bytes: int) -> str:
     return "Int64"  # fallback
 
 
-def lower_primitive(p: Primitive) -> str:
-    """Lower a C primitive to its Mojo type name string."""
-    if p.kind == PrimitiveKind.VOID:
+def _is_unsigned_int_kind(kind: IntKind) -> bool:
+    return kind in {
+        IntKind.CHAR_U,
+        IntKind.UCHAR,
+        IntKind.USHORT,
+        IntKind.UINT,
+        IntKind.ULONG,
+        IntKind.ULONGLONG,
+        IntKind.UINT128,
+    }
+
+
+def lower_scalar(t: VoidType | IntType | FloatType) -> str:
+    """Lower a scalar IR type to its Mojo type name string."""
+    if isinstance(t, VoidType):
         return "NoneType"
-    if p.kind == PrimitiveKind.BOOL:
+    if isinstance(t, IntType) and t.int_kind == IntKind.BOOL:
         return "Bool"
-    if p.kind == PrimitiveKind.FLOAT:
-        if p.size_bytes == 4:
+    if isinstance(t, FloatType):
+        if t.float_kind == FloatKind.FLOAT16:
+            return "Float16"
+        if t.float_kind == FloatKind.FLOAT:
             return "Float32"
-        if p.size_bytes == 8:
+        if t.float_kind == FloatKind.DOUBLE:
             return "Float64"
-        return "Float64"  # long double / unusual — document via comment at use site
-    if p.kind == PrimitiveKind.CHAR:
-        # Plain char — treat as Int8 for ABI (signedness varies by platform).
-        return "Int8" if p.is_signed else "UInt8"
-    if p.kind == PrimitiveKind.INT:
-        return _int_type_for_size(p.is_signed, p.size_bytes)
+        return "Float64"
+    if isinstance(t, IntType):
+        return _int_type_for_size(not _is_unsigned_int_kind(t.int_kind), t.size_bytes)
     return "Int32"
 
 
 def peel_typeref(t: Type) -> Type:
     """Unwrap :class:`~mojo_bindgen.ir.TypeRef` to its canonical type."""
     return t.canonical if isinstance(t, TypeRef) else t
+
+
+def peel_wrappers(t: Type) -> Type:
+    """Unwrap typedef, qualifier, and atomic wrappers to their structural core."""
+    while True:
+        if isinstance(t, TypeRef):
+            t = t.canonical
+            continue
+        if isinstance(t, QualifiedType):
+            t = t.unqualified
+            continue
+        if isinstance(t, AtomicType):
+            t = t.value_type
+            continue
+        return t
 
 
 @dataclass(frozen=True)
@@ -194,12 +225,13 @@ class TypeLowerer:
 
     def _surface_pointer(self, t: Pointer) -> str:
         o = self._origin
-        if t.pointee is None:
-            if t.qualifiers.is_const:
+        pointee, qualifiers = self._pointer_target(t)
+        if pointee is None or isinstance(peel_wrappers(pointee), VoidType):
+            if qualifiers.is_const:
                 return f"ImmutOpaquePointer[{o.immut}]"
             return f"MutOpaquePointer[{o.mut}]"
-        inner = self.surface(t.pointee)
-        if t.qualifiers.is_const:
+        inner = self.surface(pointee)
+        if qualifiers.is_const:
             return f"UnsafePointer[{inner}, {o.immut}]"
         return f"UnsafePointer[{inner}, {o.mut}]"
 
@@ -224,8 +256,24 @@ class TypeLowerer:
         return self.canonical(t.canonical)
 
     @canonical.register
-    def _(self, t: Primitive) -> str:
-        return lower_primitive(t)
+    def _(self, t: VoidType) -> str:
+        return lower_scalar(t)
+
+    @canonical.register
+    def _(self, t: IntType) -> str:
+        return lower_scalar(t)
+
+    @canonical.register
+    def _(self, t: FloatType) -> str:
+        return lower_scalar(t)
+
+    @canonical.register
+    def _(self, t: QualifiedType) -> str:
+        return self.canonical(t.unqualified)
+
+    @canonical.register
+    def _(self, t: AtomicType) -> str:
+        return self.canonical(t.value_type)
 
     @canonical.register
     def _(self, t: EnumRef) -> str:
@@ -234,12 +282,13 @@ class TypeLowerer:
     @canonical.register
     def _(self, t: Pointer) -> str:
         o = self._origin
-        if t.pointee is None:
-            if t.qualifiers.is_const:
+        pointee, qualifiers = self._pointer_target(t)
+        if pointee is None or isinstance(peel_wrappers(pointee), VoidType):
+            if qualifiers.is_const:
                 return f"ImmutOpaquePointer[{o.immut}]"
             return f"MutOpaquePointer[{o.mut}]"
-        inner = self.canonical(t.pointee)
-        if t.qualifiers.is_const:
+        inner = self.canonical(pointee)
+        if qualifiers.is_const:
             return f"UnsafePointer[{inner}, {o.immut}]"
         return f"UnsafePointer[{inner}, {o.mut}]"
 
@@ -281,6 +330,15 @@ class TypeLowerer:
     @canonical.register
     def _(self, t: StructRef) -> str:
         return self._canonical_struct_ref(t)
+
+    @staticmethod
+    def _pointer_target(t: Pointer) -> tuple[Type | None, object]:
+        from mojo_bindgen.ir import Qualifiers
+
+        pointee = t.pointee
+        if isinstance(pointee, QualifiedType):
+            return pointee.unqualified, pointee.qualifiers
+        return pointee, Qualifiers()
 
     def _canonical_struct_ref(self, t: StructRef) -> str:
         """Lower a struct reference, dispatching unions to their storage strategy."""

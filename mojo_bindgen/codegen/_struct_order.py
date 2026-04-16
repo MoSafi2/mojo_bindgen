@@ -8,7 +8,16 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
-from mojo_bindgen.ir import Array, EnumRef, Struct, StructRef, Type, TypeRef
+from mojo_bindgen.ir import (
+    Array,
+    AtomicType,
+    EnumRef,
+    QualifiedType,
+    Struct,
+    StructRef,
+    Type,
+    TypeRef,
+)
 from mojo_bindgen.codegen.lowering import mojo_ident
 
 
@@ -26,6 +35,12 @@ def struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:
         """Collect by-value struct dependencies reachable from ``ty``."""
         if isinstance(ty, TypeRef):
             walk(ty.canonical)
+            return
+        if isinstance(ty, QualifiedType):
+            walk(ty.unqualified)
+            return
+        if isinstance(ty, AtomicType):
+            walk(ty.value_type)
             return
         if isinstance(ty, EnumRef):
             return

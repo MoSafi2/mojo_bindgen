@@ -9,8 +9,11 @@
       "name": "asf_counter",
       "attrs": {
         "type": {
-          "kind": "UnsupportedType",
-          "spelling": "_Atomic(int)"
+          "kind": "AtomicType",
+          "value_type": {
+            "kind": "IntType",
+            "int_kind": "INT"
+          }
         }
       }
     },
@@ -30,8 +33,11 @@
       },
       "path": "fields.0.type",
       "attrs": {
-        "kind": "UnsupportedType",
-        "spelling": "_Atomic(uint64_t)"
+        "kind": "AtomicType",
+        "value_type": {
+          "kind": "IntType",
+          "int_kind": "INT"
+        }
       }
     }
   ]

@@ -16,14 +16,17 @@ from mojo_bindgen.ir import (
     BinaryExpr,
     CharLiteral,
     ConstExpr,
+    FloatKind,
+    FloatType,
     FloatLiteral,
     IntLiteral,
+    IntKind,
+    IntType,
     NullPtrLiteral,
-    Primitive,
-    PrimitiveKind,
     RefExpr,
     StringLiteral,
     UnaryExpr,
+    VoidType,
 )
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
 
@@ -106,7 +109,7 @@ class ParsedConstExpr:
     """A parsed constant expression plus best-effort primitive typing."""
 
     expr: ConstExpr
-    primitive: Primitive | None
+    primitive: IntType | FloatType | VoidType | None
     diagnostic: str | None = None
 
 
@@ -117,7 +120,7 @@ class ParsedMacro:
     tokens: list[str]
     kind: str
     expr: ConstExpr | None = None
-    primitive: Primitive | None = None
+    primitive: IntType | FloatType | VoidType | None = None
     diagnostic: str | None = None
 
 
@@ -213,7 +216,7 @@ class ConstExprParser:
         if self._is_null_pointer_tokens(tokens):
             return ParsedConstExpr(
                 expr=NullPtrLiteral(),
-                primitive=Primitive("void", PrimitiveKind.VOID, False, 0),
+                primitive=VoidType(),
             )
         stream = _TokenStream(tokens)
         parsed = self._parse_expr(stream, min_prec=0)
@@ -274,53 +277,58 @@ class ConstExprParser:
         if raw.startswith('"') and raw.endswith('"'):
             return ParsedConstExpr(
                 expr=StringLiteral(raw[1:-1]),
-                primitive=Primitive("char", PrimitiveKind.CHAR, True, 1),
+                primitive=IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1),
             )
         if raw.startswith("'") and raw.endswith("'"):
             return ParsedConstExpr(
                 expr=CharLiteral(raw[1:-1]),
-                primitive=Primitive("char", PrimitiveKind.CHAR, True, 1),
+                primitive=IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1),
             )
         if raw == "NULL":
             return ParsedConstExpr(
                 expr=NullPtrLiteral(),
-                primitive=Primitive("void", PrimitiveKind.VOID, False, 0),
+                primitive=VoidType(),
             )
         if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", raw):
             return ParsedConstExpr(
                 expr=RefExpr(raw),
-                primitive=Primitive("int", PrimitiveKind.INT, True, 4),
+                primitive=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
             )
         return None
 
     @staticmethod
-    def _combine_binary_primitive(lhs: Primitive | None, rhs: Primitive | None) -> Primitive | None:
+    def _combine_binary_primitive(
+        lhs: IntType | FloatType | VoidType | None,
+        rhs: IntType | FloatType | VoidType | None,
+    ) -> IntType | FloatType | VoidType | None:
         """Choose a stable best-effort primitive for integer binary expressions."""
         if lhs is None:
             return rhs
         if rhs is None:
             return lhs
-        if lhs.kind == PrimitiveKind.FLOAT or rhs.kind == PrimitiveKind.FLOAT:
-            return lhs if lhs.kind == PrimitiveKind.FLOAT else rhs
-        if lhs.kind == PrimitiveKind.INT and rhs.kind == PrimitiveKind.INT:
+        if isinstance(lhs, FloatType) or isinstance(rhs, FloatType):
+            return lhs if isinstance(lhs, FloatType) else rhs
+        if isinstance(lhs, IntType) and isinstance(rhs, IntType):
             if lhs.size_bytes > rhs.size_bytes:
                 return lhs
             if rhs.size_bytes > lhs.size_bytes:
                 return rhs
-            if not lhs.is_signed or rhs.is_signed:
+            if lhs.int_kind.name.startswith("U") or not rhs.int_kind.name.startswith("U"):
                 return lhs
             return rhs
         return lhs
 
     @staticmethod
-    def _primitive_for_float_literal_suffix(suffix: str) -> Primitive:
+    def _primitive_for_float_literal_suffix(suffix: str) -> FloatType:
         """Choose a best-effort primitive type for a float literal suffix."""
         s = suffix.lower()
         if "f" in s:
-            return Primitive("float", PrimitiveKind.FLOAT, False, 4)
+            return FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
         if "l" in s:
-            return Primitive("long double", PrimitiveKind.FLOAT, False, 16)
-        return Primitive("double", PrimitiveKind.FLOAT, False, 8)
+            return FloatType(
+                float_kind=FloatKind.LONG_DOUBLE, size_bytes=16, align_bytes=16
+            )
+        return FloatType(float_kind=FloatKind.DOUBLE, size_bytes=8, align_bytes=8)
 
     @classmethod
     def _is_null_pointer_tokens(cls, tokens: list[str]) -> bool:

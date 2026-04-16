@@ -20,8 +20,8 @@
       },
       "path": "params.0.type",
       "attrs": {
-        "kind": "Primitive",
-        "name": "int"
+        "kind": "IntType",
+        "int_kind": "INT"
       }
     }
   ]

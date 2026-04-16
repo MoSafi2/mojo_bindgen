@@ -12,16 +12,18 @@ from mojo_bindgen.ir import (
     CharLiteral,
     Const,
     Enum,
+    FloatType,
     FloatLiteral,
     FunctionPtr,
     GlobalVar,
+    IntType,
     IntLiteral,
     MacroDecl,
     NullPtrLiteral,
-    Primitive,
     RefExpr,
     StringLiteral,
     UnaryExpr,
+    VoidType,
 )
 from mojo_bindgen.codegen.analysis import (
     CallbackAlias,
@@ -33,7 +35,7 @@ from mojo_bindgen.codegen.analysis import (
     AnalyzedUnit,
     TailDecl,
 )
-from mojo_bindgen.codegen.lowering import TypeLowerer, lower_primitive, mojo_ident
+from mojo_bindgen.codegen.lowering import TypeLowerer, lower_scalar, mojo_ident
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
@@ -62,6 +64,15 @@ class CodeBuilder:
         if not self._lines:
             return ""
         return "\n".join(self._lines)
+
+
+def _scalar_comment_name(t: IntType | FloatType | VoidType) -> str:
+    """Return a compact scalar label for human-facing comments."""
+    if isinstance(t, IntType):
+        return t.int_kind.value
+    if isinstance(t, FloatType):
+        return t.float_kind.value
+    return "VOID"
 
 
 class MojoRenderer:
@@ -248,10 +259,12 @@ class MojoRenderer:
 
     def _emit_enum(self, decl: Enum) -> str:
         """Render one C enum as a thin Mojo wrapper struct."""
-        base = lower_primitive(decl.underlying)
+        base = lower_scalar(decl.underlying)
         name = mojo_ident(decl.name)
         b = CodeBuilder()
-        b.add(f"# enum {decl.c_name} - underlying {decl.underlying.name} -> {base} (verify C ABI)")
+        b.add(
+            f"# enum {decl.c_name} - underlying {_scalar_comment_name(decl.underlying)} -> {base} (verify C ABI)"
+        )
         b.add("@fieldwise_init")
         b.add(f"struct {name}(Copyable, Movable, RegisterPassable):")
         b.indent()
@@ -346,10 +359,12 @@ class MojoRenderer:
         )
 
     @staticmethod
-    def _render_const_expr(expr: object, decl_type: Primitive | object) -> str | None:
+    def _render_const_expr(
+        expr: object, decl_type: IntType | FloatType | VoidType | object
+    ) -> str | None:
         """Render the supported constant-expression subset to Mojo source."""
-        if isinstance(expr, IntLiteral) and isinstance(decl_type, Primitive):
-            t = lower_primitive(decl_type)
+        if isinstance(expr, IntLiteral) and isinstance(decl_type, (IntType, FloatType, VoidType)):
+            t = lower_scalar(decl_type)
             return f"{t}({expr.value})"
         if isinstance(expr, StringLiteral):
             value = expr.value.replace("\\", "\\\\").replace('"', '\\"')

@@ -4,7 +4,7 @@
 # FFI mode: external_call
 from std.ffi import external_call
 
-# enum enb_mode - underlying unsigned int -> UInt32 (verify C ABI)
+# enum enb_mode - underlying UINT -> UInt32 (verify C ABI)
 @fieldwise_init
 struct enb_mode(Copyable, Movable, RegisterPassable):
     var value: UInt32

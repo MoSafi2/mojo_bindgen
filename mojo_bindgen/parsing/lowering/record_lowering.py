@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import Field, Primitive, Struct, StructRef, Type
+from mojo_bindgen.ir import Field, IntType, Struct, StructRef, Type
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.index import DeclIndex
 from mojo_bindgen.parsing.lowering.record_types import RecordRepository
@@ -105,7 +105,7 @@ class RecordLowerer:
 
         if cursor.is_bitfield():
             backing = self.type_lowerer.lower(cursor.type, TypeContext.FIELD)
-            if not isinstance(backing, Primitive):
+            if not isinstance(backing, IntType):
                 return None, []
             return (
                 Field(

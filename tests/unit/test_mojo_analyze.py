@@ -5,31 +5,34 @@ from __future__ import annotations
 from mojo_bindgen.ir import (
     Array,
     Field,
+    FloatKind,
+    FloatType,
     Function,
     FunctionPtr,
+    IntKind,
+    IntType,
     Param,
-    Primitive,
-    PrimitiveKind,
     Struct,
     StructRef,
     TypeRef,
     Typedef,
     Unit,
+    VoidType,
 )
 
 
-def _f32() -> Primitive:
-    return Primitive(name="float", kind=PrimitiveKind.FLOAT, is_signed=True, size_bytes=4)
+def _f32() -> FloatType:
+    return FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
 from mojo_bindgen.codegen.analysis import AnalyzedFunction, analyze_unit
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
-def _i32() -> Primitive:
-    return Primitive(name="int", kind=PrimitiveKind.INT, is_signed=True, size_bytes=4)
+def _i32() -> IntType:
+    return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
 def test_analyze_variadic_function_kind() -> None:
-    v = Primitive(name="void", kind=PrimitiveKind.VOID, is_signed=False, size_bytes=0)
+    v = VoidType()
     fn = Function(
         decl_id="fn:vf",
         name="vf",

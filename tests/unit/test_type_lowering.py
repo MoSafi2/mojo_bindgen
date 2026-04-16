@@ -8,7 +8,7 @@ import pytest
 
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import EnumRef, Function, Pointer, Primitive, Struct, StructRef, TypeRef
+from mojo_bindgen.ir import AtomicType, EnumRef, Function, IntType, Pointer, Struct, StructRef, TypeRef
 from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
 
@@ -58,8 +58,8 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "take_mode")
 
-    assert isinstance(payload.fields[0].type, Primitive)
-    assert payload.fields[0].type.name == "unsigned int"
+    assert isinstance(payload.fields[0].type, IntType)
+    assert payload.fields[0].type.size_bytes == 4
     assert isinstance(payload.fields[1].type, EnumRef)
     assert payload.fields[1].type.name == "mode_t"
 
@@ -68,7 +68,7 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     assert isinstance(fn.ret.canonical, EnumRef)
     assert isinstance(fn.params[0].type, TypeRef)
     assert fn.params[0].type.name == "my_uint"
-    assert isinstance(fn.params[0].type.canonical, Primitive)
+    assert isinstance(fn.params[0].type.canonical, IntType)
 
 
 
@@ -107,7 +107,7 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
     flags = next(f for f in outer.fields if f.name == "flags")
     assert flags.is_bitfield
     assert flags.bit_width == 3
-    assert isinstance(flags.type, Primitive)
+    assert isinstance(flags.type, IntType)
 
     zero_width = next(f for f in outer.fields if f.name == "")
     assert zero_width.is_bitfield

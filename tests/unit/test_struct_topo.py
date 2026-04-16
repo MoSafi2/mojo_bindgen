@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Field, Pointer, Primitive, PrimitiveKind, Qualifiers, Struct, StructRef
+from mojo_bindgen.ir import Field, IntKind, IntType, Pointer, Struct, StructRef
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.lowering import mojo_ident
 
 
-def _i32() -> Primitive:
-    return Primitive(name="int", kind=PrimitiveKind.INT, is_signed=True, size_bytes=4)
+def _i32() -> IntType:
+    return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
 def test_toposort_pointer_to_struct_does_not_force_pointee_first() -> None:
@@ -31,7 +31,7 @@ def test_toposort_pointer_to_struct_does_not_force_pointee_first() -> None:
             Field(
                 name="pb",
                 source_name="pb",
-                type=Pointer(pointee=b_ref, qualifiers=Qualifiers(is_const=False)),
+                type=Pointer(pointee=b_ref),
                 byte_offset=0,
             )
         ],

@@ -63,9 +63,12 @@
         "kind": "GlobalVar",
         "name": "global_name"
       },
-      "path": "type.qualifiers",
+      "path": "type.pointee",
       "attrs": {
-        "is_const": true
+        "kind": "QualifiedType",
+        "qualifiers": {
+          "is_const": true
+        }
       }
     },
     {
