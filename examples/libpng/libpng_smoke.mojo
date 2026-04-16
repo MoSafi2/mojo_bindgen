@@ -37,7 +37,9 @@ def run_write_roundtrip_checks() raises:
     pixels[0] = 0
     pixels[1] = 0
     pixels[2] = 255
-    pixels[3] = 255
+    # Make pixel0's alpha 0 so later alpha-removal/compositing checks
+    # are deterministic.
+    pixels[3] = 0
     pixels[4] = 0
     pixels[5] = 255
     pixels[6] = 0
@@ -108,6 +110,160 @@ def run_write_roundtrip_checks() raises:
     png.png_image_free(image_write)
     png.png_image_free(image_read)
     print("libpng.file_roundtrip_ok|", 1)
+
+
+def run_memory_roundtrip_checks() raises:
+    var pixels = alloc[UInt8](PIXEL_BYTES)
+
+    # BGRA, four pixels, deterministic test pattern.
+    pixels[0] = 0
+    pixels[1] = 0
+    pixels[2] = 255
+    pixels[3] = 0
+    pixels[4] = 0
+    pixels[5] = 255
+    pixels[6] = 0
+    pixels[7] = 255
+    pixels[8] = 255
+    pixels[9] = 0
+    pixels[10] = 0
+    pixels[11] = 255
+    pixels[12] = 255
+    pixels[13] = 255
+    pixels[14] = 255
+    pixels[15] = 255
+
+    # Build a writer-side png_image matching run_write_roundtrip_checks().
+    var image_write = alloc[png.png_image](1)
+    image_write[0] = png.png_image(
+        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        version=UInt32(png.PNG_IMAGE_VERSION),
+        width=UInt32(IMAGE_W),
+        height=UInt32(IMAGE_H),
+        format=UInt32(png.PNG_FORMAT_BGRA),
+        flags=0,
+        colormap_entries=0,
+        warning_or_error=0,
+        message=InlineArray[Int8, 64](uninitialized=True),
+    )
+
+    # Exercise png_image_write_to_memory with both a NULL memory pointer
+    # (size query) and a real memory buffer (actual write).
+    var memory_bytes_out = alloc[UInt64](1)
+    var write_size_ok = png.png_image_write_to_memory(
+        image_write,
+        MutOpaquePointer[MutExternalOrigin](),
+        memory_bytes_out,
+        0,
+        rebind[ImmutOpaquePointer[ImmutExternalOrigin]](pixels),
+        IMAGE_W * CHANNELS,
+        ImmutOpaquePointer[ImmutExternalOrigin](),
+    )
+    _assert("libpng.write_to_memory_size", write_size_ok != 0)
+    _assert("libpng.write_to_memory_size_nonzero", memory_bytes_out[0] > 0)
+
+    var png_bytes = alloc[UInt8](Int(memory_bytes_out[0]))
+    var write_ok = png.png_image_write_to_memory(
+        image_write,
+        rebind[MutOpaquePointer[MutExternalOrigin]](png_bytes),
+        memory_bytes_out,
+        0,
+        rebind[ImmutOpaquePointer[ImmutExternalOrigin]](pixels),
+        IMAGE_W * CHANNELS,
+        ImmutOpaquePointer[ImmutExternalOrigin](),
+    )
+    _assert("libpng.write_to_memory", write_ok != 0)
+
+    var image_read = alloc[png.png_image](1)
+    image_read[0] = png.png_image(
+        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        version=UInt32(png.PNG_IMAGE_VERSION),
+        width=0,
+        height=0,
+        format=0,
+        flags=0,
+        colormap_entries=0,
+        warning_or_error=0,
+        message=InlineArray[Int8, 64](uninitialized=True),
+    )
+
+    var begin_ok = png.png_image_begin_read_from_memory(
+        image_read,
+        rebind[ImmutOpaquePointer[ImmutExternalOrigin]](png_bytes),
+        memory_bytes_out[0],
+    )
+    _assert("libpng.begin_read_from_memory", begin_ok != 0)
+    image_read[0].format = UInt32(png.PNG_FORMAT_BGRA)
+
+    var out_pixels = alloc[UInt8](PIXEL_BYTES)
+    var finish_ok = png.png_image_finish_read(
+        image_read,
+        png.png_const_colorp(),
+        rebind[MutOpaquePointer[MutExternalOrigin]](out_pixels),
+        IMAGE_W * CHANNELS,
+        MutOpaquePointer[MutExternalOrigin](),
+    )
+    _assert("libpng.finish_read_memory", finish_ok != 0)
+    _assert("libpng.pixel_roundtrip_mem_0", out_pixels[0] == pixels[0])
+    _assert("libpng.pixel_roundtrip_mem_3", out_pixels[3] == pixels[3])
+    _assert("libpng.pixel_roundtrip_mem_15", out_pixels[15] == pixels[15])
+
+    png.png_image_free(image_write)
+    png.png_image_free(image_read)
+    print("libpng.memory_roundtrip_ok|", 1)
+
+
+def run_alpha_removal_compositing_checks() raises:
+    # Re-read the file produced in run_write_roundtrip_checks() and request
+    # RGB output (no alpha). Then confirm compositing with a deterministic
+    # background color.
+    var image_read = alloc[png.png_image](1)
+    image_read[0] = png.png_image(
+        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        version=UInt32(png.PNG_IMAGE_VERSION),
+        width=0,
+        height=0,
+        format=0,
+        flags=0,
+        colormap_entries=0,
+        warning_or_error=0,
+        message=InlineArray[Int8, 64](uninitialized=True),
+    )
+
+    var png_path = _cstr("/tmp/mojo_bindgen_libpng_smoke.png")
+    var begin_ok = png.png_image_begin_read_from_file(image_read, png_path)
+    _assert("libpng.alpha_begin_read_from_file", begin_ok != 0)
+
+    image_read[0].format = UInt32(png.PNG_FORMAT_RGB)
+
+    var background = alloc[png.png_color_struct](1)
+    background[0] = png.png_color_struct(red=7, green=11, blue=13)
+    var background_ptr = rebind[
+        UnsafePointer[png.png_color_struct, ImmutExternalOrigin]
+    ](background)
+
+    var out_rgb = alloc[UInt8](IMAGE_W * IMAGE_H * 3)
+    var finish_ok = png.png_image_finish_read(
+        image_read,
+        background_ptr,
+        rebind[MutOpaquePointer[MutExternalOrigin]](out_rgb),
+        IMAGE_W * 3,
+        MutOpaquePointer[MutExternalOrigin](),
+    )
+    _assert("libpng.alpha_finish_read", finish_ok != 0)
+
+    # out_rgb layout for PNG_FORMAT_RGB is R,G,B per pixel (row-major).
+    _assert("libpng.alpha_removed_pixel0_r", out_rgb[0] == 7)
+    _assert("libpng.alpha_removed_pixel0_g", out_rgb[1] == 11)
+    _assert("libpng.alpha_removed_pixel0_b", out_rgb[2] == 13)
+
+    # Pixel1 is fully opaque in our BGRA test pattern.
+    _assert("libpng.alpha_removed_pixel1_r", out_rgb[3] == 0)
+    _assert("libpng.alpha_removed_pixel1_g", out_rgb[4] == 255)
+    _assert("libpng.alpha_removed_pixel1_b", out_rgb[5] == 0)
+
+    png.png_image_free(image_read)
+    print("libpng.alpha_removal_composite_ok|", 1)
 
 
 def run_transform_and_options_checks() raises:
@@ -248,5 +404,7 @@ def run_lightweight_struct_api_checks() raises:
 def main() raises:
     run_version_checks()
     run_write_roundtrip_checks()
+    run_memory_roundtrip_checks()
+    run_alpha_removal_compositing_checks()
     run_transform_and_options_checks()
     run_lightweight_struct_api_checks()
