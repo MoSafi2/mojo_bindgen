@@ -17,7 +17,7 @@ IR node types (as Python classes / unions in this module):
 
 from __future__ import annotations
 import json
-from dataclasses import MISSING, dataclass, field, fields
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import (
     Any,
@@ -26,140 +26,8 @@ from typing import (
     Literal,
     Self,
     Union,
-    cast,
-    get_args,
-    get_origin,
-    get_type_hints,
 )
-
-
-def _encode_json_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, StrEnum):
-        return v.value
-    to_json_dict = getattr(v, "to_json_dict", None)
-    if callable(to_json_dict):
-        return to_json_dict()
-    if isinstance(v, list):
-        return [_encode_json_value(x) for x in v]
-    return v
-
-
-def _decode_list(raw: Any, elem_type: Any) -> Any:
-    if raw is None:
-        return None
-    if not isinstance(raw, list):
-        raise TypeError(f"expected list, got {type(raw).__name__}")
-    out: list[Any] = []
-    for x in raw:
-        out.append(_decode_json_value(x, elem_type))
-    return out
-
-
-def _decode_json_value(raw: Any, annotated_type: Any) -> Any:
-    if raw is None:
-        return None
-
-    origin = get_origin(annotated_type)
-    if origin is list:
-        (elem_type,) = get_args(annotated_type) or (Any,)
-        return _decode_list(raw, elem_type)
-
-    # Dataclass-ish nodes (non-union) with from_json_dict.
-    from_json_dict = getattr(annotated_type, "from_json_dict", None)
-    if callable(from_json_dict) and isinstance(raw, dict):
-        return from_json_dict(raw)
-
-    # For discriminated union nodes (Type / Decl / ConstExpr), callers must
-    # provide an explicit converter via field metadata; otherwise we keep the
-    # error loud so we don't silently mis-decode.
-    if isinstance(raw, dict) and "kind" in raw:
-        raise TypeError(
-            f"missing decoder for discriminated object kind={raw.get('kind')!r}"
-        )
-
-    return raw
-
-
-class SerDeMixin:
-    """
-    Shared JSON serialization/deserialization mixin for IR dataclasses.
-
-    Strict schema note: dict insertion order is preserved, so we keep `kind`
-    first (when present) and then emit keys in either dataclass-field order or
-    an explicit `__json_field_order__` override.
-    """
-
-    KIND: ClassVar[str | None] = None
-    __json_field_order__: ClassVar[list[str] | None] = (
-        None  # JSON keys, excluding "kind"
-    )
-
-    def to_json_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {}
-        kind = getattr(self, "KIND", None)
-        if kind is not None:
-            out["kind"] = kind
-
-        f_by_json_key: dict[str, Any] = {}
-        for f in fields(cast(Any, self)):
-            if f.metadata.get("json_exclude", False):
-                continue
-            json_key = f.metadata.get("json_key", f.name)
-            f_by_json_key[json_key] = f
-
-        json_order = getattr(self, "__json_field_order__", None)
-        if json_order is None:
-            json_order = [
-                (f.metadata.get("json_key", f.name))
-                for f in fields(cast(Any, self))
-                if not f.metadata.get("json_exclude", False)
-            ]
-
-        for json_key in json_order:
-            f = f_by_json_key[json_key]
-            v = getattr(self, f.name)
-            to_json = f.metadata.get("to_json")
-            if callable(to_json):
-                out[json_key] = to_json(v)
-            else:
-                out[json_key] = _encode_json_value(v)
-        return out
-
-    @classmethod
-    def from_json_dict(cls, d: dict[str, Any]) -> Self:
-        kind = getattr(cls, "KIND", None)
-        if kind is not None:
-            _expect_kind(d, kind)
-
-        type_hints = get_type_hints(cls)
-        kwargs: dict[str, Any] = {}
-        for f in fields(cast(Any, cls)):
-            if f.metadata.get("json_exclude", False):
-                continue
-
-            json_key = f.metadata.get("json_key", f.name)
-            if json_key in d:
-                raw = d[json_key]
-            else:
-                missing = f.metadata.get("json_missing")
-                if callable(missing):
-                    raw = missing(d)
-                elif f.default is not MISSING or f.default_factory is not MISSING:  # type: ignore[comparison-overlap]
-                    continue
-                else:
-                    raise KeyError(json_key)
-
-            from_json = f.metadata.get("from_json")
-            if callable(from_json):
-                try:
-                    kwargs[f.name] = from_json(raw, d)
-                except TypeError:
-                    kwargs[f.name] = from_json(raw)
-            else:
-                kwargs[f.name] = _decode_json_value(raw, type_hints.get(f.name, f.type))
-        return cls(**kwargs)  # type: ignore[call-arg]
+from mojo_bindgen.serde import SerDeMixin, SerdeFieldSpec, SerdeSpec
 
 
 class IntKind(StrEnum):
@@ -229,11 +97,6 @@ class Qualifiers(SerDeMixin):
     """C type qualifiers preserved on pointee types and other referenced types."""
 
     KIND: ClassVar[str | None] = None
-    __json_field_order__: ClassVar[list[str] | None] = [
-        "is_const",
-        "is_volatile",
-        "is_restrict",
-    ]
 
     is_const: bool = False
     is_volatile: bool = False
@@ -254,66 +117,39 @@ def _expect_kind(d: dict[str, Any], kind: str) -> None:
 class VoidType(SerDeMixin):
     """The unqualified C ``void`` type."""
 
-    KIND: ClassVar[str | None] = "VoidType"
-
 
 @dataclass(frozen=True)
 class IntType(SerDeMixin):
     """Explicit integer-like scalar type with ABI width metadata."""
 
-    int_kind: IntKind = field(
-        metadata={
-            "to_json": lambda k: k.value,
-            "from_json": lambda raw: IntKind(raw),
-        }
-    )
+    int_kind: IntKind
     size_bytes: int
     align_bytes: int | None = None
     ext_bits: int | None = None
-    KIND: ClassVar[str | None] = "IntType"
-    __json_field_order__: ClassVar[list[str] | None] = [
-        "int_kind",
-        "size_bytes",
-        "align_bytes",
-        "ext_bits",
-    ]
 
 
 @dataclass(frozen=True)
 class FloatType(SerDeMixin):
     """Explicit floating-point scalar type with ABI width metadata."""
 
-    float_kind: FloatKind = field(
-        metadata={
-            "to_json": lambda k: k.value,
-            "from_json": lambda raw: FloatKind(raw),
-        }
-    )
+    float_kind: FloatKind
     size_bytes: int
     align_bytes: int | None = None
-    KIND: ClassVar[str | None] = "FloatType"
-    __json_field_order__: ClassVar[list[str] | None] = [
-        "float_kind",
-        "size_bytes",
-        "align_bytes",
-    ]
 
 
 @dataclass(frozen=True)
 class QualifiedType(SerDeMixin):
     """A use-site application of C qualifiers to an underlying structural type."""
 
-    unqualified: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    unqualified: Type
     qualifiers: Qualifiers = field(default_factory=Qualifiers)
-    KIND: ClassVar[str | None] = "QualifiedType"
 
 
 @dataclass(frozen=True)
 class AtomicType(SerDeMixin):
     """A C11 ``_Atomic(T)`` wrapper around an underlying value type."""
 
-    value_type: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    KIND: ClassVar[str | None] = "AtomicType"
+    value_type: Type
 
 
 @dataclass
@@ -323,12 +159,7 @@ class Pointer(SerDeMixin):
     pointee=None means unqualified ``void*`` → emit OpaquePointer directly.
     """
 
-    pointee: Type | None = field(
-        metadata={
-            "from_json": lambda raw: None if raw is None else type_from_json(raw),
-        }
-    )  # None == void*
-    KIND: ClassVar[str | None] = "Pointer"
+    pointee: Type | None  # None == void*
 
 
 @dataclass
@@ -341,10 +172,9 @@ class Array(SerDeMixin):
     incomplete array, or VLA-like construct.
     """
 
-    element: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    element: Type
     size: int | None
     array_kind: ArrayKind = "fixed"
-    KIND: ClassVar[str | None] = "Array"
 
 
 @dataclass
@@ -354,15 +184,12 @@ class FunctionPtr(SerDeMixin):
     Full ret/params are retained for documentation and future tooling.
     """
 
-    ret: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    params: list[Type] = field(
-        metadata={"from_json": lambda raw: [type_from_json(p) for p in raw]}
-    )
+    ret: Type
+    params: list[Type]
     param_names: list[str] | None = None
     is_variadic: bool = False
     calling_convention: str | None = None
     is_noreturn: bool = False
-    KIND: ClassVar[str | None] = "FunctionPtr"
 
 
 @dataclass
@@ -375,11 +202,17 @@ class OpaqueRecordRef(SerDeMixin):
     not model faithfully.
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "c_name": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+        }
+    )
+
+    decl_id: str
     name: str
-    c_name: str = field(metadata={"json_missing": lambda d: d["name"]})
+    c_name: str
     is_union: bool = False
-    KIND: ClassVar[str | None] = "OpaqueRecordRef"
 
 
 @dataclass
@@ -396,7 +229,6 @@ class UnsupportedType(SerDeMixin):
     reason: str
     size_bytes: int | None = None
     align_bytes: int | None = None
-    KIND: ClassVar[str | None] = "UnsupportedType"
 
 
 @dataclass
@@ -409,7 +241,6 @@ class ComplexType(SerDeMixin):
 
     element: FloatType
     size_bytes: int
-    KIND: ClassVar[str | None] = "ComplexType"
 
 
 @dataclass
@@ -420,11 +251,10 @@ class VectorType(SerDeMixin):
     collapsing them into unsupported opaque blobs.
     """
 
-    element: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    element: Type
     count: int | None
     size_bytes: int
     is_ext_vector: bool = False
-    KIND: ClassVar[str | None] = "VectorType"
 
 
 @dataclass(frozen=True)
@@ -441,26 +271,30 @@ class StructRef(SerDeMixin):
     by-value unions to ``InlineArray[UInt8, size]`` without a separate lookup.
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+    )
+
+    decl_id: str
     name: str
     c_name: str
     is_union: bool = False
     size_bytes: int = 0
     is_anonymous: bool = False
-    KIND: ClassVar[str | None] = "StructRef"
 
 
 @dataclass(frozen=True)
 class EnumRef(SerDeMixin):
     """Reference to a named enum declaration with its integer ABI type."""
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+    )
+
+    decl_id: str
     name: str
     c_name: str
-    KIND: ClassVar[str | None] = "EnumRef"
-    underlying: IntType = field(
-        metadata={"from_json": lambda raw: type_from_json(raw)}  # type: ignore[arg-type]
-    )
+    underlying: IntType
 
 
 @dataclass
@@ -473,10 +307,13 @@ class TypeRef(SerDeMixin):
     typedef ``name`` preserves the C API spelling for readable emission.
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+    )
+
+    decl_id: str
     name: str
-    canonical: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    KIND: ClassVar[str | None] = "TypeRef"
+    canonical: Type
 
 
 # ─────────────────────────────────────────────
@@ -485,8 +322,17 @@ class TypeRef(SerDeMixin):
 
 
 @dataclass
-class Field:
+class Field(SerDeMixin):
     """One member of a struct or union."""
+
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "source_name": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "is_bitfield": SerdeFieldSpec(omit_if_default=True),
+            "bit_offset": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
+            "bit_width": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
+        }
+    )
 
     name: str
     source_name: str
@@ -500,34 +346,6 @@ class Field:
     bit_width: int = 0
     """Width in bits. Meaningful if ``is_bitfield``."""
 
-    def to_json_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "name": self.name,
-            "source_name": self.source_name,
-            "type": self.type.to_json_dict(),
-            "byte_offset": self.byte_offset,
-            "is_anonymous": self.is_anonymous,
-        }
-        if self.is_bitfield:
-            out["is_bitfield"] = True
-            out["bit_offset"] = self.bit_offset
-            out["bit_width"] = self.bit_width
-        return out
-
-    @classmethod
-    def from_json_dict(cls, d: dict[str, Any]) -> Self:
-        return cls(
-            name=d["name"],
-            source_name=d.get("source_name", d["name"]),
-            type=type_from_json(d["type"]),
-            byte_offset=d["byte_offset"],
-            is_anonymous=d.get("is_anonymous", False),
-            is_bitfield=d.get("is_bitfield", False),
-            bit_offset=d.get("bit_offset", 0),
-            bit_width=d.get("bit_width", 0),
-        )
-
-
 @dataclass
 class Struct(SerDeMixin):
     """
@@ -536,7 +354,11 @@ class Struct(SerDeMixin):
     Fields are in declaration order (clang cursor order).
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+    )
+
+    decl_id: str
     name: str  # Mojo name
     c_name: str  # original C name for cross-reference
     fields: list[Field]
@@ -547,7 +369,6 @@ class Struct(SerDeMixin):
     is_complete: bool = True
     is_packed: bool = False
     requested_align_bytes: int | None = None
-    KIND: ClassVar[str | None] = "Struct"
 
 
 # Recursive type nodes (no inline Struct/Bitfield — layouts are Struct decls + Field metadata)
@@ -575,7 +396,6 @@ class IntLiteral(SerDeMixin):
     """Integer constant expression leaf."""
 
     value: int
-    KIND: ClassVar[str | None] = "IntLiteral"
 
 
 @dataclass(frozen=True)
@@ -583,7 +403,6 @@ class FloatLiteral(SerDeMixin):
     """Floating-point constant expression leaf, preserved as source text."""
 
     value: str
-    KIND: ClassVar[str | None] = "FloatLiteral"
 
 
 @dataclass(frozen=True)
@@ -591,7 +410,6 @@ class StringLiteral(SerDeMixin):
     """String-literal constant expression leaf without surrounding quotes."""
 
     value: str
-    KIND: ClassVar[str | None] = "StringLiteral"
 
 
 @dataclass(frozen=True)
@@ -599,14 +417,11 @@ class CharLiteral(SerDeMixin):
     """Character-literal constant expression leaf without surrounding quotes."""
 
     value: str
-    KIND: ClassVar[str | None] = "CharLiteral"
 
 
 @dataclass(frozen=True)
 class NullPtrLiteral(SerDeMixin):
     """Null-pointer constant expression leaf."""
-
-    KIND: ClassVar[str | None] = "NullPtrLiteral"
 
 
 @dataclass(frozen=True)
@@ -614,7 +429,6 @@ class RefExpr(SerDeMixin):
     """Reference to another constant-like symbol in a constant expression."""
 
     name: str
-    KIND: ClassVar[str | None] = "RefExpr"
 
 
 @dataclass(frozen=True)
@@ -622,11 +436,7 @@ class UnaryExpr(SerDeMixin):
     """Unary constant expression such as ``-x`` or ``~x``."""
 
     op: str
-    operand: ConstExpr = field(
-        metadata={"from_json": lambda raw: const_expr_from_json(raw)}
-    )
-    KIND: ClassVar[str | None] = "UnaryExpr"
-    __json_field_order__: ClassVar[list[str] | None] = ["op", "operand"]
+    operand: ConstExpr
 
 
 @dataclass(frozen=True)
@@ -634,32 +444,23 @@ class BinaryExpr(SerDeMixin):
     """Binary constant expression such as ``a | b`` or ``x << 2``."""
 
     op: str
-    lhs: ConstExpr = field(
-        metadata={"from_json": lambda raw: const_expr_from_json(raw)}
-    )
-    rhs: ConstExpr = field(
-        metadata={"from_json": lambda raw: const_expr_from_json(raw)}
-    )
-    KIND: ClassVar[str | None] = "BinaryExpr"
+    lhs: ConstExpr
+    rhs: ConstExpr
 
 
 @dataclass(frozen=True)
 class CastExpr(SerDeMixin):
     """Cast applied inside a constant expression."""
 
-    target: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    expr: ConstExpr = field(
-        metadata={"from_json": lambda raw: const_expr_from_json(raw)}
-    )
-    KIND: ClassVar[str | None] = "CastExpr"
+    target: Type
+    expr: ConstExpr
 
 
 @dataclass(frozen=True)
 class SizeOfExpr(SerDeMixin):
     """``sizeof(T)`` constant expression."""
 
-    target: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    KIND: ClassVar[str | None] = "SizeOfExpr"
+    target: Type
 
 
 ConstExpr = Union[
@@ -683,7 +484,6 @@ class Enumerant(SerDeMixin):
     c_name: str  # original C name
     value: int
     KIND: ClassVar[str | None] = None
-    __json_field_order__: ClassVar[list[str] | None] = ["name", "c_name", "value"]
 
 
 @dataclass
@@ -697,12 +497,15 @@ class Enum(SerDeMixin):
     underlying is always IntType (C enum base type is integer).
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+    )
+
+    decl_id: str
     name: str
     c_name: str
     underlying: IntType
     enumerants: list[Enumerant]
-    KIND: ClassVar[str | None] = "Enum"
 
 
 @dataclass
@@ -717,24 +520,24 @@ class Typedef(SerDeMixin):
     inside compound positions (struct fields, function pointer signatures).
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
-    name: str
-    aliased: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    canonical: Type = field(
-        metadata={
-            "from_json": lambda raw: type_from_json(raw),
-            "json_missing": lambda d: d["aliased"],
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "canonical": SerdeFieldSpec(missing_from=lambda d: d["aliased"]),
         }
     )
-    KIND: ClassVar[str | None] = "Typedef"
+
+    decl_id: str
+    name: str
+    aliased: Type
+    canonical: Type
 
 
 @dataclass
 class Param(SerDeMixin):
     name: str  # "" for anonymous params
-    type: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    type: Type
     KIND: ClassVar[str | None] = None
-    __json_field_order__: ClassVar[list[str] | None] = ["name", "type"]
 
 
 @dataclass
@@ -745,25 +548,28 @@ class Function(SerDeMixin):
     is_variadic=True → emitted as a comment block, no body generated.
     """
 
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        field_order=(
+            "decl_id",
+            "name",
+            "link_name",
+            "ret",
+            "params",
+            "is_variadic",
+            "calling_convention",
+            "is_noreturn",
+        ),
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])},
+    )
+
     name: str  # Mojo-mapped name (post NameMapper)
     link_name: str  # original C symbol name (used in external_call)
-    ret: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    ret: Type
     params: list[Param]
     is_variadic: bool = False
-    decl_id: str = field(default="", metadata={"json_missing": lambda d: d["name"]})
+    decl_id: str = ""
     calling_convention: str | None = None
     is_noreturn: bool = False
-    KIND: ClassVar[str | None] = "Function"
-    __json_field_order__: ClassVar[list[str] | None] = [
-        "decl_id",
-        "name",
-        "link_name",
-        "ret",
-        "params",
-        "is_variadic",
-        "calling_convention",
-        "is_noreturn",
-    ]
 
 
 @dataclass
@@ -777,11 +583,8 @@ class Const(SerDeMixin):
     """
 
     name: str
-    type: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
-    expr: ConstExpr = field(
-        metadata={"from_json": lambda raw: const_expr_from_json(raw)}
-    )
-    KIND: ClassVar[str | None] = "Const"
+    type: Type
+    expr: ConstExpr
 
 
 @dataclass
@@ -794,31 +597,16 @@ class MacroDecl(SerDeMixin):
     macros the parser can structurally understand today.
     """
 
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"kind": SerdeFieldSpec(json_key="macro_kind")}
+    )
+
     name: str
     tokens: list[str]
-    kind: MacroDeclKind = field(metadata={"json_key": "macro_kind"})
-    expr: ConstExpr | None = field(
-        default=None,
-        metadata={
-            "from_json": lambda raw: None if raw is None else const_expr_from_json(raw),
-        },
-    )
-    type: Type | None = field(
-        default=None,
-        metadata={
-            "from_json": lambda raw: None if raw is None else type_from_json(raw)
-        },
-    )
+    kind: MacroDeclKind
+    expr: ConstExpr | None = None
+    type: Type | None = None
     diagnostic: str | None = None
-    KIND: ClassVar[str | None] = "MacroDecl"
-    __json_field_order__: ClassVar[list[str] | None] = [
-        "name",
-        "tokens",
-        "macro_kind",
-        "expr",
-        "type",
-        "diagnostic",
-    ]
 
 
 @dataclass
@@ -830,18 +618,16 @@ class GlobalVar(SerDeMixin):
     compile-time constant.
     """
 
-    decl_id: str = field(metadata={"json_missing": lambda d: d["name"]})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+    )
+
+    decl_id: str
     name: str
     link_name: str
-    type: Type = field(metadata={"from_json": lambda raw: type_from_json(raw)})
+    type: Type
     is_const: bool = False
-    initializer: ConstExpr | None = field(
-        default=None,
-        metadata={
-            "from_json": lambda raw: None if raw is None else const_expr_from_json(raw),
-        },
-    )
-    KIND: ClassVar[str | None] = "GlobalVar"
+    initializer: ConstExpr | None = None
 
 
 @dataclass(frozen=True)
@@ -855,14 +641,6 @@ class IRDiagnostic(SerDeMixin):
     col: int | None = None
     decl_id: str | None = None
     KIND: ClassVar[str | None] = None
-    __json_field_order__: ClassVar[list[str] | None] = [
-        "severity",
-        "message",
-        "file",
-        "line",
-        "col",
-        "decl_id",
-    ]
 
 
 Decl = Union[
@@ -883,12 +661,8 @@ class Unit(SerDeMixin):
     source_header: str
     library: str  # e.g. "zlib"
     link_name: str  # e.g. "z"  (used in DLHandle)
-    decls: list[Decl] = field(
-        default_factory=list,
-        metadata={"from_json": lambda raw: [decl_from_json(x) for x in raw]},
-    )
+    decls: list[Decl] = field(default_factory=list)
     diagnostics: list[IRDiagnostic] = field(default_factory=list)
-    KIND: ClassVar[str | None] = "Unit"
 
     def to_json(self, *, indent: int | None = 2) -> str:
         """Serialize this unit to a JSON string (default: indented for readability)."""
