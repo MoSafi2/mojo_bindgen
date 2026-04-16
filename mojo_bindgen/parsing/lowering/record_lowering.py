@@ -60,7 +60,7 @@ class RecordLowerer:
 
     def lower_record_definition(self, cursor: cx.Cursor) -> tuple[list[Struct], Struct]:
         """Lower a complete struct/union definition and nested anonymous records."""
-        decl_id, c_name, name, is_anonymous = self.index.record_identity(cursor)
+        decl_id, c_name, name, is_anonymous = self.index.record_lowering_identity(cursor)
         cached = self.repository.get(decl_id)
         if cached is not None:
             return [], cached
@@ -85,7 +85,7 @@ class RecordLowerer:
             elif (
                 child.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
                 and child.is_definition()
-                and self.index.record_identity(child)[3]
+                and self.index.record_lowering_identity(child)[3]
                 and not self._has_explicit_field_for_record(cursor, child)
             ):
                 field, nested_defs = self._lower_direct_anonymous_record_field(cursor.type, child)
@@ -189,7 +189,7 @@ class RecordLowerer:
                 continue
             if not child.is_definition():
                 continue
-            _, _, _, is_anonymous = self.index.record_identity(child)
+            _, _, _, is_anonymous = self.index.record_lowering_identity(child)
             if is_anonymous:
                 continue
             child_nested, struct = self.lower_record_definition(child)

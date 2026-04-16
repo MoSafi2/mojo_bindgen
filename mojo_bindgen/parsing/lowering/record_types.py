@@ -68,7 +68,7 @@ class RecordTypeResolver:
         if cached is not None:
             return self.repository.make_struct_ref(cached)
 
-        definition = self.index.record_definition_for_cursor(decl)
+        definition = self.index.record_definition_for_decl(decl)
         if definition is not None:
             if decl.spelling and decl_id in self.index.top_level_decl_ids:
                 return StructRef(

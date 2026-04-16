@@ -1,8 +1,16 @@
 """Declaration indexing and identity services for one translation unit.
 
-This module owns source-graph metadata for the parser package: stable
-declaration identities, record definition lookups, top-level cursor ordering,
-and anonymous record naming policy. It does not lower anything into IR.
+`DeclIndex` is the small service layer that sits between the parser frontend
+and the record/type lowering logic. It indexes a single
+`clang.cindex.TranslationUnit` and provides:
+
+- stable declaration IDs (`decl_id_for_cursor`)
+- cached complete record definition cursors (`record_definition_for_decl`)
+- stable record lowering identity + naming policy (`record_lowering_identity`)
+
+This module intentionally does *not* lower anything into IR; it only owns
+source-graph metadata and naming/identity decisions used by downstream
+lowerers.
 """
 
 from __future__ import annotations
@@ -29,11 +37,16 @@ NAMED_DECL_KINDS = (
 
 
 def _location_key(cursor: cx.Cursor) -> str:
+    """Return a stable source-location key for a cursor.
+
+    Used for anonymous identity fallbacks and anonymous sibling ordinals.
+    """
     loc = cursor.location
     return f"{loc.file}:{loc.line}:{loc.column}:{cursor.kind}:{cursor.spelling}"
 
 
 def _is_anonymous_record_spelling(spelling: str) -> bool:
+    """Heuristic for clang's synthetic spellings for anonymous records."""
     return not spelling or "(unnamed at " in spelling or "(anonymous at " in spelling
 
 
@@ -66,7 +79,32 @@ def _use_location_identity_for_cursor(cursor: cx.Cursor) -> bool:
 
 @dataclass
 class DeclIndex:
-    """Identity and declaration index for one translation unit."""
+    """Identity and declaration index for one translation unit.
+
+    Data model:
+    - `primary_cursors_in_order`: primary-file cursors in deterministic preorder.
+      This ordering is used to assign ordinals to anonymous record definitions
+      so sibling anonymous records get distinct synthesized names.
+    - `top_level_decl_ids`: `decl_id` values for each primary cursor. This is
+      used to recognize “named top-level” decls during type resolution.
+    - `record_definition_by_decl_id`: mapping from `decl_id` to the cached
+      complete clang definition cursor for that record (struct/union only).
+    - `anonymous_record_name_by_decl_id`: cache for synthesized IR-friendly
+      names of anonymous record declarations.
+
+    Identity rules (`decl_id_for_cursor`):
+    - Prefer clang USR when present, except for anonymous inline record
+      struct/union cursors where libclang may reuse the same USR for sibling
+      definitions.
+    - Otherwise, use a spelling-based fallback for “named decl kinds”.
+    - Finally, fall back to a hashed location key with an `anon:` prefix.
+
+    Anonymous naming rules (`record_lowering_identity`):
+    - Anonymous record spellings trigger synthesized naming.
+    - Synthesized names incorporate the anonymous record kind
+      (`anon_struct`/`anon_union`), a stable ordinal, and a scope stem derived
+      from lexical/semantic parents.
+    """
 
     header: Path
     primary_cursors_in_order: tuple[cx.Cursor, ...]
@@ -80,7 +118,12 @@ class DeclIndex:
         tu: cx.TranslationUnit,
         frontend: ClangFrontend,
     ) -> DeclIndex:
-        """Build a declaration index for primary-file cursors in one TU."""
+        """Index one translation unit for primary-file declaration cursors.
+
+        The index is limited to the frontend's configured primary/header file:
+        we only record complete record definitions (`struct`/`union`) when the
+        cursor originates from the primary file.
+        """
         primary = tuple(frontend.iter_primary_cursors(tu))
         index = cls(
             header=frontend.header.resolve(),
@@ -102,7 +145,22 @@ class DeclIndex:
         return index
 
     def decl_id_for_cursor(self, cursor: cx.Cursor) -> str:
-        """Return the stable declaration identity for a clang cursor."""
+        """Return a stable declaration identity for a clang cursor.
+
+        This value is used as the cross-cursor key for caching record
+        definitions and synthesized anonymous record names.
+
+        Selection rules (three conditional “arms”):
+        - USR arm: a normal named decl where clang provides a USR and the
+          cursor is not an anonymous inline `struct`/`union` (for example
+          `struct node { ... };`) => returns the USR.
+        - `kind:spelling` arm: a named decl kind with an explicit spelling
+          (for example `enum Color { ... }`) when USR is missing/unused =>
+          returns `ENUM_DECL:Color` (or the appropriate `kind`).
+        - `anon:` arm: an anonymous inline record whose spelling is empty or
+          synthetic (for example `struct { int x; } inner;`) =>
+          returns `anon:<hash>` derived from source location.
+        """
         usr = cursor.get_usr()
         if usr and not _use_location_identity_for_cursor(cursor):
             return usr
@@ -114,24 +172,44 @@ class DeclIndex:
         digest = hashlib.sha256(loc_key.encode("utf-8")).hexdigest()[:16]
         return f"anon:{digest}"
 
-    def record_definition_for_cursor(self, cursor: cx.Cursor) -> cx.Cursor | None:
-        """Return the complete definition cursor for a record declaration."""
+    def record_definition_for_decl(self, cursor: cx.Cursor) -> cx.Cursor | None:
+        """Return the complete clang definition cursor for a record declaration.
+
+        This resolves the incoming record declaration (forward or definition) to
+        a stable `decl_id`, then returns the cached complete definition cursor
+        for that `decl_id` if one exists (or `None` if the record is incomplete
+        or was not indexed from the primary file).
+        """
         decl_id = self.decl_id_for_cursor(cursor)
         return self.record_definition_by_decl_id.get(decl_id)
 
     def is_complete_record_decl(self, cursor: cx.Cursor) -> bool:
-        """Return whether the record declaration has a complete definition."""
+        """Return whether a record cursor is backed by a complete definition."""
         if cursor.kind not in RECORD_KINDS:
             return False
-        return self.record_definition_for_cursor(cursor) is not None
+        return self.record_definition_for_decl(cursor) is not None
 
     def is_primary(self, cursor: cx.Cursor) -> bool:
-        """Return whether a cursor originates from the configured header."""
+        """Return whether a cursor originates from the configured primary header."""
         loc = cursor.location
         return bool(loc.file and Path(loc.file.name).resolve() == self.header)
 
-    def record_identity(self, cursor: cx.Cursor) -> tuple[str, str, str, bool]:
-        """Return stable identity fields for a lowered record declaration."""
+    def record_lowering_identity(self, cursor: cx.Cursor) -> tuple[str, str, str, bool]:
+        """Return stable identity fields for lowering a record declaration.
+
+        The returned tuple is:
+        - `decl_id`: stable declaration identity (may be USR or an anonymous
+          location-based fallback).
+        - `name`: IR struct/union name (possibly synthesized for anonymous
+          records).
+        - `c_name`: C spelling name for diagnostics / mapping (currently the
+          same as `name`).
+        - `is_anonymous`: whether the cursor corresponds to an anonymous record
+          that requires synthesized naming during lowering.
+
+        Callers use the tuple to consistently populate `Struct` metadata and
+        to decide how to treat nested anonymous record members.
+        """
         decl_id = self.decl_id_for_cursor(cursor)
         if not _is_anonymous_record_spelling(cursor.spelling):
             return decl_id, cursor.spelling, cursor.spelling, False
@@ -139,6 +217,16 @@ class DeclIndex:
         return decl_id, synth, synth, True
 
     def _anonymous_record_name(self, cursor: cx.Cursor, decl_id: str) -> str:
+        """Synthesize a stable IR-friendly name for an anonymous record.
+
+        The name is derived from:
+        - a scope stem based on the anonymous record's naming parent
+        - the record kind (`anon_struct` / `anon_union`)
+        - an ordinal derived from sibling anonymous record definitions
+
+        Results are cached by `decl_id` because callers may see multiple
+        cursors that map to the same declaration identity.
+        """
         cached = self.anonymous_record_name_by_decl_id.get(decl_id)
         if cached is not None:
             return cached
@@ -152,6 +240,11 @@ class DeclIndex:
         return synth
 
     def _scope_stem(self, cursor: cx.Cursor | None) -> str:
+        """Compute the hierarchical “scope stem” part of an anonymous name.
+
+        For example, anonymous fields inside named structs get names that embed
+        their field-name and parent scope chain.
+        """
         if cursor is None:
             return ""
         if cursor.kind == cx.CursorKind.FIELD_DECL:
@@ -169,6 +262,11 @@ class DeclIndex:
         return self._scope_stem(parent)
 
     def _naming_parent(self, cursor: cx.Cursor) -> cx.Cursor | None:
+        """Choose the parent cursor used to derive an anonymous record scope stem.
+
+        We prefer `lexical_parent` (falling back to `semantic_parent`) but only
+        accept the parent when it originates from the configured primary header.
+        """
         parent = getattr(cursor, "lexical_parent", None) or getattr(cursor, "semantic_parent", None)
         if parent is None:
             return None
@@ -179,6 +277,12 @@ class DeclIndex:
         return parent
 
     def _anonymous_record_ordinal(self, cursor: cx.Cursor, parent: cx.Cursor | None) -> int:
+        """Compute a stable ordinal among sibling anonymous record definitions.
+
+        Anonymous struct/union declarations may appear as siblings with equal
+        USRs. To keep synthesized names distinct, we number them by their
+        relative definition occurrence and stable source location.
+        """
         siblings = self.primary_cursors_in_order if parent is None else tuple(parent.get_children())
         target_loc = _location_key(cursor)
         ordinal = 0
