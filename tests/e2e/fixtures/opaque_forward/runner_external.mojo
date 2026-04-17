@@ -1,4 +1,4 @@
-from p1_opaque_forward_bindings_external import of_probe
+from opaque_forward_bindings_external import of_probe
 
 
 def main() raises:

@@ -1,4 +1,4 @@
-from p1_vector_extension_types_runtime_bindings_external import (
+from vector_extension_types_runtime_bindings_external import (
     vet_add,
     vet_add_sum_case0,
     vet_float4,
