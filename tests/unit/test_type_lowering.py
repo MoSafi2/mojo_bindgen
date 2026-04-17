@@ -8,7 +8,7 @@ import pytest
 
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import AtomicType, EnumRef, Function, IntType, Pointer, Struct, StructRef, TypeRef
+from mojo_bindgen.ir import AtomicType, EnumRef, Function, IntKind, IntType, Pointer, QualifiedType, Struct, StructRef, TypeRef
 from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
 
@@ -203,6 +203,28 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
     assert isinstance(next_field.type, Pointer)
     assert isinstance(next_field.type.pointee, StructRef)
     assert next_field.type.pointee.name == "node"
+
+
+def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> None:
+    header = tmp_path / "qualified_atomic_ptr.h"
+    header.write_text(
+        "int ev_load_atomic(const _Atomic int *src);\n",
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "ev_load_atomic")
+    assert isinstance(fn.params[0].type, Pointer)
+    assert isinstance(fn.params[0].type.pointee, QualifiedType)
+    assert fn.params[0].type.pointee.qualifiers.is_const is True
+    assert isinstance(fn.params[0].type.pointee.unqualified, AtomicType)
+    assert isinstance(fn.params[0].type.pointee.unqualified.value_type, IntType)
+    assert fn.params[0].type.pointee.unqualified.value_type.int_kind == IntKind.INT
 
 
 def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_path: Path) -> None:

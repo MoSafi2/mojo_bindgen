@@ -11,7 +11,7 @@ import subprocess
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import ClassVar, Iterator
 
 import clang.cindex as cx
 
@@ -152,6 +152,8 @@ class ClangFrontend:
 class ClangCompat:
     """Compatibility helpers for libclang Python binding differences."""
 
+    _value_type_api_ready: ClassVar[bool | None] = None
+
     def get_calling_convention(self, t: cx.Type) -> str | None:
         """Return a readable calling-convention string if available."""
         if hasattr(t, "get_canonical"):
@@ -192,3 +194,37 @@ class ClangCompat:
         except Exception:
             return None
         return count if isinstance(count, int) and count >= 0 else None
+
+    @classmethod
+    def _ensure_value_type_api(cls) -> bool:
+        """Register ``clang_Type_getValueType`` when libclang exposes it."""
+        if cls._value_type_api_ready is not None:
+            return cls._value_type_api_ready
+        try:
+            cx.register_function(
+                cx.conf.lib,
+                ("clang_Type_getValueType", [cx.Type], cx.Type, cx.Type.from_result),
+                False,
+            )
+        except Exception:
+            cls._value_type_api_ready = False
+        else:
+            cls._value_type_api_ready = True
+        return cls._value_type_api_ready
+
+    def get_value_type(self, t: cx.Type) -> cx.Type | None:
+        """Return the modified value type for wrappers like ``_Atomic(T)``."""
+        getter = getattr(t, "get_value_type", None)
+        if callable(getter):
+            try:
+                value_type = getter()
+            except Exception:
+                return None
+            return None if value_type.kind == cx.TypeKind.INVALID else value_type
+        if not self._ensure_value_type_api():
+            return None
+        try:
+            value_type = cx.conf.lib.clang_Type_getValueType(t)
+        except Exception:
+            return None
+        return None if value_type.kind == cx.TypeKind.INVALID else value_type

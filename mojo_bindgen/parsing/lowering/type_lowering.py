@@ -253,34 +253,13 @@ class TypeLowerer:
 
     def _lower_atomic_value_type(self, t: cx.Type, ctx: TypeContext) -> Type:
         spelling = t.spelling.strip()
-        if spelling.startswith("_Atomic(") and spelling.endswith(")"):
-            inner_spelling = spelling[len("_Atomic(") : -1].strip()
-        elif spelling.startswith("_Atomic "):
-            inner_spelling = spelling[len("_Atomic ") :].strip()
-        else:
-            return UnsupportedType(
-                category="unsupported_extension",
-                spelling=spelling or "_Atomic",
-                reason="unable to recover atomic value type from clang spelling",
-                size_bytes=self._safe_size(t),
-                align_bytes=self._safe_align(t),
-            )
-
-        idx = cx.Index.create()
-        src = f"{inner_spelling} __bindgen_atomic_inner;\n"
-        tu = idx.parse(
-            "__bindgen_atomic_inner.c",
-            args=self.primitive_resolver.compile_args,
-            unsaved_files=[("__bindgen_atomic_inner.c", src)],
-            options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
-        )
-        for cursor in tu.cursor.get_children():
-            if cursor.kind == cx.CursorKind.VAR_DECL and cursor.spelling == "__bindgen_atomic_inner":
-                return self.lower(cursor.type, ctx)
+        value_type = self.compat.get_value_type(t)
+        if value_type is not None:
+            return self.lower(value_type, ctx)
         return UnsupportedType(
             category="unsupported_extension",
             spelling=spelling or "_Atomic",
-            reason="failed to parse atomic value type from recovered spelling",
+            reason="libclang did not expose atomic value type information",
             size_bytes=self._safe_size(t),
             align_bytes=self._safe_align(t),
         )

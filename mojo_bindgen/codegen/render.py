@@ -104,9 +104,14 @@ class MojoRenderer:
         """Emit comments and the field declaration for one analyzed field."""
         field = analyzed_field.field
         if field.is_bitfield:
+            backing = (
+                _scalar_comment_name(field.type)
+                if isinstance(field.type, (IntType, FloatType, VoidType))
+                else type(field.type).__name__
+            )
             b.add(
                 f"# bitfield: C bits {field.bit_offset}..{field.bit_offset + field.bit_width - 1} "
-                f"({field.bit_width} bits) on {field.type.name}"
+                f"({field.bit_width} bits) on {backing}"
             )
         if analyzed_field.callback_alias_name is None and isinstance(field.type, FunctionPtr):
             b.add(f"# {types.function_ptr_comment(field.type)}")
