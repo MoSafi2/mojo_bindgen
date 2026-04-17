@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from clang import cindex as cx
 
 from mojo_bindgen.ir import Decl, Unit
-from mojo_bindgen.parsing.compat import ClangCompat
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
     ClangFrontend,

@@ -22,7 +22,7 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.parsing.compat import ClangCompat
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.index import DeclIndex
 from mojo_bindgen.parsing.lowering.primitive import (

@@ -21,7 +21,7 @@ from mojo_bindgen.ir import (
     Param,
     Typedef,
 )
-from mojo_bindgen.parsing.compat import ClangCompat
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.frontend import ClangFrontend
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.index import DeclIndex

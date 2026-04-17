@@ -492,3 +492,51 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
         'UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]]'
         "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
     ) in out
+
+
+def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
+    cb_sig = FunctionPtr(
+        ret=Pointer(pointee=None),
+        params=[Pointer(pointee=None), _i32()],
+        param_names=["ctx", "value"],
+        is_variadic=False,
+    )
+    cb_typedef = Typedef(
+        decl_id="typedef:nested_cb_t",
+        name="nested_cb_t",
+        aliased=cb_sig,
+        canonical=cb_sig,
+    )
+    fn = Function(
+        decl_id="fn:install_nested_cb",
+        name="install_nested_cb",
+        link_name="install_nested_cb",
+        ret=VoidType(),
+        params=[
+            Param(
+                name="slot",
+                type=Pointer(
+                    pointee=Pointer(
+                        pointee=TypeRef(
+                            decl_id=cb_typedef.decl_id,
+                            name=cb_typedef.name,
+                            canonical=cb_typedef.canonical,
+                        )
+                    )
+                ),
+            )
+        ],
+        is_variadic=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[cb_typedef, fn])
+    )
+    assert "comptime nested_cb_t = def (" in out
+    assert (
+        'def install_nested_cb(slot: UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], '
+        'MutExternalOrigin], MutExternalOrigin]) abi("C") -> None:'
+    ) in out
+    assert (
+        'external_call["install_nested_cb", NoneType, '
+        'UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], MutExternalOrigin], MutExternalOrigin]](slot)'
+    ) in out
