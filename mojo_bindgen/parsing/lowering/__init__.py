@@ -5,9 +5,12 @@ from __future__ import annotations
 from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser, ParsedConstExpr, ParsedMacro
 from mojo_bindgen.parsing.lowering.decl_lowering import DeclLowerer
+from mojo_bindgen.parsing.lowering.literal_resolver import (
+    LiteralResolver,
+    _suffix_probe_parse_args,
+)
 from mojo_bindgen.parsing.lowering.primitive import (
     PrimitiveResolver,
-    _suffix_probe_parse_args,
     default_signed_int_primitive,
 )
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
@@ -18,6 +21,7 @@ __all__ = [
     "ClangCompat",
     "ConstExprParser",
     "DeclLowerer",
+    "LiteralResolver",
     "ParsedConstExpr",
     "ParsedMacro",
     "PrimitiveResolver",

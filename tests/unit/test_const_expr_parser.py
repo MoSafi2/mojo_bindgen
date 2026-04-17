@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from mojo_bindgen.ir import BinaryExpr, FloatLiteral, FloatType, IntLiteral, IntType, NullPtrLiteral, RefExpr, StringLiteral
-from mojo_bindgen.parsing.lowering import ConstExprParser, PrimitiveResolver
+from mojo_bindgen.parsing.lowering import ConstExprParser, LiteralResolver
 
 
 def _has_libclang() -> bool:
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_const_expr_parser_parses_supported_leaf_forms() -> None:
-    parser = ConstExprParser(PrimitiveResolver([]))
+    parser = ConstExprParser(LiteralResolver([]))
 
     int_expr = parser.parse_tokens(["42u"])
     float_expr = parser.parse_tokens(["3.14159265"])
@@ -52,12 +52,12 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
 
 
 def test_const_expr_parser_rejects_still_unsupported_expression_subset() -> None:
-    parser = ConstExprParser(PrimitiveResolver([]))
+    parser = ConstExprParser(LiteralResolver([]))
     assert parser.parse_tokens(["sizeof", "(", "int", ")"]) is None
 
 
 def test_const_expr_parser_classifies_broader_predefined_and_function_like_macros() -> None:
-    parser = ConstExprParser(PrimitiveResolver([]))
+    parser = ConstExprParser(LiteralResolver([]))
 
     class _Token:
         def __init__(self, spelling: str) -> None:

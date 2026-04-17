@@ -25,6 +25,7 @@ from mojo_bindgen.parsing.index import DeclIndex
 from mojo_bindgen.parsing.lowering import (
     ConstExprParser,
     DeclLowerer,
+    LiteralResolver,
     PrimitiveResolver,
     RecordLowerer,
     RecordRepository,
@@ -110,7 +111,8 @@ class ClangParser:
 
     def _build_decl_lowerer(self, session: ParseSession) -> DeclLowerer:
         """Build and wire lowering collaborators for this parsing session."""
-        primitive_resolver = PrimitiveResolver(self.compile_args)
+        primitive_resolver = PrimitiveResolver()
+        literal_resolver = LiteralResolver(self.compile_args)
         compat = ClangCompat()
         record_repository = RecordRepository()
         record_types = RecordTypeResolver(
@@ -139,7 +141,7 @@ class ClangParser:
             primitive_resolver=primitive_resolver,
             type_lowerer=type_lowerer,
             record_lowerer=record_lowerer,
-            const_expr_parser=ConstExprParser(primitive_resolver),
+            const_expr_parser=ConstExprParser(literal_resolver),
             compat=compat,
         )
 

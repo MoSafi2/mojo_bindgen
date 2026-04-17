@@ -1,8 +1,8 @@
 """Token-based constant-expression parsing for macros and globals.
 
 This module owns the parser's supported constant-expression subset. It parses
-token streams from macros and initializers and relies only on a small literal
-primitive typing interface rather than the full lowering pipeline.
+token streams from macros and initializers and relies on ``LiteralResolver``
+for literal primitive typing rather than the full lowering pipeline.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from mojo_bindgen.ir import (
     UnaryExpr,
     VoidType,
 )
-from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
+from mojo_bindgen.parsing.lowering.literal_resolver import LiteralResolver
 
 
 _INT_LITERAL_RE = re.compile(
@@ -127,8 +127,8 @@ class ParsedMacro:
 class ConstExprParser:
     """Parse the small constant-expression subset supported by the parser."""
 
-    def __init__(self, primitive_resolver: PrimitiveResolver) -> None:
-        self.primitive_resolver = primitive_resolver
+    def __init__(self, literal_resolver: LiteralResolver) -> None:
+        self.literal_resolver = literal_resolver
 
     def parse_macro(self, cursor: cx.Cursor) -> ParsedMacro:
         """Classify a macro definition, preserving unsupported forms."""
@@ -266,7 +266,7 @@ class ConstExprParser:
         if value is not None:
             return ParsedConstExpr(
                 expr=IntLiteral(value),
-                primitive=self.primitive_resolver.primitive_for_integer_literal_suffix(suffix),
+                primitive=self.literal_resolver.int_type_for_integer_literal_suffix(suffix),
             )
         float_value, float_suffix = _match_float_literal(raw)
         if float_value is not None:
