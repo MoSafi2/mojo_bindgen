@@ -1,4 +1,4 @@
-"""Compile-args-dependent resolution of C literals to IR primitives."""
+"""ABI-correct resolution of C integer literal suffix families to IR primitives."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from mojo_bindgen.parsing.lowering.primitive import (
 )
 from mojo_bindgen.utils import build_c_parse_args
 
-_LITERAL_SUFFIX_PREWARM: frozenset[str] = frozenset(
+
+_PREWARM_SUFFIXES: frozenset[str] = frozenset(
     {
         "",
         "u",
@@ -39,69 +40,91 @@ _LITERAL_SUFFIX_PREWARM: frozenset[str] = frozenset(
     }
 )
 
-
-def _c_integer_spelling_for_literal_suffix(suffix: str) -> str:
-    """Map a C integer literal suffix to a canonical integer spelling."""
-    if not suffix:
-        return "int"
-    s = suffix.lower()
-    has_u = "u" in s
-    l_count = s.count("l")
-    if l_count >= 2:
-        return "unsigned long long" if has_u else "long long"
-    if l_count == 1:
-        return "unsigned long" if has_u else "long"
-    return "unsigned int" if has_u else "int"
-
-
-def _suffix_probe_parse_args(compile_args: list[str]) -> list[str]:
-    """Build parse args for integer literal suffix type probes."""
-    return build_c_parse_args(compile_args, default_std="-std=gnu11")
-
-
+_PROBE_FILENAME = "__bindgen_suffix_probe.c"
+_PROBE_DECL_NAME = "__bindgen_m"
 _PRIMITIVE_RESOLVER = PrimitiveResolver()
 
 
-def _int_primitive_from_clang_type(clang_type: cx.Type) -> IntType:
-    scalar = _PRIMITIVE_RESOLVER.resolve_primitive(clang_type)
-    if not isinstance(scalar, IntType):
-        return default_signed_int_primitive()
-    return scalar
+def _integer_spelling_for_suffix(suffix: str) -> str:
+    """Return the canonical C integer spelling implied by a literal suffix."""
+    if not suffix:
+        return "int"
+
+    s = suffix.lower()
+    has_unsigned = "u" in s
+    long_count = s.count("l")
+
+    if long_count >= 2:
+        return "unsigned long long" if has_unsigned else "long long"
+    if long_count == 1:
+        return "unsigned long" if has_unsigned else "long"
+    return "unsigned int" if has_unsigned else "int"
+
+
+def _parse_args_for_probe(compile_args: list[str]) -> list[str]:
+    """Return parse args for a tiny integer-type probe translation unit."""
+    return build_c_parse_args(compile_args, default_std="-std=gnu11")
+
+
+def _probe_source(type_spelling: str) -> str:
+    """Return the source text for a tiny variable declaration probe."""
+    return f"{type_spelling} {_PROBE_DECL_NAME};\n"
+
+
+def _fallback_int_type(type_spelling: str) -> IntType:
+    """Return a conservative integer fallback if probing fails."""
+    prim = default_signed_int_primitive()
+    if "unsigned" in type_spelling.split():
+        return IntType(
+            int_kind=IntKind.UINT,
+            size_bytes=prim.size_bytes,
+            align_bytes=prim.align_bytes,
+        )
+    return prim
+
+
+def _extract_probed_int_type(tu: cx.TranslationUnit) -> IntType | None:
+    """Extract the probed integer declaration type from a parsed TU."""
+    for cursor in tu.cursor.get_children():
+        if (
+            cursor.kind == cx.CursorKind.VAR_DECL
+            and cursor.spelling == _PROBE_DECL_NAME
+        ):
+            scalar = _PRIMITIVE_RESOLVER.resolve_primitive(cursor.type)
+            return scalar if isinstance(scalar, IntType) else None
+    return None
 
 
 class LiteralResolver:
-    """Resolve literal-related typing using the same compile flags as the main parse."""
+    """Resolve integer literal suffix families under a specific compile configuration."""
 
-    def __init__(self, compile_args: list[str]) -> None:
+    def __init__(self, compile_args: list[str], *, prewarm: bool = True) -> None:
         self.compile_args = list(compile_args)
+        self._parse_args = _parse_args_for_probe(self.compile_args)
         self._integer_suffix_cache: dict[str, IntType] = {}
-        for suffix in _LITERAL_SUFFIX_PREWARM:
-            self.int_type_for_integer_literal_suffix(suffix)
 
-    def int_type_for_integer_literal_suffix(self, suffix: str) -> IntType:
-        """Map an integer literal suffix to an ABI-correct integer primitive."""
-        if suffix in self._integer_suffix_cache:
-            return self._integer_suffix_cache[suffix]
-        spelling = _c_integer_spelling_for_literal_suffix(suffix)
+        if prewarm:
+            for suffix in _PREWARM_SUFFIXES:
+                self.int_type_for_integer_literal_suffix(suffix)
+
+    def _probe_int_type(self, suffix: str) -> IntType:
+        """Probe Clang for the ABI-correct integer type for a suffix family."""
+        type_spelling = _integer_spelling_for_suffix(suffix)
         idx = cx.Index.create()
-        src = f"{spelling} __bindgen_m;\n"
         tu = idx.parse(
-            "__bindgen_suffix_probe.c",
-            args=_suffix_probe_parse_args(self.compile_args),
-            unsaved_files=[("__bindgen_suffix_probe.c", src)],
+            _PROBE_FILENAME,
+            args=self._parse_args,
+            unsaved_files=[(_PROBE_FILENAME, _probe_source(type_spelling))],
             options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
         )
-        prim: IntType | None = None
-        for cursor in tu.cursor.get_children():
-            if (
-                cursor.kind == cx.CursorKind.VAR_DECL
-                and cursor.spelling == "__bindgen_m"
-            ):
-                prim = _int_primitive_from_clang_type(cursor.type)
-                break
-        if prim is None:
-            prim = default_signed_int_primitive()
-            if "unsigned" in spelling.split():
-                prim = IntType(int_kind=IntKind.UINT, size_bytes=prim.size_bytes)
+        return _extract_probed_int_type(tu) or _fallback_int_type(type_spelling)
+
+    def int_type_for_integer_literal_suffix(self, suffix: str) -> IntType:
+        """Return the ABI-correct integer primitive for a C literal suffix."""
+        cached = self._integer_suffix_cache.get(suffix)
+        if cached is not None:
+            return cached
+
+        prim = self._probe_int_type(suffix)
         self._integer_suffix_cache[suffix] = prim
         return prim
