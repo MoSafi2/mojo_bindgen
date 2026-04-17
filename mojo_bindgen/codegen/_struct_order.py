@@ -18,7 +18,7 @@ from mojo_bindgen.ir import (
     Type,
     TypeRef,
 )
-from mojo_bindgen.codegen.lowering import mojo_ident
+from mojo_bindgen.codegen.mojo_mapper import mojo_ident
 
 
 def struct_dependency_edges(s: Struct) -> list[tuple[str, str]]:

@@ -1,8 +1,7 @@
-"""IR -> Mojo type strings and identifier lowering helpers.
+"""IR → Mojo type strings and identifier mapping (codegen).
 
-This module contains pure lowering logic shared by analysis and rendering.
-It does not decide what to emit; it only converts IR concepts into the Mojo
-names and type strings needed by later stages.
+Pure conversion shared by analysis and rendering: IR concepts become Mojo-safe
+names and type strings. This module does not decide what to emit.
 """
 
 from __future__ import annotations
@@ -109,8 +108,8 @@ def _dtype_for_width(signed: bool, size_bytes: int) -> str | None:
     return None
 
 
-def lower_scalar(t: VoidType | IntType | FloatType) -> str:
-    """Lower a scalar IR type to its Mojo type name string."""
+def map_scalar(t: VoidType | IntType | FloatType) -> str:
+    """Map a scalar IR type to its Mojo type name string."""
     if isinstance(t, VoidType):
         return "NoneType"
     if isinstance(t, IntType) and t.int_kind == IntKind.BOOL:
@@ -128,7 +127,7 @@ def lower_scalar(t: VoidType | IntType | FloatType) -> str:
     return "Int32"
 
 
-def lower_scalar_dtype(t: VoidType | IntType | FloatType) -> str | None:
+def map_scalar_dtype(t: VoidType | IntType | FloatType) -> str | None:
     """Map a scalar IR type to a Mojo ``DType`` constant when representable."""
     if isinstance(t, VoidType):
         return None
@@ -177,31 +176,31 @@ def scalar_type_for_dtype(t: Type) -> VoidType | IntType | FloatType | None:
     return None
 
 
-def lower_vector_simd(t: VectorType) -> str | None:
-    """Lower a representable vector type to ``SIMD[dtype, size]``."""
+def map_vector_simd(t: VectorType) -> str | None:
+    """Map a representable vector type to ``SIMD[dtype, size]``."""
     element = scalar_type_for_dtype(t.element)
     if element is None or t.count is None:
         return None
-    dtype = lower_scalar_dtype(element)
+    dtype = map_scalar_dtype(element)
     if dtype is None:
         return None
     return f"SIMD[{dtype}, {t.count}]"
 
 
-def lower_complex_simd(t: ComplexType) -> str | None:
-    """Lower a representable complex scalar to ``ComplexSIMD[dtype, 1]``."""
-    dtype = lower_scalar_dtype(t.element)
+def map_complex_simd(t: ComplexType) -> str | None:
+    """Map a representable complex scalar to ``ComplexSIMD[dtype, 1]``."""
+    dtype = map_scalar_dtype(t.element)
     if dtype is None:
         return None
     return f"ComplexSIMD[{dtype}, 1]"
 
 
-def lower_atomic_type(t: AtomicType) -> str | None:
-    """Lower a representable atomic scalar to ``Atomic[dtype]``."""
+def map_atomic_type(t: AtomicType) -> str | None:
+    """Map a representable atomic scalar to ``Atomic[dtype]``."""
     value = scalar_type_for_dtype(t.value_type)
     if value is None:
         return None
-    dtype = lower_scalar_dtype(value)
+    dtype = map_scalar_dtype(value)
     if dtype is None:
         return None
     return f"Atomic[{dtype}]"
@@ -229,21 +228,21 @@ def peel_wrappers(t: Type) -> Type:
 
 @dataclass(frozen=True)
 class PointerOriginNames:
-    """Mut/Immut origin type names for UnsafePointer / OpaquePointer lowering."""
+    """Mut/Immut origin type names for UnsafePointer / OpaquePointer mapping."""
 
     mut: str
     immut: str
 
 
 def pointer_origin_names(style: FFIOriginStyle) -> PointerOriginNames:
-    """Return Mut/Immut origin type names for pointer lowering per ``ffi_origin``."""
+    """Return Mut/Immut origin type names for pointer mapping per ``ffi_origin``."""
     if style == "external":
         return PointerOriginNames(mut="MutExternalOrigin", immut="ImmutExternalOrigin")
     return PointerOriginNames(mut="MutAnyOrigin", immut="ImmutAnyOrigin")
 
 
-class TypeLowerer:
-    """Canonical and signature Mojo type lowering from IR :class:`~mojo_bindgen.ir.Type`."""
+class TypeMapper:
+    """Canonical and signature Mojo type mapping from IR :class:`~mojo_bindgen.ir.Type`."""
 
     def __init__(
         self,
@@ -262,13 +261,13 @@ class TypeLowerer:
 
     def signature(self, t: Type) -> str:
         """
-        Lower for top-level function ``def`` signatures: typedef alias name when
+        Map for top-level function ``def`` signatures: typedef alias name when
         this module emits a matching ``comptime`` typedef.
         """
         return self.surface(t)
 
     def surface(self, t: Type) -> str:
-        """Lower for public-facing generated API text while preserving emitted typedef aliases."""
+        """Map for public-facing generated API text while preserving emitted typedef aliases."""
         if isinstance(t, TypeRef):
             mid = mojo_ident(t.name.strip())
             if mid in self._callback_signature_names:
@@ -281,15 +280,15 @@ class TypeLowerer:
         if isinstance(t, Array):
             return self._surface_array(t)
         if isinstance(t, ComplexType):
-            lowered = lower_complex_simd(t)
-            if lowered is not None:
-                return lowered
+            mapped = map_complex_simd(t)
+            if mapped is not None:
+                return mapped
             inner = self.surface(t.element)
             return f"InlineArray[{inner}, 2]"
         if isinstance(t, VectorType):
-            lowered = lower_vector_simd(t)
-            if lowered is not None:
-                return lowered
+            mapped = map_vector_simd(t)
+            if mapped is not None:
+                return mapped
             if t.count is not None:
                 inner = self.surface(t.element)
                 return f"InlineArray[{inner}, {t.count}]"
@@ -344,10 +343,10 @@ class TypeLowerer:
 
     @singledispatchmethod
     def canonical(self, t: Type) -> str:
-        """Lower ``t`` to a Mojo type string for ABI/layout (typedef chain resolved)."""
+        """Map ``t`` to a Mojo type string for ABI/layout (typedef chain resolved)."""
         raise TypeError(
-            f"no canonical lowering registered for IR type {type(t).__name__!r}; "
-            "extend TypeLowerer.canonical with @canonical.register"
+            f"no canonical mapping registered for IR type {type(t).__name__!r}; "
+            "extend TypeMapper.canonical with @canonical.register"
         )
 
     @canonical.register
@@ -356,15 +355,15 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: VoidType) -> str:
-        return lower_scalar(t)
+        return map_scalar(t)
 
     @canonical.register
     def _(self, t: IntType) -> str:
-        return lower_scalar(t)
+        return map_scalar(t)
 
     @canonical.register
     def _(self, t: FloatType) -> str:
-        return lower_scalar(t)
+        return map_scalar(t)
 
     @canonical.register
     def _(self, t: QualifiedType) -> str:
@@ -372,9 +371,9 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: AtomicType) -> str:
-        lowered = lower_atomic_type(t)
-        if lowered is not None:
-            return lowered
+        mapped = map_atomic_type(t)
+        if mapped is not None:
+            return mapped
         return self.canonical(t.value_type)
 
     @canonical.register
@@ -419,17 +418,17 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: ComplexType) -> str:
-        lowered = lower_complex_simd(t)
-        if lowered is not None:
-            return lowered
+        mapped = map_complex_simd(t)
+        if mapped is not None:
+            return mapped
         inner = self.canonical(t.element)
         return f"InlineArray[{inner}, 2]"
 
     @canonical.register
     def _(self, t: VectorType) -> str:
-        lowered = lower_vector_simd(t)
-        if lowered is not None:
-            return lowered
+        mapped = map_vector_simd(t)
+        if mapped is not None:
+            return mapped
         if t.count is not None:
             inner = self.canonical(t.element)
             return f"InlineArray[{inner}, {t.count}]"
@@ -449,13 +448,13 @@ class TypeLowerer:
         return pointee, Qualifiers()
 
     def _canonical_struct_ref(self, t: StructRef) -> str:
-        """Lower a struct reference, dispatching unions to their storage strategy."""
+        """Map a struct reference, dispatching unions to their storage strategy."""
         if t.is_union:
             return self._canonical_union_struct_ref(t)
         return self._canonical_record_struct_ref(t)
 
     def _canonical_union_struct_ref(self, t: StructRef) -> str:
-        """Lower a union reference to an ``UnsafeUnion`` alias or byte storage."""
+        """Map a union reference to an ``UnsafeUnion`` alias or byte storage."""
         mid = mojo_ident(t.name.strip())
         uq = f"{mid}_Union"
         if uq in self._unsafe_union_names:
@@ -463,11 +462,11 @@ class TypeLowerer:
         return f"InlineArray[UInt8, {t.size_bytes}]"
 
     def _canonical_record_struct_ref(self, t: StructRef) -> str:
-        """Lower a non-union record reference to its emitted Mojo identifier."""
+        """Map a non-union record reference to its emitted Mojo identifier."""
         return mojo_ident(t.name.strip())
 
     def function_ptr_canonical_signature_parts(self, fp: FunctionPtr) -> list[str]:
-        """Lowered ret and param types (same as used for FFI wire comments)."""
+        """Mapped ret and param types (same as used for FFI wire comments)."""
         parts = [self.canonical(fp.ret)]
         parts.extend(self.canonical(p) for p in fp.params)
         return parts
@@ -479,7 +478,7 @@ class TypeLowerer:
         return parts
 
     def function_ptr_canonical_signature(self, fp: FunctionPtr) -> str:
-        """Comma-separated lowered ret and param types (semantic signature, not wire pointer type)."""
+        """Comma-separated mapped ret and param types (semantic signature, not wire pointer type)."""
         return ", ".join(self.function_ptr_canonical_signature_parts(fp))
 
     def function_ptr_comment(self, fp: FunctionPtr) -> str:
@@ -531,14 +530,14 @@ class TypeLowerer:
         return ", ".join(type_params)
 
 
-def lower_type(
+def map_type(
     t: Type,
     *,
     ffi_origin: FFIOriginStyle = "external",
     unsafe_union_names: frozenset[str] | None = None,
 ) -> str:
-    """Lower IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
-    return TypeLowerer(
+    """Map IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
+    return TypeMapper(
         ffi_origin=ffi_origin,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=frozenset(),

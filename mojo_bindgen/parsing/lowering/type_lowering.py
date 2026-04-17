@@ -181,6 +181,24 @@ class TypeLowerer:
         return Pointer(
             pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers)
         )
+        
+    def _lower_fnptr(self, t: cx.Type, ctx: TypeContext) -> FunctionPtr:
+        ret = self.lower(t.get_result(), ctx)
+        params = (
+            [self.lower(arg, ctx) for arg in t.argument_types()]
+            if t.kind == cx.TypeKind.FUNCTIONPROTO
+            else []
+        )
+        is_variadic = (
+            t.is_function_variadic() if t.kind == cx.TypeKind.FUNCTIONPROTO else False
+        )
+        return FunctionPtr(
+            ret=ret,
+            params=params,
+            is_variadic=is_variadic,
+            calling_convention=self.compat.get_calling_convention(t),
+        )
+
 
     def _lower_pointer_to_value(
         self, pointee: cx.Type, qualifiers: Qualifiers, ctx: TypeContext
@@ -212,23 +230,6 @@ class TypeLowerer:
         if underlying is not None:
             return underlying
         return default_signed_int_primitive()
-
-    def _lower_fnptr(self, t: cx.Type, ctx: TypeContext) -> FunctionPtr:
-        ret = self.lower(t.get_result(), ctx)
-        params = (
-            [self.lower(arg, ctx) for arg in t.argument_types()]
-            if t.kind == cx.TypeKind.FUNCTIONPROTO
-            else []
-        )
-        is_variadic = (
-            t.is_function_variadic() if t.kind == cx.TypeKind.FUNCTIONPROTO else False
-        )
-        return FunctionPtr(
-            ret=ret,
-            params=params,
-            is_variadic=is_variadic,
-            calling_convention=self.compat.get_calling_convention(t),
-        )
 
     def _lower_complex(self, t: cx.Type) -> Type:
         element = self.primitive_resolver.resolve_primitive(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from mojo_bindgen.codegen.analysis import analyze_unit
 from mojo_bindgen.codegen.generator import MojoGenerator
-from mojo_bindgen.codegen.lowering import lower_type
+from mojo_bindgen.codegen.mojo_mapper import map_type
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AtomicType,
@@ -48,19 +48,19 @@ def _char() -> IntType:
     return IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
 
 
-def test_lower_opaque_record_ref_as_opaque_pointer() -> None:
+def test_map_opaque_record_ref_as_opaque_pointer() -> None:
     t = OpaqueRecordRef(decl_id="struct:FILE", name="FILE", c_name="FILE")
-    assert lower_type(t, ffi_origin="external") == "MutOpaquePointer[MutExternalOrigin]"
+    assert map_type(t, ffi_origin="external") == "MutOpaquePointer[MutExternalOrigin]"
 
 
-def test_lower_unsupported_type_with_size_becomes_inline_bytes() -> None:
+def test_map_unsupported_type_with_size_becomes_inline_bytes() -> None:
     t = UnsupportedType(
         category="unsupported_extension",
         spelling="mystery_t",
         reason="not modeled",
         size_bytes=16,
     )
-    assert lower_type(t, ffi_origin="external") == "InlineArray[UInt8, 16]"
+    assert map_type(t, ffi_origin="external") == "InlineArray[UInt8, 16]"
 
 
 def test_incomplete_struct_is_not_emitted_as_ordered_struct() -> None:

@@ -35,7 +35,7 @@ from mojo_bindgen.codegen.analysis import (
     AnalyzedUnit,
     TailDecl,
 )
-from mojo_bindgen.codegen.lowering import TypeLowerer, lower_scalar, mojo_ident
+from mojo_bindgen.codegen.mojo_mapper import TypeMapper, map_scalar, mojo_ident
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
@@ -79,15 +79,15 @@ class MojoRenderer:
     """Turn :class:`AnalyzedUnit` into a generated Mojo module."""
 
     def __init__(self, analyzed: AnalyzedUnit) -> None:
-        """Bind an analyzed unit and prepare the lowerers needed for rendering."""
+        """Bind an analyzed unit and prepare the mappers needed for rendering."""
         self._a = analyzed
-        self._types = TypeLowerer(
+        self._types = TypeMapper(
             ffi_origin=analyzed.opts.ffi_origin,
             unsafe_union_names=analyzed.unsafe_union_names,
             typedef_mojo_names=analyzed.emitted_typedef_mojo_names,
             callback_signature_names=analyzed.callback_signature_names,
         )
-        self._union_member_types = TypeLowerer(
+        self._union_member_types = TypeMapper(
             ffi_origin=analyzed.opts.ffi_origin,
             unsafe_union_names=frozenset(),
             typedef_mojo_names=frozenset(),
@@ -97,7 +97,7 @@ class MojoRenderer:
     @staticmethod
     def _emit_field_lines(
         opts: MojoEmitOptions,
-        types: TypeLowerer,
+        types: TypeMapper,
         b: CodeBuilder,
         analyzed_field: AnalyzedField,
     ) -> None:
@@ -118,10 +118,10 @@ class MojoRenderer:
         if opts.warn_abi and field.is_bitfield:
             b.add("# ABI: verify bitfield layout matches target C compiler.")
         if analyzed_field.callback_alias_name is not None:
-            lowered = types.callback_pointer_type(analyzed_field.callback_alias_name)
+            mapped = types.callback_pointer_type(analyzed_field.callback_alias_name)
         else:
-            lowered = types.surface(field.type)
-        b.add(f"var {analyzed_field.mojo_name}: {lowered}")
+            mapped = types.surface(field.type)
+        b.add(f"var {analyzed_field.mojo_name}: {mapped}")
 
     def render_struct(self, analyzed: AnalyzedStruct) -> str:
         """Render a single analyzed non-union struct declaration."""
@@ -279,7 +279,7 @@ class MojoRenderer:
 
     def _emit_enum(self, decl: Enum) -> str:
         """Render one C enum as a thin Mojo wrapper struct."""
-        base = lower_scalar(decl.underlying)
+        base = map_scalar(decl.underlying)
         name = mojo_ident(decl.name)
         b = CodeBuilder()
         b.add(
@@ -312,7 +312,7 @@ class MojoRenderer:
         return "".join(self._emit_callback_alias(alias) for alias in self._a.callback_aliases)
 
     @staticmethod
-    def _emit_typedef(analyzed: AnalyzedTypedef, types: TypeLowerer) -> str:
+    def _emit_typedef(analyzed: AnalyzedTypedef, types: TypeMapper) -> str:
         """Render one typedef alias unless it is suppressed by analysis."""
         if analyzed.skip_duplicate:
             return ""
@@ -384,7 +384,7 @@ class MojoRenderer:
     ) -> str | None:
         """Render the supported constant-expression subset to Mojo source."""
         if isinstance(expr, IntLiteral) and isinstance(decl_type, (IntType, FloatType, VoidType)):
-            t = lower_scalar(decl_type)
+            t = map_scalar(decl_type)
             return f"{t}({expr.value})"
         if isinstance(expr, StringLiteral):
             value = expr.value.replace("\\", "\\\\").replace('"', '\\"')

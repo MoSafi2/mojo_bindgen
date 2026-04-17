@@ -42,12 +42,12 @@ from mojo_bindgen.ir import (
     VectorType,
 )
 from mojo_bindgen.codegen._struct_order import toposort_structs
-from mojo_bindgen.codegen.lowering import (
+from mojo_bindgen.codegen.mojo_mapper import (
     FFIOriginStyle,
-    TypeLowerer,
-    lower_atomic_type,
-    lower_complex_simd,
-    lower_vector_simd,
+    TypeMapper,
+    map_atomic_type,
+    map_complex_simd,
+    map_vector_simd,
     mojo_ident,
     peel_wrappers,
 )
@@ -118,7 +118,7 @@ def _type_needs_simd_import(t: Type) -> bool:
             _type_needs_simd_import(p) for p in t.params
         )
     if isinstance(t, VectorType):
-        return lower_vector_simd(t) is not None
+        return map_vector_simd(t) is not None
     return False
 
 
@@ -138,7 +138,7 @@ def _type_needs_complex_import(t: Type) -> bool:
             _type_needs_complex_import(p) for p in t.params
         )
     if isinstance(t, ComplexType):
-        return lower_complex_simd(t) is not None
+        return map_complex_simd(t) is not None
     return False
 
 
@@ -148,7 +148,7 @@ def _type_needs_atomic_import(t: Type) -> bool:
     if isinstance(t, QualifiedType):
         return _type_needs_atomic_import(t.unqualified)
     if isinstance(t, AtomicType):
-        if lower_atomic_type(t) is not None:
+        if map_atomic_type(t) is not None:
             return True
         return _type_needs_atomic_import(t.value_type)
     if isinstance(t, Pointer):
@@ -170,9 +170,9 @@ def _note_semantic_fallbacks(t: Type, notes: set[str]) -> None:
         _note_semantic_fallbacks(t.unqualified, notes)
         return
     if isinstance(t, AtomicType):
-        if lower_atomic_type(t) is None:
+        if map_atomic_type(t) is None:
             notes.add(
-                "some atomic types were lowered to their underlying non-atomic Mojo type because Atomic[dtype] was not representable"
+                "some atomic types were mapped to their underlying non-atomic Mojo type because Atomic[dtype] was not representable"
             )
         _note_semantic_fallbacks(t.value_type, notes)
         return
@@ -189,15 +189,15 @@ def _note_semantic_fallbacks(t: Type, notes: set[str]) -> None:
             _note_semantic_fallbacks(p, notes)
         return
     if isinstance(t, ComplexType):
-        if lower_complex_simd(t) is None:
+        if map_complex_simd(t) is None:
             notes.add(
-                "some complex C types were lowered as InlineArray[scalar, 2] because ComplexSIMD[dtype, 1] was not representable"
+                "some complex C types were mapped as InlineArray[scalar, 2] because ComplexSIMD[dtype, 1] was not representable"
             )
         return
     if isinstance(t, VectorType):
-        if lower_vector_simd(t) is None:
+        if map_vector_simd(t) is None:
             notes.add(
-                "some vector C types were lowered as InlineArray[...] because SIMD[dtype, size] was not representable"
+                "some vector C types were mapped as InlineArray[...] because SIMD[dtype, size] was not representable"
             )
         _note_semantic_fallbacks(t.element, notes)
 
@@ -279,22 +279,22 @@ def _type_ok_for_unsafe_union_member(t: Type) -> bool:
 def _try_unsafe_union_type_list(
     decl: Struct, ffi_origin: FFIOriginStyle
 ) -> list[str] | None:
-    """Return lowered union member types when the union is ``UnsafeUnion``-eligible."""
+    """Return mapped union member types when the union is ``UnsafeUnion``-eligible."""
     if not decl.is_union or not decl.fields:
         return None
-    lower = TypeLowerer(
+    mapper = TypeMapper(
         ffi_origin=ffi_origin,
         unsafe_union_names=frozenset(),
         typedef_mojo_names=frozenset(),
     )
-    lowered: list[str] = []
+    mapped_members: list[str] = []
     for f in decl.fields:
         if not _type_ok_for_unsafe_union_member(f.type):
             return None
-        lowered.append(lower.canonical(f.type))
-    if len(set(lowered)) != len(lowered):
+        mapped_members.append(mapper.canonical(f.type))
+    if len(set(mapped_members)) != len(mapped_members):
         return None
-    return lowered
+    return mapped_members
 
 
 def eligible_unsafe_union_names(
@@ -325,7 +325,7 @@ def _type_ok_for_register_passable_field(
             t.unqualified, struct_by_id, visiting
         )
     if isinstance(t, AtomicType):
-        if lower_atomic_type(t) is not None:
+        if map_atomic_type(t) is not None:
             return False
         return _type_ok_for_register_passable_field(
             t.value_type, struct_by_id, visiting
@@ -335,9 +335,9 @@ def _type_ok_for_register_passable_field(
     if isinstance(t, UnsupportedType):
         return False
     if isinstance(t, VectorType):
-        return lower_vector_simd(t) is not None
+        return map_vector_simd(t) is not None
     if isinstance(t, ComplexType):
-        return lower_complex_simd(t) is not None
+        return map_complex_simd(t) is not None
     if isinstance(t, StructRef):
         if t.decl_id in visiting:
             return False
@@ -632,12 +632,12 @@ def _analyze_struct(
 def _analyze_function(
     fn: Function,
     struct_map: dict[str, Struct],
-    type_lowerer: TypeLowerer,
+    type_mapper: TypeMapper,
     ret_callback_alias_name: str | None = None,
     param_callback_alias_names: tuple[str | None, ...] = (),
 ) -> AnalyzedFunction:
     """Analyze one function declaration and choose its wrapper strategy."""
-    param_names = tuple(type_lowerer.param_names(fn.params))
+    param_names = tuple(type_mapper.param_names(fn.params))
     if fn.is_variadic:
         return AnalyzedFunction(
             decl=fn,
@@ -815,7 +815,7 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     ) = _collect_callback_aliases(unit, emitted_typedef_names)
     unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
     struct_map = struct_by_decl_id(unit)
-    type_lowerer = TypeLowerer(
+    type_mapper = TypeMapper(
         ffi_origin=options.ffi_origin,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=emitted_typedef_names,
@@ -852,7 +852,7 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
                 _analyze_function(
                     d,
                     struct_map,
-                    type_lowerer,
+                    type_mapper,
                     ret_callback_alias_name=fn_ret_callback_aliases.get(d.decl_id),
                     param_callback_alias_names=tuple(
                         fn_param_callback_aliases.get((d.decl_id, i))
