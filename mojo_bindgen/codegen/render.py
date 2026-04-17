@@ -208,7 +208,7 @@ class MojoRenderer:
         if self._a.needs_complex_import:
             lines.append("from std.complex import ComplexSIMD")
         if self._a.needs_atomic_import:
-            lines.append("from std.os import Atomic")
+            lines.append("from std.atomic import Atomic")
         return "\n".join(lines) + "\n\n"
 
     def _semantic_fallback_note_block(self) -> str:

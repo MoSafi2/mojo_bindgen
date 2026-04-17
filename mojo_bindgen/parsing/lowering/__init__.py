@@ -7,7 +7,6 @@ from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser, ParsedCons
 from mojo_bindgen.parsing.lowering.decl_lowering import DeclLowerer
 from mojo_bindgen.parsing.lowering.literal_resolver import (
     LiteralResolver,
-    _suffix_probe_parse_args,
 )
 from mojo_bindgen.parsing.lowering.primitive import (
     PrimitiveResolver,
