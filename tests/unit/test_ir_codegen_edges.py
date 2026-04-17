@@ -73,7 +73,10 @@ def test_incomplete_struct_is_not_emitted_as_ordered_struct() -> None:
         align_bytes=0,
         is_complete=False,
     )
-    au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
+    au = analyze_unit(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st]),
+        MojoEmitOptions(),
+    )
     assert au.ordered_structs == ()
 
 
@@ -123,7 +126,20 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
             ),
             MacroDecl(
                 name="MACRO_GENERIC",
-                tokens=["_Generic", "(", "0", ",", "int", ":", "42", ",", "default", ":", "0", ")"],
+                tokens=[
+                    "_Generic",
+                    "(",
+                    "0",
+                    ",",
+                    "int",
+                    ":",
+                    "42",
+                    ",",
+                    "default",
+                    ":",
+                    "0",
+                    ")",
+                ],
                 kind="object_like_unsupported",
                 diagnostic="unsupported macro replacement list",
             ),
@@ -189,7 +205,9 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     macro_pos = out.index("comptime MACRO_OK = Int32(1)")
     const_pos = out.index("comptime LIMIT = Int32(7)")
-    global_pos = out.index("# global variable global_counter: Int32 (manual binding required)")
+    global_pos = out.index(
+        "# global variable global_counter: Int32 (manual binding required)"
+    )
     fn_pos = out.index('def do_work() abi("C") -> Int32:')
     assert macro_pos < global_pos
     assert const_pos < global_pos
@@ -256,12 +274,17 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.os import Atomic" in out
-    assert "# global variable counter: Atomic[DType.int32] (manual binding required)" in out
+    assert (
+        "# global variable counter: Atomic[DType.int32] (manual binding required)"
+        in out
+    )
 
 
 def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:
     i32 = _i32()
-    my_uint = Typedef(decl_id="typedef:my_uint", name="my_uint", aliased=i32, canonical=i32)
+    my_uint = Typedef(
+        decl_id="typedef:my_uint", name="my_uint", aliased=i32, canonical=i32
+    )
     my_uint_ref = TypeRef(decl_id=my_uint.decl_id, name="my_uint", canonical=i32)
     my_uint_ptr = Typedef(
         decl_id="typedef:my_uint_ptr",
@@ -312,7 +335,9 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
 
 def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() -> None:
     i32 = _i32()
-    fp = FunctionPtr(ret=i32, params=[i32, i32], param_names=["a", "b"], is_variadic=False)
+    fp = FunctionPtr(
+        ret=i32, params=[i32, i32], param_names=["a", "b"], is_variadic=False
+    )
     fp_typedef = Typedef(
         decl_id="typedef:pfr_binary_op_t",
         name="pfr_binary_op_t",
@@ -360,11 +385,17 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     )
 
     external_out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert 'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32' in external_out
-    assert 'def pfr_select_add() abi("C") -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:' in external_out
+    assert (
+        'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32'
+        in external_out
+    )
+    assert (
+        'def pfr_select_add() abi("C") -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:'
+        in external_out
+    )
     assert (
         'def pfr_select_add_direct() abi("C") -> '
-        'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:'
+        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:"
     ) in external_out
     assert (
         'return external_call["pfr_select_add", UnsafePointer[pfr_binary_op_t, MutExternalOrigin]]()'
@@ -372,7 +403,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     )
     assert (
         'return external_call["pfr_select_add_direct", '
-        'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()'
+        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()"
         in external_out
     )
     assert (
@@ -390,8 +421,14 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
             library_path_hint="/tmp/libpfr.so",
         )
     ).generate(unit)
-    assert 'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32' in dl_out
-    assert "def pfr_select_add() raises -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:" in dl_out
+    assert (
+        'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32'
+        in dl_out
+    )
+    assert (
+        "def pfr_select_add() raises -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:"
+        in dl_out
+    )
     assert (
         "def pfr_select_add_direct() raises -> "
         "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:"
@@ -402,8 +439,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     )
     assert (
         'return _bindgen_dl().call["pfr_select_add_direct", '
-        'UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()'
-        in dl_out
+        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()" in dl_out
     )
     assert (
         'return _bindgen_dl().call["pfr_call", Int32, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
@@ -471,12 +507,23 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="sqlite", link_name="sqlite", decls=[sqlite3, vtab, module])
+        Unit(
+            source_header="t.h",
+            library="sqlite",
+            link_name="sqlite",
+            decls=[sqlite3, vtab, module],
+        )
     )
     assert "comptime sqlite3_module_xCreate_cb = def (" in out
     assert "comptime sqlite3_module_xConnect_cb = def (" in out
-    assert "var xCreate: UnsafePointer[sqlite3_module_xCreate_cb, MutExternalOrigin]" in out
-    assert "var xConnect: UnsafePointer[sqlite3_module_xConnect_cb, MutExternalOrigin]" in out
+    assert (
+        "var xCreate: UnsafePointer[sqlite3_module_xCreate_cb, MutExternalOrigin]"
+        in out
+    )
+    assert (
+        "var xConnect: UnsafePointer[sqlite3_module_xConnect_cb, MutExternalOrigin]"
+        in out
+    )
     assert "# function pointer (fixed):" not in out
 
 
@@ -551,10 +598,10 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
     ) in out
     assert (
         'return external_call["sqlite3_create_collation_v2", Int32, '
-        'UnsafePointer[sqlite3, MutExternalOrigin], '
-        'UnsafePointer[Int8, MutExternalOrigin], Int32, MutOpaquePointer[MutExternalOrigin], '
-        'UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], '
-        'UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]]'
+        "UnsafePointer[sqlite3, MutExternalOrigin], "
+        "UnsafePointer[Int8, MutExternalOrigin], Int32, MutOpaquePointer[MutExternalOrigin], "
+        "UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], "
+        "UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]]"
         "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
     ) in out
 
@@ -598,10 +645,10 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
     )
     assert "comptime nested_cb_t = def (" in out
     assert (
-        'def install_nested_cb(slot: UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], '
+        "def install_nested_cb(slot: UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], "
         'MutExternalOrigin], MutExternalOrigin]) abi("C") -> None:'
     ) in out
     assert (
         'external_call["install_nested_cb", NoneType, '
-        'UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], MutExternalOrigin], MutExternalOrigin]](slot)'
+        "UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], MutExternalOrigin], MutExternalOrigin]](slot)"
     ) in out

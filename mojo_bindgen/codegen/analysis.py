@@ -114,7 +114,9 @@ def _type_needs_simd_import(t: Type) -> bool:
     if isinstance(t, Array):
         return _type_needs_simd_import(t.element)
     if isinstance(t, FunctionPtr):
-        return _type_needs_simd_import(t.ret) or any(_type_needs_simd_import(p) for p in t.params)
+        return _type_needs_simd_import(t.ret) or any(
+            _type_needs_simd_import(p) for p in t.params
+        )
     if isinstance(t, VectorType):
         return lower_vector_simd(t) is not None
     return False
@@ -132,7 +134,9 @@ def _type_needs_complex_import(t: Type) -> bool:
     if isinstance(t, Array):
         return _type_needs_complex_import(t.element)
     if isinstance(t, FunctionPtr):
-        return _type_needs_complex_import(t.ret) or any(_type_needs_complex_import(p) for p in t.params)
+        return _type_needs_complex_import(t.ret) or any(
+            _type_needs_complex_import(p) for p in t.params
+        )
     if isinstance(t, ComplexType):
         return lower_complex_simd(t) is not None
     return False
@@ -152,7 +156,9 @@ def _type_needs_atomic_import(t: Type) -> bool:
     if isinstance(t, Array):
         return _type_needs_atomic_import(t.element)
     if isinstance(t, FunctionPtr):
-        return _type_needs_atomic_import(t.ret) or any(_type_needs_atomic_import(p) for p in t.params)
+        return _type_needs_atomic_import(t.ret) or any(
+            _type_needs_atomic_import(p) for p in t.params
+        )
     return False
 
 
@@ -270,7 +276,9 @@ def _type_ok_for_unsafe_union_member(t: Type) -> bool:
     return isinstance(u, (IntType, FloatType, Pointer, FunctionPtr, OpaqueRecordRef))
 
 
-def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> list[str] | None:
+def _try_unsafe_union_type_list(
+    decl: Struct, ffi_origin: FFIOriginStyle
+) -> list[str] | None:
     """Return lowered union member types when the union is ``UnsafeUnion``-eligible."""
     if not decl.is_union or not decl.fields:
         return None
@@ -289,7 +297,9 @@ def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> lis
     return lowered
 
 
-def eligible_unsafe_union_names(unit: Unit, ffi_origin: FFIOriginStyle) -> frozenset[str]:
+def eligible_unsafe_union_names(
+    unit: Unit, ffi_origin: FFIOriginStyle
+) -> frozenset[str]:
     """Return union aliases that can be emitted as ``UnsafeUnion``."""
     out: set[str] = set()
     for d in unit.decls:
@@ -311,11 +321,15 @@ def _type_ok_for_register_passable_field(
     if isinstance(t, TypeRef):
         return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
     if isinstance(t, QualifiedType):
-        return _type_ok_for_register_passable_field(t.unqualified, struct_by_id, visiting)
+        return _type_ok_for_register_passable_field(
+            t.unqualified, struct_by_id, visiting
+        )
     if isinstance(t, AtomicType):
         if lower_atomic_type(t) is not None:
             return False
-        return _type_ok_for_register_passable_field(t.value_type, struct_by_id, visiting)
+        return _type_ok_for_register_passable_field(
+            t.value_type, struct_by_id, visiting
+        )
     if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
         return True
     if isinstance(t, UnsupportedType):
@@ -333,7 +347,8 @@ def _type_ok_for_register_passable_field(
         visiting.add(t.decl_id)
         try:
             return all(
-                _type_ok_for_register_passable_field(f.type, struct_by_id, visiting) for f in s.fields
+                _type_ok_for_register_passable_field(f.type, struct_by_id, visiting)
+                for f in s.fields
             )
         finally:
             visiting.remove(t.decl_id)
@@ -348,11 +363,16 @@ def _type_ok_for_register_passable_field(
     return False
 
 
-def struct_decl_register_passable(decl: Struct, struct_by_id: dict[str, Struct]) -> bool:
+def struct_decl_register_passable(
+    decl: Struct, struct_by_id: dict[str, Struct]
+) -> bool:
     """Return whether ``decl`` can be emitted with ``RegisterPassable``."""
     if decl.is_union:
         return False
-    return all(_type_ok_for_register_passable_field(f.type, struct_by_id, None) for f in decl.fields)
+    return all(
+        _type_ok_for_register_passable_field(f.type, struct_by_id, None)
+        for f in decl.fields
+    )
 
 
 def _field_mojo_name(f: Field, index: int) -> str:
@@ -528,12 +548,16 @@ class AnalyzedUnit:
 def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     """Return non-union structs in dependency-safe emission order."""
     struct_decls = [
-        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
+        d
+        for d in unit.decls
+        if isinstance(d, Struct) and not d.is_union and d.is_complete
     ]
     return tuple(toposort_structs(struct_decls))
 
 
-def _emitted_struct_enum_names(unit: Unit, ordered_structs: tuple[Struct, ...]) -> frozenset[str]:
+def _emitted_struct_enum_names(
+    unit: Unit, ordered_structs: tuple[Struct, ...]
+) -> frozenset[str]:
     """Return emitted struct and enum names used to detect typedef collisions."""
     emitted_names: set[str] = set()
     for s in ordered_structs:
@@ -544,12 +568,15 @@ def _emitted_struct_enum_names(unit: Unit, ordered_structs: tuple[Struct, ...]) 
     return frozenset(emitted_names)
 
 
-def _emitted_typedef_mojo_names(unit: Unit, emitted_struct_enum_names: frozenset[str]) -> frozenset[str]:
+def _emitted_typedef_mojo_names(
+    unit: Unit, emitted_struct_enum_names: frozenset[str]
+) -> frozenset[str]:
     """Return typedef names that remain visible on the generated Mojo API surface."""
     return frozenset(
         mojo_ident(d.name)
         for d in unit.decls
-        if isinstance(d, Typedef) and mojo_ident(d.name) not in emitted_struct_enum_names
+        if isinstance(d, Typedef)
+        and mojo_ident(d.name) not in emitted_struct_enum_names
     )
 
 
@@ -571,20 +598,24 @@ def _analyze_struct(
             if decl.size_bytes % ab != 0:
                 align_stride_warning = True
         elif ab > 1:
-            align_omit_comment = (
-                f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
-            )
+            align_omit_comment = f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
     if decl.is_packed:
         packed_comment = "# packed record: verify Mojo layout against the target C ABI."
         align_omit_comment = (
-            packed_comment if align_omit_comment is None else f"{align_omit_comment} {packed_comment[2:]}"
+            packed_comment
+            if align_omit_comment is None
+            else f"{align_omit_comment} {packed_comment[2:]}"
         )
     fields = tuple(
         AnalyzedField(
             field=f,
             index=i,
             mojo_name=_field_mojo_name(f, i),
-            callback_alias_name=None if field_callback_aliases is None else field_callback_aliases.get((decl.decl_id, i)),
+            callback_alias_name=(
+                None
+                if field_callback_aliases is None
+                else field_callback_aliases.get((decl.decl_id, i))
+            ),
         )
         for i, f in enumerate(decl.fields)
     )
@@ -694,7 +725,11 @@ def _collect_callback_aliases(
     for d in unit.decls:
         if isinstance(d, Typedef):
             fp = _function_ptr_from_type(d.aliased)
-            if fp is not None and _supports_callback_alias(fp) and mojo_ident(d.name) in emitted_typedef_names:
+            if (
+                fp is not None
+                and _supports_callback_alias(fp)
+                and mojo_ident(d.name) in emitted_typedef_names
+            ):
                 typedef_aliases[d.decl_id] = ensure_alias(fp, d.name)
         elif isinstance(d, Struct) and not d.is_union:
             base = d.name.strip() or d.c_name.strip()
@@ -702,27 +737,40 @@ def _collect_callback_aliases(
                 fp = _function_ptr_from_type(field.type)
                 if fp is not None and _supports_callback_alias(fp):
                     field_name = field.source_name or field.name or f"field_{i}"
-                    suffix = field_name if field_name.endswith("cb") else f"{field_name}_cb"
+                    suffix = (
+                        field_name if field_name.endswith("cb") else f"{field_name}_cb"
+                    )
                     field_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{base}_{suffix}")
         elif isinstance(d, Function):
             fp = _function_ptr_from_type(d.ret)
             if fp is not None and _supports_callback_alias(fp):
-                if isinstance(d.ret, TypeRef) and mojo_ident(d.ret.name) in emitted_typedef_names:
+                if (
+                    isinstance(d.ret, TypeRef)
+                    and mojo_ident(d.ret.name) in emitted_typedef_names
+                ):
                     fn_ret_aliases[d.decl_id] = mojo_ident(d.ret.name)
                 else:
                     fn_ret_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_return_cb")
             for i, param in enumerate(d.params):
                 fp = _function_ptr_from_type(param.type)
                 if fp is not None and _supports_callback_alias(fp):
-                    if isinstance(param.type, TypeRef) and mojo_ident(param.type.name) in emitted_typedef_names:
+                    if (
+                        isinstance(param.type, TypeRef)
+                        and mojo_ident(param.type.name) in emitted_typedef_names
+                    ):
                         fn_param_aliases[(d.decl_id, i)] = mojo_ident(param.type.name)
                     else:
                         pname = param.name or f"arg{i}"
-                        fn_param_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{d.name}_{pname}_cb")
+                        fn_param_aliases[(d.decl_id, i)] = ensure_alias(
+                            fp, f"{d.name}_{pname}_cb"
+                        )
         elif isinstance(d, GlobalVar):
             fp = _function_ptr_from_type(d.type)
             if fp is not None and _supports_callback_alias(fp):
-                if isinstance(d.type, TypeRef) and mojo_ident(d.type.name) in emitted_typedef_names:
+                if (
+                    isinstance(d.type, TypeRef)
+                    and mojo_ident(d.type.name) in emitted_typedef_names
+                ):
                     global_aliases[d.decl_id] = mojo_ident(d.type.name)
                 else:
                     global_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_cb")
@@ -775,13 +823,15 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     )
 
     ordered_structs = tuple(
-        _analyze_struct(decl, struct_map, options, field_callback_aliases) for decl in ordered_struct_decls
+        _analyze_struct(decl, struct_map, options, field_callback_aliases)
+        for decl in ordered_struct_decls
     )
 
     unions = tuple(
         AnalyzedUnion(
             decl=d,
-            uses_unsafe_union=f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union" in unsafe_union_names,
+            uses_unsafe_union=f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union"
+            in unsafe_union_names,
         )
         for d in unit.decls
         if isinstance(d, Struct) and d.is_union
@@ -805,7 +855,8 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
                     type_lowerer,
                     ret_callback_alias_name=fn_ret_callback_aliases.get(d.decl_id),
                     param_callback_alias_names=tuple(
-                        fn_param_callback_aliases.get((d.decl_id, i)) for i in range(len(d.params))
+                        fn_param_callback_aliases.get((d.decl_id, i))
+                        for i in range(len(d.params))
                     ),
                 )
             )
