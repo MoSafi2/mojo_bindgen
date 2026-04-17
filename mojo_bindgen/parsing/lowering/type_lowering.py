@@ -42,6 +42,46 @@ class TypeContext(PyEnum):
 _TYPEREF_CONTEXTS = {TypeContext.PARAM, TypeContext.RETURN, TypeContext.TYPEDEF}
 
 
+def _normalize(t: cx.Type) -> cx.Type:
+    if t.kind == cx.TypeKind.ELABORATED:
+        return _normalize(t.get_named_type())
+    return t
+
+
+def _qualifiers(t: cx.Type) -> Qualifiers:
+    return Qualifiers(
+        is_const=t.is_const_qualified(),
+        is_volatile=t.is_volatile_qualified(),
+        is_restrict=t.is_restrict_qualified(),
+    )
+
+
+def _safe_size(t: cx.Type) -> int | None:
+    return max(0, t.get_size()) or None
+
+
+def _safe_align(t: cx.Type) -> int | None:
+    return max(0, t.get_align()) or None
+
+
+def _array_kind(t: cx.Type, ctx: TypeContext) -> str:
+    if t.kind == cx.TypeKind.CONSTANTARRAY:
+        return "fixed"
+    if t.kind == cx.TypeKind.INCOMPLETEARRAY:
+        return "flexible" if ctx == TypeContext.FIELD else "incomplete"
+    if t.kind in (cx.TypeKind.VARIABLEARRAY, cx.TypeKind.DEPENDENTSIZEDARRAY):
+        return "variable"
+    return "incomplete"
+
+
+def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
+    if qualifiers == Qualifiers():
+        return Pointer(pointee=None)
+    return Pointer(
+        pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers)
+    )
+
+
 @dataclass
 class TypeLowerer:
     index: DeclIndex
@@ -57,7 +97,7 @@ class TypeLowerer:
         self._dispatch_by_kind = self._build_type_dispatch()
 
     def lower(self, clang_type: cx.Type, ctx: TypeContext) -> Type:
-        t = self._normalize(clang_type)
+        t = _normalize(clang_type)
         handler = self._dispatch_by_kind.get(t.kind)
         if handler is not None:
             return handler(t, ctx)
@@ -95,38 +135,6 @@ class TypeLowerer:
             dispatch[atomic_kind] = self._lower_atomic
         return dispatch
 
-    @staticmethod
-    def _normalize(t: cx.Type) -> cx.Type:
-        if t.kind == cx.TypeKind.ELABORATED:
-            return TypeLowerer._normalize(t.get_named_type())
-        return t
-
-    @staticmethod
-    def _qualifiers(t: cx.Type) -> Qualifiers:
-        return Qualifiers(
-            is_const=t.is_const_qualified(),
-            is_volatile=t.is_volatile_qualified(),
-            is_restrict=t.is_restrict_qualified(),
-        )
-
-    @staticmethod
-    def _safe_size(t: cx.Type) -> int | None:
-        return max(0, t.get_size()) or None
-
-    @staticmethod
-    def _safe_align(t: cx.Type) -> int | None:
-        return max(0, t.get_align()) or None
-
-    @staticmethod
-    def _array_kind(t: cx.Type, ctx: TypeContext) -> str:
-        if t.kind == cx.TypeKind.CONSTANTARRAY:
-            return "fixed"
-        if t.kind == cx.TypeKind.INCOMPLETEARRAY:
-            return "flexible" if ctx == TypeContext.FIELD else "incomplete"
-        if t.kind in (cx.TypeKind.VARIABLEARRAY, cx.TypeKind.DEPENDENTSIZEDARRAY):
-            return "variable"
-        return "incomplete"
-
     def _lower_invalid(self, t: cx.Type, _ctx: TypeContext) -> Type:
         self.diagnostics.add_type_diag("warning", t, "invalid type kind")
         return UnsupportedType(
@@ -141,8 +149,8 @@ class TypeLowerer:
             category="unexposed",
             spelling=t.spelling or "unexposed",
             reason="clang reported UNEXPOSED type kind",
-            size_bytes=self._safe_size(t),
-            align_bytes=self._safe_align(t),
+            size_bytes=_safe_size(t),
+            align_bytes=_safe_align(t),
         )
 
     def _lower_void(self, _t: cx.Type, _ctx: TypeContext) -> Type:
@@ -152,21 +160,19 @@ class TypeLowerer:
         decl = t.get_declaration()
         name = decl.spelling or t.spelling
         canonical = self.lower(t.get_canonical(), ctx)
-        if ctx in _TYPEREF_CONTEXTS:
-            return TypeRef(
-                decl_id=self.index.decl_id_for_cursor(decl),
-                name=name,
-                canonical=canonical,
-            )
-        return canonical
+        return TypeRef(
+            decl_id=self.index.decl_id_for_cursor(decl),
+            name=name,
+            canonical=canonical,
+        )
 
     def _lower_pointer(self, t: cx.Type, ctx: TypeContext) -> Type:
         raw_pointee = t.get_pointee()
-        qualifiers = self._qualifiers(raw_pointee)
-        pointee = self._normalize(raw_pointee)
+        qualifiers = _qualifiers(raw_pointee)
+        pointee = _normalize(raw_pointee)
         if pointee.kind == cx.TypeKind.VOID:
-            return self._lower_void_pointer(qualifiers)
-        canonical_pointee = self._normalize(pointee.get_canonical())
+            return _lower_void_pointer(qualifiers)
+        canonical_pointee = _normalize(pointee.get_canonical())
         if canonical_pointee.kind in (
             cx.TypeKind.FUNCTIONPROTO,
             cx.TypeKind.FUNCTIONNOPROTO,
@@ -174,14 +180,6 @@ class TypeLowerer:
             return self._lower_fnptr(canonical_pointee, ctx)
         return self._lower_pointer_to_value(pointee, qualifiers, ctx)
 
-    @staticmethod
-    def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
-        if qualifiers == Qualifiers():
-            return Pointer(pointee=None)
-        return Pointer(
-            pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers)
-        )
-        
     def _lower_fnptr(self, t: cx.Type, ctx: TypeContext) -> FunctionPtr:
         ret = self.lower(t.get_result(), ctx)
         params = (
@@ -211,7 +209,7 @@ class TypeLowerer:
     def _lower_array(self, t: cx.Type, ctx: TypeContext) -> Type:
         element = self.lower(t.get_array_element_type(), ctx)
         size = t.get_array_size() if t.kind == cx.TypeKind.CONSTANTARRAY else None
-        return Array(element=element, size=size, array_kind=self._array_kind(t, ctx))
+        return Array(element=element, size=size, array_kind=_array_kind(t, ctx))
 
     def _lower_record(self, t: cx.Type) -> Type:
         return self.record_types.lower_record_type(t)
@@ -240,8 +238,8 @@ class TypeLowerer:
                 category="complex",
                 spelling=t.spelling or "complex",
                 reason="complex element type is not a primitive scalar",
-                size_bytes=self._safe_size(t),
-                align_bytes=self._safe_align(t),
+                size_bytes=_safe_size(t),
+                align_bytes=_safe_align(t),
             )
         return ComplexType(element=element, size_bytes=max(0, t.get_size()))
 
@@ -272,8 +270,8 @@ class TypeLowerer:
             category="unsupported_extension",
             spelling=spelling or "_Atomic",
             reason="libclang did not expose atomic value type information",
-            size_bytes=self._safe_size(t),
-            align_bytes=self._safe_align(t),
+            size_bytes=_safe_size(t),
+            align_bytes=_safe_align(t),
         )
 
     def _lower_primitive(self, t: cx.Type) -> Type:
@@ -284,6 +282,6 @@ class TypeLowerer:
             category="unknown",
             spelling=t.spelling or "unknown",
             reason="type is neither scalar nor otherwise modeled",
-            size_bytes=self._safe_size(t),
-            align_bytes=self._safe_align(t),
+            size_bytes=_safe_size(t),
+            align_bytes=_safe_align(t),
         )
