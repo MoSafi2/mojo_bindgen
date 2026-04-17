@@ -75,6 +75,9 @@ Each golden case has a `status.json` with per-phase status. The summary below re
 | `p0_ptr_to_array` | Pointer-to-array declarations (`int (*p)[N]`) from upstream bindgen edge cases. | pass | n/a |
 | `p0_fnptr_return` | Function returning function-pointer (`fn -> fnptr`) lowering and wrapper generation. | pass | n/a |
 | `p1_anon_struct_union` | Anonymous struct-inside-union nesting and field resolution. | pass | n/a |
+| `p1_atomic_types_runtime` | Atomic counter increment/decrement functional checks; includes emitted atomic global note and verifies mode-specific runtime behavior. | pass | n/a |
+| `p1_complex_types_runtime` | Complex arithmetic through `_Complex float` bindings, asserting real/imag outputs in both linking modes. | pass | n/a |
+| `p1_vector_extension_types_runtime` | Vector-extension math (`vector_size(16)`) validated through scalar wrappers while preserving vector typedef emit coverage. | pass | n/a |
 
 ## Surface-Only Policy Coverage
 

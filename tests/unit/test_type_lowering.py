@@ -8,7 +8,7 @@ import pytest
 
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import AtomicType, EnumRef, Function, IntKind, IntType, Pointer, QualifiedType, Struct, StructRef, TypeRef
+from mojo_bindgen.ir import AtomicType, EnumRef, Function, IntKind, IntType, Pointer, QualifiedType, Struct, StructRef, TypeRef, Typedef, VectorType
 from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
 
@@ -225,6 +225,35 @@ def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> Non
     assert isinstance(fn.params[0].type.pointee.unqualified, AtomicType)
     assert isinstance(fn.params[0].type.pointee.unqualified.value_type, IntType)
     assert fn.params[0].type.pointee.unqualified.value_type.int_kind == IntKind.INT
+
+
+def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_path: Path) -> None:
+    header = tmp_path / "vector_size_typedef.h"
+    header.write_text(
+        (
+            "typedef float vet_float4 __attribute__((vector_size(16)));\n"
+            "typedef struct vet_payload { vet_float4 lanes; } vet_payload;\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    td = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "vet_float4")
+    payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "vet_payload")
+
+    assert isinstance(td.canonical, VectorType)
+    assert td.canonical.count == 4
+    assert isinstance(payload.fields[0].type, VectorType)
+    assert payload.fields[0].type.count == 4
+
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "from std.builtin.simd import SIMD" in out
+    assert "comptime vet_float4 = SIMD[DType.float32, 4]" in out
 
 
 def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_path: Path) -> None:

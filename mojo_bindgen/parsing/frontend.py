@@ -187,12 +187,14 @@ class ClangCompat:
     def get_num_elements(self, t: cx.Type) -> int | None:
         """Return vector element count across libclang variants."""
         getter = getattr(t, "get_num_elements", None)
-        if not callable(getter):
-            return None
-        try:
-            count = getter()
-        except Exception:
-            return None
+        if callable(getter):
+            try:
+                count = getter()
+            except Exception:
+                count = None
+            if isinstance(count, int) and count >= 0:
+                return count
+        count = getattr(t, "element_count", None)
         return count if isinstance(count, int) and count >= 0 else None
 
     @classmethod
