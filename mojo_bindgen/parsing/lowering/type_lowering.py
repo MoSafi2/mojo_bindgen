@@ -128,7 +128,7 @@ class TypeLowerer:
         return "incomplete"
 
     def _lower_invalid(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        self.diagnostics.add_type_diag("warning", t, "invalid type (INVALID)")
+        self.diagnostics.add_type_diag("warning", t, "invalid type kind")
         return UnsupportedType(
             category="invalid",
             spelling=t.spelling or "invalid",
@@ -136,7 +136,7 @@ class TypeLowerer:
         )
 
     def _lower_unexposed(self, t: cx.Type, _ctx: TypeContext) -> Type:
-        self.diagnostics.add_type_diag("warning", t, "unexposed type (UNEXPOSED)")
+        self.diagnostics.add_type_diag("warning", t, "unexposed type kind")
         return UnsupportedType(
             category="unexposed",
             spelling=t.spelling or "unexposed",
@@ -165,15 +165,26 @@ class TypeLowerer:
         qualifiers = self._qualifiers(raw_pointee)
         pointee = self._normalize(raw_pointee)
         if pointee.kind == cx.TypeKind.VOID:
-            if qualifiers == Qualifiers():
-                return Pointer(pointee=None)
-            return Pointer(pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers))
+            return self._lower_void_pointer(qualifiers)
         canonical_pointee = self._normalize(pointee.get_canonical())
         if canonical_pointee.kind in (
             cx.TypeKind.FUNCTIONPROTO,
             cx.TypeKind.FUNCTIONNOPROTO,
         ):
             return self._lower_fnptr(canonical_pointee, ctx)
+        return self._lower_pointer_to_value(pointee, qualifiers, ctx)
+
+    @staticmethod
+    def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
+        if qualifiers == Qualifiers():
+            return Pointer(pointee=None)
+        return Pointer(
+            pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers)
+        )
+
+    def _lower_pointer_to_value(
+        self, pointee: cx.Type, qualifiers: Qualifiers, ctx: TypeContext
+    ) -> Type:
         lowered = self.lower(pointee, ctx)
         if qualifiers != Qualifiers():
             lowered = QualifiedType(unqualified=lowered, qualifiers=qualifiers)
@@ -247,7 +258,7 @@ class TypeLowerer:
         self.diagnostics.add_type_diag(
             "warning",
             t,
-            "atomic semantics are preserved in IR but erased in generated Mojo",
+            "_Atomic lowered to std.Atomic when the value is a representable scalar dtype, otherwise falls back to the underlying non-atomic type"
         )
         return AtomicType(value_type=inner)
 
