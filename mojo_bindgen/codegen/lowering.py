@@ -95,6 +95,20 @@ def _is_unsigned_int_kind(kind: IntKind) -> bool:
     }
 
 
+def _dtype_for_width(signed: bool, size_bytes: int) -> str | None:
+    if size_bytes == 1:
+        return "DType.int8" if signed else "DType.uint8"
+    if size_bytes == 2:
+        return "DType.int16" if signed else "DType.uint16"
+    if size_bytes == 4:
+        return "DType.int32" if signed else "DType.uint32"
+    if size_bytes == 8:
+        return "DType.int64" if signed else "DType.uint64"
+    if size_bytes == 16:
+        return "DType.int128" if signed else "DType.uint128"
+    return None
+
+
 def lower_scalar(t: VoidType | IntType | FloatType) -> str:
     """Lower a scalar IR type to its Mojo type name string."""
     if isinstance(t, VoidType):
@@ -112,6 +126,85 @@ def lower_scalar(t: VoidType | IntType | FloatType) -> str:
     if isinstance(t, IntType):
         return _int_type_for_size(not _is_unsigned_int_kind(t.int_kind), t.size_bytes)
     return "Int32"
+
+
+def lower_scalar_dtype(t: VoidType | IntType | FloatType) -> str | None:
+    """Map a scalar IR type to a Mojo ``DType`` constant when representable."""
+    if isinstance(t, VoidType):
+        return None
+    if isinstance(t, IntType):
+        if t.int_kind == IntKind.BOOL:
+            return "DType.bool"
+        if t.int_kind in {
+            IntKind.CHAR_S,
+            IntKind.SCHAR,
+            IntKind.SHORT,
+            IntKind.INT,
+            IntKind.LONG,
+            IntKind.LONGLONG,
+            IntKind.INT128,
+        }:
+            return _dtype_for_width(True, t.size_bytes)
+        if t.int_kind in {
+            IntKind.CHAR_U,
+            IntKind.UCHAR,
+            IntKind.USHORT,
+            IntKind.UINT,
+            IntKind.ULONG,
+            IntKind.ULONGLONG,
+            IntKind.UINT128,
+        }:
+            return _dtype_for_width(False, t.size_bytes)
+        if t.int_kind == IntKind.CHAR16:
+            return "DType.uint16"
+        if t.int_kind == IntKind.CHAR32:
+            return "DType.uint32"
+        return None
+    if t.float_kind == FloatKind.FLOAT16:
+        return "DType.float16"
+    if t.float_kind == FloatKind.FLOAT:
+        return "DType.float32"
+    if t.float_kind == FloatKind.DOUBLE:
+        return "DType.float64"
+    return None
+
+
+def scalar_type_for_dtype(t: Type) -> VoidType | IntType | FloatType | None:
+    """Return the scalar core of ``t`` when it has a direct Mojo ``DType`` mapping."""
+    core = peel_wrappers(t)
+    if isinstance(core, (VoidType, IntType, FloatType)):
+        return core
+    return None
+
+
+def lower_vector_simd(t: VectorType) -> str | None:
+    """Lower a representable vector type to ``SIMD[dtype, size]``."""
+    element = scalar_type_for_dtype(t.element)
+    if element is None or t.count is None:
+        return None
+    dtype = lower_scalar_dtype(element)
+    if dtype is None:
+        return None
+    return f"SIMD[{dtype}, {t.count}]"
+
+
+def lower_complex_simd(t: ComplexType) -> str | None:
+    """Lower a representable complex scalar to ``ComplexSIMD[dtype, 1]``."""
+    dtype = lower_scalar_dtype(t.element)
+    if dtype is None:
+        return None
+    return f"ComplexSIMD[{dtype}, 1]"
+
+
+def lower_atomic_type(t: AtomicType) -> str | None:
+    """Lower a representable atomic scalar to ``Atomic[dtype]``."""
+    value = scalar_type_for_dtype(t.value_type)
+    if value is None:
+        return None
+    dtype = lower_scalar_dtype(value)
+    if dtype is None:
+        return None
+    return f"Atomic[{dtype}]"
 
 
 def peel_typeref(t: Type) -> Type:
@@ -188,9 +281,15 @@ class TypeLowerer:
         if isinstance(t, Array):
             return self._surface_array(t)
         if isinstance(t, ComplexType):
+            lowered = lower_complex_simd(t)
+            if lowered is not None:
+                return lowered
             inner = self.surface(t.element)
             return f"InlineArray[{inner}, 2]"
         if isinstance(t, VectorType):
+            lowered = lower_vector_simd(t)
+            if lowered is not None:
+                return lowered
             if t.count is not None:
                 inner = self.surface(t.element)
                 return f"InlineArray[{inner}, {t.count}]"
@@ -273,6 +372,9 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: AtomicType) -> str:
+        lowered = lower_atomic_type(t)
+        if lowered is not None:
+            return lowered
         return self.canonical(t.value_type)
 
     @canonical.register
@@ -317,11 +419,17 @@ class TypeLowerer:
 
     @canonical.register
     def _(self, t: ComplexType) -> str:
+        lowered = lower_complex_simd(t)
+        if lowered is not None:
+            return lowered
         inner = self.canonical(t.element)
         return f"InlineArray[{inner}, 2]"
 
     @canonical.register
     def _(self, t: VectorType) -> str:
+        lowered = lower_vector_simd(t)
+        if lowered is not None:
+            return lowered
         if t.count is not None:
             inner = self.canonical(t.element)
             return f"InlineArray[{inner}, {t.count}]"

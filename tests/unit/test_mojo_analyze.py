@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from mojo_bindgen.ir import (
+    AtomicType,
     Array,
+    ComplexType,
     Field,
     FloatKind,
     FloatType,
@@ -17,6 +19,7 @@ from mojo_bindgen.ir import (
     TypeRef,
     Typedef,
     Unit,
+    VectorType,
     VoidType,
 )
 
@@ -214,3 +217,73 @@ def test_analyze_function_pointer_returns_use_wrapper_kind() -> None:
     assert len(wrappers) == 2
     assert all(w.kind == "wrapper" for w in wrappers)
     assert "my_binary_op_t" in au.emitted_typedef_mojo_names
+
+
+def test_analyze_tracks_semantic_imports_and_register_passable_vector_complex() -> None:
+    f32 = _f32()
+    st = Struct(
+        decl_id="struct:VecCx",
+        name="VecCx",
+        c_name="VecCx",
+        fields=[
+            Field(
+                name="lanes",
+                source_name="lanes",
+                type=VectorType(element=f32, count=4, size_bytes=16),
+                byte_offset=0,
+            ),
+            Field(
+                name="value",
+                source_name="value",
+                type=ComplexType(element=f32, size_bytes=8),
+                byte_offset=16,
+            ),
+        ],
+        size_bytes=24,
+        align_bytes=16,
+        is_union=False,
+    )
+    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    au = analyze_unit(unit, MojoEmitOptions())
+    assert au.needs_simd_import is True
+    assert au.needs_complex_import is True
+    assert au.needs_atomic_import is False
+    assert au.semantic_fallback_notes == ()
+    assert au.ordered_structs[0].register_passable is True
+
+
+def test_analyze_atomic_import_and_register_passable_policy() -> None:
+    i32 = _i32()
+    atomic_i32 = AtomicType(value_type=i32)
+    atomic_wchar = AtomicType(
+        value_type=IntType(int_kind=IntKind.WCHAR, size_bytes=4, align_bytes=4)
+    )
+    atomic_box = Struct(
+        decl_id="struct:AtomicBox",
+        name="AtomicBox",
+        c_name="AtomicBox",
+        fields=[Field(name="value", source_name="value", type=atomic_i32, byte_offset=0)],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    wchar_box = Struct(
+        decl_id="struct:AtomicFallback",
+        name="AtomicFallback",
+        c_name="AtomicFallback",
+        fields=[Field(name="value", source_name="value", type=atomic_wchar, byte_offset=0)],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[atomic_box, wchar_box, Function(decl_id="fn:get", name="get", link_name="get", ret=atomic_i32, params=[], is_variadic=False)],
+    )
+    au = analyze_unit(unit, MojoEmitOptions())
+    assert au.needs_atomic_import is True
+    assert any("atomic types were lowered" in note for note in au.semantic_fallback_notes)
+    assert au.ordered_structs[0].register_passable is False
+    assert au.ordered_structs[1].register_passable is True

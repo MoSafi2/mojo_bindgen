@@ -162,6 +162,7 @@ class MojoRenderer:
         chunks: list[str] = []
         if self._a.opts.module_comment:
             chunks.append(self._module_header())
+        chunks.append(self._semantic_fallback_note_block())
         chunks.append(self._import_block())
         chunks.append(self._dl_handle_helpers())
         chunks.append(self._emit_callback_alias_section())
@@ -202,7 +203,21 @@ class MojoRenderer:
         lines.append(f"from std.ffi import {', '.join(ffi_names)}")
         if self._a.needs_opaque_imports:
             lines.append("from std.memory import ImmutOpaquePointer, MutOpaquePointer")
+        if self._a.needs_simd_import:
+            lines.append("from std.builtin.simd import SIMD")
+        if self._a.needs_complex_import:
+            lines.append("from std.complex import ComplexSIMD")
+        if self._a.needs_atomic_import:
+            lines.append("from std.os import Atomic")
         return "\n".join(lines) + "\n\n"
+
+    def _semantic_fallback_note_block(self) -> str:
+        """Render module-level notes for semantic type fallbacks."""
+        if not self._a.semantic_fallback_notes:
+            return ""
+        lines = [f"# NOTE: {note}" for note in self._a.semantic_fallback_notes]
+        lines.append("")
+        return "\n".join(lines)
 
     def _dl_handle_helpers(self) -> str:
         """Render helper code for ``owned_dl_handle`` linking mode, if needed."""
@@ -512,6 +527,10 @@ def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
         unit=Unit(source_header="", library="", link_name="", decls=[]),
         opts=options,
         needs_opaque_imports=False,
+        needs_simd_import=False,
+        needs_complex_import=False,
+        needs_atomic_import=False,
+        semantic_fallback_notes=tuple(),
         unsafe_union_names=frozenset(),
         emitted_typedef_mojo_names=frozenset(),
         callback_aliases=tuple(),

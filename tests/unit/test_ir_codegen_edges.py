@@ -7,7 +7,9 @@ from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.lowering import lower_type
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    AtomicType,
     BinaryExpr,
+    ComplexType,
     Const,
     Field,
     FloatKind,
@@ -33,6 +35,7 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
     UnsupportedType,
+    VectorType,
     VoidType,
 )
 
@@ -192,6 +195,68 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
     assert const_pos < global_pos
     assert macro_pos < fn_pos
     assert const_pos < fn_pos
+
+
+def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> None:
+    f32 = FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
+    wchar = IntType(int_kind=IntKind.WCHAR, size_bytes=4, align_bytes=4)
+    st = Struct(
+        decl_id="struct:simd_holder",
+        name="simd_holder",
+        c_name="simd_holder",
+        fields=[
+            Field(
+                name="lanes",
+                source_name="lanes",
+                type=VectorType(element=f32, count=4, size_bytes=16),
+                byte_offset=0,
+            ),
+            Field(
+                name="complex_value",
+                source_name="complex_value",
+                type=ComplexType(element=f32, size_bytes=8),
+                byte_offset=16,
+            ),
+            Field(
+                name="fallback_atomic",
+                source_name="fallback_atomic",
+                type=AtomicType(value_type=wchar),
+                byte_offset=24,
+            ),
+        ],
+        size_bytes=32,
+        align_bytes=16,
+        is_union=False,
+    )
+    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "from std.builtin.simd import SIMD" in out
+    assert "from std.complex import ComplexSIMD" in out
+    assert "from std.os import Atomic" not in out
+    assert "var lanes: SIMD[DType.float32, 4]" in out
+    assert "var complex_value: ComplexSIMD[DType.float32, 1]" in out
+    assert "var fallback_atomic: Int32" in out
+    assert "atomic types were lowered to their underlying non-atomic Mojo type" in out
+
+
+def test_generator_imports_atomic_for_representable_atomic_types() -> None:
+    i32 = _i32()
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[
+            GlobalVar(
+                decl_id="var:counter",
+                name="counter",
+                link_name="counter",
+                type=AtomicType(value_type=i32),
+            )
+        ],
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "from std.os import Atomic" in out
+    assert "# global variable counter: Atomic[DType.int32] (manual binding required)" in out
 
 
 def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:

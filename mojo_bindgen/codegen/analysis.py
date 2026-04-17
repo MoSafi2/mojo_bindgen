@@ -13,7 +13,7 @@ Facts that are true about the parsed C API remain in the IR.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 from mojo_bindgen.ir import (
     AtomicType,
@@ -45,6 +45,9 @@ from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.lowering import (
     FFIOriginStyle,
     TypeLowerer,
+    lower_atomic_type,
+    lower_complex_simd,
+    lower_vector_simd,
     mojo_ident,
     peel_wrappers,
 )
@@ -97,6 +100,146 @@ def _type_needs_opaque_pointer_import(t: Type) -> bool:
     if isinstance(t, (OpaqueRecordRef, UnsupportedType)):
         return True
     return False
+
+
+def _type_needs_simd_import(t: Type) -> bool:
+    if isinstance(t, TypeRef):
+        return _type_needs_simd_import(t.canonical)
+    if isinstance(t, QualifiedType):
+        return _type_needs_simd_import(t.unqualified)
+    if isinstance(t, AtomicType):
+        return _type_needs_simd_import(t.value_type)
+    if isinstance(t, Pointer):
+        return t.pointee is not None and _type_needs_simd_import(t.pointee)
+    if isinstance(t, Array):
+        return _type_needs_simd_import(t.element)
+    if isinstance(t, FunctionPtr):
+        return _type_needs_simd_import(t.ret) or any(_type_needs_simd_import(p) for p in t.params)
+    if isinstance(t, VectorType):
+        return lower_vector_simd(t) is not None
+    return False
+
+
+def _type_needs_complex_import(t: Type) -> bool:
+    if isinstance(t, TypeRef):
+        return _type_needs_complex_import(t.canonical)
+    if isinstance(t, QualifiedType):
+        return _type_needs_complex_import(t.unqualified)
+    if isinstance(t, AtomicType):
+        return _type_needs_complex_import(t.value_type)
+    if isinstance(t, Pointer):
+        return t.pointee is not None and _type_needs_complex_import(t.pointee)
+    if isinstance(t, Array):
+        return _type_needs_complex_import(t.element)
+    if isinstance(t, FunctionPtr):
+        return _type_needs_complex_import(t.ret) or any(_type_needs_complex_import(p) for p in t.params)
+    if isinstance(t, ComplexType):
+        return lower_complex_simd(t) is not None
+    return False
+
+
+def _type_needs_atomic_import(t: Type) -> bool:
+    if isinstance(t, TypeRef):
+        return _type_needs_atomic_import(t.canonical)
+    if isinstance(t, QualifiedType):
+        return _type_needs_atomic_import(t.unqualified)
+    if isinstance(t, AtomicType):
+        if lower_atomic_type(t) is not None:
+            return True
+        return _type_needs_atomic_import(t.value_type)
+    if isinstance(t, Pointer):
+        return t.pointee is not None and _type_needs_atomic_import(t.pointee)
+    if isinstance(t, Array):
+        return _type_needs_atomic_import(t.element)
+    if isinstance(t, FunctionPtr):
+        return _type_needs_atomic_import(t.ret) or any(_type_needs_atomic_import(p) for p in t.params)
+    return False
+
+
+def _note_semantic_fallbacks(t: Type, notes: set[str]) -> None:
+    if isinstance(t, TypeRef):
+        _note_semantic_fallbacks(t.canonical, notes)
+        return
+    if isinstance(t, QualifiedType):
+        _note_semantic_fallbacks(t.unqualified, notes)
+        return
+    if isinstance(t, AtomicType):
+        if lower_atomic_type(t) is None:
+            notes.add(
+                "some atomic types were lowered to their underlying non-atomic Mojo type because Atomic[dtype] was not representable"
+            )
+        _note_semantic_fallbacks(t.value_type, notes)
+        return
+    if isinstance(t, Pointer):
+        if t.pointee is not None:
+            _note_semantic_fallbacks(t.pointee, notes)
+        return
+    if isinstance(t, Array):
+        _note_semantic_fallbacks(t.element, notes)
+        return
+    if isinstance(t, FunctionPtr):
+        _note_semantic_fallbacks(t.ret, notes)
+        for p in t.params:
+            _note_semantic_fallbacks(p, notes)
+        return
+    if isinstance(t, ComplexType):
+        if lower_complex_simd(t) is None:
+            notes.add(
+                "some complex C types were lowered as InlineArray[scalar, 2] because ComplexSIMD[dtype, 1] was not representable"
+            )
+        return
+    if isinstance(t, VectorType):
+        if lower_vector_simd(t) is None:
+            notes.add(
+                "some vector C types were lowered as InlineArray[...] because SIMD[dtype, size] was not representable"
+            )
+        _note_semantic_fallbacks(t.element, notes)
+
+
+def _unit_uses_import(unit: Unit, predicate: Callable[[Type], bool]) -> bool:
+    for d in unit.decls:
+        if isinstance(d, Struct) and not d.is_union:
+            if any(predicate(f.type) for f in d.fields):
+                return True
+        elif isinstance(d, Function):
+            if predicate(d.ret) or any(predicate(p.type) for p in d.params):
+                return True
+        elif isinstance(d, Typedef):
+            if predicate(d.canonical):
+                return True
+        elif isinstance(d, GlobalVar):
+            if predicate(d.type):
+                return True
+    return False
+
+
+def unit_needs_simd_import(unit: Unit) -> bool:
+    return _unit_uses_import(unit, _type_needs_simd_import)
+
+
+def unit_needs_complex_import(unit: Unit) -> bool:
+    return _unit_uses_import(unit, _type_needs_complex_import)
+
+
+def unit_needs_atomic_import(unit: Unit) -> bool:
+    return _unit_uses_import(unit, _type_needs_atomic_import)
+
+
+def unit_semantic_fallback_notes(unit: Unit) -> tuple[str, ...]:
+    notes: set[str] = set()
+    for d in unit.decls:
+        if isinstance(d, Struct) and not d.is_union:
+            for f in d.fields:
+                _note_semantic_fallbacks(f.type, notes)
+        elif isinstance(d, Function):
+            _note_semantic_fallbacks(d.ret, notes)
+            for p in d.params:
+                _note_semantic_fallbacks(p.type, notes)
+        elif isinstance(d, Typedef):
+            _note_semantic_fallbacks(d.canonical, notes)
+        elif isinstance(d, GlobalVar):
+            _note_semantic_fallbacks(d.type, notes)
+    return tuple(sorted(notes))
 
 
 def unit_needs_opaque_imports(unit: Unit) -> bool:
@@ -170,11 +313,17 @@ def _type_ok_for_register_passable_field(
     if isinstance(t, QualifiedType):
         return _type_ok_for_register_passable_field(t.unqualified, struct_by_id, visiting)
     if isinstance(t, AtomicType):
+        if lower_atomic_type(t) is not None:
+            return False
         return _type_ok_for_register_passable_field(t.value_type, struct_by_id, visiting)
     if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
         return True
-    if isinstance(t, (UnsupportedType, VectorType, ComplexType)):
+    if isinstance(t, UnsupportedType):
         return False
+    if isinstance(t, VectorType):
+        return lower_vector_simd(t) is not None
+    if isinstance(t, ComplexType):
+        return lower_complex_simd(t) is not None
     if isinstance(t, StructRef):
         if t.decl_id in visiting:
             return False
@@ -362,6 +511,10 @@ class AnalyzedUnit:
     unit: Unit
     opts: MojoEmitOptions
     needs_opaque_imports: bool
+    needs_simd_import: bool
+    needs_complex_import: bool
+    needs_atomic_import: bool
+    semantic_fallback_notes: tuple[str, ...]
     unsafe_union_names: frozenset[str]
     emitted_typedef_mojo_names: frozenset[str]
     callback_aliases: tuple[CallbackAlias, ...]
@@ -663,6 +816,10 @@ def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
         unit=unit,
         opts=options,
         needs_opaque_imports=unit_needs_opaque_imports(unit),
+        needs_simd_import=unit_needs_simd_import(unit),
+        needs_complex_import=unit_needs_complex_import(unit),
+        needs_atomic_import=unit_needs_atomic_import(unit),
+        semantic_fallback_notes=unit_semantic_fallback_notes(unit),
         unsafe_union_names=unsafe_union_names,
         emitted_typedef_mojo_names=emitted_typedef_names,
         callback_aliases=callback_aliases,

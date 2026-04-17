@@ -9,5 +9,5 @@ comptime tc_word = UInt32
 comptime tc_word_alias = tc_word
 
 def tc_identity(value: tc_word_alias) abi("C") -> tc_word_alias:
-    return external_call["tc_identity", UInt32, UInt32](value)
+    return external_call["tc_identity", UInt32, tc_word_alias](value)
 
