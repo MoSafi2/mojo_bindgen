@@ -16,7 +16,7 @@ example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"
 
 [dependencies]
-mojo = ">=0.26.3.0.dev2026041520,<0.27"
+mojo = ">=0.26.3.0.dev2026041716,<0.27"
 python = ">=3.14.4,<3.15"
 ipykernel = ">=7.1.0,<8"
 jupyter = ">=1.1.1,<2"
