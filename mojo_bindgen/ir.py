@@ -29,7 +29,7 @@ from typing import (
 )
 from mojo_bindgen.serde import SerDeMixin, SerdeFieldSpec, SerdeSpec
 
-
+# Check for char and wchar_t in the IntKind enum
 class IntKind(StrEnum):
     """Discriminant for integer-like scalars and character-width integer types."""
 
