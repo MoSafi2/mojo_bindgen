@@ -1,15 +1,15 @@
-"""Declaration indexing and identity services for one translation unit.
+"""Declaration indexing and naming services for one translation unit.
 
-`DeclIndex` is the small service layer that sits between the parser frontend
-and the record/type lowering logic. It indexes a single
+`DeclIndex` is the service layer that sits between the parser frontend and the
+record/type lowering logic. It indexes a single
 `clang.cindex.TranslationUnit` and provides:
 
 - stable declaration IDs (`decl_id_for_cursor`)
 - cached complete record definition cursors (`record_definition_for_decl`)
-- stable record lowering identity + naming policy (`record_lowering_identity`)
+- stable naming policy for lowered record declarations (`record_naming`)
 
 This module intentionally does *not* lower anything into IR; it only owns
-source-graph metadata and naming/identity decisions used by downstream
+source-graph metadata and anonymous naming decisions used by downstream
 lowerers.
 """
 
@@ -77,6 +77,15 @@ def _use_location_identity_for_cursor(cursor: cx.Cursor) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class RecordNaming:
+    """Stable lowered naming metadata for one record declaration."""
+
+    name: str
+    c_name: str
+    is_anonymous: bool
+
+
 @dataclass
 class DeclIndex:
     """Identity and declaration index for one translation unit.
@@ -85,8 +94,6 @@ class DeclIndex:
     - `primary_cursors_in_order`: primary-file cursors in deterministic preorder.
       This ordering is used to assign ordinals to anonymous record definitions
       so sibling anonymous records get distinct synthesized names.
-    - `top_level_decl_ids`: `decl_id` values for each primary cursor. This is
-      used to recognize “named top-level” decls during type resolution.
     - `record_definition_by_decl_id`: mapping from `decl_id` to the cached
       complete clang definition cursor for that record (struct/union only).
     - `anonymous_record_name_by_decl_id`: cache for synthesized IR-friendly
@@ -99,7 +106,7 @@ class DeclIndex:
     - Otherwise, use a spelling-based fallback for “named decl kinds”.
     - Finally, fall back to a hashed location key with an `anon:` prefix.
 
-    Anonymous naming rules (`record_lowering_identity`):
+    Anonymous naming rules (`record_naming`):
     - Anonymous record spellings trigger synthesized naming.
     - Synthesized names incorporate the anonymous record kind
       (`anon_struct`/`anon_union`), a stable ordinal, and a scope stem derived
@@ -108,7 +115,6 @@ class DeclIndex:
 
     header: Path
     primary_cursors_in_order: tuple[cx.Cursor, ...]
-    top_level_decl_ids: list[str]
     record_definition_by_decl_id: dict[str, cx.Cursor]
     anonymous_record_name_by_decl_id: dict[str, str]
 
@@ -128,7 +134,6 @@ class DeclIndex:
         index = cls(
             header=frontend.header.resolve(),
             primary_cursors_in_order=primary,
-            top_level_decl_ids=[],
             record_definition_by_decl_id={},
             anonymous_record_name_by_decl_id={},
         )
@@ -139,8 +144,6 @@ class DeclIndex:
             if cursor.kind in RECORD_KINDS and cursor.is_definition():
                 decl_id = index.decl_id_for_cursor(cursor)
                 index.record_definition_by_decl_id[decl_id] = cursor
-
-        index.top_level_decl_ids.extend(index.decl_id_for_cursor(cursor) for cursor in primary)
 
         return index
 
@@ -194,27 +197,17 @@ class DeclIndex:
         loc = cursor.location
         return bool(loc.file and Path(loc.file.name).resolve() == self.header)
 
-    def record_lowering_identity(self, cursor: cx.Cursor) -> tuple[str, str, str, bool]:
-        """Return stable identity fields for lowering a record declaration.
-
-        The returned tuple is:
-        - `decl_id`: stable declaration identity (may be USR or an anonymous
-          location-based fallback).
-        - `name`: IR struct/union name (possibly synthesized for anonymous
-          records).
-        - `c_name`: C spelling name for diagnostics / mapping (currently the
-          same as `name`).
-        - `is_anonymous`: whether the cursor corresponds to an anonymous record
-          that requires synthesized naming during lowering.
-
-        Callers use the tuple to consistently populate `Struct` metadata and
-        to decide how to treat nested anonymous record members.
-        """
+    def record_naming(self, cursor: cx.Cursor) -> RecordNaming:
+        """Return stable lowered naming metadata for a record declaration."""
         decl_id = self.decl_id_for_cursor(cursor)
         if not _is_anonymous_record_spelling(cursor.spelling):
-            return decl_id, cursor.spelling, cursor.spelling, False
+            return RecordNaming(
+                name=cursor.spelling,
+                c_name=cursor.spelling,
+                is_anonymous=False,
+            )
         synth = self._anonymous_record_name(cursor, decl_id)
-        return decl_id, synth, synth, True
+        return RecordNaming(name=synth, c_name=synth, is_anonymous=True)
 
     def _anonymous_record_name(self, cursor: cx.Cursor, decl_id: str) -> str:
         """Synthesize a stable IR-friendly name for an anonymous record.

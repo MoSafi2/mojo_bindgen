@@ -316,6 +316,36 @@ def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_pat
     assert value_field.type.decl_id == inner.decl_id
 
 
+def test_record_lowering_reuses_named_nested_record_nominally_after_definition(tmp_path: Path) -> None:
+    header = tmp_path / "record_lowering_named_nested_nominal.h"
+    header.write_text(
+        (
+            "struct outer {\n"
+            "  struct inner_value {\n"
+            "    int y;\n"
+            "  } value;\n"
+            "  struct inner_value copy;\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
+    inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_value")
+
+    copy_field = next(f for f in outer.fields if f.name == "copy")
+    assert isinstance(copy_field.type, StructRef)
+    assert copy_field.type.decl_id == inner.decl_id
+    assert copy_field.type.name == "inner_value"
+    assert copy_field.type.is_anonymous is False
+
+
 def test_codegen_emits_named_nested_record_defs_before_parent(tmp_path: Path) -> None:
     header = tmp_path / "record_codegen_named_nested.h"
     header.write_text(

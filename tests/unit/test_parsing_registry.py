@@ -71,13 +71,14 @@ def test_registry_synthesizes_anonymous_record_identity(tmp_path: Path) -> None:
         if child.kind == cx.CursorKind.FIELD_DECL and child.spelling == "inner"
     )
     anonymous = inner_field.type.get_canonical().get_declaration().get_definition()
-    decl_id, name, c_name, is_anonymous = registry.record_lowering_identity(anonymous)
+    decl_id = registry.decl_id_for_cursor(anonymous)
+    naming = registry.record_naming(anonymous)
     assert decl_id
-    assert name.startswith("outer__anon_struct_1")
-    assert c_name == name
-    assert is_anonymous is True
-    assert "/" not in name
-    assert ":" not in name
+    assert naming.name.startswith("outer__anon_struct_1")
+    assert naming.c_name == naming.name
+    assert naming.is_anonymous is True
+    assert "/" not in naming.name
+    assert ":" not in naming.name
 
 
 def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: Path) -> None:

@@ -1,9 +1,9 @@
-"""Record caching and record-type resolution for parser lowering.
+"""Record caching and nominal record-type resolution for parser lowering.
 
 This module owns the shared record repository and the policy for resolving
-clang record types into IR references or inline lowered definitions. It exists
-to keep type lowering and record-definition lowering from mutating each
-other's internals directly.
+clang record types into IR references. Inline definition materialization
+remains the responsibility of record-definition lowering, except for complete
+anonymous records that cannot be named nominally.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class RecordRepository:
 
 @dataclass
 class RecordTypeResolver:
-    """Resolve record-typed clang nodes without lowerers owning each other."""
+    """Resolve record-typed clang nodes into nominal or lowered record refs."""
 
     index: DeclIndex
     repository: RecordRepository
@@ -70,12 +70,12 @@ class RecordTypeResolver:
 
         definition = self.index.record_definition_for_decl(decl)
         if definition is not None:
-            if decl.spelling and decl_id in self.index.top_level_decl_ids:
+            if decl.spelling:
                 return StructRef(
                     decl_id=decl_id,
                     name=decl.spelling,
                     c_name=decl.spelling,
-                    is_union=(definition.kind == cx.CursorKind.UNION_DECL),
+                    is_union=(decl.kind == cx.CursorKind.UNION_DECL),
                     size_bytes=max(0, clang_type.get_size()),
                     is_anonymous=False,
                 )
