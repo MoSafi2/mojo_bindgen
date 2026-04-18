@@ -284,6 +284,6 @@ def test_analyze_atomic_import_and_register_passable_policy() -> None:
     )
     au = analyze_unit(unit, MojoEmitOptions())
     assert au.needs_atomic_import is True
-    assert any("atomic types were lowered" in note for note in au.semantic_fallback_notes)
+    assert any("atomic types were mapped" in note for note in au.semantic_fallback_notes)
     assert au.ordered_structs[0].register_passable is False
     assert au.ordered_structs[1].register_passable is True

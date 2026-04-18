@@ -786,7 +786,7 @@ def _collect_callback_aliases(
     )
 
 
-def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
+def _analyze_unit_impl(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     """Analyze a parsed unit and derive Mojo-specific generation decisions.
 
     Parameters
@@ -894,3 +894,15 @@ def analyzed_struct_for_test(
     unit analysis.
     """
     return _analyze_struct(decl, struct_by_name, options, None)
+
+
+def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
+    """Compatibility name for the final semantic analysis implementation."""
+    return _analyze_unit_impl(unit, options)
+
+
+def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
+    """Run the IR pass pipeline and final semantic analysis over ``unit``."""
+    from mojo_bindgen.passes.pipeline import run_ir_passes
+
+    return _analyze_unit_impl(run_ir_passes(unit), options)

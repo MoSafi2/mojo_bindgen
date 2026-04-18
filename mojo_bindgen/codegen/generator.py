@@ -6,10 +6,11 @@ analysis and rendering together manually.
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Unit
-from mojo_bindgen.codegen.analysis import AnalyzedUnit, analyze_unit
+from mojo_bindgen.codegen.analysis import AnalyzedUnit
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.render import MojoRenderer
+from mojo_bindgen.ir import Unit
+from mojo_bindgen.passes import AnalyzeForMojoPass, run_ir_passes
 
 
 class MojoGenerator:
@@ -30,7 +31,8 @@ class MojoGenerator:
 
     def analyze(self, unit: Unit) -> AnalyzedUnit:
         """Run semantic codegen analysis over ``unit``."""
-        return analyze_unit(unit, self._options)
+        normalized = run_ir_passes(unit)
+        return AnalyzeForMojoPass(self._options).run(normalized)
 
     def render(self, analyzed: AnalyzedUnit) -> str:
         """Render previously analyzed codegen state to Mojo source."""

@@ -254,7 +254,7 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> Non
     assert "var lanes: SIMD[DType.float32, 4]" in out
     assert "var complex_value: ComplexSIMD[DType.float32, 1]" in out
     assert "var fallback_atomic: Int32" in out
-    assert "atomic types were lowered to their underlying non-atomic Mojo type" in out
+    assert "atomic types were mapped to their underlying non-atomic Mojo type" in out
 
 
 def test_generator_imports_atomic_for_representable_atomic_types() -> None:
@@ -273,7 +273,7 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "from std.os import Atomic" in out
+    assert "from std.atomic import Atomic" in out
     assert (
         "# global variable counter: Atomic[DType.int32] (manual binding required)"
         in out
