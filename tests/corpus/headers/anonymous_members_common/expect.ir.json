@@ -1,7 +1,7 @@
 {
   "decl_kind_counts": {
     "Const": 2,
-    "Struct": 2,
+    "Struct": 3,
     "Typedef": 1
   },
   "decls": [

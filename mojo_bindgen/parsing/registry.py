@@ -1,4 +1,4 @@
-"""Record lookup, naming, caching, and resolution services.
+"""Record lookup, naming, caching, and source-driven record materialization.
 
 `RecordRegistry` is the record-scoped service layer that sits between the
 parser frontend and the lowering pipeline. It indexes one
@@ -8,11 +8,13 @@ parser frontend and the lowering pipeline. It indexes one
 - cached complete record definition cursors (`record_definition_for_decl`)
 - stable naming policy for lowered record declarations (`record_naming`)
 - cached lowered record definitions and `StructRef` creation
-- nominal record-type resolution (`lower_record_type`)
+- anonymous definition materialization helpers for raw lowering
 
-This module intentionally remains record-focused. It does not lower records
-itself beyond resolving anonymous complete record references through the bound
-record-definition lowerer.
+This module intentionally remains record-focused and source-driven. It does not
+own post-parse normalization or semantic policy; those belong to IR passes.
+Its only materialization step beyond direct lookup is lowering anonymous
+complete record references that cannot be represented nominally without their
+definition.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from typing import Callable
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import OpaqueRecordRef, Struct, StructRef, Type, UnsupportedType
+from mojo_bindgen.ir import Struct, StructRef
 from mojo_bindgen.parsing.frontend import ClangFrontend
 
 
@@ -81,7 +83,7 @@ class RecordNaming:
 
 @dataclass
 class RecordRegistry:
-    """Record-scoped lookup, cache, and resolution service for one translation unit."""
+    """Record-scoped lookup, cache, and raw materialization service for one translation unit."""
 
     header: Path
     primary_cursors_in_order: tuple[cx.Cursor, ...]
@@ -182,41 +184,14 @@ class RecordRegistry:
             is_anonymous=struct.is_anonymous,
         )
 
-    def lower_record_type(self, clang_type: cx.Type) -> Type:
-        """Resolve one clang record type to an IR record representation."""
-        decl = clang_type.get_declaration()
-        decl_id = self.decl_id_for_cursor(decl)
-
+    def materialize_record_definition(self, cursor: cx.Cursor) -> Struct:
+        """Lower one complete record definition cursor and return the cached `Struct`."""
+        decl_id = self.decl_id_for_cursor(cursor)
         cached = self.get(decl_id)
         if cached is not None:
-            return self.make_struct_ref(cached)
-
-        definition = self.record_definition_for_decl(decl)
-        if definition is not None:
-            if decl.spelling:
-                return StructRef(
-                    decl_id=decl_id,
-                    name=decl.spelling,
-                    c_name=decl.spelling,
-                    is_union=(decl.kind == cx.CursorKind.UNION_DECL),
-                    size_bytes=max(0, clang_type.get_size()),
-                    is_anonymous=False,
-                )
-            _, struct = self._require_definition_lowerer()(definition)
-            return self.make_struct_ref(struct)
-
-        if decl.spelling:
-            return OpaqueRecordRef(
-                decl_id=decl_id,
-                name=decl.spelling,
-                c_name=decl.spelling,
-                is_union=(decl.kind == cx.CursorKind.UNION_DECL),
-            )
-        return UnsupportedType(
-            category="unsupported_extension",
-            spelling="__anonymous_record",
-            reason="anonymous incomplete record reference cannot be named",
-        )
+            return cached
+        _, struct = self._require_definition_lowerer()(cursor)
+        return struct
 
     def _require_definition_lowerer(
         self,

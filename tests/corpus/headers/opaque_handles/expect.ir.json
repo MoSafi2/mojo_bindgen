@@ -35,7 +35,7 @@
       },
       "path": "ret.pointee.canonical",
       "attrs": {
-        "kind": "OpaqueRecordRef",
+        "kind": "StructRef",
         "name": "foo"
       }
     },
@@ -46,7 +46,7 @@
       },
       "path": "ret.pointee",
       "attrs": {
-        "kind": "OpaqueRecordRef",
+        "kind": "StructRef",
         "name": "bar",
         "is_union": true
       }

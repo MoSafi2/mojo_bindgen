@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 import clang.cindex as cx
 from mojo_bindgen.ir import Struct
+from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
+from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 
 from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig
 from mojo_bindgen.parsing.registry import RecordRegistry
@@ -121,7 +124,7 @@ def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: P
     assert registry.decl_id_for_cursor(anon_structs[0]) != registry.decl_id_for_cursor(anon_structs[1])
 
 
-def test_registry_prefers_cached_lowered_record_over_nominal_resolution(tmp_path: Path) -> None:
+def test_type_lowerer_prefers_cached_lowered_record_over_nominal_resolution(tmp_path: Path) -> None:
     header = tmp_path / "registry_cache.h"
     header.write_text(
         "struct node { int value; };\n",
@@ -148,6 +151,11 @@ def test_registry_prefers_cached_lowered_record_over_nominal_resolution(tmp_path
     )
     registry.store(cached)
 
-    lowered = registry.lower_record_type(node.type)
+    type_lowerer = TypeLowerer(
+        registry=registry,
+        diagnostics=ParserDiagnosticSink(),
+        primitive_resolver=PrimitiveResolver(),
+    )
+    lowered = type_lowerer.lower(node.type, TypeContext.FIELD)
     assert lowered.name == "node_cached"
     assert lowered.decl_id == cached.decl_id

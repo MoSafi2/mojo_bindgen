@@ -1,9 +1,8 @@
-"""Struct and union lowering for the parser package.
+"""Struct and union lowering for raw parser IR construction.
 
-This module owns lowering of record declarations and field-site materialization
+This module owns source-driven record lowering and field-site materialization
 for inline record definitions. It may delegate type conversion to the type
-lowerer, but it does not assemble unrelated top-level declarations such as
-functions, typedefs, or globals.
+lowerer, but it does not own post-parse normalization or semantic policy.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 
 
 class RecordLowerer:
-    """Lower record declarations and fields through explicit collaborators."""
+    """Lower record declarations and fields into raw IR through explicit collaborators."""
 
     def __init__(
         self,

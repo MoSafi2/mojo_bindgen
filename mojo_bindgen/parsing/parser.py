@@ -22,6 +22,7 @@ from mojo_bindgen.parsing.frontend import (
     _resolve_header_path,
 )
 from mojo_bindgen.parsing.registry import RecordRegistry
+from mojo_bindgen.passes.pipeline import run_ir_passes
 from mojo_bindgen.parsing.lowering import (
     ConstExprParser,
     DeclLowerer,
@@ -72,6 +73,10 @@ class ClangParser:
 
     def run(self) -> Unit:
         """Parse the configured header into IR."""
+        return run_ir_passes(self.run_raw())
+
+    def run_raw(self) -> Unit:
+        """Parse the configured header into raw source-faithful IR."""
         session = self._build_parser_session()
         self.session = session
         decl_lowerer = self._build_decl_lowerer(session)

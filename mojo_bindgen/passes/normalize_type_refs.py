@@ -232,9 +232,13 @@ class NormalizeTypeRefsPass:
             if target is None and t.name:
                 target = typedefs_by_name.get(t.name)
             if target is None:
-                return self._normalize_type(t.canonical, typedefs_by_id, typedefs_by_name, visiting)
+                return self._canonicalize_type(
+                    t.canonical, typedefs_by_id, typedefs_by_name, visiting
+                )
             if target.decl_id in visiting:
-                return self._normalize_type(target.canonical, typedefs_by_id, typedefs_by_name, visiting)
+                return self._canonicalize_type(
+                    target.canonical, typedefs_by_id, typedefs_by_name, visiting
+                )
             return self._canonicalize_type(
                 target.aliased,
                 typedefs_by_id,

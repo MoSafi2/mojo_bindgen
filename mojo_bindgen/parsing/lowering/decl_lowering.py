@@ -172,12 +172,11 @@ class DeclLowerer:
         name = cursor.spelling
         ut = cursor.underlying_typedef_type
         aliased = self.type_lowerer.lower(ut, TypeContext.TYPEDEF)
-        canonical = self.type_lowerer.lower(ut.get_canonical(), TypeContext.TYPEDEF)
         return Typedef(
             decl_id=self.registry.decl_id_for_cursor(cursor),
             name=name,
             aliased=aliased,
-            canonical=canonical,
+            canonical=aliased,
         )
 
     @staticmethod

@@ -35,8 +35,12 @@
       "attrs": {
         "kind": "AtomicType",
         "value_type": {
-          "kind": "IntType",
-          "int_kind": "ULONG"
+          "kind": "TypeRef",
+          "name": "uint64_t",
+          "canonical": {
+            "kind": "IntType",
+            "int_kind": "ULONG"
+          }
         }
       }
     }

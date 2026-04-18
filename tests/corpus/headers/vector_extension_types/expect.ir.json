@@ -35,8 +35,12 @@
       },
       "path": "fields.0.type",
       "attrs": {
-        "kind": "VectorType",
-        "size_bytes": 16
+        "kind": "TypeRef",
+        "name": "vet_float4",
+        "canonical": {
+          "kind": "VectorType",
+          "size_bytes": 16
+        }
       }
     }
   ]

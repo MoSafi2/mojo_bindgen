@@ -13,6 +13,7 @@ from mojo_bindgen.ir import (
     EnumRef,
     FloatType,
     FunctionPtr,
+    StructRef,
     Pointer,
     Qualifiers,
     QualifiedType,
@@ -36,9 +37,6 @@ class TypeContext(PyEnum):
     PARAM = auto()
     RETURN = auto()
     TYPEDEF = auto()
-
-
-_TYPEREF_CONTEXTS = {TypeContext.PARAM, TypeContext.RETURN, TypeContext.TYPEDEF}
 
 
 def _normalize(t: cx.Type) -> cx.Type:
@@ -83,6 +81,8 @@ def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
 
 @dataclass
 class TypeLowerer:
+    """Lower clang types into raw IR facts before the Unit-to-Unit pass pipeline."""
+
     registry: RecordRegistry
     diagnostics: ParserDiagnosticSink
     primitive_resolver: PrimitiveResolver
@@ -157,7 +157,8 @@ class TypeLowerer:
     def _lower_typedef(self, t: cx.Type, ctx: TypeContext) -> Type:
         decl = t.get_declaration()
         name = decl.spelling or t.spelling
-        canonical = self.lower(t.get_canonical(), ctx)
+        raw_target = getattr(decl, "underlying_typedef_type", None) or t.get_canonical()
+        canonical = self.lower(raw_target, ctx)
         return TypeRef(
             decl_id=self.registry.decl_id_for_cursor(decl),
             name=name,
@@ -210,7 +211,33 @@ class TypeLowerer:
         return Array(element=element, size=size, array_kind=_array_kind(t, ctx))
 
     def _lower_record(self, t: cx.Type) -> Type:
-        return self.registry.lower_record_type(t)
+        decl = t.get_declaration()
+        decl_id = self.registry.decl_id_for_cursor(decl)
+
+        cached = self.registry.get(decl_id)
+        if cached is not None:
+            return self.registry.make_struct_ref(cached)
+
+        definition = self.registry.record_definition_for_decl(decl)
+        if decl.spelling:
+            return StructRef(
+                decl_id=decl_id,
+                name=decl.spelling,
+                c_name=decl.spelling,
+                is_union=(decl.kind == cx.CursorKind.UNION_DECL),
+                size_bytes=max(0, t.get_size()),
+                is_anonymous=False,
+            )
+
+        if definition is not None:
+            struct = self.registry.materialize_record_definition(definition)
+            return self.registry.make_struct_ref(struct)
+
+        return UnsupportedType(
+            category="unsupported_extension",
+            spelling="__anonymous_record",
+            reason="anonymous incomplete record reference cannot be named",
+        )
 
     def _lower_enum(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
