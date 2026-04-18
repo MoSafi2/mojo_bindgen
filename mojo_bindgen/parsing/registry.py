@@ -1,27 +1,31 @@
-"""Declaration indexing and naming services for one translation unit.
+"""Record lookup, naming, caching, and resolution services.
 
-`DeclIndex` is the service layer that sits between the parser frontend and the
-record/type lowering logic. It indexes a single
+`RecordRegistry` is the record-scoped service layer that sits between the
+parser frontend and the lowering pipeline. It indexes one
 `clang.cindex.TranslationUnit` and provides:
 
 - stable declaration IDs (`decl_id_for_cursor`)
 - cached complete record definition cursors (`record_definition_for_decl`)
 - stable naming policy for lowered record declarations (`record_naming`)
+- cached lowered record definitions and `StructRef` creation
+- nominal record-type resolution (`lower_record_type`)
 
-This module intentionally does *not* lower anything into IR; it only owns
-source-graph metadata and anonymous naming decisions used by downstream
-lowerers.
+This module intentionally remains record-focused. It does not lower records
+itself beyond resolving anonymous complete record references through the bound
+record-definition lowerer.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import clang.cindex as cx
 
+from mojo_bindgen.ir import OpaqueRecordRef, Struct, StructRef, Type, UnsupportedType
 from mojo_bindgen.parsing.frontend import ClangFrontend
 
 
@@ -37,10 +41,7 @@ NAMED_DECL_KINDS = (
 
 
 def _location_key(cursor: cx.Cursor) -> str:
-    """Return a stable source-location key for a cursor.
-
-    Used for anonymous identity fallbacks and anonymous sibling ordinals.
-    """
+    """Return a stable source-location key for a cursor."""
     loc = cursor.location
     return f"{loc.file}:{loc.line}:{loc.column}:{cursor.kind}:{cursor.spelling}"
 
@@ -65,16 +66,8 @@ def _sanitize_name_stem(raw: str, *, fallback: str) -> str:
 
 
 def _use_location_identity_for_cursor(cursor: cx.Cursor) -> bool:
-    """Return whether ``cursor`` needs source-local identity instead of USR.
-
-    libclang may report the same USR for sibling anonymous inline record
-    definitions within one anonymous carrier. For anonymous struct/union
-    declarations, use location-based identity so each definition remains
-    distinct for lowering and caching.
-    """
-    return cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL) and (
-        _is_anonymous_record_spelling(cursor.spelling)
-    )
+    """Return whether ``cursor`` needs source-local identity instead of USR."""
+    return cursor.kind in RECORD_KINDS and _is_anonymous_record_spelling(cursor.spelling)
 
 
 @dataclass(frozen=True)
@@ -87,51 +80,25 @@ class RecordNaming:
 
 
 @dataclass
-class DeclIndex:
-    """Identity and declaration index for one translation unit.
-
-    Data model:
-    - `primary_cursors_in_order`: primary-file cursors in deterministic preorder.
-      This ordering is used to assign ordinals to anonymous record definitions
-      so sibling anonymous records get distinct synthesized names.
-    - `record_definition_by_decl_id`: mapping from `decl_id` to the cached
-      complete clang definition cursor for that record (struct/union only).
-    - `anonymous_record_name_by_decl_id`: cache for synthesized IR-friendly
-      names of anonymous record declarations.
-
-    Identity rules (`decl_id_for_cursor`):
-    - Prefer clang USR when present, except for anonymous inline record
-      struct/union cursors where libclang may reuse the same USR for sibling
-      definitions.
-    - Otherwise, use a spelling-based fallback for “named decl kinds”.
-    - Finally, fall back to a hashed location key with an `anon:` prefix.
-
-    Anonymous naming rules (`record_naming`):
-    - Anonymous record spellings trigger synthesized naming.
-    - Synthesized names incorporate the anonymous record kind
-      (`anon_struct`/`anon_union`), a stable ordinal, and a scope stem derived
-      from lexical/semantic parents.
-    """
+class RecordRegistry:
+    """Record-scoped lookup, cache, and resolution service for one translation unit."""
 
     header: Path
     primary_cursors_in_order: tuple[cx.Cursor, ...]
     record_definition_by_decl_id: dict[str, cx.Cursor]
     anonymous_record_name_by_decl_id: dict[str, str]
+    _records_by_decl_id: dict[str, Struct] = field(default_factory=dict)
+    _definition_lowerer: Callable[[cx.Cursor], tuple[list[Struct], Struct]] | None = None
 
     @classmethod
     def build_from_translation_unit(
         cls,
         tu: cx.TranslationUnit,
         frontend: ClangFrontend,
-    ) -> DeclIndex:
-        """Index one translation unit for primary-file declaration cursors.
-
-        The index is limited to the frontend's configured primary/header file:
-        we only record complete record definitions (`struct`/`union`) when the
-        cursor originates from the primary file.
-        """
+    ) -> RecordRegistry:
+        """Index one translation unit for primary-file record declarations."""
         primary = tuple(frontend.iter_primary_cursors(tu))
-        index = cls(
+        registry = cls(
             header=frontend.header.resolve(),
             primary_cursors_in_order=primary,
             record_definition_by_decl_id={},
@@ -142,28 +109,20 @@ class DeclIndex:
             if not frontend.is_primary_file_cursor(cursor):
                 continue
             if cursor.kind in RECORD_KINDS and cursor.is_definition():
-                decl_id = index.decl_id_for_cursor(cursor)
-                index.record_definition_by_decl_id[decl_id] = cursor
+                decl_id = registry.decl_id_for_cursor(cursor)
+                registry.record_definition_by_decl_id[decl_id] = cursor
 
-        return index
+        return registry
+
+    def bind_definition_lowerer(
+        self,
+        lower_record_definition: Callable[[cx.Cursor], tuple[list[Struct], Struct]],
+    ) -> None:
+        """Attach the record-definition lowerer used for anonymous materialization."""
+        self._definition_lowerer = lower_record_definition
 
     def decl_id_for_cursor(self, cursor: cx.Cursor) -> str:
-        """Return a stable declaration identity for a clang cursor.
-
-        This value is used as the cross-cursor key for caching record
-        definitions and synthesized anonymous record names.
-
-        Selection rules (three conditional “arms”):
-        - USR arm: a normal named decl where clang provides a USR and the
-          cursor is not an anonymous inline `struct`/`union` (for example
-          `struct node { ... };`) => returns the USR.
-        - `kind:spelling` arm: a named decl kind with an explicit spelling
-          (for example `enum Color { ... }`) when USR is missing/unused =>
-          returns `ENUM_DECL:Color` (or the appropriate `kind`).
-        - `anon:` arm: an anonymous inline record whose spelling is empty or
-          synthetic (for example `struct { int x; } inner;`) =>
-          returns `anon:<hash>` derived from source location.
-        """
+        """Return a stable declaration identity for a clang cursor."""
         usr = cursor.get_usr()
         if usr and not _use_location_identity_for_cursor(cursor):
             return usr
@@ -176,13 +135,7 @@ class DeclIndex:
         return f"anon:{digest}"
 
     def record_definition_for_decl(self, cursor: cx.Cursor) -> cx.Cursor | None:
-        """Return the complete clang definition cursor for a record declaration.
-
-        This resolves the incoming record declaration (forward or definition) to
-        a stable `decl_id`, then returns the cached complete definition cursor
-        for that `decl_id` if one exists (or `None` if the record is incomplete
-        or was not indexed from the primary file).
-        """
+        """Return the complete clang definition cursor for a record declaration."""
         decl_id = self.decl_id_for_cursor(cursor)
         return self.record_definition_by_decl_id.get(decl_id)
 
@@ -209,17 +162,71 @@ class DeclIndex:
         synth = self._anonymous_record_name(cursor, decl_id)
         return RecordNaming(name=synth, c_name=synth, is_anonymous=True)
 
+    def get(self, decl_id: str) -> Struct | None:
+        """Return a cached lowered record definition when available."""
+        return self._records_by_decl_id.get(decl_id)
+
+    def store(self, struct: Struct) -> None:
+        """Store a lowered record definition by declaration id."""
+        self._records_by_decl_id[struct.decl_id] = struct
+
+    @staticmethod
+    def make_struct_ref(struct: Struct) -> StructRef:
+        """Build a stable StructRef from one lowered Struct."""
+        return StructRef(
+            decl_id=struct.decl_id,
+            name=struct.name,
+            c_name=struct.c_name,
+            is_union=struct.is_union,
+            size_bytes=struct.size_bytes,
+            is_anonymous=struct.is_anonymous,
+        )
+
+    def lower_record_type(self, clang_type: cx.Type) -> Type:
+        """Resolve one clang record type to an IR record representation."""
+        decl = clang_type.get_declaration()
+        decl_id = self.decl_id_for_cursor(decl)
+
+        cached = self.get(decl_id)
+        if cached is not None:
+            return self.make_struct_ref(cached)
+
+        definition = self.record_definition_for_decl(decl)
+        if definition is not None:
+            if decl.spelling:
+                return StructRef(
+                    decl_id=decl_id,
+                    name=decl.spelling,
+                    c_name=decl.spelling,
+                    is_union=(decl.kind == cx.CursorKind.UNION_DECL),
+                    size_bytes=max(0, clang_type.get_size()),
+                    is_anonymous=False,
+                )
+            _, struct = self._require_definition_lowerer()(definition)
+            return self.make_struct_ref(struct)
+
+        if decl.spelling:
+            return OpaqueRecordRef(
+                decl_id=decl_id,
+                name=decl.spelling,
+                c_name=decl.spelling,
+                is_union=(decl.kind == cx.CursorKind.UNION_DECL),
+            )
+        return UnsupportedType(
+            category="unsupported_extension",
+            spelling="__anonymous_record",
+            reason="anonymous incomplete record reference cannot be named",
+        )
+
+    def _require_definition_lowerer(
+        self,
+    ) -> Callable[[cx.Cursor], tuple[list[Struct], Struct]]:
+        if self._definition_lowerer is None:
+            raise RuntimeError("RecordRegistry definition lowerer has not been bound")
+        return self._definition_lowerer
+
     def _anonymous_record_name(self, cursor: cx.Cursor, decl_id: str) -> str:
-        """Synthesize a stable IR-friendly name for an anonymous record.
-
-        The name is derived from:
-        - a scope stem based on the anonymous record's naming parent
-        - the record kind (`anon_struct` / `anon_union`)
-        - an ordinal derived from sibling anonymous record definitions
-
-        Results are cached by `decl_id` because callers may see multiple
-        cursors that map to the same declaration identity.
-        """
+        """Synthesize a stable IR-friendly name for an anonymous record."""
         cached = self.anonymous_record_name_by_decl_id.get(decl_id)
         if cached is not None:
             return cached
@@ -233,11 +240,7 @@ class DeclIndex:
         return synth
 
     def _scope_stem(self, cursor: cx.Cursor | None) -> str:
-        """Compute the hierarchical “scope stem” part of an anonymous name.
-
-        For example, anonymous fields inside named structs get names that embed
-        their field-name and parent scope chain.
-        """
+        """Compute the hierarchical “scope stem” part of an anonymous name."""
         if cursor is None:
             return ""
         if cursor.kind == cx.CursorKind.FIELD_DECL:
@@ -245,7 +248,7 @@ class DeclIndex:
             parent = self._naming_parent(cursor)
             parent_stem = self._scope_stem(parent)
             return field_name if not parent_stem else f"{parent_stem}__{field_name}"
-        if cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
+        if cursor.kind in RECORD_KINDS:
             if _is_anonymous_record_spelling(cursor.spelling):
                 return self._anonymous_record_name(cursor, self.decl_id_for_cursor(cursor))
             return _sanitize_name_stem(cursor.spelling, fallback="record")
@@ -255,11 +258,7 @@ class DeclIndex:
         return self._scope_stem(parent)
 
     def _naming_parent(self, cursor: cx.Cursor) -> cx.Cursor | None:
-        """Choose the parent cursor used to derive an anonymous record scope stem.
-
-        We prefer `lexical_parent` (falling back to `semantic_parent`) but only
-        accept the parent when it originates from the configured primary header.
-        """
+        """Choose the parent cursor used to derive an anonymous record scope stem."""
         parent = getattr(cursor, "lexical_parent", None) or getattr(cursor, "semantic_parent", None)
         if parent is None:
             return None
@@ -270,12 +269,7 @@ class DeclIndex:
         return parent
 
     def _anonymous_record_ordinal(self, cursor: cx.Cursor, parent: cx.Cursor | None) -> int:
-        """Compute a stable ordinal among sibling anonymous record definitions.
-
-        Anonymous struct/union declarations may appear as siblings with equal
-        USRs. To keep synthesized names distinct, we number them by their
-        relative definition occurrence and stable source location.
-        """
+        """Compute a stable ordinal among sibling anonymous record definitions."""
         siblings = self.primary_cursors_in_order if parent is None else tuple(parent.get_children())
         target_loc = _location_key(cursor)
         ordinal = 0

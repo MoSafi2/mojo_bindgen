@@ -12,8 +12,7 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import Field, IntType, Struct, StructRef, Type
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
-from mojo_bindgen.parsing.index import DeclIndex
-from mojo_bindgen.parsing.lowering.record_types import RecordRepository
+from mojo_bindgen.parsing.registry import RecordRegistry
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 
 
@@ -22,19 +21,17 @@ class RecordLowerer:
 
     def __init__(
         self,
-        index: DeclIndex,
+        registry: RecordRegistry,
         diagnostics: ParserDiagnosticSink,
         type_lowerer: TypeLowerer,
-        repository: RecordRepository,
     ) -> None:
-        self.index = index
+        self.registry = registry
         self.diagnostics = diagnostics
         self.type_lowerer = type_lowerer
-        self.repository = repository
 
     def make_struct_ref(self, struct: Struct) -> StructRef:
         """Build a stable StructRef from one lowered Struct."""
-        return self.repository.make_struct_ref(struct)
+        return self.registry.make_struct_ref(struct)
 
     def lower_top_level_record(self, cursor: cx.Cursor) -> list[Struct] | Struct | None:
         """Lower a top-level record declaration from the primary file."""
@@ -45,8 +42,8 @@ class RecordLowerer:
             if nested:
                 return nested + [struct]
             return struct
-        if cursor.spelling and not self.index.is_complete_record_decl(cursor):
-            decl_id = self.index.decl_id_for_cursor(cursor)
+        if cursor.spelling and not self.registry.is_complete_record_decl(cursor):
+            decl_id = self.registry.decl_id_for_cursor(cursor)
             return Struct(
                 decl_id=decl_id,
                 name=cursor.spelling,
@@ -61,9 +58,9 @@ class RecordLowerer:
 
     def lower_record_definition(self, cursor: cx.Cursor) -> tuple[list[Struct], Struct]:
         """Lower a complete struct/union definition and nested anonymous records."""
-        decl_id = self.index.decl_id_for_cursor(cursor)
-        naming = self.index.record_naming(cursor)
-        cached = self.repository.get(decl_id)
+        decl_id = self.registry.decl_id_for_cursor(cursor)
+        naming = self.registry.record_naming(cursor)
+        cached = self.registry.get(decl_id)
         if cached is not None:
             return [], cached
 
@@ -77,7 +74,7 @@ class RecordLowerer:
             is_union=(cursor.kind == cx.CursorKind.UNION_DECL),
             is_anonymous=naming.is_anonymous,
         )
-        self.repository.store(struct)
+        self.registry.store(struct)
 
         nested: list[Struct] = []
         fields: list[Field] = []
@@ -87,7 +84,7 @@ class RecordLowerer:
             elif (
                 child.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
                 and child.is_definition()
-                and self.index.record_naming(child).is_anonymous
+                and self.registry.record_naming(child).is_anonymous
                 and not self._has_explicit_field_for_record(cursor, child)
             ):
                 field, nested_defs = self._lower_direct_anonymous_record_field(cursor.type, child)
@@ -192,29 +189,29 @@ class RecordLowerer:
         definition = ft.get_declaration().get_definition()
         if definition is None:
             return False
-        return self.index.decl_id_for_cursor(definition) == self.index.decl_id_for_cursor(record)
+        return self.registry.decl_id_for_cursor(definition) == self.registry.decl_id_for_cursor(record)
 
     def _find_implicit_record_field(self, parent_type: cx.Type, record: cx.Cursor) -> cx.Cursor | None:
         """Find the implicit field cursor that stores a direct anonymous record member."""
-        record_decl_id = self.index.decl_id_for_cursor(record)
+        record_decl_id = self.registry.decl_id_for_cursor(record)
         for field_cursor in parent_type.get_fields():
             definition = field_cursor.type.get_canonical().get_declaration().get_definition()
             if definition is None:
                 continue
-            if self.index.decl_id_for_cursor(definition) == record_decl_id:
+            if self.registry.decl_id_for_cursor(definition) == record_decl_id:
                 return field_cursor
         return None
 
     def _has_explicit_field_for_record(self, parent: cx.Cursor, record: cx.Cursor) -> bool:
         """Return whether ``record`` already has an explicit ``FIELD_DECL`` in ``parent``."""
-        record_decl_id = self.index.decl_id_for_cursor(record)
+        record_decl_id = self.registry.decl_id_for_cursor(record)
         for child in parent.get_children():
             if child.kind != cx.CursorKind.FIELD_DECL:
                 continue
             definition = child.type.get_canonical().get_declaration().get_definition()
             if definition is None:
                 continue
-            if self.index.decl_id_for_cursor(definition) == record_decl_id:
+            if self.registry.decl_id_for_cursor(definition) == record_decl_id:
                 return True
         return False
 

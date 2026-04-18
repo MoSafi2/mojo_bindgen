@@ -13,7 +13,7 @@ from mojo_bindgen.parsing.lowering.primitive import (
     default_signed_int_primitive,
 )
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
-from mojo_bindgen.parsing.lowering.record_types import RecordRepository, RecordTypeResolver
+from mojo_bindgen.parsing.registry import RecordNaming, RecordRegistry
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 
 __all__ = [
@@ -25,8 +25,8 @@ __all__ = [
     "ParsedMacro",
     "PrimitiveResolver",
     "RecordLowerer",
-    "RecordRepository",
-    "RecordTypeResolver",
+    "RecordNaming",
+    "RecordRegistry",
     "TypeContext",
     "TypeLowerer",
     "_suffix_probe_parse_args",

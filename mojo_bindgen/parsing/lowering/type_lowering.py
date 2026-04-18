@@ -24,12 +24,11 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
-from mojo_bindgen.parsing.index import DeclIndex
+from mojo_bindgen.parsing.registry import RecordRegistry
 from mojo_bindgen.parsing.lowering.primitive import (
     PrimitiveResolver,
     default_signed_int_primitive,
 )
-from mojo_bindgen.parsing.lowering.record_types import RecordTypeResolver
 
 
 class TypeContext(PyEnum):
@@ -84,10 +83,9 @@ def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
 
 @dataclass
 class TypeLowerer:
-    index: DeclIndex
+    registry: RecordRegistry
     diagnostics: ParserDiagnosticSink
     primitive_resolver: PrimitiveResolver
-    record_types: RecordTypeResolver
     compat: ClangCompat = field(default_factory=ClangCompat)
     _dispatch_by_kind: dict[object, Callable[[cx.Type, TypeContext], Type]] = field(
         init=False, repr=False
@@ -161,7 +159,7 @@ class TypeLowerer:
         name = decl.spelling or t.spelling
         canonical = self.lower(t.get_canonical(), ctx)
         return TypeRef(
-            decl_id=self.index.decl_id_for_cursor(decl),
+            decl_id=self.registry.decl_id_for_cursor(decl),
             name=name,
             canonical=canonical,
         )
@@ -212,7 +210,7 @@ class TypeLowerer:
         return Array(element=element, size=size, array_kind=_array_kind(t, ctx))
 
     def _lower_record(self, t: cx.Type) -> Type:
-        return self.record_types.lower_record_type(t)
+        return self.registry.lower_record_type(t)
 
     def _lower_enum(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
@@ -220,7 +218,7 @@ class TypeLowerer:
         underlying = self.primitive_resolver.resolve_primitive(decl.enum_type)
         if name and underlying is not None:
             return EnumRef(
-                decl_id=self.index.decl_id_for_cursor(decl),
+                decl_id=self.registry.decl_id_for_cursor(decl),
                 name=name,
                 c_name=name,
                 underlying=underlying,

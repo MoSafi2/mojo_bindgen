@@ -24,7 +24,7 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.frontend import ClangFrontend
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
-from mojo_bindgen.parsing.index import DeclIndex
+from mojo_bindgen.parsing.registry import RecordRegistry
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
@@ -39,7 +39,7 @@ class DeclLowerer:
         *,
         frontend: ClangFrontend,
         tu: cx.TranslationUnit,
-        index: DeclIndex,
+        registry: RecordRegistry,
         diagnostics: ParserDiagnosticSink,
         primitive_resolver: PrimitiveResolver,
         type_lowerer: TypeLowerer,
@@ -49,7 +49,7 @@ class DeclLowerer:
     ) -> None:
         self.frontend = frontend
         self.tu = tu
-        self.index = index
+        self.registry = registry
         self.diagnostics = diagnostics
         self.primitive_resolver = primitive_resolver
         self.type_lowerer = type_lowerer
@@ -114,7 +114,7 @@ class DeclLowerer:
                 "function has no prototype (K&R-style); parameters may be incomplete",
             )
         return Function(
-            decl_id=self.index.decl_id_for_cursor(cursor),
+            decl_id=self.registry.decl_id_for_cursor(cursor),
             name=cursor.spelling,
             link_name=cursor.spelling,
             ret=ret_ir,
@@ -161,7 +161,7 @@ class DeclLowerer:
                     Enumerant(name=child.spelling, c_name=child.spelling, value=child.enum_value)
                 )
         return Enum(
-            decl_id=self.index.decl_id_for_cursor(cursor),
+            decl_id=self.registry.decl_id_for_cursor(cursor),
             name=c_name,
             c_name=c_name,
             underlying=underlying,
@@ -174,7 +174,7 @@ class DeclLowerer:
         aliased = self.type_lowerer.lower(ut, TypeContext.TYPEDEF)
         canonical = self.type_lowerer.lower(ut.get_canonical(), TypeContext.TYPEDEF)
         return Typedef(
-            decl_id=self.index.decl_id_for_cursor(cursor),
+            decl_id=self.registry.decl_id_for_cursor(cursor),
             name=name,
             aliased=aliased,
             canonical=canonical,
@@ -188,7 +188,7 @@ class DeclLowerer:
     def _build_global_var(self, cursor: cx.Cursor) -> GlobalVar:
         parsed = self.const_expr_parser.parse_initializer(cursor)
         return GlobalVar(
-            decl_id=self.index.decl_id_for_cursor(cursor),
+            decl_id=self.registry.decl_id_for_cursor(cursor),
             name=cursor.spelling,
             link_name=cursor.spelling,
             type=self.type_lowerer.lower(cursor.type, TypeContext.PARAM),

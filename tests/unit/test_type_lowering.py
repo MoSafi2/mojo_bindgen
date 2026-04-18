@@ -58,10 +58,14 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "take_mode")
 
-    assert isinstance(payload.fields[0].type, IntType)
-    assert payload.fields[0].type.size_bytes == 4
-    assert isinstance(payload.fields[1].type, EnumRef)
+    assert isinstance(payload.fields[0].type, TypeRef)
+    assert payload.fields[0].type.name == "my_uint"
+    assert isinstance(payload.fields[0].type.canonical, IntType)
+    assert payload.fields[0].type.canonical.size_bytes == 4
+    assert isinstance(payload.fields[1].type, TypeRef)
     assert payload.fields[1].type.name == "mode_t"
+    assert isinstance(payload.fields[1].type.canonical, EnumRef)
+    assert payload.fields[1].type.canonical.name == "mode_t"
 
     assert isinstance(fn.ret, TypeRef)
     assert fn.ret.name == "mode_t"
@@ -248,8 +252,10 @@ def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_pa
 
     assert isinstance(td.canonical, VectorType)
     assert td.canonical.count == 4
-    assert isinstance(payload.fields[0].type, VectorType)
-    assert payload.fields[0].type.count == 4
+    assert isinstance(payload.fields[0].type, TypeRef)
+    assert payload.fields[0].type.name == "vet_float4"
+    assert isinstance(payload.fields[0].type.canonical, VectorType)
+    assert payload.fields[0].type.canonical.count == 4
 
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.builtin.simd import SIMD" in out

@@ -2,7 +2,7 @@
 
 This module owns the parser package entrypoint. It validates user-facing input,
 runs the staged parser pipeline, and returns the final Unit. Parsing policy
-lives in dedicated frontend, indexing, lowering, and diagnostics modules.
+lives in dedicated frontend, registry, lowering, and diagnostics modules.
 """
 
 from __future__ import annotations
@@ -21,15 +21,13 @@ from mojo_bindgen.parsing.frontend import (
     _default_system_compile_args,
     _resolve_header_path,
 )
-from mojo_bindgen.parsing.index import DeclIndex
+from mojo_bindgen.parsing.registry import RecordRegistry
 from mojo_bindgen.parsing.lowering import (
     ConstExprParser,
     DeclLowerer,
     LiteralResolver,
     PrimitiveResolver,
     RecordLowerer,
-    RecordRepository,
-    RecordTypeResolver,
     TypeLowerer,
 )
 
@@ -40,7 +38,7 @@ class ParseSession:
 
     frontend: ClangFrontend
     tu: cx.TranslationUnit
-    index: DeclIndex
+    registry: RecordRegistry
     header: str
     library: str
     link_name: str
@@ -99,11 +97,11 @@ class ClangParser:
         self.diagnostics.add_frontend_diagnostics(frontend_diagnostics)
         _handle_frontend_errors(self.header, frontend_diagnostics, self.raise_on_error)
 
-        index = DeclIndex.build_from_translation_unit(tu, frontend)
+        registry = RecordRegistry.build_from_translation_unit(tu, frontend)
         return ParseSession(
             frontend=frontend,
             tu=tu,
-            index=index,
+            registry=registry,
             header=str(self.header),
             library=self.library,
             link_name=self.link_name,
@@ -114,29 +112,22 @@ class ClangParser:
         primitive_resolver = PrimitiveResolver()
         literal_resolver = LiteralResolver(self.compile_args)
         compat = ClangCompat()
-        record_repository = RecordRepository()
-        record_types = RecordTypeResolver(
-            index=session.index,
-            repository=record_repository,
-        )
         type_lowerer = TypeLowerer(
-            index=session.index,
+            registry=session.registry,
             diagnostics=self.diagnostics,
             primitive_resolver=primitive_resolver,
-            record_types=record_types,
             compat=compat,
         )
         record_lowerer = RecordLowerer(
-            index=session.index,
+            registry=session.registry,
             diagnostics=self.diagnostics,
             type_lowerer=type_lowerer,
-            repository=record_repository,
         )
-        record_types.bind_definition_lowerer(record_lowerer.lower_record_definition)
+        session.registry.bind_definition_lowerer(record_lowerer.lower_record_definition)
         return DeclLowerer(
             frontend=session.frontend,
             tu=session.tu,
-            index=session.index,
+            registry=session.registry,
             diagnostics=self.diagnostics,
             primitive_resolver=primitive_resolver,
             type_lowerer=type_lowerer,
