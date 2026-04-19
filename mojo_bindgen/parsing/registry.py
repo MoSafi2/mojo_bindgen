@@ -21,15 +21,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import clang.cindex as cx
 
 from mojo_bindgen.ir import Struct, StructRef
 from mojo_bindgen.parsing.frontend import ClangFrontend
-
 
 RECORD_KINDS = (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
 NAMED_DECL_KINDS = (

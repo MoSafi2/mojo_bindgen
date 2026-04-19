@@ -137,7 +137,11 @@ def test_weird_stress_fixture_preserves_selected_hard_declarations() -> None:
     header = _REPO_ROOT / "tests" / "stress" / "weird" / "stress_weird_input.h"
     unit = ClangParser(header, library="stress_weird", link_name="stress_weird").run()
 
-    names = {decl.name for decl in unit.decls if isinstance(decl, (Struct, Function, GlobalVar, Enum, Typedef))}
+    names = {
+        decl.name
+        for decl in unit.decls
+        if isinstance(decl, (Struct, Function, GlobalVar, Enum, Typedef))
+    }
 
     assert {
         "ev_flex_old",

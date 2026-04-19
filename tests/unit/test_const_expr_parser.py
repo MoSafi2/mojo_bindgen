@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from mojo_bindgen.ir import BinaryExpr, FloatLiteral, FloatType, IntLiteral, IntType, NullPtrLiteral, RefExpr, StringLiteral
+from mojo_bindgen.ir import (
+    BinaryExpr,
+    FloatLiteral,
+    FloatType,
+    IntLiteral,
+    IntType,
+    NullPtrLiteral,
+    RefExpr,
+    StringLiteral,
+)
 from mojo_bindgen.parsing.lowering import ConstExprParser, LiteralResolver
 
 
@@ -78,8 +87,12 @@ def test_const_expr_parser_classifies_broader_predefined_and_function_like_macro
     predefined = parser.parse_macro(_Cursor("MACRO_FILE", ["__FILE__"]))
     stdc_version = parser.parse_macro(_Cursor("MACRO_STDC_VERSION", ["__STDC_VERSION__"]))
     stdc_no_atomics = parser.parse_macro(_Cursor("MACRO_STDC_NO_ATOMICS", ["__STDC_NO_ATOMICS__"]))
-    header_version = parser.parse_macro(_Cursor("MACRO_STDIO_VERSION", ["__STDC_VERSION_STDIO_H__"]))
-    function_like = parser.parse_macro(_Cursor("MACRO_FUNC", ["x", "(", "x", ")", "+", "1"], function_like=True))
+    header_version = parser.parse_macro(
+        _Cursor("MACRO_STDIO_VERSION", ["__STDC_VERSION_STDIO_H__"])
+    )
+    function_like = parser.parse_macro(
+        _Cursor("MACRO_FUNC", ["x", "(", "x", ")", "+", "1"], function_like=True)
+    )
 
     assert predefined.kind == "predefined"
     assert predefined.tokens == ["__FILE__"]

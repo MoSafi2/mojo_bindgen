@@ -8,7 +8,7 @@ from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD
 def _bindgen_dl() raises -> OwnedDLHandle:
     return OwnedDLHandle(DEFAULT_RTLD)
 
-struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
+struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
         var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
@@ -22,15 +22,15 @@ struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
 
     @staticmethod
     def load() raises -> Self.T:
-        return Self._raw()[]
+        return Self._raw()[].copy()
 
     @staticmethod
     def store(value: Self.T) raises -> None:
         var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
-        p[] = value
+        p[] = value.copy()
 
 
-struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
+struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
         var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
@@ -44,7 +44,7 @@ struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
 
     @staticmethod
     def load() raises -> Self.T:
-        return Self._raw()[]
+        return Self._raw()[].copy()
 
 
 # incomplete C struct `gscp_cfg` — opaque; use only as pointer target

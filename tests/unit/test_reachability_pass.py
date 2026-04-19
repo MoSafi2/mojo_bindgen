@@ -75,9 +75,7 @@ def test_skips_when_struct_already_declared() -> None:
         params=[Param(name="p", type=Pointer(pointee=orphan))],
         decl_id="c:@F@f",
     )
-    unit = Unit(
-        source_header="t.h", library="t", link_name="t", decls=[existing, fn]
-    )
+    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[existing, fn])
     result = ReachabilityMaterializePass().run(unit)
     assert result.unit.decls == unit.decls
     assert result.synthesized_structs == ()
@@ -106,10 +104,7 @@ def test_function_ptr_traversal_finds_nested_orphan() -> None:
     result = ReachabilityMaterializePass().run(
         unit, ReachabilityOptions(traverse_function_ptrs=True)
     )
-    assert any(
-        isinstance(d, Struct) and d.decl_id == inner.decl_id
-        for d in result.unit.decls
-    )
+    assert any(isinstance(d, Struct) and d.decl_id == inner.decl_id for d in result.unit.decls)
     assert inner.decl_id in result.reachable_orphan_decl_ids
 
     no_fp = ReachabilityMaterializePass().run(

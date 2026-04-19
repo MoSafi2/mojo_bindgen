@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
-    AtomicType,
     Array,
+    AtomicType,
     ComplexType,
     Field,
     FloatKind,
@@ -16,18 +17,17 @@ from mojo_bindgen.ir import (
     Param,
     Struct,
     StructRef,
-    TypeRef,
     Typedef,
+    TypeRef,
     Unit,
     VectorType,
     VoidType,
 )
+from mojo_bindgen.passes.analyze_for_mojo import AnalyzedFunction, analyze_unit
 
 
 def _f32() -> FloatType:
     return FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.passes.analyze_for_mojo import AnalyzedFunction, analyze_unit
 
 
 def _i32() -> IntType:
@@ -280,7 +280,18 @@ def test_analyze_atomic_import_and_register_passable_policy() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
-        decls=[atomic_box, wchar_box, Function(decl_id="fn:get", name="get", link_name="get", ret=atomic_i32, params=[], is_variadic=False)],
+        decls=[
+            atomic_box,
+            wchar_box,
+            Function(
+                decl_id="fn:get",
+                name="get",
+                link_name="get",
+                ret=atomic_i32,
+                params=[],
+                is_variadic=False,
+            ),
+        ],
     )
     au = analyze_unit(unit, MojoEmitOptions())
     assert au.needs_atomic_import is True

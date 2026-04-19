@@ -1,35 +1,36 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum as PyEnum, auto
-from typing import Callable
+from enum import Enum as PyEnum
+from enum import auto
 
 import clang.cindex as cx
 
 from mojo_bindgen.ir import (
-    AtomicType,
     Array,
+    AtomicType,
     ComplexType,
     EnumRef,
     FloatType,
     FunctionPtr,
-    StructRef,
     Pointer,
-    Qualifiers,
     QualifiedType,
+    Qualifiers,
+    StructRef,
     Type,
     TypeRef,
     UnsupportedType,
     VectorType,
     VoidType,
 )
-from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
-from mojo_bindgen.parsing.registry import RecordRegistry
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.primitive import (
     PrimitiveResolver,
     default_signed_int_primitive,
 )
+from mojo_bindgen.parsing.registry import RecordRegistry
 
 
 class TypeContext(PyEnum):
@@ -74,9 +75,7 @@ def _array_kind(t: cx.Type, ctx: TypeContext) -> str:
 def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
     if qualifiers == Qualifiers():
         return Pointer(pointee=None)
-    return Pointer(
-        pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers)
-    )
+    return Pointer(pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers))
 
 
 @dataclass
@@ -122,13 +121,9 @@ class TypeLowerer:
         if (complex_kind := getattr(cx.TypeKind, "COMPLEX", None)) is not None:
             dispatch[complex_kind] = lambda t, _ctx: self._lower_complex(t)
         if (vector_kind := getattr(cx.TypeKind, "VECTOR", None)) is not None:
-            dispatch[vector_kind] = lambda t, _ctx: self._lower_vector(
-                t, is_ext_vector=False
-            )
+            dispatch[vector_kind] = lambda t, _ctx: self._lower_vector(t, is_ext_vector=False)
         if (ext_vector_kind := getattr(cx.TypeKind, "EXTVECTOR", None)) is not None:
-            dispatch[ext_vector_kind] = lambda t, _ctx: self._lower_vector(
-                t, is_ext_vector=True
-            )
+            dispatch[ext_vector_kind] = lambda t, _ctx: self._lower_vector(t, is_ext_vector=True)
         if (atomic_kind := getattr(cx.TypeKind, "ATOMIC", None)) is not None:
             dispatch[atomic_kind] = self._lower_atomic
         return dispatch
@@ -185,16 +180,13 @@ class TypeLowerer:
             if t.kind == cx.TypeKind.FUNCTIONPROTO
             else []
         )
-        is_variadic = (
-            t.is_function_variadic() if t.kind == cx.TypeKind.FUNCTIONPROTO else False
-        )
+        is_variadic = t.is_function_variadic() if t.kind == cx.TypeKind.FUNCTIONPROTO else False
         return FunctionPtr(
             ret=ret,
             params=params,
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(t),
         )
-
 
     def _lower_pointer_to_value(
         self, pointee: cx.Type, qualifiers: Qualifiers, ctx: TypeContext
@@ -254,9 +246,7 @@ class TypeLowerer:
         return default_signed_int_primitive()
 
     def _lower_complex(self, t: cx.Type) -> Type:
-        element = self.primitive_resolver.resolve_primitive(
-            self.compat.get_element_type(t)
-        )
+        element = self.primitive_resolver.resolve_primitive(self.compat.get_element_type(t))
         if not isinstance(element, FloatType):
             return UnsupportedType(
                 category="complex",
@@ -281,7 +271,7 @@ class TypeLowerer:
         self.diagnostics.add_type_diag(
             "warning",
             t,
-            "_Atomic lowered to std.Atomic when the value is a representable scalar dtype, otherwise falls back to the underlying non-atomic type"
+            "_Atomic lowered to std.Atomic when the value is a representable scalar dtype, otherwise falls back to the underlying non-atomic type",
         )
         return AtomicType(value_type=inner)
 

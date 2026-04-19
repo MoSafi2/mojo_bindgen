@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator, Literal
+from typing import Literal
 
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
@@ -19,10 +20,10 @@ from mojo_bindgen.codegen.mojo_mapper import (
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
+    ComplexType,
     Const,
     Enum,
     EnumRef,
-    ComplexType,
     Field,
     FloatType,
     Function,
@@ -36,8 +37,8 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Type,
-    TypeRef,
     Typedef,
+    TypeRef,
     Unit,
     UnsupportedType,
     VectorType,
@@ -355,9 +356,7 @@ def _type_ok_for_unsafe_union_member(t: Type) -> bool:
     return isinstance(u, (IntType, FloatType, Pointer, FunctionPtr, OpaqueRecordRef))
 
 
-def _try_unsafe_union_type_list(
-    decl: Struct, ffi_origin: FFIOriginStyle
-) -> list[str] | None:
+def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> list[str] | None:
     if not decl.is_union or not decl.fields:
         return None
     mapper = TypeMapper(
@@ -375,9 +374,7 @@ def _try_unsafe_union_type_list(
     return mapped_members
 
 
-def eligible_unsafe_union_names(
-    unit: Unit, ffi_origin: FFIOriginStyle
-) -> frozenset[str]:
+def eligible_unsafe_union_names(unit: Unit, ffi_origin: FFIOriginStyle) -> frozenset[str]:
     out: set[str] = set()
     for d in unit.decls:
         if isinstance(d, Struct) and d.is_union:
@@ -397,15 +394,11 @@ def _type_ok_for_register_passable_field(
     if isinstance(t, TypeRef):
         return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
     if isinstance(t, QualifiedType):
-        return _type_ok_for_register_passable_field(
-            t.unqualified, struct_by_id, visiting
-        )
+        return _type_ok_for_register_passable_field(t.unqualified, struct_by_id, visiting)
     if isinstance(t, AtomicType):
         if map_atomic_type(t) is not None:
             return False
-        return _type_ok_for_register_passable_field(
-            t.value_type, struct_by_id, visiting
-        )
+        return _type_ok_for_register_passable_field(t.value_type, struct_by_id, visiting)
     if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
         return True
     if isinstance(t, UnsupportedType):
@@ -493,14 +486,11 @@ def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bo
     return cache
 
 
-def struct_decl_register_passable(
-    decl: Struct, struct_by_id: dict[str, Struct]
-) -> bool:
+def struct_decl_register_passable(decl: Struct, struct_by_id: dict[str, Struct]) -> bool:
     if decl.is_union or not decl.is_complete:
         return False
     return all(
-        _type_ok_for_register_passable_field(f.type, struct_by_id, None)
-        for f in decl.fields
+        _type_ok_for_register_passable_field(f.type, struct_by_id, None) for f in decl.fields
     )
 
 
@@ -514,9 +504,7 @@ def _field_mojo_name(f: Field, index: int) -> str:
 
 def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     struct_decls = [
-        d
-        for d in unit.decls
-        if isinstance(d, Struct) and not d.is_union and d.is_complete
+        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
     ]
     return tuple(toposort_structs(struct_decls))
 
@@ -524,9 +512,7 @@ def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
 def _incomplete_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     """Forward-declared / incomplete non-union structs, in TU declaration order."""
     return tuple(
-        d
-        for d in unit.decls
-        if isinstance(d, Struct) and not d.is_union and not d.is_complete
+        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and not d.is_complete
     )
 
 
@@ -552,8 +538,7 @@ def _emitted_typedef_mojo_names(
     return frozenset(
         mojo_ident(d.name)
         for d in unit.decls
-        if isinstance(d, Typedef)
-        and mojo_ident(d.name) not in emitted_struct_enum_names
+        if isinstance(d, Typedef) and mojo_ident(d.name) not in emitted_struct_enum_names
     )
 
 
@@ -630,17 +615,12 @@ def _collect_callback_aliases(
                 fp = _function_ptr_from_type(field.type)
                 if fp is not None and _supports_callback_alias(fp):
                     field_name = field.source_name or field.name or f"field_{i}"
-                    suffix = (
-                        field_name if field_name.endswith("cb") else f"{field_name}_cb"
-                    )
+                    suffix = field_name if field_name.endswith("cb") else f"{field_name}_cb"
                     field_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{base}_{suffix}")
         elif isinstance(d, Function):
             fp = _function_ptr_from_type(d.ret)
             if fp is not None and _supports_callback_alias(fp):
-                if (
-                    isinstance(d.ret, TypeRef)
-                    and mojo_ident(d.ret.name) in emitted_typedef_names
-                ):
+                if isinstance(d.ret, TypeRef) and mojo_ident(d.ret.name) in emitted_typedef_names:
                     fn_ret_aliases[d.decl_id] = mojo_ident(d.ret.name)
                 else:
                     fn_ret_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_return_cb")
@@ -654,16 +634,11 @@ def _collect_callback_aliases(
                         fn_param_aliases[(d.decl_id, i)] = mojo_ident(param.type.name)
                     else:
                         pname = param.name or f"arg{i}"
-                        fn_param_aliases[(d.decl_id, i)] = ensure_alias(
-                            fp, f"{d.name}_{pname}_cb"
-                        )
+                        fn_param_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{d.name}_{pname}_cb")
         elif isinstance(d, GlobalVar):
             fp = _function_ptr_from_type(d.type)
             if fp is not None and _supports_callback_alias(fp):
-                if (
-                    isinstance(d.type, TypeRef)
-                    and mojo_ident(d.type.name) in emitted_typedef_names
-                ):
+                if isinstance(d.type, TypeRef) and mojo_ident(d.type.name) in emitted_typedef_names:
                     global_aliases[d.decl_id] = mojo_ident(d.type.name)
                 else:
                     global_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_cb")
@@ -786,9 +761,7 @@ def _analyze_global_var(
         else type_mapper.surface(decl.type)
     )
     if reason is not None:
-        return AnalyzedGlobalVar(
-            decl=decl, kind="stub", surface_type=ty, stub_reason=reason
-        )
+        return AnalyzedGlobalVar(decl=decl, kind="stub", surface_type=ty, stub_reason=reason)
     return AnalyzedGlobalVar(decl=decl, kind="wrapper", surface_type=ty)
 
 
@@ -833,9 +806,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
     # Phase A: precompute unit-level semantic facts
     ordered_struct_decls = _ordered_struct_decls(unit)
     incomplete_struct_decls = _incomplete_struct_decls(unit)
-    emitted_names = _emitted_struct_enum_names(
-        unit, ordered_struct_decls, incomplete_struct_decls
-    )
+    emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls, incomplete_struct_decls)
     emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
     callback_info = _collect_callback_aliases(unit, emitted_typedef_names)
     unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
@@ -901,9 +872,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
                 AnalyzedTypedef(
                     decl=d,
                     skip_duplicate=mojo_ident(d.name) in ctx.emitted_names,
-                    callback_alias_name=ctx.callback_info.typedef_aliases.get(
-                        d.decl_id
-                    ),
+                    callback_alias_name=ctx.callback_info.typedef_aliases.get(d.decl_id),
                 )
             )
         elif isinstance(d, Function):
@@ -913,9 +882,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
                     ctx.struct_map,
                     ctx.type_mapper,
                     ctx.register_passable_by_decl_id,
-                    ret_callback_alias_name=ctx.callback_info.fn_ret_aliases.get(
-                        d.decl_id
-                    ),
+                    ret_callback_alias_name=ctx.callback_info.fn_ret_aliases.get(d.decl_id),
                     param_callback_alias_names=tuple(
                         ctx.callback_info.fn_param_aliases.get((d.decl_id, i))
                         for i in range(len(d.params))
@@ -924,9 +891,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
             )
         elif isinstance(d, GlobalVar):
             tail_decls.append(
-                _analyze_global_var(
-                    d, ctx.type_mapper, ctx.callback_info.global_aliases
-                )
+                _analyze_global_var(d, ctx.type_mapper, ctx.callback_info.global_aliases)
             )
         elif isinstance(d, (Enum, Const, MacroDecl)):
             tail_decls.append(d)

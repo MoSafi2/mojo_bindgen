@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import clang.cindex as cx
+import pytest
+
 from mojo_bindgen.ir import Struct
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
-
-from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig
 from mojo_bindgen.parsing.registry import RecordRegistry
 
 
@@ -32,22 +32,15 @@ pytestmark = pytest.mark.skipif(
 def test_registry_unifies_forward_decl_and_definition(tmp_path: Path) -> None:
     header = tmp_path / "registry_forward.h"
     header.write_text(
-        (
-            "struct node;\n"
-            "struct node { int value; };\n"
-        ),
+        ("struct node;\nstruct node { int value; };\n"),
         encoding="utf-8",
     )
 
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
-    registry =  RecordRegistry.build_from_translation_unit(tu, frontend)
+    registry = RecordRegistry.build_from_translation_unit(tu, frontend)
 
-    records = [
-        cursor
-        for cursor in frontend.iter_primary_cursors(tu)
-        if cursor.spelling == "node"
-    ]
+    records = [cursor for cursor in frontend.iter_primary_cursors(tu) if cursor.spelling == "node"]
     assert len(records) == 2
     assert registry.decl_id_for_cursor(records[0]) == registry.decl_id_for_cursor(records[1])
     assert registry.is_complete_record_decl(records[0]) is True
@@ -121,7 +114,9 @@ def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: P
 
     assert len(anon_structs) == 2
     assert anon_structs[0].get_usr() == anon_structs[1].get_usr()
-    assert registry.decl_id_for_cursor(anon_structs[0]) != registry.decl_id_for_cursor(anon_structs[1])
+    assert registry.decl_id_for_cursor(anon_structs[0]) != registry.decl_id_for_cursor(
+        anon_structs[1]
+    )
 
 
 def test_type_lowerer_prefers_cached_lowered_record_over_nominal_resolution(tmp_path: Path) -> None:

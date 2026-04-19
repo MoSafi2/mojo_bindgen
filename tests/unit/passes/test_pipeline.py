@@ -9,11 +9,9 @@ from mojo_bindgen.ir import (
     IntKind,
     IntType,
     Param,
-    Pointer,
     Struct,
-    StructRef,
-    TypeRef,
     Typedef,
+    TypeRef,
     Unit,
     VoidType,
 )

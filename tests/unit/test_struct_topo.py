@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Field, IntKind, IntType, Pointer, Struct, StructRef
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.ir import Field, IntKind, IntType, Pointer, Struct, StructRef
 
 
 def _i32() -> IntType:

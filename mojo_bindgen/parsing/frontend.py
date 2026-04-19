@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import subprocess
 import warnings
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Iterator
+from typing import ClassVar
 
 import clang.cindex as cx
 

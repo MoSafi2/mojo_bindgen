@@ -11,7 +11,6 @@ from mojo_bindgen.parsing.lowering.primitive import (
 )
 from mojo_bindgen.utils import build_c_parse_args
 
-
 _PREWARM_SUFFIXES: frozenset[str] = frozenset(
     {
         "",
@@ -86,10 +85,7 @@ def _fallback_int_type(type_spelling: str) -> IntType:
 def _extract_probed_int_type(tu: cx.TranslationUnit) -> IntType | None:
     """Extract the probed integer declaration type from a parsed TU."""
     for cursor in tu.cursor.get_children():
-        if (
-            cursor.kind == cx.CursorKind.VAR_DECL
-            and cursor.spelling == _PROBE_DECL_NAME
-        ):
+        if cursor.kind == cx.CursorKind.VAR_DECL and cursor.spelling == _PROBE_DECL_NAME:
             scalar = _PRIMITIVE_RESOLVER.resolve_primitive(cursor.type)
             return scalar if isinstance(scalar, IntType) else None
     return None

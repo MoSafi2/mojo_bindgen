@@ -13,8 +13,8 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import Field, IntType, Struct, StructRef, Type
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
-from mojo_bindgen.parsing.registry import RecordRegistry
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
+from mojo_bindgen.parsing.registry import RecordRegistry
 
 _RECORD_DECL_KINDS = (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL)
 
@@ -56,9 +56,7 @@ class _FieldDiscovery:
                     sites.append(site)
         return sites
 
-    def _field_decl_site(
-        self, parent_type: cx.Type, field_cursor: cx.Cursor
-    ) -> FieldSite:
+    def _field_decl_site(self, parent_type: cx.Type, field_cursor: cx.Cursor) -> FieldSite:
         """Build a field site for one field declaration, including bitfields and inline records."""
         name = field_cursor.spelling
         bit_offset = self._field_bit_offset(parent_type, field_cursor)
@@ -85,8 +83,7 @@ class _FieldDiscovery:
             is_anonymous=not bool(name),
             attached_record=attached,
             uses_attached_record_ref=(
-                attached is not None
-                and self._field_type_matches_record(field_cursor, attached)
+                attached is not None and self._field_type_matches_record(field_cursor, attached)
             ),
         )
 
@@ -99,9 +96,7 @@ class _FieldDiscovery:
         implicit_field = self._find_implicit_record_field(parent_type, record_cursor)
         bit_offset = self._field_bit_offset(parent_type, implicit_field)
         byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
-        field_type = (
-            implicit_field.type if implicit_field is not None else record_cursor.type
-        )
+        field_type = implicit_field.type if implicit_field is not None else record_cursor.type
         return FieldSite(
             name="",
             source_name="",
@@ -171,9 +166,7 @@ class _FieldDiscovery:
                 return field_cursor
         return None
 
-    def _field_type_matches_record(
-        self, field_cursor: cx.Cursor, record_cursor: cx.Cursor
-    ) -> bool:
+    def _field_type_matches_record(self, field_cursor: cx.Cursor, record_cursor: cx.Cursor) -> bool:
         """Whether the field's record type is the same definition as the given record cursor."""
         field_type = field_cursor.type.get_canonical()
         if field_type.kind != cx.TypeKind.RECORD:
@@ -181,9 +174,9 @@ class _FieldDiscovery:
         definition = field_type.get_declaration().get_definition()
         if definition is None:
             return False
-        return self.registry.decl_id_for_cursor(
-            definition
-        ) == self.registry.decl_id_for_cursor(record_cursor)
+        return self.registry.decl_id_for_cursor(definition) == self.registry.decl_id_for_cursor(
+            record_cursor
+        )
 
     @staticmethod
     def _field_bit_offset(parent_type: cx.Type, cursor: cx.Cursor | None) -> int:
@@ -275,8 +268,7 @@ class RecordLowerer:
         record.fields = [
             field
             for field in (
-                self._lower_field_site(site)
-                for site in self._field_discovery.discover(cursor)
+                self._lower_field_site(site) for site in self._field_discovery.discover(cursor)
             )
             if field is not None
         ]

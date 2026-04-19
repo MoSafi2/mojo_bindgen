@@ -8,7 +8,6 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import FloatKind, FloatType, IntKind, IntType, Type, VoidType
 
-
 _QUALIFIER_RE = re.compile(r"\b(?:const|volatile|restrict)\b")
 _EXT_INT_RE = re.compile(r"(?:_BitInt|_ExtInt)\s*\(\s*(\d+)\s*\)")
 

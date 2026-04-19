@@ -16,18 +16,20 @@ IR node types (as Python classes / unions in this module):
 """
 
 from __future__ import annotations
+
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import (
     Any,
-    Callable,
     ClassVar,
     Literal,
-    Self,
     Union,
 )
-from mojo_bindgen.serde import SerDeMixin, SerdeFieldSpec, SerdeSpec
+
+from mojo_bindgen.serde import SerdeFieldSpec, SerDeMixin, SerdeSpec
+
 
 # Check for char and wchar_t in the IntKind enum
 class IntKind(StrEnum):
@@ -346,6 +348,7 @@ class Field(SerDeMixin):
     bit_width: int = 0
     """Width in bits. Meaningful if ``is_bitfield``."""
 
+
 @dataclass
 class Struct(SerDeMixin):
     """
@@ -597,9 +600,7 @@ class MacroDecl(SerDeMixin):
     macros the parser can structurally understand today.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"kind": SerdeFieldSpec(json_key="macro_kind")}
-    )
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="macro_kind")})
 
     name: str
     tokens: list[str]

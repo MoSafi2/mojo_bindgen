@@ -78,7 +78,7 @@ def test_macro_closure_cross_include_header(tmp_path: Path) -> None:
     primary = tmp_path / "macro_primary.h"
     primary.write_text(
         textwrap.dedent(
-            f"""\
+            """\
             #include "macro_dep.h"
             #define OUTER_NEG -(INNER_VAL)
             #define OUTER_FMT (INNER_FLAG | 1)
@@ -94,9 +94,7 @@ def test_macro_closure_cross_include_header(tmp_path: Path) -> None:
         compile_args=["-I", str(tmp_path)],
     ).run()
 
-    by_name: dict[str, MacroDecl] = {
-        d.name: d for d in unit.decls if isinstance(d, MacroDecl)
-    }
+    by_name: dict[str, MacroDecl] = {d.name: d for d in unit.decls if isinstance(d, MacroDecl)}
     neg = by_name["OUTER_NEG"]
     assert neg.kind == "object_like_supported"
     assert neg.expr is not None

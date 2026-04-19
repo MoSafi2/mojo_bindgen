@@ -13,7 +13,7 @@ def normalize_std_flag(arg: str) -> str:
     - ``std=c99`` (normalized)
     """
     if arg.startswith("--std="):
-        return f"-std={arg[len('--std='):]}"
+        return f"-std={arg[len('--std=') :]}"
     if arg.startswith("std="):
         return f"-{arg}"
     return arg

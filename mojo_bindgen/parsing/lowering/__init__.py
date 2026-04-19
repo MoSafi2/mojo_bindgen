@@ -13,8 +13,8 @@ from mojo_bindgen.parsing.lowering.primitive import (
     default_signed_int_primitive,
 )
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
-from mojo_bindgen.parsing.registry import RecordNaming, RecordRegistry
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
+from mojo_bindgen.parsing.registry import RecordNaming, RecordRegistry
 
 __all__ = [
     "ClangCompat",

@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
+    BinaryExpr,
     CastExpr,
     Const,
     ConstExpr,
@@ -29,11 +30,10 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Type,
-    TypeRef,
     Typedef,
-    Unit,
+    TypeRef,
     UnaryExpr,
-    BinaryExpr,
+    Unit,
 )
 
 
@@ -98,17 +98,13 @@ def _walk_const_expr(
 ) -> None:
     if isinstance(expr, CastExpr):
         _walk_type(expr.target, out, traverse_function_ptrs=traverse_function_ptrs)
-        _walk_const_expr(
-            expr.expr, out, traverse_function_ptrs=traverse_function_ptrs
-        )
+        _walk_const_expr(expr.expr, out, traverse_function_ptrs=traverse_function_ptrs)
         return
     if isinstance(expr, SizeOfExpr):
         _walk_type(expr.target, out, traverse_function_ptrs=traverse_function_ptrs)
         return
     if isinstance(expr, UnaryExpr):
-        _walk_const_expr(
-            expr.operand, out, traverse_function_ptrs=traverse_function_ptrs
-        )
+        _walk_const_expr(expr.operand, out, traverse_function_ptrs=traverse_function_ptrs)
         return
     if isinstance(expr, BinaryExpr):
         _walk_const_expr(expr.lhs, out, traverse_function_ptrs=traverse_function_ptrs)
@@ -138,9 +134,7 @@ def _collect_from_decl(
     if isinstance(decl, GlobalVar):
         _walk_type(decl.type, out, traverse_function_ptrs=traverse_fp)
         if options.traverse_const_expr_types and decl.initializer is not None:
-            _walk_const_expr(
-                decl.initializer, out, traverse_function_ptrs=traverse_fp
-            )
+            _walk_const_expr(decl.initializer, out, traverse_function_ptrs=traverse_fp)
         return
     if isinstance(decl, Const):
         _walk_type(decl.type, out, traverse_function_ptrs=traverse_fp)
@@ -189,9 +183,7 @@ class ReachabilityMaterializePass:
         for decl in unit.decls:
             _collect_from_decl(decl, collected, options=opts)
 
-        existing: set[str] = {
-            d.decl_id for d in unit.decls if isinstance(d, Struct)
-        }
+        existing: set[str] = {d.decl_id for d in unit.decls if isinstance(d, Struct)}
 
         # Unique by decl_id; first occurrence wins for ordering among duplicates.
         seen_ids: set[str] = set()

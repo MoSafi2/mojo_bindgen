@@ -7,16 +7,23 @@ declarations referenced from that analysis and emits a single Mojo source file.
 
 from __future__ import annotations
 
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_mapper import (
+    TypeMapper,
+    map_scalar,
+    mojo_ident,
+    pointer_origin_names,
+)
 from mojo_bindgen.ir import (
     BinaryExpr,
     CharLiteral,
     Const,
     Enum,
-    FloatType,
     FloatLiteral,
+    FloatType,
     FunctionPtr,
-    IntType,
     IntLiteral,
+    IntType,
     MacroDecl,
     NullPtrLiteral,
     RefExpr,
@@ -24,15 +31,7 @@ from mojo_bindgen.ir import (
     UnaryExpr,
     VoidType,
 )
-from mojo_bindgen.codegen.mojo_mapper import (
-    TypeMapper,
-    map_scalar,
-    mojo_ident,
-    pointer_origin_names,
-)
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.passes.analyze_for_mojo import (
-    CallbackAlias,
     AnalyzedField,
     AnalyzedFunction,
     AnalyzedGlobalVar,
@@ -40,6 +39,7 @@ from mojo_bindgen.passes.analyze_for_mojo import (
     AnalyzedTypedef,
     AnalyzedUnion,
     AnalyzedUnit,
+    CallbackAlias,
     TailDecl,
 )
 
@@ -133,9 +133,7 @@ class MojoRenderer:
         decl = analyzed.decl
         name = mojo_ident(decl.name.strip() or decl.c_name.strip())
         b = CodeBuilder()
-        b.add(
-            f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target"
-        )
+        b.add(f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target")
         b.add("@fieldwise_init")
         b.add(f"struct {name}(Copyable, Movable):")
         b.indent()
@@ -385,14 +383,8 @@ class MojoRenderer:
             if isinstance(decl.expr, RefExpr):
                 reason = "identifier reference macro is not emitted directly; only literal macros are currently supported"
                 if body:
-                    return (
-                        f"# macro {decl.name}: {reason}\n"
-                        f"# define {decl.name} {body}\n\n"
-                    )
-                return (
-                    f"# macro {decl.name}: {reason}\n"
-                    f"# define {decl.name}\n\n"
-                )
+                    return f"# macro {decl.name}: {reason}\n# define {decl.name} {body}\n\n"
+                return f"# macro {decl.name}: {reason}\n# define {decl.name}\n\n"
             rendered = MojoRenderer._render_const_expr(decl.expr, decl.type)
             if rendered is not None:
                 return f"comptime {mojo_ident(decl.name)} = {rendered}\n\n"
@@ -404,14 +396,8 @@ class MojoRenderer:
             reason = decl.diagnostic or decl.kind.replace("_", " ")
 
         if body:
-            return (
-                f"# macro {decl.name}: {reason}\n"
-                f"# define {decl.name} {body}\n\n"
-            )
-        return (
-            f"# macro {decl.name}: {reason}\n"
-            f"# define {decl.name}\n\n"
-        )
+            return f"# macro {decl.name}: {reason}\n# define {decl.name} {body}\n\n"
+        return f"# macro {decl.name}: {reason}\n# define {decl.name}\n\n"
 
     @staticmethod
     def _render_const_expr(
@@ -452,7 +438,7 @@ class MojoRenderer:
         mut_o = o.mut
         immut_o = o.immut
         return (
-            "struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:\n"
+            "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
             "    @staticmethod\n"
             "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
             "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
@@ -466,15 +452,15 @@ class MojoRenderer:
             "\n"
             "    @staticmethod\n"
             "    def load() raises -> Self.T:\n"
-            "        return Self._raw()[]\n"
+            "        return Self._raw()[].copy()\n"
             "\n"
             "    @staticmethod\n"
             "    def store(value: Self.T) raises -> None:\n"
             f"        var p = rebind[UnsafePointer[Self.T, {mut_o}]](Self._raw())\n"
-            "        p[] = value\n"
+            "        p[] = value.copy()\n"
             "\n"
             "\n"
-            "struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:\n"
+            "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
             "    @staticmethod\n"
             "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
             "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
@@ -488,7 +474,7 @@ class MojoRenderer:
             "\n"
             "    @staticmethod\n"
             "    def load() raises -> Self.T:\n"
-            "        return Self._raw()[]\n"
+            "        return Self._raw()[].copy()\n"
             "\n"
             "\n"
         )
@@ -499,15 +485,13 @@ class MojoRenderer:
         if ag.kind == "stub":
             const_kw = "const " if decl.is_const else ""
             reason = ag.stub_reason or "manual binding required"
-            return (
-                f"# global variable {decl.link_name}: {const_kw}{ag.surface_type} ({reason})\n\n"
-            )
+            return f"# global variable {decl.link_name}: {const_kw}{ag.surface_type} ({reason})\n\n"
         link_lit = decl.link_name.replace("\\", "\\\\").replace('"', '\\"')
         wrapper = "GlobalConst" if decl.is_const else "GlobalVar"
         name = mojo_ident(decl.name)
         return (
             f"# global `{decl.link_name}` -> {ag.surface_type}\n"
-            f"comptime {name} = {wrapper}[T={ag.surface_type}, link=\"{link_lit}\"]\n\n"
+            f'comptime {name} = {wrapper}[T={ag.surface_type}, link="{link_lit}"]\n\n'
         )
 
     def _function_signature(self, analyzed: AnalyzedFunction) -> tuple[str, str, str, bool, str]:
@@ -520,7 +504,9 @@ class MojoRenderer:
         )
         args_sig = ", ".join(
             f"{name}: {self._types.callback_pointer_type(alias) if alias is not None else self._types.signature(param.type)}"
-            for name, param, alias in zip(analyzed.param_names, fn.params, analyzed.param_callback_alias_names)
+            for name, param, alias in zip(
+                analyzed.param_names, fn.params, analyzed.param_callback_alias_names
+            )
         )
         call_args = ", ".join(analyzed.param_names)
         ret_abi = self._types.canonical(fn.ret)

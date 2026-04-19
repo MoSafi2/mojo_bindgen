@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import sys
 import types
+from collections.abc import Callable
 from dataclasses import MISSING, dataclass, field, fields
 from enum import StrEnum
 from functools import cache
-from typing import Any, Callable, ClassVar, Self, Union, cast, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Self, Union, cast, get_args, get_origin, get_type_hints
 
 _SERDE_DEFAULT_KIND = object()
 
@@ -45,7 +46,9 @@ def _decode_json_value(raw: Any, annotated_type: Any, owner_cls: type) -> Any:
     if raw is None:
         return None
 
-    if (dispatch := SerDeMixin._serde_union_dispatch_for(owner_cls, annotated_type)) is not None and isinstance(raw, dict):
+    if (
+        dispatch := SerDeMixin._serde_union_dispatch_for(owner_cls, annotated_type)
+    ) is not None and isinstance(raw, dict):
         return dispatch(raw)
 
     origin = get_origin(annotated_type)
@@ -80,9 +83,7 @@ def _decode_json_value(raw: Any, annotated_type: Any, owner_cls: type) -> Any:
         return from_json_dict(raw)
 
     if isinstance(raw, dict) and "kind" in raw:
-        raise TypeError(
-            f"missing decoder for discriminated object kind={raw.get('kind')!r}"
-        )
+        raise TypeError(f"missing decoder for discriminated object kind={raw.get('kind')!r}")
 
     return raw
 
@@ -149,9 +150,7 @@ class SerDeMixin:
         if annotated_type == module_vars.get("Type"):
             return cast(Callable[[dict[str, Any]], Any], module_vars.get("type_from_json"))
         if annotated_type == module_vars.get("ConstExpr"):
-            return cast(
-                Callable[[dict[str, Any]], Any], module_vars.get("const_expr_from_json")
-            )
+            return cast(Callable[[dict[str, Any]], Any], module_vars.get("const_expr_from_json"))
         if annotated_type == module_vars.get("Decl"):
             return cast(Callable[[dict[str, Any]], Any], module_vars.get("decl_from_json"))
         return None

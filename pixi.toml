@@ -6,6 +6,9 @@ platforms = ["linux-64"]
 
 [tasks]
 test = "pytest"
+lint = "ruff check mojo_bindgen tests"
+format = "ruff format mojo_bindgen tests"
+typecheck = "pyright mojo_bindgen"
 install-editable = "python -m pip install -e ."
 build = "python -m build"
 build-wheel = "python -m build --wheel"
@@ -29,3 +32,5 @@ typer = ">=0.24.1,<0.25"
 mojo-bindgen = { path = ".", editable = true }
 pytest = ">=9.0.3, <10"
 build = ">=1.4.3, <2"
+ruff = ">=0.8.0, <0.14"
+pyright = ">=1.1.400, <2"

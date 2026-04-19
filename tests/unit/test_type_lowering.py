@@ -8,7 +8,20 @@ import pytest
 
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import AtomicType, EnumRef, Function, IntKind, IntType, Pointer, QualifiedType, Struct, StructRef, TypeRef, Typedef, VectorType
+from mojo_bindgen.ir import (
+    AtomicType,
+    EnumRef,
+    Function,
+    IntKind,
+    IntType,
+    Pointer,
+    QualifiedType,
+    Struct,
+    StructRef,
+    Typedef,
+    TypeRef,
+    VectorType,
+)
 from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
 
@@ -73,7 +86,6 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     assert isinstance(fn.params[0].type, TypeRef)
     assert fn.params[0].type.name == "my_uint"
     assert isinstance(fn.params[0].type.canonical, IntType)
-
 
 
 def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) -> None:
@@ -175,27 +187,26 @@ def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Pat
     assert anon_union.type.is_union is True
     assert anon_union.type.is_anonymous is True
 
-    inner_union = next(d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_union.type.decl_id)
-    anon_struct = next(f for f in inner_union.fields if f.is_anonymous and isinstance(f.type, StructRef))
+    inner_union = next(
+        d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_union.type.decl_id
+    )
+    anon_struct = next(
+        f for f in inner_union.fields if f.is_anonymous and isinstance(f.type, StructRef)
+    )
     assert anon_struct.byte_offset == 0
     assert anon_struct.type.is_union is False
     assert anon_struct.type.is_anonymous is True
 
-    leaf_struct = next(d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_struct.type.decl_id)
+    leaf_struct = next(
+        d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_struct.type.decl_id
+    )
     assert [f.name for f in leaf_struct.fields] == ["x", "y"]
 
 
 def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path: Path) -> None:
     header = tmp_path / "record_codegen_direct_anon.h"
     header.write_text(
-        (
-            "typedef struct outer_t {\n"
-            "  int tag;\n"
-            "  union {\n"
-            "    int value;\n"
-            "  };\n"
-            "} outer_t;\n"
-        ),
+        ("typedef struct outer_t {\n  int tag;\n  union {\n    int value;\n  };\n} outer_t;\n"),
         encoding="utf-8",
     )
     unit = ClangParser(
@@ -216,13 +227,7 @@ def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path:
 def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_recursive.h"
     header.write_text(
-        (
-            "struct node {\n"
-            "  int value;\n"
-            "  struct node* next;\n"
-            "};\n"
-            "typedef struct node node;\n"
-        ),
+        ("struct node {\n  int value;\n  struct node* next;\n};\ntypedef struct node node;\n"),
         encoding="utf-8",
     )
     unit = ClangParser(
@@ -295,14 +300,7 @@ def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_pa
 def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_named_nested_ptr.h"
     header.write_text(
-        (
-            "struct outer {\n"
-            "  struct inner {\n"
-            "    int x;\n"
-            "  } *p;\n"
-            "  struct inner *q;\n"
-            "};\n"
-        ),
+        ("struct outer {\n  struct inner {\n    int x;\n  } *p;\n  struct inner *q;\n};\n"),
         encoding="utf-8",
     )
     unit = ClangParser(
@@ -328,13 +326,7 @@ def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_p
 def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_named_nested_value.h"
     header.write_text(
-        (
-            "struct outer {\n"
-            "  struct inner_value {\n"
-            "    int y;\n"
-            "  } value;\n"
-            "};\n"
-        ),
+        ("struct outer {\n  struct inner_value {\n    int y;\n  } value;\n};\n"),
         encoding="utf-8",
     )
     unit = ClangParser(
@@ -352,7 +344,9 @@ def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_pat
     assert value_field.type.decl_id == inner.decl_id
 
 
-def test_record_lowering_reuses_named_nested_record_nominally_after_definition(tmp_path: Path) -> None:
+def test_record_lowering_reuses_named_nested_record_nominally_after_definition(
+    tmp_path: Path,
+) -> None:
     header = tmp_path / "record_lowering_named_nested_nominal.h"
     header.write_text(
         (
@@ -410,4 +404,7 @@ def test_codegen_emits_named_nested_record_defs_before_parent(tmp_path: Path) ->
     assert out.index("struct sqlite3_index_constraint") < out.index("struct sqlite3_index_info")
     assert "var aConstraint: UnsafePointer[sqlite3_index_constraint, MutExternalOrigin]" in out
     assert "var aOrderBy: UnsafePointer[sqlite3_index_orderby, MutExternalOrigin]" in out
-    assert "var aConstraintUsage: UnsafePointer[sqlite3_index_constraint_usage, MutExternalOrigin]" in out
+    assert (
+        "var aConstraintUsage: UnsafePointer[sqlite3_index_constraint_usage, MutExternalOrigin]"
+        in out
+    )

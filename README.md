@@ -2,7 +2,9 @@
 
 Generate **Mojo FFI** bindings from **C headers** using [libclang](https://pypi.org/project/libclang/) (Python bindings). The tool parses a header, builds an internal IR, and emits a `.mojo` module with `external_call` or `owned_dl_handle` linking.
 
-For maintainer-facing architecture notes, see [docs/codegen-architecture.md](docs/codegen-architecture.md).
+**Requires Python 3.14+** (aligned with current Modular/Mojo Pixi stacks).
+
+For maintainer-facing architecture notes, see [docs/codegen-architecture.md](docs/codegen-architecture.md). For contributing, security contact, and release notes, see [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CHANGELOG.md](CHANGELOG.md).
 
 ## Setup
 
@@ -33,9 +35,33 @@ pixi install
 pixi shell
 ```
 
+The Pixi workspace is **linux-64 only** at the moment; on macOS or Windows use a virtual environment and `pip install -e ".[dev]"` instead (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+
 This installs the `mojo-bindgen` package in editable mode and puts the `mojo-bindgen` CLI on your `PATH`.
 
 You also need a **system libclang** shared library compatible with the `libclang` Python wheel.
+
+### Library usage (Python API)
+
+The CLI wraps the same pipeline you can call from Python: parse a header to IR, then generate Mojo source.
+
+```python
+from pathlib import Path
+
+from mojo_bindgen.codegen import MojoEmitOptions, generate_mojo
+from mojo_bindgen.parsing.parser import ClangParser
+
+header = Path("include/mylib.h")
+unit = ClangParser(
+    header,
+    library="mylib",
+    link_name="mylib",
+    compile_args=["-I", "include"],
+).run()
+mojo_src = generate_mojo(unit, MojoEmitOptions(linking="external_call"))
+```
+
+Stable exports from the `mojo_bindgen` package root are `MojoGenerator`, `MojoEmitOptions`, `generate_mojo`, and `__version__`. Parsing types (`ClangParser`, `ParseError`, `Unit`) live in their modules and are treated as public for programmatic use; follow semver for the workflow above when upgrading.
 
 ## CLI
 
@@ -113,4 +139,4 @@ Optional one-shot targets:
 
 ## License
 
-See project files for license terms if applicable.
+Licensed under the **MIT License**. See [LICENSE](LICENSE).

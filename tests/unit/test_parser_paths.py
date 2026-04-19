@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.utils import build_c_parse_args, normalize_std_flag
 from mojo_bindgen.parsing.parser import _default_system_compile_args, _resolve_header_path
+from mojo_bindgen.utils import build_c_parse_args, normalize_std_flag
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

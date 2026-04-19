@@ -18,10 +18,10 @@ from mojo_bindgen.ir import (
     CharLiteral,
     ConstExpr,
     FloatKind,
-    FloatType,
     FloatLiteral,
-    IntLiteral,
+    FloatType,
     IntKind,
+    IntLiteral,
     IntType,
     NullPtrLiteral,
     RefExpr,
@@ -31,11 +31,8 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.parsing.lowering.literal_resolver import LiteralResolver
 
-
 _INT_LITERAL_RE = re.compile(
-    r"^([+-]?)"
-    r"(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)"
-    r"([uUlL]*)$",
+    r"^([+-]?)" r"(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)" r"([uUlL]*)$",
 )
 
 _FLOAT_LITERAL_RE = re.compile(
@@ -253,9 +250,15 @@ class ConstExprParser:
             )
 
         is_function_like = getattr(cursor, "is_macro_function_like", None)
-        if (callable(is_function_like) and is_function_like()) or (
-            is_function_like is not None and not callable(is_function_like) and bool(is_function_like)
-        ) or looks_function_like_macro_body(body):
+        if (
+            (callable(is_function_like) and is_function_like())
+            or (
+                is_function_like is not None
+                and not callable(is_function_like)
+                and bool(is_function_like)
+            )
+            or looks_function_like_macro_body(body)
+        ):
             return ParsedMacro(
                 tokens=body,
                 kind="function_like_unsupported",
@@ -352,7 +355,9 @@ class ConstExprParser:
             operand = self._parse_prefix(stream)
             if operand is None:
                 return None
-            return ParsedConstExpr(expr=UnaryExpr(op=tok, operand=operand.expr), primitive=operand.primitive)
+            return ParsedConstExpr(
+                expr=UnaryExpr(op=tok, operand=operand.expr), primitive=operand.primitive
+            )
         return self._parse_leaf(tok)
 
     def _parse_leaf(self, raw: str) -> ParsedConstExpr | None:
@@ -419,9 +424,7 @@ class ConstExprParser:
         if "f" in s:
             return FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
         if "l" in s:
-            return FloatType(
-                float_kind=FloatKind.LONG_DOUBLE, size_bytes=16, align_bytes=16
-            )
+            return FloatType(float_kind=FloatKind.LONG_DOUBLE, size_bytes=16, align_bytes=16)
         return FloatType(float_kind=FloatKind.DOUBLE, size_bytes=8, align_bytes=8)
 
     @classmethod
@@ -429,7 +432,13 @@ class ConstExprParser:
         """Return whether the tokens spell a parenthesized ``(void*)0`` null constant."""
         current = tokens[:]
         while True:
-            if current == ["(", "void", "*", ")", "0"] or current == ["(", "void", "*", ")", "NULL"]:
+            if current == ["(", "void", "*", ")", "0"] or current == [
+                "(",
+                "void",
+                "*",
+                ")",
+                "NULL",
+            ]:
                 return True
             stripped = cls._strip_outer_parens(current)
             if stripped == current:

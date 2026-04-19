@@ -12,8 +12,8 @@ from functools import singledispatchmethod
 from typing import Literal
 
 from mojo_bindgen.ir import (
-    AtomicType,
     Array,
+    AtomicType,
     ComplexType,
     EnumRef,
     FloatKind,
@@ -26,6 +26,7 @@ from mojo_bindgen.ir import (
     Param,
     Pointer,
     QualifiedType,
+    Qualifiers,
     StructRef,
     Type,
     TypeRef,
@@ -439,9 +440,7 @@ class TypeMapper:
         return self._canonical_struct_ref(t)
 
     @staticmethod
-    def _pointer_target(t: Pointer) -> tuple[Type | None, object]:
-        from mojo_bindgen.ir import Qualifiers
-
+    def _pointer_target(t: Pointer) -> tuple[Type | None, Qualifiers]:
         pointee = t.pointee
         if isinstance(pointee, QualifiedType):
             return pointee.unqualified, pointee.qualifiers
@@ -515,17 +514,11 @@ class TypeMapper:
             ),
         ]
         for i, p in enumerate(fn.params):
-            alias = (
-                param_callback_alias_names[i]
-                if i < len(param_callback_alias_names)
-                else None
-            )
+            alias = param_callback_alias_names[i] if i < len(param_callback_alias_names) else None
             # Keep typedef-backed callback signatures (including nested pointer positions)
             # so the callsite argument type exactly matches the wrapper signature.
             type_params.append(
-                self.callback_pointer_type(alias)
-                if alias is not None
-                else self.signature(p.type)
+                self.callback_pointer_type(alias) if alias is not None else self.signature(p.type)
             )
         return ", ".join(type_params)
 

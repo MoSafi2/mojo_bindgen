@@ -1,7 +1,6 @@
 """Explicit IR pass pipeline for post-parse transformations."""
 
 from mojo_bindgen.passes.analyze_for_mojo import (
-    AnalyzeForMojoPass,
     AnalyzedField,
     AnalyzedFunction,
     AnalyzedGlobalVar,
@@ -9,6 +8,7 @@ from mojo_bindgen.passes.analyze_for_mojo import (
     AnalyzedTypedef,
     AnalyzedUnion,
     AnalyzedUnit,
+    AnalyzeForMojoPass,
     CallbackAlias,
     GlobalVarKind,
     TailDecl,

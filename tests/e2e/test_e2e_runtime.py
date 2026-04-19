@@ -52,15 +52,11 @@ def _run(
 
 def _assert_schema(case_dir: Path, status: dict[str, Any]) -> None:
     phases = status.get("phases")
-    assert isinstance(
-        phases, dict
-    ), f"{case_dir}: status.json must contain object key 'phases'"
+    assert isinstance(phases, dict), f"{case_dir}: status.json must contain object key 'phases'"
     for phase in _PHASES:
         assert phase in phases, f"{case_dir}: missing phase '{phase}'"
         val = phases[phase]
-        assert (
-            val in _VALID_PHASE_STATUS
-        ), f"{case_dir}: invalid status for {phase}: {val}"
+        assert val in _VALID_PHASE_STATUS, f"{case_dir}: invalid status for {phase}: {val}"
 
     required = (
         "input.h",
@@ -90,9 +86,7 @@ def _parse_runner_output(stdout: str) -> dict[str, float | int]:
     return out
 
 
-def _assert_expected_values(
-    got: dict[str, float | int], expected: dict[str, float | int]
-) -> None:
+def _assert_expected_values(got: dict[str, float | int], expected: dict[str, float | int]) -> None:
     assert got.keys() == expected.keys()
     for key, exp in expected.items():
         got_value = got[key]
@@ -108,9 +102,7 @@ def _assert_emit_has_snippets(emitted: str, expectation_file: Path) -> None:
         snippet = raw.strip()
         if not snippet or snippet.startswith("#"):
             continue
-        assert (
-            snippet in emitted
-        ), f"missing snippet '{snippet}' from {expectation_file}"
+        assert snippet in emitted, f"missing snippet '{snippet}' from {expectation_file}"
 
 
 def _check_phase(
@@ -133,9 +125,7 @@ def _check_phase(
         "toolchain_variant",
     }:
         if ok:
-            pytest.xfail(
-                f"{phase} unexpectedly passed; update status.json and expectations"
-            )
+            pytest.xfail(f"{phase} unexpectedly passed; update status.json and expectations")
         pytest.xfail(f"{phase} expected non-pass ({expected_status})")
         return
     raise AssertionError(f"unknown expected status {expected_status}")
@@ -177,9 +167,7 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     )
 
     lib_path = tmp_path / f"lib{case_name}.so"
-    cc = _run(
-        ["cc", "-shared", "-fPIC", str(source), "-o", str(lib_path)], cwd=_REPO_ROOT
-    )
+    cc = _run(["cc", "-shared", "-fPIC", str(source), "-o", str(lib_path)], cwd=_REPO_ROOT)
     if cc.returncode != 0:
         raise AssertionError(
             f"failed to build C shared lib for {case_name}\nstdout:\n{cc.stdout}\nstderr:\n{cc.stderr}"
@@ -200,9 +188,7 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         ],
         cwd=_REPO_ROOT,
     )
-    _check_phase(
-        "bindgen_external", phases["bindgen_external"], bindgen_external, str(case_dir)
-    )
+    _check_phase("bindgen_external", phases["bindgen_external"], bindgen_external, str(case_dir))
 
     bindgen_dl = _run(
         [
@@ -224,12 +210,8 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     _check_phase("bindgen_dl", phases["bindgen_dl"], bindgen_dl, str(case_dir))
 
     # Keep generated bindings under each golden case for local inspection.
-    _persist_generated_bindings(
-        bindings_external, case_dir / "generated.bindings.external.mojo"
-    )
-    _persist_generated_bindings(
-        bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo"
-    )
+    _persist_generated_bindings(bindings_external, case_dir / "generated.bindings.external.mojo")
+    _persist_generated_bindings(bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo")
 
     if bindgen_external.returncode == 0:
         _assert_emit_has_snippets(
@@ -320,6 +302,4 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
             str(case_dir),
         )
         if runtime_dl.returncode == 0:
-            _assert_expected_values(
-                _parse_runner_output(runtime_dl.stdout), expected_rt_dl
-            )
+            _assert_expected_values(_parse_runner_output(runtime_dl.stdout), expected_rt_dl)

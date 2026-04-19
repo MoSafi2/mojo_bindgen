@@ -21,15 +21,14 @@ from mojo_bindgen.ir import (
     Param,
     Typedef,
 )
-from mojo_bindgen.parsing.frontend import ClangCompat
-from mojo_bindgen.parsing.frontend import ClangFrontend
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
-from mojo_bindgen.parsing.registry import RecordRegistry
+from mojo_bindgen.parsing.frontend import ClangCompat, ClangFrontend
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
 from mojo_bindgen.parsing.lowering.macro_env import collect_object_like_macro_env
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
+from mojo_bindgen.parsing.registry import RecordRegistry
 
 
 class DeclLowerer:
@@ -146,7 +145,9 @@ class DeclLowerer:
         out: list[Const] = []
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
-                out.append(Const(name=child.spelling, type=underlying, expr=IntLiteral(child.enum_value)))
+                out.append(
+                    Const(name=child.spelling, type=underlying, expr=IntLiteral(child.enum_value))
+                )
         return out
 
     def _build_enum(self, cursor: cx.Cursor) -> Enum | None:

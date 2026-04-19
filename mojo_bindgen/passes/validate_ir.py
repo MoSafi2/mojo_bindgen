@@ -15,8 +15,8 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Type,
-    TypeRef,
     Typedef,
+    TypeRef,
     Unit,
 )
 

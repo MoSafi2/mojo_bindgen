@@ -56,4 +56,3 @@ def test_surface_fixture_no_align(case_dir: Path) -> None:
     expected = (case_dir / "expect.no_align.mojo").read_text(encoding="utf-8")
     relative_header = str(header.relative_to(_REPO_ROOT))
     assert _normalize_source_line(out, relative_header) == expected
-

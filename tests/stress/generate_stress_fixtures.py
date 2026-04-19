@@ -20,20 +20,18 @@ from mojo_bindgen.ir import (
     Array,
     Const,
     Enum,
-    Field,
     Function,
     GlobalVar,
     MacroDecl,
     OpaqueRecordRef,
     Struct,
     Type,
-    TypeRef,
     Typedef,
+    TypeRef,
     Unit,
     UnsupportedType,
 )
 from mojo_bindgen.parsing.parser import ClangParser
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STRESS_ROOT = REPO_ROOT / "tests" / "stress"
@@ -155,10 +153,14 @@ def _iter_jsonc_lines(unit: Unit, data: dict[str, Any]) -> list[str]:
             lines.append(f"    {raw}{suffix}")
         if isinstance(decl, Struct):
             for field in decl.fields:
-                lines.append(f"    // field {field.source_name or field.name or '(anonymous)'}: {_type_comment(field.type)}")
+                lines.append(
+                    f"    // field {field.source_name or field.name or '(anonymous)'}: {_type_comment(field.type)}"
+                )
         elif isinstance(decl, Function):
             for param in decl.params:
-                lines.append(f"    // param {param.name or '(anonymous)'}: {_type_comment(param.type)}")
+                lines.append(
+                    f"    // param {param.name or '(anonymous)'}: {_type_comment(param.type)}"
+                )
         elif isinstance(decl, Const):
             lines.append(f"    // const expr kind: {type(decl.expr).__name__}")
         elif isinstance(decl, MacroDecl):
@@ -178,7 +180,9 @@ def _iter_jsonc_lines(unit: Unit, data: dict[str, Any]) -> list[str]:
         pretty = json.dumps(diag, indent=2)
         pretty_lines = pretty.splitlines()
         for i, raw in enumerate(pretty_lines):
-            suffix = "," if i == len(pretty_lines) - 1 and index != len(data["diagnostics"]) - 1 else ""
+            suffix = (
+                "," if i == len(pretty_lines) - 1 and index != len(data["diagnostics"]) - 1 else ""
+            )
             lines.append(f"    {raw}{suffix}")
     lines.append("  ]")
     lines.append("}")

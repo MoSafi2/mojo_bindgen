@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.codegen.mojo_mapper import map_type
 from mojo_bindgen.ir import (
     AtomicType,
     ComplexType,
@@ -15,7 +16,6 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.codegen.mojo_mapper import map_type
 
 
 def test_map_void_pointer_mutable_external() -> None:
@@ -25,11 +25,7 @@ def test_map_void_pointer_mutable_external() -> None:
 
 
 def test_map_void_pointer_const_external() -> None:
-    t = Pointer(
-        pointee=QualifiedType(
-            unqualified=VoidType(), qualifiers=Qualifiers(is_const=True)
-        )
-    )
+    t = Pointer(pointee=QualifiedType(unqualified=VoidType(), qualifiers=Qualifiers(is_const=True)))
     s = map_type(t, ffi_origin="external")
     assert s == "ImmutOpaquePointer[ImmutExternalOrigin]"
 
@@ -42,9 +38,7 @@ def test_map_void_pointer_mutable_any_origin() -> None:
 
 def test_map_const_int_pointer_external() -> None:
     ip = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
-    t = Pointer(
-        pointee=QualifiedType(unqualified=ip, qualifiers=Qualifiers(is_const=True))
-    )
+    t = Pointer(pointee=QualifiedType(unqualified=ip, qualifiers=Qualifiers(is_const=True)))
     s = map_type(t, ffi_origin="external")
     assert s == "UnsafePointer[Int32, ImmutExternalOrigin]"
 

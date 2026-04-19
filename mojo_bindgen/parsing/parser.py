@@ -7,22 +7,21 @@ lives in dedicated frontend, registry, lowering, and diagnostics modules.
 
 from __future__ import annotations
 
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+
 from clang import cindex as cx
 
 from mojo_bindgen.ir import Decl, Unit
-from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
+    ClangCompat,
     ClangFrontend,
     ClangFrontendConfig,
     FrontendDiagnostic,
     _default_system_compile_args,
     _resolve_header_path,
 )
-from mojo_bindgen.parsing.registry import RecordRegistry
-from mojo_bindgen.passes.pipeline import run_ir_passes
 from mojo_bindgen.parsing.lowering import (
     ConstExprParser,
     DeclLowerer,
@@ -31,6 +30,8 @@ from mojo_bindgen.parsing.lowering import (
     RecordLowerer,
     TypeLowerer,
 )
+from mojo_bindgen.parsing.registry import RecordRegistry
+from mojo_bindgen.passes.pipeline import run_ir_passes
 
 
 @dataclass(frozen=True)
@@ -64,9 +65,7 @@ class ClangParser:
         self.library = library
         self.link_name = link_name
         self.compile_args = (
-            _default_system_compile_args()
-            if compile_args is None
-            else list(compile_args)
+            _default_system_compile_args() if compile_args is None else list(compile_args)
         )
         self.raise_on_error = raise_on_error
         self.diagnostics: ParserDiagnosticSink = ParserDiagnosticSink()
@@ -141,9 +140,7 @@ class ClangParser:
             compat=compat,
         )
 
-    def _collect_decls(
-        self, session: ParseSession, decl_lowerer: DeclLowerer
-    ) -> list[Decl]:
+    def _collect_decls(self, session: ParseSession, decl_lowerer: DeclLowerer) -> list[Decl]:
         """Lower top-level cursors and append macro declarations."""
         decls: list[Decl] = []
         completed_marker = 0
@@ -156,8 +153,8 @@ class ClangParser:
                 continue
             if cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
                 if cursor.is_definition() and cursor.spelling:
-                    completed_marker, completed_records = decl_lowerer.record_lowerer.completed_records_since(
-                        completed_marker
+                    completed_marker, completed_records = (
+                        decl_lowerer.record_lowerer.completed_records_since(completed_marker)
                     )
                     decls.extend(completed_records)
                 else:
