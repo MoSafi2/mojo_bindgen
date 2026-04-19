@@ -100,11 +100,19 @@ class DeclLowerer:
 
     def _build_function(self, cursor: cx.Cursor) -> Function:
         fn_type = cursor.type
-        ret_ir = self.type_lowerer.lower(fn_type.get_result(), TypeContext.RETURN)
+        ret_ir = self.type_lowerer.lower(
+            fn_type.get_result(),
+            TypeContext.RETURN,
+            source_cursor=cursor,
+        )
         params: list[Param] = []
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.PARM_DECL:
-                param_type = self.type_lowerer.lower(child.type, TypeContext.PARAM)
+                param_type = self.type_lowerer.lower(
+                    child.type,
+                    TypeContext.PARAM,
+                    source_cursor=child,
+                )
                 params.append(Param(name=child.spelling, type=param_type))
 
         is_variadic = fn_type.kind == cx.TypeKind.FUNCTIONPROTO and fn_type.is_function_variadic()
@@ -174,7 +182,7 @@ class DeclLowerer:
     def _build_typedef(self, cursor: cx.Cursor) -> Typedef:
         name = cursor.spelling
         ut = cursor.underlying_typedef_type
-        aliased = self.type_lowerer.lower(ut, TypeContext.TYPEDEF)
+        aliased = self.type_lowerer.lower(ut, TypeContext.TYPEDEF, source_cursor=cursor)
         canonical = self.type_lowerer.lower(ut.get_canonical(), TypeContext.TYPEDEF)
         return Typedef(
             decl_id=self.registry.decl_id_for_cursor(cursor),

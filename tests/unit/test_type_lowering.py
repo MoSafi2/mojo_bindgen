@@ -12,6 +12,7 @@ from mojo_bindgen.ir import (
     AtomicType,
     EnumRef,
     Function,
+    FunctionPtr,
     IntKind,
     IntType,
     Pointer,
@@ -86,6 +87,72 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     assert isinstance(fn.params[0].type, TypeRef)
     assert fn.params[0].type.name == "my_uint"
     assert isinstance(fn.params[0].type.canonical, IntType)
+
+
+def test_type_lowering_preserves_callback_parameter_names_across_positions(tmp_path: Path) -> None:
+    header = tmp_path / "callback_param_names.h"
+    header.write_text(
+        (
+            "typedef int (*typedef_cb_t)(int value, void *userdata);\n"
+            "struct callbacks_t {\n"
+            "  int (*poll)(int timeout_ms, void *);\n"
+            "};\n"
+            "int install(int (*fn)(int count, void *ctx));\n"
+            "int (*chooser(void))(int timeout_ms, void *userdata);\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    typedef_cb = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "typedef_cb_t")
+    callbacks = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "callbacks_t")
+    install = next(d for d in unit.decls if isinstance(d, Function) and d.name == "install")
+    chooser = next(d for d in unit.decls if isinstance(d, Function) and d.name == "chooser")
+
+    assert isinstance(typedef_cb.aliased, FunctionPtr)
+    assert typedef_cb.aliased.param_names == ["value", "userdata"]
+
+    poll = next(f for f in callbacks.fields if f.name == "poll")
+    assert isinstance(poll.type, FunctionPtr)
+    assert poll.type.param_names == ["timeout_ms", ""]
+
+    assert isinstance(install.params[0].type, FunctionPtr)
+    assert install.params[0].type.param_names == ["count", "ctx"]
+
+    assert isinstance(chooser.ret, FunctionPtr)
+    assert chooser.ret.param_names == ["timeout_ms", "userdata"]
+
+
+def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(tmp_path: Path) -> None:
+    header = tmp_path / "callback_codegen_names.h"
+    header.write_text(
+        (
+            "typedef int (*named_cb_t)(int value, void *userdata);\n"
+            "struct callbacks_t {\n"
+            "  int (*poll)(int timeout_ms, void *);\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+
+    assert 'comptime named_cb_t = def (value: c_int, userdata: MutOpaquePointer[MutExternalOrigin]) thin abi("C") -> c_int' in out
+    assert (
+        'comptime callbacks_t_poll_cb = def (timeout_ms: c_int, arg1: MutOpaquePointer[MutExternalOrigin]) thin abi("C") -> c_int'
+        in out
+    )
 
 
 def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) -> None:

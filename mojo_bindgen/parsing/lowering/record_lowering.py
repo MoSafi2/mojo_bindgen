@@ -26,6 +26,7 @@ class FieldSite:
     name: str
     source_name: str
     field_type: cx.Type
+    field_cursor: cx.Cursor | None
     byte_offset: int
     is_anonymous: bool
     is_bitfield: bool = False
@@ -68,6 +69,7 @@ class _FieldDiscovery:
                 name=name,
                 source_name=name,
                 field_type=field_cursor.type,
+                field_cursor=field_cursor,
                 byte_offset=byte_offset,
                 is_anonymous=not bool(name),
                 is_bitfield=True,
@@ -79,6 +81,7 @@ class _FieldDiscovery:
             name=name,
             source_name=name,
             field_type=field_cursor.type,
+            field_cursor=field_cursor,
             byte_offset=byte_offset,
             is_anonymous=not bool(name),
             attached_record=attached,
@@ -101,6 +104,7 @@ class _FieldDiscovery:
             name="",
             source_name="",
             field_type=field_type,
+            field_cursor=implicit_field,
             byte_offset=byte_offset,
             is_anonymous=True,
             attached_record=record_cursor,
@@ -309,7 +313,11 @@ class RecordLowerer:
             inner = self.lower_record_definition(site.attached_record)
             if site.uses_attached_record_ref:
                 return self.make_struct_ref(inner)
-        return self.type_lowerer.lower(site.field_type, TypeContext.FIELD)
+        return self.type_lowerer.lower(
+            site.field_type,
+            TypeContext.FIELD,
+            source_cursor=site.field_cursor,
+        )
 
     @staticmethod
     def _apply_attributes(record: Struct, cursor: cx.Cursor) -> None:

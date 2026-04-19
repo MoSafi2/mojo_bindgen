@@ -93,8 +93,17 @@ class TypeLowerer:
     def __post_init__(self) -> None:
         self._dispatch_by_kind = self._build_type_dispatch()
 
-    def lower(self, clang_type: cx.Type, ctx: TypeContext) -> Type:
+    def lower(
+        self,
+        clang_type: cx.Type,
+        ctx: TypeContext,
+        *,
+        source_cursor: cx.Cursor | None = None,
+    ) -> Type:
         t = _normalize(clang_type)
+        fnptr = self._lower_function_pointer_with_cursor(t, ctx, source_cursor)
+        if fnptr is not None:
+            return fnptr
         handler = self._dispatch_by_kind.get(t.kind)
         if handler is not None:
             return handler(t, ctx)
@@ -159,7 +168,12 @@ class TypeLowerer:
             canonical=canonical,
         )
 
-    def _lower_pointer(self, t: cx.Type, ctx: TypeContext) -> Type:
+    def _lower_pointer(
+        self,
+        t: cx.Type,
+        ctx: TypeContext,
+        source_cursor: cx.Cursor | None = None,
+    ) -> Type:
         raw_pointee = t.get_pointee()
         qualifiers = _qualifiers(raw_pointee)
         pointee = _normalize(raw_pointee)
@@ -179,8 +193,27 @@ class TypeLowerer:
                 in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO)
                 else canonical_pointee
             )
-            return self._lower_fnptr(fn_shape, ctx)
+            return self._lower_fnptr(fn_shape, ctx, source_cursor=source_cursor)
         return self._lower_pointer_to_value(pointee, qualifiers, ctx)
+
+    def _lower_function_pointer_with_cursor(
+        self,
+        t: cx.Type,
+        ctx: TypeContext,
+        source_cursor: cx.Cursor | None,
+    ) -> FunctionPtr | None:
+        if source_cursor is None:
+            return None
+        if t.kind in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
+            return self._lower_fnptr(t, ctx, source_cursor=source_cursor)
+        if t.kind != cx.TypeKind.POINTER:
+            return None
+        raw_pointee = t.get_pointee()
+        pointee = _normalize(raw_pointee)
+        canonical_pointee = _normalize(pointee.get_canonical())
+        if canonical_pointee.kind not in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
+            return None
+        return self._lower_pointer(t, ctx, source_cursor=source_cursor)
 
     def _lower_fn_proto_parameter(self, sugared: cx.Type, canonical: cx.Type, ctx: TypeContext) -> Type:
         """Lower one function-prototype parameter.
@@ -197,7 +230,12 @@ class TypeLowerer:
             return self.lower(canonical, ctx)
         return self.lower(sugared, ctx)
 
-    def _lower_fnptr(self, t: cx.Type, ctx: TypeContext) -> FunctionPtr:
+    def _lower_fnptr(
+        self,
+        t: cx.Type,
+        ctx: TypeContext,
+        source_cursor: cx.Cursor | None = None,
+    ) -> FunctionPtr:
         ret = self.lower(t.get_result(), ctx)
         if t.kind == cx.TypeKind.FUNCTIONPROTO:
             canon = _normalize(t.get_canonical())
@@ -209,12 +247,38 @@ class TypeLowerer:
         else:
             params = []
             is_variadic = False
+        param_names = self._extract_function_ptr_param_names(source_cursor, len(params))
         return FunctionPtr(
             ret=ret,
             params=params,
+            param_names=param_names,
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(t),
         )
+
+    @staticmethod
+    def _extract_function_ptr_param_names(
+        source_cursor: cx.Cursor | None,
+        param_count: int,
+    ) -> list[str] | None:
+        if source_cursor is None or param_count == 0:
+            return None
+
+        parm_children = [
+            child for child in source_cursor.get_children() if child.kind == cx.CursorKind.PARM_DECL
+        ]
+        if source_cursor.kind == cx.CursorKind.FUNCTION_DECL:
+            outer_param_count = len(tuple(source_cursor.get_arguments()))
+            return_param_count = len(parm_children) - outer_param_count
+            if return_param_count < param_count:
+                return None
+            parm_children = parm_children[:return_param_count]
+
+        if len(parm_children) < param_count:
+            return None
+
+        names = [child.spelling for child in parm_children[:param_count]]
+        return names if any(name for name in names) else None
 
     def _lower_pointer_to_value(
         self, pointee: cx.Type, qualifiers: Qualifiers, ctx: TypeContext
