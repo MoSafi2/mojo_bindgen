@@ -159,6 +159,10 @@ from cairo_bindings import (
     cairo_region_translate,
     cairo_recording_surface_create,
     cairo_glyph_t,
+    cairo_t,
+    cairo_surface_t,
+    cairo_pattern_t,
+    cairo_font_options_t,
     _cairo_status,
     _cairo_format,
     _cairo_content,
@@ -206,7 +210,7 @@ def _approx_eq(a: Float64, b: Float64, eps: Float64 = 1e-9) -> Bool:
 
 
 def _draw_panel_border(
-    cr: UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin],
+    cr: UnsafePointer[cairo_t, MutExternalOrigin],
     x: Float64,
     y: Float64,
     w: Float64,
@@ -309,16 +313,12 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert(
         "get_target_nonnull",
         cairo_get_target(cr)
-        != UnsafePointer[
-            MutOpaquePointer[MutExternalOrigin], MutExternalOrigin
-        ](),
+        != UnsafePointer[cairo_surface_t, MutExternalOrigin](),
     )
     _assert(
         "get_group_target_nonnull",
         cairo_get_group_target(cr)
-        != UnsafePointer[
-            MutOpaquePointer[MutExternalOrigin], MutExternalOrigin
-        ](),
+        != UnsafePointer[cairo_surface_t, MutExternalOrigin](),
     )
 
     cairo_destroy(cr)
@@ -327,7 +327,7 @@ def run_metadata_and_lifecycle_checks() raises:
 
 
 def draw_composite_scene(
-    cr: UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]
+    cr: UnsafePointer[cairo_t, MutExternalOrigin]
 ) raises:
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0)
     cairo_paint(cr)
@@ -457,9 +457,7 @@ def draw_composite_scene(
     var matrix = alloc[_cairo_matrix](1)
     cairo_pattern_get_matrix(rgba_pat, matrix)
     cairo_pattern_set_matrix(rgba_pat, matrix)
-    var surf_ptr = alloc[
-        UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]
-    ](1)
+    var surf_ptr = alloc[UnsafePointer[cairo_surface_t, MutExternalOrigin]](1)
     _ok(
         "pattern_get_surface",
         cairo_pattern_get_surface(surface_pat, surf_ptr),
@@ -555,9 +553,7 @@ def draw_composite_scene(
     _assert(
         "panel4_get_source_nonnull",
         cairo_get_source(cr)
-        != UnsafePointer[
-            MutOpaquePointer[MutExternalOrigin], MutExternalOrigin
-        ](),
+        != UnsafePointer[cairo_pattern_t, MutExternalOrigin](),
     )
     cairo_pattern_destroy(source_probe)
     cairo_restore(cr)
@@ -679,45 +675,31 @@ def run_non_visual_object_checks() raises:
     var opts = cairo_font_options_create()
     _ok("font_options_create", cairo_font_options_status(opts))
     var opts2 = cairo_font_options_copy(
-        rebind[
-            UnsafePointer[
-                MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin
-            ]
-        ](opts)
+        rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](opts)
     )
     _ok("font_options_copy", cairo_font_options_status(opts2))
     cairo_font_options_merge(
         opts,
-        rebind[
-            UnsafePointer[
-                MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin
-            ]
-        ](opts2),
+        rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](opts2),
     )
     _assert(
         "font_options_equal",
         cairo_font_options_equal(
-            rebind[
-                UnsafePointer[
-                    MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin
-                ]
-            ](opts),
-            rebind[
-                UnsafePointer[
-                    MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin
-                ]
-            ](opts2),
+            rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](
+                opts
+            ),
+            rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](
+                opts2
+            ),
         )
         != 0,
     )
     _assert(
         "font_options_hash_stable",
         cairo_font_options_hash(
-            rebind[
-                UnsafePointer[
-                    MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin
-                ]
-            ](opts)
+            rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](
+                opts
+            )
         )
         == 0,
     )
@@ -807,9 +789,7 @@ def run_non_visual_object_checks() raises:
 
 
 def run_png_roundtrip_from_composite(
-    surface: UnsafePointer[
-        MutOpaquePointer[MutExternalOrigin], MutExternalOrigin
-    ]
+    surface: UnsafePointer[cairo_surface_t, MutExternalOrigin]
 ) raises:
     var out_path = CStringSlice("/tmp/mojo_bindgen_cairo_smoke_composite.png\0")
     _ok(

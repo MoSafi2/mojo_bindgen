@@ -55,7 +55,7 @@ def run_write_roundtrip_checks() raises:
 
     var image_write = alloc[png.png_image](1)
     image_write[0] = png.png_image(
-        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=UInt32(IMAGE_W),
         height=UInt32(IMAGE_H),
@@ -78,7 +78,7 @@ def run_write_roundtrip_checks() raises:
 
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
-        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
@@ -136,7 +136,7 @@ def run_memory_roundtrip_checks() raises:
     # Build a writer-side png_image matching run_write_roundtrip_checks().
     var image_write = alloc[png.png_image](1)
     image_write[0] = png.png_image(
-        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=UInt32(IMAGE_W),
         height=UInt32(IMAGE_H),
@@ -176,7 +176,7 @@ def run_memory_roundtrip_checks() raises:
 
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
-        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
@@ -219,7 +219,7 @@ def run_alpha_removal_compositing_checks() raises:
     # background color.
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
-        opaque=UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin](),
+        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
