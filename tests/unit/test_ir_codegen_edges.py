@@ -63,7 +63,7 @@ def test_map_unsupported_type_with_size_becomes_inline_bytes() -> None:
     assert map_type(t, ffi_origin="external") == "InlineArray[UInt8, 16]"
 
 
-def test_incomplete_struct_is_not_emitted_as_ordered_struct() -> None:
+def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None:
     st = Struct(
         decl_id="struct:foo",
         name="foo",
@@ -78,6 +78,8 @@ def test_incomplete_struct_is_not_emitted_as_ordered_struct() -> None:
         MojoEmitOptions(),
     )
     assert au.ordered_structs == ()
+    assert len(au.ordered_incomplete_structs) == 1
+    assert au.ordered_incomplete_structs[0].decl.decl_id == st.decl_id
 
 
 def test_generator_renders_global_var_stub_and_macro_comments() -> None:

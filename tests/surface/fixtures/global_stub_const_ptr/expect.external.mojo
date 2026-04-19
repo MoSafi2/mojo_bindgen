@@ -4,5 +4,9 @@
 # FFI mode: external_call
 from std.ffi import external_call
 
+# incomplete C struct `gscp_cfg` — opaque; use only as pointer target
+@fieldwise_init
+struct gscp_cfg(Copyable, Movable):
+    pass
 # global variable gscp_default_cfg: UnsafePointer[gscp_cfg, ImmutExternalOrigin] (manual binding required)
 

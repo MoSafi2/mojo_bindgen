@@ -4,6 +4,10 @@
 # FFI mode: external_call
 from std.ffi import external_call
 
+# incomplete C struct `ofp_handle` — opaque; use only as pointer target
+@fieldwise_init
+struct ofp_handle(Copyable, Movable):
+    pass
 def ofp_open() abi("C") -> UnsafePointer[ofp_handle, MutExternalOrigin]:
     return external_call["ofp_open", UnsafePointer[ofp_handle, MutExternalOrigin]]()
 

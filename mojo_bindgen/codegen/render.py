@@ -123,9 +123,27 @@ class MojoRenderer:
             mapped = types.surface(field.type)
         b.add(f"var {analyzed_field.mojo_name}: {mapped}")
 
+    def _render_opaque_struct_stub(self, analyzed: AnalyzedStruct) -> str:
+        """Emit a nominal struct for a C incomplete/opaque record (pointer targets only)."""
+        decl = analyzed.decl
+        name = mojo_ident(decl.name.strip() or decl.c_name.strip())
+        b = CodeBuilder()
+        b.add(
+            f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target"
+        )
+        b.add("@fieldwise_init")
+        b.add(f"struct {name}(Copyable, Movable):")
+        b.indent()
+        b.add("pass")
+        b.dedent()
+        b.add("")
+        return b.render()
+
     def render_struct(self, analyzed: AnalyzedStruct) -> str:
         """Render a single analyzed non-union struct declaration."""
         decl = analyzed.decl
+        if not decl.is_complete:
+            return self._render_opaque_struct_stub(analyzed)
         name = mojo_ident(decl.name.strip() or decl.c_name.strip())
         traits = (
             "(Copyable, Movable, RegisterPassable)"
@@ -165,6 +183,8 @@ class MojoRenderer:
         chunks.append(self._semantic_fallback_note_block())
         chunks.append(self._import_block())
         chunks.append(self._dl_handle_helpers())
+        for s in self._a.ordered_incomplete_structs:
+            chunks.append(self.render_struct(s))
         chunks.append(self._emit_callback_alias_section())
         for d in self._a.tail_decls:
             if isinstance(d, (Const, MacroDecl)):
@@ -536,6 +556,7 @@ def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
         callback_aliases=tuple(),
         callback_signature_names=frozenset(),
         global_callback_aliases={},
+        ordered_incomplete_structs=tuple(),
         ordered_structs=(analyzed,),
         unions=tuple(),
         tail_decls=tuple(),

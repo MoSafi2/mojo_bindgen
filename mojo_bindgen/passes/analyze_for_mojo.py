@@ -128,6 +128,7 @@ class AnalyzedUnit:
     callback_aliases: tuple[CallbackAlias, ...]
     callback_signature_names: frozenset[str]
     global_callback_aliases: dict[str, str]
+    ordered_incomplete_structs: tuple[AnalyzedStruct, ...]
     ordered_structs: tuple[AnalyzedStruct, ...]
     unions: tuple[AnalyzedUnion, ...]
     tail_decls: tuple[TailDecl, ...]
@@ -146,9 +147,10 @@ def mojo_align_decorator_ok(align_bytes: int) -> bool:
 
 
 def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
+    """Map struct ``decl_id`` to :class:`Struct`, including incomplete (opaque) records."""
     out: dict[str, Struct] = {}
     for d in unit.decls:
-        if isinstance(d, Struct) and not d.is_union and d.is_complete:
+        if isinstance(d, Struct) and not d.is_union:
             out[d.decl_id] = d
     return out
 
@@ -396,7 +398,7 @@ def _type_ok_for_register_passable_field(
         if t.decl_id in visiting:
             return False
         s = struct_by_id.get(t.decl_id)
-        if s is None or s.is_union:
+        if s is None or s.is_union or not s.is_complete:
             return False
         visiting.add(t.decl_id)
         try:
@@ -428,7 +430,7 @@ def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bo
         if decl_id in computing:
             return False
         s = struct_by_id.get(decl_id)
-        if s is None or s.is_union:
+        if s is None or s.is_union or not s.is_complete:
             cache[decl_id] = False
             return False
         computing.add(decl_id)
@@ -474,7 +476,7 @@ def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bo
 def struct_decl_register_passable(
     decl: Struct, struct_by_id: dict[str, Struct]
 ) -> bool:
-    if decl.is_union:
+    if decl.is_union or not decl.is_complete:
         return False
     return all(
         _type_ok_for_register_passable_field(f.type, struct_by_id, None)
@@ -499,11 +501,24 @@ def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     return tuple(toposort_structs(struct_decls))
 
 
+def _incomplete_struct_decls(unit: Unit) -> tuple[Struct, ...]:
+    """Forward-declared / incomplete non-union structs, in TU declaration order."""
+    return tuple(
+        d
+        for d in unit.decls
+        if isinstance(d, Struct) and not d.is_union and not d.is_complete
+    )
+
+
 def _emitted_struct_enum_names(
-    unit: Unit, ordered_structs: tuple[Struct, ...]
+    unit: Unit,
+    ordered_structs: tuple[Struct, ...],
+    incomplete_structs: tuple[Struct, ...],
 ) -> frozenset[str]:
     emitted_names: set[str] = set()
     for s in ordered_structs:
+        emitted_names.add(mojo_ident(s.name.strip() or s.c_name.strip()))
+    for s in incomplete_structs:
         emitted_names.add(mojo_ident(s.name.strip() or s.c_name.strip()))
     for d in unit.decls:
         if isinstance(d, Enum):
@@ -753,7 +768,10 @@ def _analyze_function(
 def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     # Phase A: precompute unit-level semantic facts
     ordered_struct_decls = _ordered_struct_decls(unit)
-    emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls)
+    incomplete_struct_decls = _incomplete_struct_decls(unit)
+    emitted_names = _emitted_struct_enum_names(
+        unit, ordered_struct_decls, incomplete_struct_decls
+    )
     emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
     callback_info = _collect_callback_aliases(unit, emitted_typedef_names)
     unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
@@ -781,6 +799,16 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
     )
 
     # Phase B: materialize analyzed declarations
+    ordered_incomplete_structs = tuple(
+        _analyze_struct(
+            decl,
+            ctx.struct_map,
+            ctx.options,
+            ctx.callback_info.field_aliases,
+            register_passable=ctx.register_passable_by_decl_id.get(decl.decl_id, False),
+        )
+        for decl in incomplete_struct_decls
+    )
     ordered_structs = tuple(
         _analyze_struct(
             decl,
@@ -846,6 +874,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         callback_aliases=ctx.callback_info.aliases,
         callback_signature_names=ctx.callback_info.signature_names,
         global_callback_aliases=ctx.callback_info.global_aliases,
+        ordered_incomplete_structs=ordered_incomplete_structs,
         ordered_structs=ordered_structs,
         unions=unions,
         tail_decls=tuple(tail_decls),
