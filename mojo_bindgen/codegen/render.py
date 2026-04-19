@@ -79,6 +79,14 @@ def _scalar_comment_name(t: IntType | FloatType | VoidType) -> str:
     return "VOID"
 
 
+def _mojo_float_literal_text(c_spelling: str) -> str:
+    """Strip C float suffixes; Mojo has no ``f``/``F``/``l``/``L`` floating literals."""
+    t = c_spelling.rstrip()
+    while t and t[-1] in "fFlL":
+        t = t[:-1]
+    return t
+
+
 class MojoRenderer:
     """Turn :class:`AnalyzedUnit` into a generated Mojo module."""
 
@@ -414,7 +422,7 @@ class MojoRenderer:
             value = expr.value.replace("\\", "\\\\").replace("'", "\\'")
             return f"'{value}'"
         if isinstance(expr, FloatLiteral):
-            return expr.value
+            return _mojo_float_literal_text(expr.value)
         if isinstance(expr, RefExpr):
             return mojo_ident(expr.name)
         if isinstance(expr, UnaryExpr):

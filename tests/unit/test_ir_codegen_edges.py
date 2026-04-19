@@ -12,6 +12,7 @@ from mojo_bindgen.ir import (
     Const,
     Field,
     FloatKind,
+    FloatLiteral,
     FloatType,
     Function,
     FunctionPtr,
@@ -220,6 +221,30 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
     assert const_pos < global_pos
     assert macro_pos < fn_pos
     assert const_pos < fn_pos
+
+
+def test_generator_strips_c_float_suffix_in_macro_and_const() -> None:
+    f32 = FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[
+            MacroDecl(
+                name="PRIO_LOW",
+                tokens=["0.25", "f"],
+                kind="object_like_supported",
+                expr=FloatLiteral("0.25f"),
+                type=f32,
+            ),
+            Const(name="PRIO_HIGH", type=f32, expr=FloatLiteral("0.75F")),
+        ],
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "comptime PRIO_LOW = 0.25" in out
+    assert "0.25f" not in out
+    assert "comptime PRIO_HIGH = 0.75" in out
+    assert "0.75F" not in out
 
 
 def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> None:
