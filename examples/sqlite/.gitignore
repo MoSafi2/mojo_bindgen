@@ -1,0 +1,3 @@
+sqlite3_bindings.mojo
+sqlite_smoke
+*.o
