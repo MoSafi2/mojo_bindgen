@@ -2,11 +2,55 @@
 # source: tests/surface/fixtures/global_stub_const_ptr/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD
+
+# Resolve symbols from libraries already linked into this process (e.g. mojo link step).
+def _bindgen_dl() raises -> OwnedDLHandle:
+    return OwnedDLHandle(DEFAULT_RTLD)
+
+struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
+    @staticmethod
+    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
+        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+        if not opt:
+            raise Error(String("bindgen: missing C global symbol"))
+        return opt
+
+    @staticmethod
+    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:
+        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+
+    @staticmethod
+    def load() raises -> Self.T:
+        return Self._raw()[]
+
+    @staticmethod
+    def store(value: Self.T) raises -> None:
+        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+        p[] = value
+
+
+struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
+    @staticmethod
+    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
+        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+        if not opt:
+            raise Error(String("bindgen: missing C global symbol"))
+        return opt
+
+    @staticmethod
+    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:
+        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())
+
+    @staticmethod
+    def load() raises -> Self.T:
+        return Self._raw()[]
+
 
 # incomplete C struct `gscp_cfg` — opaque; use only as pointer target
 @fieldwise_init
 struct gscp_cfg(Copyable, Movable):
     pass
-# global variable gscp_default_cfg: UnsafePointer[gscp_cfg, ImmutExternalOrigin] (manual binding required)
+# global `gscp_default_cfg` -> UnsafePointer[gscp_cfg, ImmutExternalOrigin]
+comptime gscp_default_cfg = GlobalVar[T=UnsafePointer[gscp_cfg, ImmutExternalOrigin], link="gscp_default_cfg"]
 

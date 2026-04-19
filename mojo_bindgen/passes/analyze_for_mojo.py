@@ -109,7 +109,24 @@ class AnalyzedUnion:
     uses_unsafe_union: bool
 
 
-TailDecl = Enum | Const | MacroDecl | GlobalVar | AnalyzedTypedef | AnalyzedFunction
+GlobalVarKind = Literal["wrapper", "stub"]
+
+
+@dataclass(frozen=True)
+class AnalyzedGlobalVar:
+    """Derived global variable emission policy."""
+
+    decl: GlobalVar
+    kind: GlobalVarKind
+    """``wrapper``: emit ``GlobalVar`` / ``GlobalConst`` helpers; ``stub``: comment-only."""
+
+    surface_type: str
+    """Mojo surface type used for ``GlobalVar[T=..., link=...]`` (wrapper) or comments (stub)."""
+
+    stub_reason: str | None = None
+
+
+TailDecl = Enum | Const | MacroDecl | AnalyzedGlobalVar | AnalyzedTypedef | AnalyzedFunction
 
 
 @dataclass(frozen=True)
@@ -122,6 +139,9 @@ class AnalyzedUnit:
     needs_simd_import: bool
     needs_complex_import: bool
     needs_atomic_import: bool
+    needs_global_symbol_helpers: bool
+    """True when at least one global uses ``OwnedDLHandle.get_symbol`` (wrapper globals)."""
+
     semantic_fallback_notes: tuple[str, ...]
     unsafe_union_names: frozenset[str]
     emitted_typedef_mojo_names: frozenset[str]
@@ -728,6 +748,50 @@ def _analyze_struct(
     )
 
 
+def _outer_atomic(t: Type) -> AtomicType | None:
+    """Return the outermost :class:`AtomicType` wrapper, if any (before typedef peel)."""
+
+    while True:
+        if isinstance(t, AtomicType):
+            return t
+        if isinstance(t, TypeRef):
+            t = t.canonical
+            continue
+        if isinstance(t, QualifiedType):
+            t = t.unqualified
+            continue
+        return None
+
+
+def _global_var_stub_reason(decl: GlobalVar) -> str | None:
+    """Return a stub reason when thin ``GlobalVar`` wrappers are not emitted."""
+    if _outer_atomic(decl.type) is not None:
+        return "atomic global requires manual binding (use Atomic APIs on a pointer)"
+    core = peel_wrappers(decl.type)
+    if isinstance(core, UnsupportedType) and (core.size_bytes is None or core.size_bytes == 0):
+        return "unsupported global type layout"
+    return None
+
+
+def _analyze_global_var(
+    decl: GlobalVar,
+    type_mapper: TypeMapper,
+    global_aliases: dict[str, str],
+) -> AnalyzedGlobalVar:
+    reason = _global_var_stub_reason(decl)
+    callback_alias = global_aliases.get(decl.decl_id)
+    ty = (
+        type_mapper.callback_pointer_type(callback_alias)
+        if callback_alias is not None
+        else type_mapper.surface(decl.type)
+    )
+    if reason is not None:
+        return AnalyzedGlobalVar(
+            decl=decl, kind="stub", surface_type=ty, stub_reason=reason
+        )
+    return AnalyzedGlobalVar(decl=decl, kind="wrapper", surface_type=ty)
+
+
 def _analyze_function(
     fn: Function,
     struct_map: dict[str, Struct],
@@ -858,8 +922,18 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
                     ),
                 )
             )
-        elif isinstance(d, (Enum, Const, MacroDecl, GlobalVar)):
+        elif isinstance(d, GlobalVar):
+            tail_decls.append(
+                _analyze_global_var(
+                    d, ctx.type_mapper, ctx.callback_info.global_aliases
+                )
+            )
+        elif isinstance(d, (Enum, Const, MacroDecl)):
             tail_decls.append(d)
+
+    needs_global_symbol_helpers = any(
+        isinstance(d, AnalyzedGlobalVar) and d.kind == "wrapper" for d in tail_decls
+    )
 
     return AnalyzedUnit(
         unit=unit,
@@ -868,6 +942,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         needs_simd_import=ctx.import_needs.simd,
         needs_complex_import=ctx.import_needs.complex,
         needs_atomic_import=ctx.import_needs.atomic,
+        needs_global_symbol_helpers=needs_global_symbol_helpers,
         semantic_fallback_notes=ctx.semantic_fallback_notes,
         unsafe_union_names=ctx.unsafe_union_names,
         emitted_typedef_mojo_names=ctx.emitted_typedef_names,

@@ -155,7 +155,12 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "# global variable global_counter: Int32 (manual binding required)" in out
+    assert 'from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD' in out
+    assert "def _bindgen_dl() raises -> OwnedDLHandle:" in out
+    assert "struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:" in out
+    assert (
+        'comptime global_counter = GlobalVar[T=Int32, link="global_counter"]' in out
+    )
     assert 'comptime LIB_NAME = "bindgen"' in out
     assert "comptime LIMIT = Int32(7)" in out
     assert "comptime FLAGS = (Int32(1) | Int32(2))" in out
@@ -208,7 +213,7 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
     macro_pos = out.index("comptime MACRO_OK = Int32(1)")
     const_pos = out.index("comptime LIMIT = Int32(7)")
     global_pos = out.index(
-        "# global variable global_counter: Int32 (manual binding required)"
+        'comptime global_counter = GlobalVar[T=Int32, link="global_counter"]'
     )
     fn_pos = out.index('def do_work() abi("C") -> Int32:')
     assert macro_pos < global_pos
@@ -277,9 +282,30 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.atomic import Atomic" in out
     assert (
-        "# global variable counter: Atomic[DType.int32] (manual binding required)"
+        "# global variable counter: Atomic[DType.int32] (atomic global requires manual "
+        "binding (use Atomic APIs on a pointer))"
         in out
     )
+
+
+def test_generator_emits_global_const_wrapper_for_const_qualified_scalar() -> None:
+    i32 = _i32()
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[
+            GlobalVar(
+                decl_id="var:limit",
+                name="limit",
+                link_name="limit",
+                type=i32,
+                is_const=True,
+            ),
+        ],
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert 'comptime limit = GlobalConst[T=Int32, link="limit"]' in out
 
 
 def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:
@@ -332,7 +358,9 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
     assert "comptime my_uint_ptr = UnsafePointer[my_uint, MutExternalOrigin]" in out
     assert "var value: my_uint" in out
     assert "var ptr: my_uint_ptr" in out
-    assert "# global variable global_ptr: my_uint_ptr (manual binding required)" in out
+    assert (
+        'comptime global_ptr = GlobalVar[T=my_uint_ptr, link="global_ptr"]' in out
+    )
 
 
 def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() -> None:

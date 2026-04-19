@@ -2,7 +2,50 @@
 # source: tests/surface/fixtures/globals_and_consts/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD
+
+# Resolve symbols from libraries already linked into this process (e.g. mojo link step).
+def _bindgen_dl() raises -> OwnedDLHandle:
+    return OwnedDLHandle(DEFAULT_RTLD)
+
+struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
+    @staticmethod
+    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
+        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+        if not opt:
+            raise Error(String("bindgen: missing C global symbol"))
+        return opt
+
+    @staticmethod
+    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:
+        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+
+    @staticmethod
+    def load() raises -> Self.T:
+        return Self._raw()[]
+
+    @staticmethod
+    def store(value: Self.T) raises -> None:
+        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+        p[] = value
+
+
+struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
+    @staticmethod
+    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
+        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+        if not opt:
+            raise Error(String("bindgen: missing C global symbol"))
+        return opt
+
+    @staticmethod
+    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:
+        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())
+
+    @staticmethod
+    def load() raises -> Self.T:
+        return Self._raw()[]
+
 
 comptime DEFAULT_LIMIT = UInt32(42)
 
@@ -12,5 +55,6 @@ comptime DEFAULT_LIMIT = UInt32(42)
 struct point(Copyable, Movable, RegisterPassable):
     var x: Int32
     var y: Int32
-# global variable global_counter: Int32 (manual binding required)
+# global `global_counter` -> Int32
+comptime global_counter = GlobalVar[T=Int32, link="global_counter"]
 

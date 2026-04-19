@@ -15,7 +15,6 @@ from mojo_bindgen.ir import (
     FloatType,
     FloatLiteral,
     FunctionPtr,
-    GlobalVar,
     IntType,
     IntLiteral,
     MacroDecl,
@@ -25,12 +24,18 @@ from mojo_bindgen.ir import (
     UnaryExpr,
     VoidType,
 )
-from mojo_bindgen.codegen.mojo_mapper import TypeMapper, map_scalar, mojo_ident
+from mojo_bindgen.codegen.mojo_mapper import (
+    TypeMapper,
+    map_scalar,
+    mojo_ident,
+    pointer_origin_names,
+)
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.passes.analyze_for_mojo import (
     CallbackAlias,
     AnalyzedField,
     AnalyzedFunction,
+    AnalyzedGlobalVar,
     AnalyzedStruct,
     AnalyzedTypedef,
     AnalyzedUnion,
@@ -183,6 +188,8 @@ class MojoRenderer:
         chunks.append(self._semantic_fallback_note_block())
         chunks.append(self._import_block())
         chunks.append(self._dl_handle_helpers())
+        if self._a.needs_global_symbol_helpers:
+            chunks.append(self._emit_global_var_runtime_structs())
         for s in self._a.ordered_incomplete_structs:
             chunks.append(self.render_struct(s))
         chunks.append(self._emit_callback_alias_section())
@@ -216,6 +223,8 @@ class MojoRenderer:
         lines: list[str] = []
         if self._a.opts.linking == "external_call":
             ffi_names = ["external_call"]
+            if self._a.needs_global_symbol_helpers:
+                ffi_names.extend(["OwnedDLHandle", "DEFAULT_RTLD"])
         else:
             ffi_names = ["DEFAULT_RTLD", "OwnedDLHandle"]
         if self._a.unions and self._a.unsafe_union_names:
@@ -241,6 +250,12 @@ class MojoRenderer:
 
     def _dl_handle_helpers(self) -> str:
         """Render helper code for ``owned_dl_handle`` linking mode, if needed."""
+        if self._a.opts.linking == "external_call" and self._a.needs_global_symbol_helpers:
+            return (
+                "# Resolve symbols from libraries already linked into this process (e.g. mojo link step).\n"
+                "def _bindgen_dl() raises -> OwnedDLHandle:\n"
+                "    return OwnedDLHandle(DEFAULT_RTLD)\n\n"
+            )
         if self._a.opts.linking != "owned_dl_handle":
             return ""
         if self._a.opts.library_path_hint:
@@ -431,16 +446,69 @@ class MojoRenderer:
             return None
         return None
 
-    def _emit_global_var(self, decl: GlobalVar) -> str:
-        """Render a reference stub for a top-level global variable.
+    def _emit_global_var_runtime_structs(self) -> str:
+        """Emit ``GlobalVar`` / ``GlobalConst`` helpers and shared symbol lookup."""
+        o = pointer_origin_names(self._a.opts.ffi_origin)
+        mut_o = o.mut
+        immut_o = o.immut
+        return (
+            "struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:\n"
+            "    @staticmethod\n"
+            "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
+            "        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
+            "        if not opt:\n"
+            '            raise Error(String("bindgen: missing C global symbol"))\n'
+            "        return opt\n"
+            "\n"
+            "    @staticmethod\n"
+            f"    def ptr() raises -> UnsafePointer[Self.T, {mut_o}]:\n"
+            f"        return rebind[UnsafePointer[Self.T, {mut_o}]](Self._raw())\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def load() raises -> Self.T:\n"
+            "        return Self._raw()[]\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def store(value: Self.T) raises -> None:\n"
+            f"        var p = rebind[UnsafePointer[Self.T, {mut_o}]](Self._raw())\n"
+            "        p[] = value\n"
+            "\n"
+            "\n"
+            "struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:\n"
+            "    @staticmethod\n"
+            "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
+            "        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
+            "        if not opt:\n"
+            '            raise Error(String("bindgen: missing C global symbol"))\n'
+            "        return opt\n"
+            "\n"
+            "    @staticmethod\n"
+            f"    def ptr() raises -> UnsafePointer[Self.T, {immut_o}]:\n"
+            f"        return rebind[UnsafePointer[Self.T, {immut_o}]](Self._raw())\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def load() raises -> Self.T:\n"
+            "        return Self._raw()[]\n"
+            "\n"
+            "\n"
+        )
 
-        Global variables remain part of the IR surface even though thin Mojo
-        bindings do not yet generate direct accessors for them.
-        """
-        callback_alias = self._a.global_callback_aliases.get(decl.decl_id)
-        ty = self._types.callback_pointer_type(callback_alias) if callback_alias is not None else self._types.surface(decl.type)
-        const_kw = "const " if decl.is_const else ""
-        return f"# global variable {decl.link_name}: {const_kw}{ty} (manual binding required)\n\n"
+    def _emit_analyzed_global_var(self, ag: AnalyzedGlobalVar) -> str:
+        """Render a ``GlobalVar`` / ``GlobalConst`` binding or a manual stub comment."""
+        decl = ag.decl
+        if ag.kind == "stub":
+            const_kw = "const " if decl.is_const else ""
+            reason = ag.stub_reason or "manual binding required"
+            return (
+                f"# global variable {decl.link_name}: {const_kw}{ag.surface_type} ({reason})\n\n"
+            )
+        link_lit = decl.link_name.replace("\\", "\\\\").replace('"', '\\"')
+        wrapper = "GlobalConst" if decl.is_const else "GlobalVar"
+        name = mojo_ident(decl.name)
+        return (
+            f"# global `{decl.link_name}` -> {ag.surface_type}\n"
+            f"comptime {name} = {wrapper}[T={ag.surface_type}, link=\"{link_lit}\"]\n\n"
+        )
 
     def _function_signature(self, analyzed: AnalyzedFunction) -> tuple[str, str, str, bool, str]:
         """Build derived signature fragments used by function rendering."""
@@ -528,8 +596,8 @@ class MojoRenderer:
             return self._emit_const(decl)
         if isinstance(decl, MacroDecl):
             return self._emit_macro(decl)
-        if isinstance(decl, GlobalVar):
-            return self._emit_global_var(decl)
+        if isinstance(decl, AnalyzedGlobalVar):
+            return self._emit_analyzed_global_var(decl)
         if isinstance(decl, AnalyzedFunction):
             return self._emit_function(decl)
         raise TypeError(f"unexpected tail decl {type(decl)!r}")
@@ -550,6 +618,7 @@ def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
         needs_simd_import=False,
         needs_complex_import=False,
         needs_atomic_import=False,
+        needs_global_symbol_helpers=False,
         semantic_fallback_notes=tuple(),
         unsafe_union_names=frozenset(),
         emitted_typedef_mojo_names=frozenset(),
