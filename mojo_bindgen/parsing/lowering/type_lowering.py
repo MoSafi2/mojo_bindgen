@@ -157,8 +157,7 @@ class TypeLowerer:
     def _lower_typedef(self, t: cx.Type, ctx: TypeContext) -> Type:
         decl = t.get_declaration()
         name = decl.spelling or t.spelling
-        raw_target = getattr(decl, "underlying_typedef_type", None) or t.get_canonical()
-        canonical = self.lower(raw_target, ctx)
+        canonical = self.lower(t.get_canonical(), ctx)
         return TypeRef(
             decl_id=self.registry.decl_id_for_cursor(decl),
             name=name,

@@ -76,6 +76,36 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
 
 
 
+def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) -> None:
+    header = tmp_path / "nested_typedef_chain.h"
+    header.write_text(
+        (
+            "typedef unsigned int inner_t;\n"
+            "typedef inner_t outer_t;\n"
+            "typedef struct payload_t {\n"
+            "  outer_t value;\n"
+            "} payload_t;\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    outer = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "outer_t")
+    payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
+
+    assert isinstance(outer.aliased, TypeRef)
+    assert outer.aliased.name == "inner_t"
+    assert isinstance(outer.canonical, IntType)
+    assert isinstance(payload.fields[0].type, TypeRef)
+    assert payload.fields[0].type.name == "outer_t"
+    assert isinstance(payload.fields[0].type.canonical, IntType)
+
+
 def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_nested.h"
     header.write_text(
