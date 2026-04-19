@@ -1,4 +1,4 @@
-from p1_complex_types_runtime_bindings_dl import cplx_add, cplx_imag, cplx_mul, cplx_real
+from complex_types_runtime_bindings_dl import cplx_add, cplx_imag, cplx_mul, cplx_real
 from std.complex import ComplexSIMD
 
 

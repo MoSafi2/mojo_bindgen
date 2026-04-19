@@ -1,4 +1,4 @@
-from p1_anon_struct_union_bindings_dl import asu_sanity
+from anon_struct_union_bindings_dl import asu_sanity
 
 
 def main() raises:

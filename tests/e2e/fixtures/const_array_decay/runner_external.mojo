@@ -1,4 +1,4 @@
-from p1_const_array_decay_bindings_external import cad_sanity
+from const_array_decay_bindings_external import cad_sanity
 
 
 def main() raises:

@@ -3,7 +3,6 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 from std.ffi import external_call
-from std.memory import ImmutOpaquePointer, MutOpaquePointer
 
-# global variable gscp_default_cfg: UnsafePointer[MutOpaquePointer[MutExternalOrigin], ImmutExternalOrigin] (manual binding required)
+# global variable gscp_default_cfg: UnsafePointer[gscp_cfg, ImmutExternalOrigin] (manual binding required)
 

@@ -3,11 +3,10 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 from std.ffi import external_call
-from std.memory import ImmutOpaquePointer, MutOpaquePointer
 
-def ofp_open() abi("C") -> UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]:
-    return external_call["ofp_open", UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]]()
+def ofp_open() abi("C") -> UnsafePointer[ofp_handle, MutExternalOrigin]:
+    return external_call["ofp_open", UnsafePointer[ofp_handle, MutExternalOrigin]]()
 
-def ofp_close(handle: UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]) abi("C") -> None:
-    external_call["ofp_close", NoneType, UnsafePointer[MutOpaquePointer[MutExternalOrigin], MutExternalOrigin]](handle)
+def ofp_close(handle: UnsafePointer[ofp_handle, MutExternalOrigin]) abi("C") -> None:
+    external_call["ofp_close", NoneType, UnsafePointer[ofp_handle, MutExternalOrigin]](handle)
 

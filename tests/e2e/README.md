@@ -68,16 +68,16 @@ Each golden case has a `status.json` with per-phase status. The summary below re
 | `functional_math` | Basic scalar function bindings (`int32`, `double`, `uint64`) and runtime calls in external + owned-dl modes. | pass | n/a |
 | `functional_records` | Struct/enum by-value/by-field behavior and runtime ABI compatibility. | pass | n/a |
 | `full_surface_runtime` | Broad ABI surface: unions, bitfields, packed structs, callbacks, arrays, pointers, volatile/restrict, globals. | pass | n/a |
-| `p0_incomplete_array_padding` | Flexible/incomplete array member layout and emitted struct shape (`payload[]` style headers). | pass | n/a |
-| `p0_large_alignment` | Explicit alignment attributes (`aligned(16)`), offset/alignment ABI checks via runtime helpers. | pass | n/a |
-| `p1_opaque_forward` | Forward-declared opaque `union` + `struct` pointer signatures and callability. | pass | n/a |
-| `p1_const_array_decay` | `const T arr[N]` parameter decay semantics and wrapper emission/runtime behavior. | pass | n/a |
-| `p0_ptr_to_array` | Pointer-to-array declarations (`int (*p)[N]`) from upstream bindgen edge cases. | pass | n/a |
-| `p0_fnptr_return` | Function returning function-pointer (`fn -> fnptr`) lowering and wrapper generation. | pass | n/a |
-| `p1_anon_struct_union` | Anonymous struct-inside-union nesting and field resolution. | pass | n/a |
-| `p1_atomic_types_runtime` | Atomic counter increment/decrement functional checks; includes emitted atomic global note and verifies mode-specific runtime behavior. | pass | n/a |
-| `p1_complex_types_runtime` | Complex arithmetic through `_Complex float` bindings, asserting real/imag outputs in both linking modes. | pass | n/a |
-| `p1_vector_extension_types_runtime` | Vector-extension math (`vector_size(16)`) validated through scalar wrappers while preserving vector typedef emit coverage. | pass | n/a |
+| `incomplete_array_padding` | Flexible/incomplete array member layout and emitted struct shape (`payload[]` style headers). | pass | n/a |
+| `large_alignment` | Explicit alignment attributes (`aligned(16)`), offset/alignment ABI checks via runtime helpers. | pass | n/a |
+| `opaque_forward` | Forward-declared opaque `union` + `struct` pointer signatures and callability. | pass | n/a |
+| `const_array_decay` | `const T arr[N]` parameter decay semantics and wrapper emission/runtime behavior. | pass | n/a |
+| `ptr_to_array` | Pointer-to-array declarations (`int (*p)[N]`) from upstream bindgen edge cases. | pass | n/a |
+| `fnptr_return` | Function returning function-pointer (`fn -> fnptr`) lowering and wrapper generation. | pass | n/a |
+| `anon_struct_union` | Anonymous struct-inside-union nesting and field resolution. | pass | n/a |
+| `atomic_types_runtime` | Atomic counter increment/decrement functional checks; includes emitted atomic global note and verifies mode-specific runtime behavior. | pass | n/a |
+| `complex_types_runtime` | Complex arithmetic through `_Complex float` bindings, asserting real/imag outputs in both linking modes. | pass | n/a |
+| `vector_extension_types_runtime` | Vector-extension math (`vector_size(16)`) validated through scalar wrappers while preserving vector typedef emit coverage. | pass | n/a |
 
 ## Surface-Only Policy Coverage
 

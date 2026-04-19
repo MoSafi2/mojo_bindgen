@@ -1,4 +1,4 @@
-from p1_complex_types_runtime_bindings_external import (
+from complex_types_runtime_bindings_external import (
     cplx_add,
     cplx_imag,
     cplx_mul,

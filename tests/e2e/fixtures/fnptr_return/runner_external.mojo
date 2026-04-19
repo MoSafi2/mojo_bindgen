@@ -1,4 +1,4 @@
-from p0_fnptr_return_bindings_external import pfr_sanity
+from fnptr_return_bindings_external import pfr_sanity
 
 
 def main() raises:

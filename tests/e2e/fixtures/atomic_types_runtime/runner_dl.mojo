@@ -1,4 +1,4 @@
-from p1_atomic_types_runtime_bindings_dl import (
+from atomic_types_runtime_bindings_dl import (
     at_addr,
     at_addr_const,
     at_dec,

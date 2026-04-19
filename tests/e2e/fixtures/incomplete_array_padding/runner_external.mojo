@@ -1,4 +1,4 @@
-from p0_incomplete_array_padding_bindings_external import iap_header_size, iap_sanity
+from incomplete_array_padding_bindings_external import iap_header_size, iap_sanity
 
 
 def main() raises:

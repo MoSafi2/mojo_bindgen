@@ -44,17 +44,23 @@ def _tool_cmd(name: str) -> list[str] | None:
     return None
 
 
-def _run(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, cwd=cwd, env=env, text=True, capture_output=True)
 
 
 def _assert_schema(case_dir: Path, status: dict[str, Any]) -> None:
     phases = status.get("phases")
-    assert isinstance(phases, dict), f"{case_dir}: status.json must contain object key 'phases'"
+    assert isinstance(
+        phases, dict
+    ), f"{case_dir}: status.json must contain object key 'phases'"
     for phase in _PHASES:
         assert phase in phases, f"{case_dir}: missing phase '{phase}'"
         val = phases[phase]
-        assert val in _VALID_PHASE_STATUS, f"{case_dir}: invalid status for {phase}: {val}"
+        assert (
+            val in _VALID_PHASE_STATUS
+        ), f"{case_dir}: invalid status for {phase}: {val}"
 
     required = (
         "input.h",
@@ -84,7 +90,9 @@ def _parse_runner_output(stdout: str) -> dict[str, float | int]:
     return out
 
 
-def _assert_expected_values(got: dict[str, float | int], expected: dict[str, float | int]) -> None:
+def _assert_expected_values(
+    got: dict[str, float | int], expected: dict[str, float | int]
+) -> None:
     assert got.keys() == expected.keys()
     for key, exp in expected.items():
         got_value = got[key]
@@ -100,10 +108,17 @@ def _assert_emit_has_snippets(emitted: str, expectation_file: Path) -> None:
         snippet = raw.strip()
         if not snippet or snippet.startswith("#"):
             continue
-        assert snippet in emitted, f"missing snippet '{snippet}' from {expectation_file}"
+        assert (
+            snippet in emitted
+        ), f"missing snippet '{snippet}' from {expectation_file}"
 
 
-def _check_phase(phase: str, expected_status: str, proc: subprocess.CompletedProcess[str], detail: str) -> None:
+def _check_phase(
+    phase: str,
+    expected_status: str,
+    proc: subprocess.CompletedProcess[str],
+    detail: str,
+) -> None:
     ok = proc.returncode == 0
     if expected_status == "pass":
         assert ok, (
@@ -113,9 +128,14 @@ def _check_phase(phase: str, expected_status: str, proc: subprocess.CompletedPro
             f"stderr:\n{proc.stderr}"
         )
         return
-    if expected_status.startswith("known_fail") or expected_status in {"unsupported", "toolchain_variant"}:
+    if expected_status.startswith("known_fail") or expected_status in {
+        "unsupported",
+        "toolchain_variant",
+    }:
         if ok:
-            pytest.xfail(f"{phase} unexpectedly passed; update status.json and expectations")
+            pytest.xfail(
+                f"{phase} unexpectedly passed; update status.json and expectations"
+            )
         pytest.xfail(f"{phase} expected non-pass ({expected_status})")
         return
     raise AssertionError(f"unknown expected status {expected_status}")
@@ -149,13 +169,21 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     source = case_dir / "impl.c"
     runner_external = case_dir / "runner_external.mojo"
     runner_dl = case_dir / "runner_dl.mojo"
-    expected_rt_external = json.loads((case_dir / "expect.runtime.external.json").read_text(encoding="utf-8"))
-    expected_rt_dl = json.loads((case_dir / "expect.runtime.owned_dl_handle.json").read_text(encoding="utf-8"))
+    expected_rt_external = json.loads(
+        (case_dir / "expect.runtime.external.json").read_text(encoding="utf-8")
+    )
+    expected_rt_dl = json.loads(
+        (case_dir / "expect.runtime.owned_dl_handle.json").read_text(encoding="utf-8")
+    )
 
     lib_path = tmp_path / f"lib{case_name}.so"
-    cc = _run(["cc", "-shared", "-fPIC", str(source), "-o", str(lib_path)], cwd=_REPO_ROOT)
+    cc = _run(
+        ["cc", "-shared", "-fPIC", str(source), "-o", str(lib_path)], cwd=_REPO_ROOT
+    )
     if cc.returncode != 0:
-        raise AssertionError(f"failed to build C shared lib for {case_name}\nstdout:\n{cc.stdout}\nstderr:\n{cc.stderr}")
+        raise AssertionError(
+            f"failed to build C shared lib for {case_name}\nstdout:\n{cc.stdout}\nstderr:\n{cc.stderr}"
+        )
 
     bindings_external = tmp_path / f"{case_name}_bindings_external.mojo"
     bindings_dl = tmp_path / f"{case_name}_bindings_dl.mojo"
@@ -172,7 +200,9 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         ],
         cwd=_REPO_ROOT,
     )
-    _check_phase("bindgen_external", phases["bindgen_external"], bindgen_external, str(case_dir))
+    _check_phase(
+        "bindgen_external", phases["bindgen_external"], bindgen_external, str(case_dir)
+    )
 
     bindgen_dl = _run(
         [
@@ -194,16 +224,26 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     _check_phase("bindgen_dl", phases["bindgen_dl"], bindgen_dl, str(case_dir))
 
     # Keep generated bindings under each golden case for local inspection.
-    _persist_generated_bindings(bindings_external, case_dir / "generated.bindings.external.mojo")
-    _persist_generated_bindings(bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo")
+    _persist_generated_bindings(
+        bindings_external, case_dir / "generated.bindings.external.mojo"
+    )
+    _persist_generated_bindings(
+        bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo"
+    )
 
     if bindgen_external.returncode == 0:
-        _assert_emit_has_snippets(bindings_external.read_text(encoding="utf-8"), case_dir / "expect.emit.external.mojo")
+        _assert_emit_has_snippets(
+            bindings_external.read_text(encoding="utf-8"),
+            case_dir / "expect.emit.external.mojo",
+        )
     else:
         pytest.xfail("bindgen external did not succeed; emit check skipped")
 
     if bindgen_dl.returncode == 0:
-        _assert_emit_has_snippets(bindings_dl.read_text(encoding="utf-8"), case_dir / "expect.emit.owned_dl_handle.mojo")
+        _assert_emit_has_snippets(
+            bindings_dl.read_text(encoding="utf-8"),
+            case_dir / "expect.emit.owned_dl_handle.mojo",
+        )
     else:
         pytest.xfail("bindgen dl did not succeed; emit check skipped")
 
@@ -225,7 +265,12 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         ],
         cwd=_REPO_ROOT,
     )
-    _check_phase("mojo_build_external", phases["mojo_build_external"], build_external, str(case_dir))
+    _check_phase(
+        "mojo_build_external",
+        phases["mojo_build_external"],
+        build_external,
+        str(case_dir),
+    )
 
     build_dl = _run(
         [
@@ -243,14 +288,30 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
 
     if build_external.returncode == 0:
         external_env = os.environ.copy()
-        external_env["LD_LIBRARY_PATH"] = f"{tmp_path}:{external_env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
+        external_env["LD_LIBRARY_PATH"] = (
+            f"{tmp_path}:{external_env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
+        )
         runtime_external = _run([str(external_bin)], cwd=_REPO_ROOT, env=external_env)
-        _check_phase("runtime_external", phases["runtime_external"], runtime_external, str(case_dir))
+        _check_phase(
+            "runtime_external",
+            phases["runtime_external"],
+            runtime_external,
+            str(case_dir),
+        )
         if runtime_external.returncode == 0:
-            _assert_expected_values(_parse_runner_output(runtime_external.stdout), expected_rt_external)
+            _assert_expected_values(
+                _parse_runner_output(runtime_external.stdout), expected_rt_external
+            )
 
     if build_dl.returncode == 0:
         runtime_dl = _run([str(dl_bin)], cwd=_REPO_ROOT)
-        _check_phase("runtime_owned_dl_handle", phases["runtime_owned_dl_handle"], runtime_dl, str(case_dir))
+        _check_phase(
+            "runtime_owned_dl_handle",
+            phases["runtime_owned_dl_handle"],
+            runtime_dl,
+            str(case_dir),
+        )
         if runtime_dl.returncode == 0:
-            _assert_expected_values(_parse_runner_output(runtime_dl.stdout), expected_rt_dl)
+            _assert_expected_values(
+                _parse_runner_output(runtime_dl.stdout), expected_rt_dl
+            )

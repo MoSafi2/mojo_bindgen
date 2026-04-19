@@ -1,4 +1,4 @@
-from p0_large_alignment_bindings_external import la_align, la_offset_b, la_sanity
+from large_alignment_bindings_external import la_align, la_offset_b, la_sanity
 
 
 def main() raises:
