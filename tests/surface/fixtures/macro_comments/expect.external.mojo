@@ -7,8 +7,7 @@ from std.ffi import external_call
 # macro MCC_FILE: predefined macro preserved without evaluation
 # define MCC_FILE __FILE__
 
-# macro MCC_REF: identifier reference macro is not emitted directly; only literal macros are currently supported
-# define MCC_REF MCC_TARGET
+comptime MCC_REF = Int32(9)
 
 comptime MCC_TARGET = Int32(9)
 

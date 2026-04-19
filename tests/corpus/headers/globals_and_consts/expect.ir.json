@@ -89,8 +89,8 @@
       },
       "path": "expr",
       "attrs": {
-        "kind": "RefExpr",
-        "name": "DEFAULT_LIMIT"
+        "kind": "IntLiteral",
+        "value": 42
       }
     },
     {

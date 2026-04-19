@@ -102,35 +102,6 @@ PNG_H="$(find_png_h "$PNG_PKG")" || {
 LINK_NAME="$(find_link_name "$PNG_PKG")"
 
 "${BG[@]}" "$PNG_H" --library "$LINK_NAME" --link-name "$LINK_NAME" -o libpng_bindings.mojo
-# Some libpng declarations include attribute forms that currently surface as
-# `abi("C")` in emitted Mojo. Strip that token for compatibility with Mojo parser.
-python - <<'PY'
-from pathlib import Path
-
-path = Path("libpng_bindings.mojo")
-text = path.read_text()
-
-# Prefer restoring missing macro aliases over deleting dependent constants.
-if "comptime PNG_FP_MAX" not in text:
-    text = text.replace(
-        "comptime PNG_FP_HALF = Int32(50000)\n",
-        "comptime PNG_FP_HALF = Int32(50000)\ncomptime PNG_FP_MAX = Int32(2147483647)\n",
-    )
-
-if "comptime PNG_FORMAT_GA" not in text:
-    text = text.replace(
-        "comptime PNG_FORMAT_GRAY = Int32(0)\n",
-        "comptime PNG_FORMAT_GRAY = Int32(0)\ncomptime PNG_FORMAT_GA = PNG_FORMAT_FLAG_ALPHA\n",
-    )
-
-if "\ncomptime PNG_FORMAT_RGB = " not in text:
-    text = text.replace(
-        "comptime PNG_FORMAT_BGR = (PNG_FORMAT_FLAG_COLOR | PNG_FORMAT_FLAG_BGR)\n",
-        "comptime PNG_FORMAT_RGB = PNG_FORMAT_FLAG_COLOR\ncomptime PNG_FORMAT_BGR = (PNG_FORMAT_FLAG_COLOR | PNG_FORMAT_FLAG_BGR)\n",
-    )
-
-path.write_text(text)
-PY
 
 OBJ="$(mktemp "${TMPDIR:-/tmp}/libpng-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT

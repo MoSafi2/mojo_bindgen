@@ -26,6 +26,7 @@ from mojo_bindgen.parsing.frontend import ClangFrontend
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.registry import RecordRegistry
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
+from mojo_bindgen.parsing.lowering.macro_env import collect_object_like_macro_env
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
@@ -78,13 +79,14 @@ class DeclLowerer:
 
     def collect_macros(self) -> list[Decl]:
         """Lower all primary-file macro definitions into preserved IR nodes."""
+        macro_env = collect_object_like_macro_env(self.tu)
         out: list[Decl] = []
         for cursor in self.tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
             if not self.frontend.is_primary_file_cursor(cursor):
                 continue
-            parsed = self.const_expr_parser.parse_macro(cursor)
+            parsed = self.const_expr_parser.parse_macro(cursor, macro_env)
             out.append(
                 MacroDecl(
                     name=cursor.spelling,

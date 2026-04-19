@@ -14,6 +14,7 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import (
     BinaryExpr,
+    CastExpr,
     CharLiteral,
     ConstExpr,
     FloatKind,
@@ -104,6 +105,104 @@ def _is_predefined_macro_name(name: str) -> bool:
     return False
 
 
+def looks_function_like_macro_body(tokens: list[str]) -> bool:
+    """Heuristically detect a function-like macro from raw macro tokens."""
+    if not tokens or tokens[0] != "(":
+        return False
+    depth = 0
+    end_index: int | None = None
+    for index, tok in enumerate(tokens):
+        if tok == "(":
+            depth += 1
+        elif tok == ")":
+            depth -= 1
+            if depth == 0:
+                end_index = index
+                break
+    if end_index is None:
+        return False
+    inner = tokens[1:end_index]
+    if not inner:
+        return True
+    for tok in inner:
+        if tok in {",", "..."}:
+            continue
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", tok):
+            continue
+        return False
+    return True
+
+
+def fold_const_expr(expr: ConstExpr) -> ConstExpr:
+    """Constant-fold integer unary/binary expressions where operands are literals."""
+    if isinstance(expr, UnaryExpr):
+        inner = fold_const_expr(expr.operand)
+        if isinstance(inner, IntLiteral):
+            v = inner.value
+            if expr.op == "-":
+                return IntLiteral(-v)
+            if expr.op == "~":
+                return IntLiteral(~v)
+        return UnaryExpr(op=expr.op, operand=inner)
+    if isinstance(expr, BinaryExpr):
+        lhs = fold_const_expr(expr.lhs)
+        rhs = fold_const_expr(expr.rhs)
+        if isinstance(lhs, IntLiteral) and isinstance(rhs, IntLiteral):
+            a, b = lhs.value, rhs.value
+            out = _eval_int_binary(expr.op, a, b)
+            if out is not None:
+                return IntLiteral(out)
+        return BinaryExpr(op=expr.op, lhs=lhs, rhs=rhs)
+    if isinstance(expr, CastExpr):
+        inner = fold_const_expr(expr.expr)
+        return CastExpr(target=expr.target, expr=inner)
+    return expr
+
+
+def _eval_int_binary(op: str, a: int, b: int) -> int | None:
+    """Evaluate ``a op b`` for supported integer ops; ``None`` means do not fold."""
+    try:
+        if op == "|":
+            return a | b
+        if op == "^":
+            return a ^ b
+        if op == "&":
+            return a & b
+        if op == "<<":
+            return a << b
+        if op == ">>":
+            return a >> b
+        if op == "+":
+            return a + b
+        if op == "-":
+            return a - b
+        if op == "*":
+            return a * b
+        if op == "/":
+            if b == 0:
+                return None
+            # C integer division truncates toward zero
+            n = abs(a) // abs(b)
+            return n if (a >= 0) == (b >= 0) else -n
+        if op == "%":
+            if b == 0:
+                return None
+            return a % b
+    except (OverflowError, ValueError):
+        return None
+    return None
+
+
+def fold_parsed_const_expr(parsed: ParsedConstExpr) -> ParsedConstExpr:
+    """Fold a parsed constant expression, preserving primitive typing when unchanged."""
+    folded = fold_const_expr(parsed.expr)
+    return ParsedConstExpr(
+        expr=folded,
+        primitive=parsed.primitive,
+        diagnostic=parsed.diagnostic,
+    )
+
+
 @dataclass(frozen=True)
 class ParsedConstExpr:
     """A parsed constant expression plus best-effort primitive typing."""
@@ -130,8 +229,17 @@ class ConstExprParser:
     def __init__(self, literal_resolver: LiteralResolver) -> None:
         self.literal_resolver = literal_resolver
 
-    def parse_macro(self, cursor: cx.Cursor) -> ParsedMacro:
-        """Classify a macro definition, preserving unsupported forms."""
+    def parse_macro(
+        self,
+        cursor: cx.Cursor,
+        macro_env: dict[str, list[str]] | None = None,
+    ) -> ParsedMacro:
+        """Classify a macro definition, preserving unsupported forms.
+
+        When ``macro_env`` is provided (full-TU object-like index), the macro body
+        is expanded before parsing so identifiers from included headers fold to
+        literals where possible.
+        """
         tokens = list(cursor.get_tokens())
         body = [t.spelling for t in tokens[1:]]
         if not body:
@@ -147,55 +255,41 @@ class ConstExprParser:
         is_function_like = getattr(cursor, "is_macro_function_like", None)
         if (callable(is_function_like) and is_function_like()) or (
             is_function_like is not None and not callable(is_function_like) and bool(is_function_like)
-        ) or self._looks_function_like_body(body):
+        ) or looks_function_like_macro_body(body):
             return ParsedMacro(
                 tokens=body,
                 kind="function_like_unsupported",
                 diagnostic="function-like macros are preserved but not parsed",
             )
 
-        parsed = self.parse_tokens(body)
+        expanded = body
+        if macro_env is not None:
+            from mojo_bindgen.parsing.lowering.macro_env import (
+                expand_object_like_macro_tokens,
+            )
+
+            expanded = expand_object_like_macro_tokens(body, macro_env)
+
+        parsed = self.parse_tokens(expanded)
         if parsed is None:
             return ParsedMacro(
                 tokens=body,
                 kind="object_like_unsupported",
                 diagnostic="unsupported macro replacement list",
             )
+        folded = fold_parsed_const_expr(parsed)
         return ParsedMacro(
             tokens=body,
             kind="object_like_supported",
-            expr=parsed.expr,
-            primitive=parsed.primitive,
-            diagnostic=parsed.diagnostic,
+            expr=folded.expr,
+            primitive=folded.primitive,
+            diagnostic=folded.diagnostic,
         )
 
     @staticmethod
     def _looks_function_like_body(tokens: list[str]) -> bool:
         """Heuristically detect a function-like macro from raw macro tokens."""
-        if not tokens or tokens[0] != "(":
-            return False
-        depth = 0
-        end_index: int | None = None
-        for index, tok in enumerate(tokens):
-            if tok == "(":
-                depth += 1
-            elif tok == ")":
-                depth -= 1
-                if depth == 0:
-                    end_index = index
-                    break
-        if end_index is None:
-            return False
-        inner = tokens[1:end_index]
-        if not inner:
-            return True
-        for tok in inner:
-            if tok in {",", "..."}:
-                continue
-            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", tok):
-                continue
-            return False
-        return True
+        return looks_function_like_macro_body(tokens)
 
     def parse_initializer(self, cursor: cx.Cursor) -> ParsedConstExpr | None:
         """Parse a top-level variable initializer into a supported expression."""
@@ -366,6 +460,9 @@ _BINARY_PRECEDENCE = {
     ">>": 4,
     "+": 5,
     "-": 5,
+    "*": 6,
+    "/": 6,
+    "%": 6,
 }
 
 
