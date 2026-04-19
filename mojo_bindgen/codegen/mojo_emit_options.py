@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.codegen.mojo_mapper import FFIOriginStyle
+from mojo_bindgen.codegen.mojo_mapper import FFIOriginStyle, FFIScalarStyle
 
 LinkingMode = Literal["external_call", "owned_dl_handle"]
 """Supported linking strategies for generated wrappers."""
@@ -16,7 +16,7 @@ class MojoEmitOptions:
     """Controls Mojo code generation and rendering behavior.
 
     The options are shared by analysis and rendering. They shape link strategy,
-    pointer provenance, generated comments, and alignment emission policy.
+    pointer provenance, and generated comments.
     """
 
     linking: LinkingMode = "external_call"
@@ -36,5 +36,5 @@ class MojoEmitOptions:
     ffi_origin: FFIOriginStyle = "external"
     """Pointer provenance for mapped types: ``external`` → Mut/Immut*ExternalOrigin (recommended for C FFI); ``any`` → *AnyOrigin."""
 
-    emit_align: bool = True
-    """If True, emit ``@align(N)`` from C ``Struct.align_bytes`` when valid (Mojo: power of 2, ``N > 1``, max ``2**29``)."""
+    ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases"
+    """``std_ffi_aliases`` (default): ``c_int``, ``c_long``, … from ``std.ffi``. ``fixed_width``: ``Int32`` / ``Int64`` / … from Clang sizes."""

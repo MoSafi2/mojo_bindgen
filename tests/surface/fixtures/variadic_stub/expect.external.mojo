@@ -2,7 +2,7 @@
 # source: tests/surface/fixtures/variadic_stub/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_int
 
 # variadic C function - not callable from thin FFI:
-# Int32 vs_sum(count: Int32, ...)
+# c_int vs_sum(count: c_int, ...)

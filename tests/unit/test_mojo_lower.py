@@ -40,7 +40,7 @@ def test_map_const_int_pointer_external() -> None:
     ip = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
     t = Pointer(pointee=QualifiedType(unqualified=ip, qualifiers=Qualifiers(is_const=True)))
     s = map_type(t, ffi_origin="external")
-    assert s == "UnsafePointer[Int32, ImmutExternalOrigin]"
+    assert s == "UnsafePointer[c_int, ImmutExternalOrigin]"
 
 
 def test_map_vector_to_simd() -> None:
@@ -65,3 +65,8 @@ def test_map_atomic_falls_back_to_underlying_type_when_dtype_missing() -> None:
     wchar = IntType(int_kind=IntKind.WCHAR, size_bytes=4, align_bytes=4)
     t = AtomicType(value_type=wchar)
     assert map_type(t, ffi_origin="external") == "Int32"
+
+
+def test_map_int_uses_c_int_alias_by_default() -> None:
+    ip = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+    assert map_type(ip, ffi_origin="external") == "c_int"

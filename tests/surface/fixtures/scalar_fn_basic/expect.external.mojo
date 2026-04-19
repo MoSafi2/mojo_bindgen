@@ -2,8 +2,8 @@
 # source: tests/surface/fixtures/scalar_fn_basic/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_int
 
-def sf_add(a: Int32, b: Int32) abi("C") -> Int32:
-    return external_call["sf_add", Int32, Int32, Int32](a, b)
+def sf_add(a: c_int, b: c_int) abi("C") -> c_int:
+    return external_call["sf_add", c_int, c_int, c_int](a, b)
 

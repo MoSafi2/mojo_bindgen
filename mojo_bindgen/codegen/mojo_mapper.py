@@ -30,6 +30,7 @@ from mojo_bindgen.ir import (
     StructRef,
     Type,
     TypeRef,
+    Unit,
     UnsupportedType,
     VectorType,
     VoidType,
@@ -37,6 +38,9 @@ from mojo_bindgen.ir import (
 
 FFIOriginStyle = Literal["external", "any"]
 """Pointer provenance styles supported by the generated Mojo bindings."""
+
+FFIScalarStyle = Literal["fixed_width", "std_ffi_aliases"]
+"""Scalar lowering: fixed-width ints vs ``std.ffi`` ``c_int`` / ``c_long`` / …."""
 
 # Mojo keywords and reserved — append underscore if collision.
 _MOJO_RESERVED = frozenset(
@@ -125,6 +129,49 @@ def map_scalar(t: VoidType | IntType | FloatType) -> str:
         return "Float64"
     if isinstance(t, IntType):
         return _int_type_for_size(not _is_unsigned_int_kind(t.int_kind), t.size_bytes)
+    return "Int32"
+
+
+def _std_ffi_int_alias(kind: IntKind) -> str | None:
+    """``std.ffi`` comptime name for a C integer family, or None to use fixed-width lowering."""
+    return {
+        IntKind.CHAR_S: "c_char",
+        IntKind.SCHAR: "c_char",
+        IntKind.CHAR_U: "c_uchar",
+        IntKind.UCHAR: "c_uchar",
+        IntKind.SHORT: "c_short",
+        IntKind.USHORT: "c_ushort",
+        IntKind.INT: "c_int",
+        IntKind.UINT: "c_uint",
+        IntKind.LONG: "c_long",
+        IntKind.ULONG: "c_ulong",
+        IntKind.LONGLONG: "c_long_long",
+        IntKind.ULONGLONG: "c_ulong_long",
+    }.get(kind)
+
+
+def map_scalar_std_ffi(t: VoidType | IntType | FloatType, imports: set[str]) -> str:
+    """Map scalars to ``std.ffi`` aliases; record comptime names in ``imports``."""
+    if isinstance(t, VoidType):
+        return "NoneType"
+    if isinstance(t, IntType):
+        if t.int_kind == IntKind.BOOL:
+            return "Bool"
+        alias = _std_ffi_int_alias(t.int_kind)
+        if alias is not None:
+            imports.add(alias)
+            return alias
+        return map_scalar(t)
+    if isinstance(t, FloatType):
+        if t.float_kind == FloatKind.FLOAT16:
+            return "Float16"
+        if t.float_kind == FloatKind.FLOAT:
+            imports.add("c_float")
+            return "c_float"
+        if t.float_kind == FloatKind.DOUBLE:
+            imports.add("c_double")
+            return "c_double"
+        return "Float64"
     return "Int32"
 
 
@@ -252,6 +299,7 @@ class TypeMapper:
         unsafe_union_names: frozenset[str] | None,
         typedef_mojo_names: frozenset[str] | None = None,
         callback_signature_names: frozenset[str] | None = None,
+        ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases",
     ) -> None:
         """Configure pointer origins, optional ``UnsafeUnion`` names, and typedef aliases for ``signature``."""
         self._ffi_origin = ffi_origin
@@ -259,6 +307,48 @@ class TypeMapper:
         self._unsafe_union_names = unsafe_union_names or frozenset()
         self._typedef_mojo_names = typedef_mojo_names or frozenset()
         self._callback_signature_names = callback_signature_names or frozenset()
+        self._ffi_scalar_style = ffi_scalar_style
+        self._ffi_scalar_imports: set[str] = set()
+
+    def emit_scalar(self, t: VoidType | IntType | FloatType) -> str:
+        """Lower a scalar for emitted Mojo (respects ``ffi_scalar_style``)."""
+        return self._map_scalar_emit(t)
+
+    def warm_ffi_scalar_imports_from_unit(self, unit: Unit) -> None:
+        """Pre-resolve all lowered types so ``_ffi_scalar_imports`` is complete before the import line."""
+        if self._ffi_scalar_style != "std_ffi_aliases":
+            return
+        self._ffi_scalar_imports.clear()
+        from mojo_bindgen.ir import Const, Enum, GlobalVar, MacroDecl, Struct, Typedef
+
+        for d in unit.decls:
+            if isinstance(d, Struct):
+                for f in d.fields:
+                    self.canonical(f.type)
+            elif isinstance(d, Function):
+                self.canonical(d.ret)
+                for p in d.params:
+                    self.canonical(p.type)
+            elif isinstance(d, Typedef):
+                self.canonical(d.canonical)
+            elif isinstance(d, GlobalVar):
+                self.canonical(d.type)
+            elif isinstance(d, Enum):
+                self.canonical(d.underlying)
+            elif isinstance(d, Const):
+                self.canonical(d.type)
+            elif isinstance(d, MacroDecl) and d.type is not None:
+                self.canonical(d.type)
+
+    @property
+    def ffi_scalar_import_names(self) -> frozenset[str]:
+        """Comptime ``c_int`` / ``c_long`` / … names needed from ``std.ffi`` for this mapper."""
+        return frozenset(self._ffi_scalar_imports)
+
+    def _map_scalar_emit(self, t: VoidType | IntType | FloatType) -> str:
+        if self._ffi_scalar_style == "std_ffi_aliases":
+            return map_scalar_std_ffi(t, self._ffi_scalar_imports)
+        return map_scalar(t)
 
     def signature(self, t: Type) -> str:
         """
@@ -320,7 +410,7 @@ class TypeMapper:
             for i, (name, param) in enumerate(zip(names, fp.params))
         )
         ret = self.surface(fp.ret)
-        return f'def ({params}) abi("C") -> {ret}'
+        return f'def ({params}) thin abi("C") -> {ret}'
 
     def _surface_pointer(self, t: Pointer) -> str:
         o = self._origin
@@ -356,15 +446,15 @@ class TypeMapper:
 
     @canonical.register
     def _(self, t: VoidType) -> str:
-        return map_scalar(t)
+        return self._map_scalar_emit(t)
 
     @canonical.register
     def _(self, t: IntType) -> str:
-        return map_scalar(t)
+        return self._map_scalar_emit(t)
 
     @canonical.register
     def _(self, t: FloatType) -> str:
-        return map_scalar(t)
+        return self._map_scalar_emit(t)
 
     @canonical.register
     def _(self, t: QualifiedType) -> str:
@@ -528,6 +618,7 @@ def map_type(
     *,
     ffi_origin: FFIOriginStyle = "external",
     unsafe_union_names: frozenset[str] | None = None,
+    ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases",
 ) -> str:
     """Map IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
     return TypeMapper(
@@ -535,6 +626,7 @@ def map_type(
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=frozenset(),
         callback_signature_names=frozenset(),
+        ffi_scalar_style=ffi_scalar_style,
     ).canonical(t)
 
 

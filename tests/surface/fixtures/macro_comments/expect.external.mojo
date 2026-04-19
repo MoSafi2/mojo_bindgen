@@ -2,14 +2,14 @@
 # source: tests/surface/fixtures/macro_comments/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_int
 
 # macro MCC_FILE: predefined macro preserved without evaluation
 # define MCC_FILE __FILE__
 
-comptime MCC_REF = Int32(9)
+comptime MCC_REF = c_int(9)
 
-comptime MCC_TARGET = Int32(9)
+comptime MCC_TARGET = c_int(9)
 
 # macro MCC_NULL: null pointer macro is not emitted directly
 # define MCC_NULL ( ( void * ) 0 )

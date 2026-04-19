@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from mojo_bindgen.codegen._struct_order import toposort_structs
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_emit_options import FFIScalarStyle, MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import (
     FFIOriginStyle,
     TypeMapper,
@@ -153,6 +153,8 @@ class AnalyzedUnit:
     ordered_structs: tuple[AnalyzedStruct, ...]
     unions: tuple[AnalyzedUnion, ...]
     tail_decls: tuple[TailDecl, ...]
+    ffi_scalar_import_names: frozenset[str]
+    """``c_int`` / ``c_long`` / … imported from ``std.ffi`` (empty when using ``fixed_width``)."""
 
 
 def _is_power_of_two(n: int) -> bool:
@@ -356,13 +358,16 @@ def _type_ok_for_unsafe_union_member(t: Type) -> bool:
     return isinstance(u, (IntType, FloatType, Pointer, FunctionPtr, OpaqueRecordRef))
 
 
-def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> list[str] | None:
+def _try_unsafe_union_type_list(
+    decl: Struct, ffi_origin: FFIOriginStyle, ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases"
+) -> list[str] | None:
     if not decl.is_union or not decl.fields:
         return None
     mapper = TypeMapper(
         ffi_origin=ffi_origin,
         unsafe_union_names=frozenset(),
         typedef_mojo_names=frozenset(),
+        ffi_scalar_style=ffi_scalar_style,
     )
     mapped_members: list[str] = []
     for f in decl.fields:
@@ -374,11 +379,13 @@ def _try_unsafe_union_type_list(decl: Struct, ffi_origin: FFIOriginStyle) -> lis
     return mapped_members
 
 
-def eligible_unsafe_union_names(unit: Unit, ffi_origin: FFIOriginStyle) -> frozenset[str]:
+def eligible_unsafe_union_names(
+    unit: Unit, ffi_origin: FFIOriginStyle, ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases"
+) -> frozenset[str]:
     out: set[str] = set()
     for d in unit.decls:
         if isinstance(d, Struct) and d.is_union:
-            tl = _try_unsafe_union_type_list(d, ffi_origin)
+            tl = _try_unsafe_union_type_list(d, ffi_origin, ffi_scalar_style)
             if tl is not None:
                 out.add(f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union")
     return frozenset(out)
@@ -677,7 +684,6 @@ class _SemanticContext:
 def _analyze_struct(
     decl: Struct,
     struct_map: dict[str, Struct],
-    opts: MojoEmitOptions,
     field_callback_aliases: dict[tuple[str, int], str] | None,
     *,
     register_passable: bool,
@@ -686,13 +692,12 @@ def _analyze_struct(
     align_stride_warning = False
     align_omit_comment: str | None = None
     ab = decl.align_bytes
-    if opts.emit_align:
-        if mojo_align_decorator_ok(ab):
-            align_decorator = ab
-            if decl.size_bytes % ab != 0:
-                align_stride_warning = True
-        elif ab > 1:
-            align_omit_comment = f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
+    if mojo_align_decorator_ok(ab):
+        align_decorator = ab
+        if decl.size_bytes % ab != 0:
+            align_stride_warning = True
+    elif ab > 1:
+        align_omit_comment = f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
     if decl.is_packed:
         packed_comment = "# packed record: verify Mojo layout against the target C ABI."
         align_omit_comment = (
@@ -809,7 +814,9 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
     emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls, incomplete_struct_decls)
     emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
     callback_info = _collect_callback_aliases(unit, emitted_typedef_names)
-    unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
+    unsafe_union_names = eligible_unsafe_union_names(
+        unit, options.ffi_origin, options.ffi_scalar_style
+    )
     struct_map = struct_by_decl_id(unit)
     register_passable_by_decl_id = build_register_passable_map(struct_map)
     import_needs, semantic_fallback_notes = collect_unit_import_and_fallback_needs(unit)
@@ -818,6 +825,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=emitted_typedef_names,
         callback_signature_names=callback_info.signature_names,
+        ffi_scalar_style=options.ffi_scalar_style,
     )
     ctx = _SemanticContext(
         options=options,
@@ -838,7 +846,6 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         _analyze_struct(
             decl,
             ctx.struct_map,
-            ctx.options,
             ctx.callback_info.field_aliases,
             register_passable=ctx.register_passable_by_decl_id.get(decl.decl_id, False),
         )
@@ -848,7 +855,6 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         _analyze_struct(
             decl,
             ctx.struct_map,
-            ctx.options,
             ctx.callback_info.field_aliases,
             register_passable=ctx.register_passable_by_decl_id.get(decl.decl_id, False),
         )
@@ -900,6 +906,9 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         isinstance(d, AnalyzedGlobalVar) and d.kind == "wrapper" for d in tail_decls
     )
 
+    ctx.type_mapper.warm_ffi_scalar_imports_from_unit(unit)
+    ffi_scalar_import_names = ctx.type_mapper.ffi_scalar_import_names
+
     return AnalyzedUnit(
         unit=unit,
         opts=ctx.options,
@@ -918,17 +927,17 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         ordered_structs=ordered_structs,
         unions=unions,
         tail_decls=tuple(tail_decls),
+        ffi_scalar_import_names=ffi_scalar_import_names,
     )
 
 
 def analyzed_struct_for_test(
     decl: Struct,
     *,
-    options: MojoEmitOptions,
     struct_by_name: dict[str, Struct],
 ) -> AnalyzedStruct:
     reg = build_register_passable_map(struct_by_name).get(decl.decl_id, False)
-    return _analyze_struct(decl, struct_by_name, options, None, register_passable=reg)
+    return _analyze_struct(decl, struct_by_name, None, register_passable=reg)
 
 
 def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:

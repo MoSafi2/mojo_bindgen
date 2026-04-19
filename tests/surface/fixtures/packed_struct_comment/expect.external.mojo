@@ -2,11 +2,11 @@
 # source: tests/surface/fixtures/packed_struct_comment/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_uchar, c_uint
 
 # struct psc_header - size=5 align=1 (verify packed/aligned ABI)
 # packed record: verify Mojo layout against the target C ABI.
 @fieldwise_init
 struct psc_header(Copyable, Movable, RegisterPassable):
-    var tag: UInt8
-    var size: UInt32
+    var tag: c_uchar
+    var size: c_uint

@@ -100,18 +100,18 @@ mojo-bindgen include/me.h --compile-arg=-std=c99 -o out.mojo
 `--compile-arg` standard flags accept `-std=...`, `--std=...`, and `std=...` forms. If no standard is provided, `-std=gnu11` is used by default.
 
 By default, `--library` and `--link-name` are the header file stem (e.g. `me` for `me.h`).
-`--compile-arg` is repeatable, and `--emit-align` is enabled by default (`--no-emit-align` disables it).
+`--compile-arg` is repeatable.
 Use `mojo-bindgen --help` for full option details.
 
 ## Features
 
 - **libclang parsing:** Walks a primary C header with configurable compile flags (default language is `gnu11` if you do not pass `-std=...`). Repeatable `--compile-arg` passes include paths, sysroot, target triple, and standard selection.
 - **IR and tooling:** Builds a structured IR, runs validation and a reachability materialization pass, and can **dump JSON** (`--json`) for debugging or downstream tools.
-- **Generated Mojo surface:** Emits structs (with optional `@align` from C alignment via `--emit-align` / `--no-emit-align`), unions (including `@unsafe_union` when layout analysis marks them eligible), enums, typedefs, and thin wrappers for non-variadic functions using `external_call` or `OwnedDLHandle.call` depending on `--linking`.
+- **Generated Mojo surface:** Emits structs (with `@align` from C alignment when expressible in Mojo), unions (including `@unsafe_union` when layout analysis marks them eligible), enums, typedefs, and thin wrappers for non-variadic functions using `external_call` or `OwnedDLHandle.call` depending on `--linking`.
 - **Linking modes:** `external_call` (default) links C symbols at Mojo build time; `owned_dl_handle` resolves calls through `OwnedDLHandle`, with optional `--library-path-hint` for dlopen-style loading.
 - **C globals:** For globals whose types are thin-FFI-compatible, the emitter generates `GlobalVar` / `GlobalConst` helpers that load and store through `UnsafePointer`, resolving symbols with `OwnedDLHandle.get_symbol` when needed (see `examples/global_consts/`). Atomics and layouts that cannot be lowered still become comment stubs with a short reason.
 - **Macros and constants:** Object-like macros and `const` initializers are handled when the body fits the supported token expression grammar (literals, identifiers, parentheses, unary `-` / `~`, and binary operators); integer subexpressions are constant-folded when both operands are literals. Unsupported forms are classified and often preserved as comments rather than silent guesses.
-- **Python API extras:** `MojoEmitOptions` also exposes pointer provenance (`ffi_origin`: `external` vs `any`), module header comments, and ABI reminder comments—tunable from code even though the CLI only exposes linking, library path hint, and align emission today.
+- **Python API extras:** `MojoEmitOptions` also exposes pointer provenance (`ffi_origin`: `external` vs `any`), module header comments, and ABI reminder comments—tunable from code even though the CLI only exposes linking and library path hint today.
 
 ## Limitations & Rough Edges
 

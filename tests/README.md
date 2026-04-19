@@ -98,7 +98,6 @@ Each case under `tests/surface/fixtures/<case>/` contains:
 
 - `input.h`
 - `expect.external.mojo`
-- `expect.no_align.mojo`
 
 These are parser-driven goldens for representative emitted bindings.
 

@@ -153,17 +153,20 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD" in out
+    import_line = [ln for ln in out.splitlines() if ln.startswith("from std.ffi import")][0]
+    assert (
+        "external_call" in import_line and "OwnedDLHandle" in import_line and "c_int" in import_line
+    )
     assert "def _bindgen_dl() raises -> OwnedDLHandle:" in out
     assert "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
     assert (
         "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
     )
-    assert 'comptime global_counter = GlobalVar[T=Int32, link="global_counter"]' in out
+    assert 'comptime global_counter = GlobalVar[T=c_int, link="global_counter"]' in out
     assert 'comptime LIB_NAME = "bindgen"' in out
-    assert "comptime LIMIT = Int32(7)" in out
-    assert "comptime FLAGS = (Int32(1) | Int32(2))" in out
-    assert "comptime MACRO_OK = Int32(1)" in out
+    assert "comptime LIMIT = c_int(7)" in out
+    assert "comptime FLAGS = (c_int(1) | c_int(2))" in out
+    assert "comptime MACRO_OK = c_int(1)" in out
     assert "# macro MACRO_FILE: predefined macro preserved without evaluation" in out
     assert "# define MACRO_FILE __FILE__" in out
     assert "# macro MACRO_NULL: null pointer macro is not emitted directly" in out
@@ -209,10 +212,10 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    macro_pos = out.index("comptime MACRO_OK = Int32(1)")
-    const_pos = out.index("comptime LIMIT = Int32(7)")
-    global_pos = out.index('comptime global_counter = GlobalVar[T=Int32, link="global_counter"]')
-    fn_pos = out.index('def do_work() abi("C") -> Int32:')
+    macro_pos = out.index("comptime MACRO_OK = c_int(1)")
+    const_pos = out.index("comptime LIMIT = c_int(7)")
+    global_pos = out.index('comptime global_counter = GlobalVar[T=c_int, link="global_counter"]')
+    fn_pos = out.index('def do_work() abi("C") -> c_int:')
     assert macro_pos < global_pos
     assert const_pos < global_pos
     assert macro_pos < fn_pos
@@ -301,7 +304,7 @@ def test_generator_emits_global_const_wrapper_for_const_qualified_scalar() -> No
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert 'comptime limit = GlobalConst[T=Int32, link="limit"]' in out
+    assert 'comptime limit = GlobalConst[T=c_int, link="limit"]' in out
 
 
 def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> None:
@@ -348,7 +351,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
         ],
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "comptime my_uint = Int32" in out
+    assert "comptime my_uint = c_int" in out
     assert "comptime my_uint_ptr = UnsafePointer[my_uint, MutExternalOrigin]" in out
     assert "var value: my_uint" in out
     assert "var ptr: my_uint_ptr" in out
@@ -405,7 +408,9 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     )
 
     external_out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert 'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32' in external_out
+    assert (
+        'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in external_out
+    )
     assert (
         'def pfr_select_add() abi("C") -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:'
         in external_out
@@ -423,11 +428,11 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()" in external_out
     )
     assert (
-        'def pfr_call(op: UnsafePointer[pfr_binary_op_t, MutExternalOrigin], lhs: Int32, rhs: Int32) abi("C") -> Int32:'
+        'def pfr_call(op: UnsafePointer[pfr_binary_op_t, MutExternalOrigin], lhs: c_int, rhs: c_int) abi("C") -> c_int:'
         in external_out
     )
     assert (
-        'return external_call["pfr_call", Int32, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
+        'return external_call["pfr_call", c_int, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], c_int, c_int](op, lhs, rhs)'
         in external_out
     )
 
@@ -437,7 +442,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
             library_path_hint="/tmp/libpfr.so",
         )
     ).generate(unit)
-    assert 'comptime pfr_binary_op_t = def (a: Int32, b: Int32) abi("C") -> Int32' in dl_out
+    assert 'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in dl_out
     assert (
         "def pfr_select_add() raises -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:"
         in dl_out
@@ -455,7 +460,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()" in dl_out
     )
     assert (
-        'return _bindgen_dl().call["pfr_call", Int32, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], Int32, Int32](op, lhs, rhs)'
+        'return _bindgen_dl().call["pfr_call", c_int, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], c_int, c_int](op, lhs, rhs)'
         in dl_out
     )
 
@@ -596,17 +601,17 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
     assert (
         "def sqlite3_create_collation_v2("
         "db: UnsafePointer[sqlite3, MutExternalOrigin], "
-        "zName: UnsafePointer[Int8, MutExternalOrigin], "
-        "eTextRep: Int32, "
+        "zName: UnsafePointer[c_char, MutExternalOrigin], "
+        "eTextRep: c_int, "
         "ctx: MutOpaquePointer[MutExternalOrigin], "
         "xCompare: UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], "
         "xDestroy: UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]"
-        ') abi("C") -> Int32:'
+        ') abi("C") -> c_int:'
     ) in out
     assert (
-        'return external_call["sqlite3_create_collation_v2", Int32, '
+        'return external_call["sqlite3_create_collation_v2", c_int, '
         "UnsafePointer[sqlite3, MutExternalOrigin], "
-        "UnsafePointer[Int8, MutExternalOrigin], Int32, MutOpaquePointer[MutExternalOrigin], "
+        "UnsafePointer[c_char, MutExternalOrigin], c_int, MutOpaquePointer[MutExternalOrigin], "
         "UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], "
         "UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]]"
         "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
@@ -659,3 +664,24 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
         'external_call["install_nested_cb", NoneType, '
         "UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], MutExternalOrigin], MutExternalOrigin]](slot)"
     ) in out
+
+
+def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
+    i32 = _i32()
+    fn = Function(
+        decl_id="fn:sf_add",
+        name="sf_add",
+        link_name="sf_add",
+        ret=i32,
+        params=[
+            Param(name="a", type=i32),
+            Param(name="b", type=i32),
+        ],
+        is_variadic=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+    )
+    assert "from std.ffi import external_call, c_int" in out
+    assert 'def sf_add(a: c_int, b: c_int) abi("C") -> c_int:' in out
+    assert 'return external_call["sf_add", c_int, c_int, c_int](a, b)' in out

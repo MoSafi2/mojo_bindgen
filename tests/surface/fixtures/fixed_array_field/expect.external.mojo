@@ -2,9 +2,9 @@
 # source: tests/surface/fixtures/fixed_array_field/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_uchar
 
 # struct faf_block - size=4 align=1 (verify packed/aligned ABI)
 @fieldwise_init
 struct faf_block(Copyable, Movable):
-    var bytes: InlineArray[UInt8, 4]
+    var bytes: InlineArray[c_uchar, 4]

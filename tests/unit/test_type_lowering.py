@@ -219,7 +219,7 @@ def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path:
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
 
     assert "struct outer_t" in out
-    assert "var tag: Int32" in out
+    assert "var tag: c_int" in out
     assert "var _anon_1: " in out
     assert "struct __bindgen_anon_" not in out
 

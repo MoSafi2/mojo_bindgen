@@ -2,9 +2,9 @@
 # source: tests/surface/fixtures/macro_literals/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_char, c_double, c_int
 
-comptime MLI_INT = Int32(7)
+comptime MLI_INT = c_int(7)
 
 comptime MLI_FLOAT = 3.5
 

@@ -46,13 +46,3 @@ def test_surface_fixture_external(case_dir: Path) -> None:
     expected = (case_dir / "expect.external.mojo").read_text(encoding="utf-8")
     relative_header = str(header.relative_to(_REPO_ROOT))
     assert _normalize_source_line(out, relative_header) == expected
-
-
-@pytest.mark.parametrize("case_dir", _case_dirs(), ids=lambda p: p.name)
-def test_surface_fixture_no_align(case_dir: Path) -> None:
-    header = case_dir / "input.h"
-    unit = ClangParser(header, library="surface_globals", link_name="surface_globals").run()
-    out = MojoGenerator(MojoEmitOptions(emit_align=False)).generate(unit)
-    expected = (case_dir / "expect.no_align.mojo").read_text(encoding="utf-8")
-    relative_header = str(header.relative_to(_REPO_ROOT))
-    assert _normalize_source_line(out, relative_header) == expected

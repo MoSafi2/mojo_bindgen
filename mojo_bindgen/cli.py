@@ -74,16 +74,6 @@ def run(
             help="Path hint for OwnedDLHandle when --linking owned_dl_handle.",
         ),
     ] = None,
-    emit_align: Annotated[
-        bool,
-        typer.Option(
-            "--emit-align/--no-emit-align",
-            help=(
-                "Emit @align(N) on structs from C alignment (Mojo-valid values only). "
-                "Default: emit align."
-            ),
-        ),
-    ] = True,
 ) -> int:
     """Generate Mojo FFI from a C header using libclang.
 
@@ -116,7 +106,6 @@ def run(
         opts = MojoEmitOptions(
             linking=linking,
             library_path_hint=library_path_hint,
-            emit_align=emit_align,
         )
         text = MojoGenerator(opts).generate(unit)
 

@@ -86,7 +86,6 @@ def test_non_json_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) 
         def __init__(self, opts) -> None:
             calls["linking"] = opts.linking
             calls["library_path_hint"] = opts.library_path_hint
-            calls["emit_align"] = opts.emit_align
 
         def generate(self, _unit: _DummyUnit) -> str:
             return "generated"
@@ -102,7 +101,6 @@ def test_non_json_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) 
             "owned_dl_handle",
             "--library-path-hint",
             "/tmp/libsample.so",
-            "--no-emit-align",
         ]
     )
     captured = capsys.readouterr()
@@ -111,7 +109,6 @@ def test_non_json_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) 
     assert calls == {
         "linking": "owned_dl_handle",
         "library_path_hint": "/tmp/libsample.so",
-        "emit_align": False,
     }
 
 

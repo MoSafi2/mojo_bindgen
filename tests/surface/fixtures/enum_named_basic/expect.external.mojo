@@ -2,14 +2,14 @@
 # source: tests/surface/fixtures/enum_named_basic/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_uint
 
-# enum enb_mode - underlying UINT -> UInt32 (verify C ABI)
+# enum enb_mode - underlying UINT -> c_uint (verify C ABI)
 @fieldwise_init
 struct enb_mode(Copyable, Movable, RegisterPassable):
-    var value: UInt32
-    comptime ENB_ADD = Self(UInt32(1))
-    comptime ENB_SUB = Self(UInt32(2))
+    var value: c_uint
+    comptime ENB_ADD = Self(c_uint(1))
+    comptime ENB_SUB = Self(c_uint(2))
 def enb_flip(mode: enb_mode) abi("C") -> enb_mode:
     return external_call["enb_flip", enb_mode, enb_mode](mode)
 

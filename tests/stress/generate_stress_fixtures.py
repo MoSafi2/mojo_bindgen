@@ -199,11 +199,6 @@ def _write_case(case: StressCase, *, ir_only: bool) -> None:
             _normalize_source_line(external, case.header),
             encoding="utf-8",
         )
-        no_align = MojoGenerator(MojoEmitOptions(emit_align=False)).generate(unit)
-        (base.parent / f"{base.name}_no_align.mojo").write_text(
-            _normalize_source_line(no_align, case.header),
-            encoding="utf-8",
-        )
 
     data = unit.to_json_dict()
     jsonc_text = "\n".join(_iter_jsonc_lines(unit, data)) + "\n"

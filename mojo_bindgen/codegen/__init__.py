@@ -5,9 +5,10 @@ surface rather than the individual implementation modules.
 """
 
 from mojo_bindgen.codegen.generator import MojoGenerator, generate_mojo
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_emit_options import FFIScalarStyle, MojoEmitOptions
 
 __all__ = [
+    "FFIScalarStyle",
     "MojoGenerator",
     "MojoEmitOptions",
     "generate_mojo",

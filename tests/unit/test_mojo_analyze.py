@@ -150,7 +150,7 @@ def test_analyze_precomputes_struct_align_and_passability() -> None:
         is_union=False,
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
-    au = analyze_unit(unit, MojoEmitOptions(emit_align=True))
+    au = analyze_unit(unit, MojoEmitOptions())
     assert len(au.ordered_structs) == 1
     s = au.ordered_structs[0]
     assert s.register_passable is True

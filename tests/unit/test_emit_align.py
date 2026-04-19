@@ -1,4 +1,4 @@
-"""Tests for @align emission (MojoEmitOptions.emit_align)."""
+"""Tests for @align emission from C struct alignment."""
 
 from __future__ import annotations
 
@@ -52,10 +52,9 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
     )
     struct_by_name = dict(struct_by_decl_id(unit))
     struct_by_name[patched.decl_id] = patched
-    opts = MojoEmitOptions(emit_align=True, warn_abi=False)
+    opts = MojoEmitOptions(warn_abi=False)
     analyzed = analyzed_struct_for_test(
         patched,
-        options=opts,
         struct_by_name=struct_by_name,
     )
     text = render_struct(analyzed, opts)
@@ -76,10 +75,9 @@ def test_align_omitted_comment_for_invalid_c_align_bytes() -> None:
         align_bytes=3,
         is_union=False,
     )
-    opts = MojoEmitOptions(emit_align=True, warn_abi=False)
+    opts = MojoEmitOptions(warn_abi=False)
     analyzed = analyzed_struct_for_test(
         bad,
-        options=opts,
         struct_by_name={bad.decl_id: bad},
     )
     text = render_struct(analyzed, opts)

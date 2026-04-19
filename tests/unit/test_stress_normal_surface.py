@@ -63,20 +63,3 @@ def test_emit_stress_normal_matches_golden() -> None:
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     expected = golden_path.read_text(encoding="utf-8")
     assert _normalize_source_line(out) == _normalize_source_line(expected)
-
-
-def test_emit_stress_normal_without_align_matches_golden() -> None:
-    header = _REPO_ROOT / "tests" / "stress" / "normal" / "stress_normal_input.h"
-    golden_path = _REPO_ROOT / "tests" / "stress" / "normal" / "stress_normal_no_align.mojo"
-    assert header.is_file(), f"missing fixture: {header}"
-    assert golden_path.is_file(), f"missing golden: {golden_path}"
-
-    parser = ClangParser(
-        header,
-        library="stress_normal",
-        link_name="stress_normal",
-    )
-    unit = parser.run()
-    out = MojoGenerator(MojoEmitOptions(emit_align=False)).generate(unit)
-    expected = golden_path.read_text(encoding="utf-8")
-    assert _normalize_source_line(out) == _normalize_source_line(expected)

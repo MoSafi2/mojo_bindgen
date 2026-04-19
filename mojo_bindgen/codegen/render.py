@@ -10,7 +10,6 @@ from __future__ import annotations
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import (
     TypeMapper,
-    map_scalar,
     mojo_ident,
     pointer_origin_names,
 )
@@ -91,12 +90,14 @@ class MojoRenderer:
             unsafe_union_names=analyzed.unsafe_union_names,
             typedef_mojo_names=analyzed.emitted_typedef_mojo_names,
             callback_signature_names=analyzed.callback_signature_names,
+            ffi_scalar_style=analyzed.opts.ffi_scalar_style,
         )
         self._union_member_types = TypeMapper(
             ffi_origin=analyzed.opts.ffi_origin,
             unsafe_union_names=frozenset(),
             typedef_mojo_names=frozenset(),
             callback_signature_names=frozenset(),
+            ffi_scalar_style=analyzed.opts.ffi_scalar_style,
         )
 
     @staticmethod
@@ -159,16 +160,15 @@ class MojoRenderer:
                 f"# struct {decl.c_name} - size={decl.size_bytes} align={decl.align_bytes} "
                 "(verify packed/aligned ABI)"
             )
-        if self._a.opts.emit_align:
-            if analyzed.align_decorator is not None:
-                b.add(f"@align({analyzed.align_decorator})")
-                if analyzed.align_stride_warning:
-                    b.add(
-                        "# FFI: array stride follows size_of[T](); only T[0] is guaranteed "
-                        "align_of[T]-aligned; pad struct size to a multiple of alignment for per-element alignment."
-                    )
-            elif analyzed.align_omit_comment is not None:
-                b.add(analyzed.align_omit_comment)
+        if analyzed.align_decorator is not None:
+            b.add(f"@align({analyzed.align_decorator})")
+            if analyzed.align_stride_warning:
+                b.add(
+                    "# FFI: array stride follows size_of[T](); only T[0] is guaranteed "
+                    "align_of[T]-aligned; pad struct size to a multiple of alignment for per-element alignment."
+                )
+        elif analyzed.align_omit_comment is not None:
+            b.add(analyzed.align_omit_comment)
         b.add("@fieldwise_init")
         b.add(f"struct {name}{traits}:")
         b.indent()
@@ -227,6 +227,9 @@ class MojoRenderer:
             ffi_names = ["DEFAULT_RTLD", "OwnedDLHandle"]
         if self._a.unions and self._a.unsafe_union_names:
             ffi_names.append("UnsafeUnion")
+        scalar = sorted(self._a.ffi_scalar_import_names)
+        if scalar:
+            ffi_names.extend(scalar)
         lines.append(f"from std.ffi import {', '.join(ffi_names)}")
         if self._a.needs_opaque_imports:
             lines.append("from std.memory import ImmutOpaquePointer, MutOpaquePointer")
@@ -312,7 +315,7 @@ class MojoRenderer:
 
     def _emit_enum(self, decl: Enum) -> str:
         """Render one C enum as a thin Mojo wrapper struct."""
-        base = map_scalar(decl.underlying)
+        base = self._types.emit_scalar(decl.underlying)
         name = mojo_ident(decl.name)
         b = CodeBuilder()
         b.add(
@@ -355,8 +358,7 @@ class MojoRenderer:
         rhs = types.surface(analyzed.decl.aliased)
         return f"comptime {name} = {rhs}\n\n"
 
-    @staticmethod
-    def _emit_const(decl: Const) -> str:
+    def _emit_const(self, decl: Const) -> str:
         """Render one constant declaration from the supported ``ConstExpr`` subset.
 
         Unsupported or pointer-like constant forms are emitted as comments so
@@ -364,15 +366,14 @@ class MojoRenderer:
         """
         expr = decl.expr
         name = mojo_ident(decl.name)
-        rendered = MojoRenderer._render_const_expr(expr, decl.type)
+        rendered = self._render_const_expr(expr, decl.type)
         if rendered is None:
             if isinstance(expr, NullPtrLiteral):
                 return f"# constant {decl.name}: null pointer macro is not emitted directly\n\n"
             return f"# constant {decl.name}: unsupported constant expression form\n\n"
         return f"comptime {name} = {rendered}\n\n"
 
-    @staticmethod
-    def _emit_macro(decl: MacroDecl) -> str:
+    def _emit_macro(self, decl: MacroDecl) -> str:
         """Render one preserved macro declaration.
 
         Supported object-like macros emit as ``comptime`` constants. All other
@@ -385,7 +386,7 @@ class MojoRenderer:
                 if body:
                     return f"# macro {decl.name}: {reason}\n# define {decl.name} {body}\n\n"
                 return f"# macro {decl.name}: {reason}\n# define {decl.name}\n\n"
-            rendered = MojoRenderer._render_const_expr(decl.expr, decl.type)
+            rendered = self._render_const_expr(decl.expr, decl.type)
             if rendered is not None:
                 return f"comptime {mojo_ident(decl.name)} = {rendered}\n\n"
             if isinstance(decl.expr, NullPtrLiteral):
@@ -399,13 +400,12 @@ class MojoRenderer:
             return f"# macro {decl.name}: {reason}\n# define {decl.name} {body}\n\n"
         return f"# macro {decl.name}: {reason}\n# define {decl.name}\n\n"
 
-    @staticmethod
     def _render_const_expr(
-        expr: object, decl_type: IntType | FloatType | VoidType | object
+        self, expr: object, decl_type: IntType | FloatType | VoidType | object
     ) -> str | None:
         """Render the supported constant-expression subset to Mojo source."""
         if isinstance(expr, IntLiteral) and isinstance(decl_type, (IntType, FloatType, VoidType)):
-            t = map_scalar(decl_type)
+            t = self._types.emit_scalar(decl_type)
             return f"{t}({expr.value})"
         if isinstance(expr, StringLiteral):
             value = expr.value.replace("\\", "\\\\").replace('"', '\\"')
@@ -418,13 +418,13 @@ class MojoRenderer:
         if isinstance(expr, RefExpr):
             return mojo_ident(expr.name)
         if isinstance(expr, UnaryExpr):
-            operand = MojoRenderer._render_const_expr(expr.operand, decl_type)
+            operand = self._render_const_expr(expr.operand, decl_type)
             if operand is None:
                 return None
             return f"{expr.op}({operand})"
         if isinstance(expr, BinaryExpr):
-            lhs = MojoRenderer._render_const_expr(expr.lhs, decl_type)
-            rhs = MojoRenderer._render_const_expr(expr.rhs, decl_type)
+            lhs = self._render_const_expr(expr.lhs, decl_type)
+            rhs = self._render_const_expr(expr.rhs, decl_type)
             if lhs is None or rhs is None:
                 return None
             return f"({lhs} {expr.op} {rhs})"
@@ -615,5 +615,6 @@ def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
         ordered_structs=(analyzed,),
         unions=tuple(),
         tail_decls=tuple(),
+        ffi_scalar_import_names=frozenset(),
     )
     return MojoRenderer(dummy).render_struct(analyzed)

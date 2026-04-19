@@ -5,7 +5,7 @@
 from std.ffi import external_call
 from std.memory import ImmutOpaquePointer, MutOpaquePointer
 
-comptime cta_cb_t = def (arg0: Int32) abi("C") -> Int32
+comptime cta_cb_t = def (arg0: c_int) thin abi("C") -> c_int
 
 def cta_install(cb: UnsafePointer[cta_cb_t, MutExternalOrigin]) abi("C") -> None:
     external_call["cta_install", NoneType, UnsafePointer[cta_cb_t, MutExternalOrigin]](cb)
