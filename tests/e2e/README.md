@@ -76,6 +76,7 @@ Each golden case has a `status.json` with per-phase status. The summary below re
 | `fnptr_return` | Function returning function-pointer (`fn -> fnptr`) lowering and wrapper generation. | pass | n/a |
 | `anon_struct_union` | Anonymous struct-inside-union nesting and field resolution. | pass | n/a |
 | `atomic_types_runtime` | Atomic counter increment/decrement functional checks; includes emitted atomic global note and verifies mode-specific runtime behavior. | pass | n/a |
+| `globals_consts_runtime` | Mutable and `const` scalar globals via generated `GlobalVar` / `GlobalConst`; runtime uses `LD_PRELOAD` on the built `.so` so `dlsym` can resolve symbols (Mojo link does not always emit `DT_NEEDED` for `-l`). | pass | n/a |
 | `complex_types_runtime` | Complex arithmetic through `_Complex float` bindings, asserting real/imag outputs in both linking modes. | pass | n/a |
 | `vector_extension_types_runtime` | Vector-extension math (`vector_size(16)`) validated through scalar wrappers while preserving vector typedef emit coverage. | pass | n/a |
 

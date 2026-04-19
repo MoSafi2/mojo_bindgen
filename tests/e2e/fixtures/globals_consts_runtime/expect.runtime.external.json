@@ -1,0 +1,11 @@
+{
+  "gcr_limit": 42,
+  "gcr_mut_before": 10,
+  "gcr_mut_after": 99,
+  "gcr_vec_const_lane0": 1.0,
+  "gcr_vec_const_lane3": 4.0,
+  "gcr_vec_mut_lane0_before": 0.5,
+  "gcr_vec_mut_lane2_before": 2.5,
+  "gcr_vec_mut_lane0_after": 10.0,
+  "gcr_vec_mut_lane2_after": 30.0
+}

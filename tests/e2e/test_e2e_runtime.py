@@ -291,6 +291,11 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         external_env["LD_LIBRARY_PATH"] = (
             f"{tmp_path}:{external_env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
         )
+        # C globals resolved via dlsym require the shared object to be loaded into the
+        # process. Mojo's link step does not always add DT_NEEDED for -ltestlib; preload
+        # ensures symbols are visible to OwnedDLHandle(...).get_symbol (see globals_consts_runtime).
+        if case_name == "globals_consts_runtime":
+            external_env["LD_PRELOAD"] = str(lib_path)
         runtime_external = _run([str(external_bin)], cwd=_REPO_ROOT, env=external_env)
         _check_phase(
             "runtime_external",
@@ -304,7 +309,10 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
             )
 
     if build_dl.returncode == 0:
-        runtime_dl = _run([str(dl_bin)], cwd=_REPO_ROOT)
+        dl_env = os.environ.copy()
+        if case_name == "globals_consts_runtime":
+            dl_env["LD_PRELOAD"] = str(lib_path)
+        runtime_dl = _run([str(dl_bin)], cwd=_REPO_ROOT, env=dl_env)
         _check_phase(
             "runtime_owned_dl_handle",
             phases["runtime_owned_dl_handle"],

@@ -11,10 +11,10 @@ def _bindgen_dl() raises -> OwnedDLHandle:
 struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
         if not opt:
             raise Error(String("bindgen: missing C global symbol"))
-        return opt
+        return opt.value()
 
     @staticmethod
     def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:
@@ -33,10 +33,10 @@ struct GlobalVar[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
 struct GlobalConst[T: Copyable & ImplicitlyCopyable, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
         if not opt:
             raise Error(String("bindgen: missing C global symbol"))
-        return opt
+        return opt.value()
 
     @staticmethod
     def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:
