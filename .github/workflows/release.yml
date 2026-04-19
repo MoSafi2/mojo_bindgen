@@ -1,5 +1,10 @@
-# Builds sdist/wheel when a version tag is pushed. Upload to PyPI manually or add a
-# publish job with trusted publishing / API tokens when ready.
+# Build sdist/wheel on version tags and publish to PyPI (trusted publishing / OIDC).
+#
+# One-time PyPI setup: https://docs.pypi.org/trusted-publishers/
+# - Project → Settings → Publishing → add a trusted publisher for this repo,
+#   workflow "release.yml", and (if used below) environment "pypi".
+# - Create a GitHub Environment named "pypi" if you keep the environment block
+#   (Protection rules are optional; empty is fine).
 name: Release build
 
 on:
@@ -30,3 +35,21 @@ jobs:
         with:
           name: dist
           path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mojo-bindgen/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

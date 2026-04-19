@@ -43,8 +43,7 @@ End-to-end tests (`tests/e2e/`) need a C toolchain, Mojo, and more setup; see [t
 ## Releases
 
 1. Update [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]` with a dated section for the new version, then set the version in [pyproject.toml](pyproject.toml).
-2. Commit, tag `vX.Y.Z`, and push the tag. The [release workflow](.github/workflows/release.yml) builds sdist/wheel and uploads them as a **GitHub Actions artifact** named `dist` (download from the workflow run).
-3. Publish to PyPI: upload `dist/*` (for example with `twine`), or add a separate trusted-publishing job when you are ready.
+2. Commit, tag `vX.Y.Z`, and push the tag. The [release workflow](.github/workflows/release.yml) builds sdist/wheel, uploads them as a **GitHub Actions artifact** named `dist`, and **publishes to PyPI** using [trusted publishing](https://docs.pypi.org/trusted-publishers/).
 
 Semantic versioning applies to the **documented public API**: CLI behavior, `mojo_bindgen` exports (`MojoGenerator`, `MojoEmitOptions`, `generate_mojo`, `__version__`), and the parse → IR → generate flow described in the README. Internal modules may change between minor releases.
 
