@@ -197,6 +197,7 @@ class RecordLowerer:
         self.diagnostics = diagnostics
         self.type_lowerer = type_lowerer
         self._field_discovery = _FieldDiscovery(registry)
+        self._completed_record_decl_ids: list[str] = []
 
     def make_struct_ref(self, struct: Struct) -> StructRef:
         """Build a stable StructRef from one lowered Struct."""
@@ -221,6 +222,13 @@ class RecordLowerer:
                 is_complete=False,
             )
         return None
+
+    def completed_records_since(self, start: int) -> tuple[int, list[Struct]]:
+        """Return lowered record definitions completed after one marker index."""
+        decl_ids = self._completed_record_decl_ids[start:]
+        return len(self._completed_record_decl_ids), [
+            self.registry.get(decl_id) for decl_id in decl_ids if self.registry.get(decl_id) is not None
+        ]
 
     def lower_record_definition(self, cursor: cx.Cursor) -> Struct:
         """Lower one complete struct/union definition exactly once."""
@@ -248,7 +256,8 @@ class RecordLowerer:
             if field is not None
         ]
         self._apply_attributes(record, cursor)
-        self.registry.mark_completed(record)
+        if record.decl_id not in self._completed_record_decl_ids:
+            self._completed_record_decl_ids.append(record.decl_id)
         return record
 
     def _lower_field_site(self, site: FieldSite) -> Field | None:

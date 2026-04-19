@@ -156,7 +156,7 @@ class ClangParser:
                 continue
             if cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
                 if cursor.is_definition() and cursor.spelling:
-                    completed_marker, completed_records = session.registry.completed_records_since(
+                    completed_marker, completed_records = decl_lowerer.record_lowerer.completed_records_since(
                         completed_marker
                     )
                     decls.extend(completed_records)

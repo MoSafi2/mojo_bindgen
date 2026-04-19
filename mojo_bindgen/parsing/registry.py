@@ -90,7 +90,6 @@ class RecordRegistry:
     record_definition_by_decl_id: dict[str, cx.Cursor]
     anonymous_record_name_by_decl_id: dict[str, str]
     _records_by_decl_id: dict[str, Struct] = field(default_factory=dict)
-    _completed_record_decl_ids: list[str] = field(default_factory=list)
     _definition_lowerer: Callable[[cx.Cursor], Struct] | None = None
 
     @classmethod
@@ -172,18 +171,6 @@ class RecordRegistry:
     def store(self, struct: Struct) -> None:
         """Store a lowered record definition by declaration id."""
         self._records_by_decl_id[struct.decl_id] = struct
-
-    def mark_completed(self, struct: Struct) -> None:
-        """Record that one lowered record definition has finished field materialization."""
-        if struct.decl_id not in self._completed_record_decl_ids:
-            self._completed_record_decl_ids.append(struct.decl_id)
-
-    def completed_records_since(self, start: int) -> tuple[int, list[Struct]]:
-        """Return lowered record definitions completed after one marker index."""
-        decl_ids = self._completed_record_decl_ids[start:]
-        return len(self._completed_record_decl_ids), [
-            self._records_by_decl_id[decl_id] for decl_id in decl_ids
-        ]
 
     @staticmethod
     def make_struct_ref(struct: Struct) -> StructRef:
