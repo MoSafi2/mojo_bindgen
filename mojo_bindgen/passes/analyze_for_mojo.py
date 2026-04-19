@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
-from typing import Callable
+from typing import Iterator, Literal
 
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
@@ -45,6 +44,8 @@ from mojo_bindgen.ir import (
 )
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
+
+# --- Analyzed* IR -----------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -152,193 +153,179 @@ def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
     return out
 
 
-def _type_needs_opaque_pointer_import(t: Type) -> bool:
+# --- Type traversal + import / fallback queries ------------------------------------
+
+
+def _iter_type_nodes_opaque_import(t: Type) -> Iterator[Type]:
+    """Preorder; does not descend into FunctionPtr children (opaque-import semantics)."""
+    yield t
     if isinstance(t, TypeRef):
-        return _type_needs_opaque_pointer_import(t.canonical)
-    if isinstance(t, QualifiedType):
-        return _type_needs_opaque_pointer_import(t.unqualified)
-    if isinstance(t, AtomicType):
-        return _type_needs_opaque_pointer_import(t.value_type)
-    if isinstance(t, EnumRef):
-        return False
-    if isinstance(t, Pointer):
+        yield from _iter_type_nodes_opaque_import(t.canonical)
+    elif isinstance(t, QualifiedType):
+        yield from _iter_type_nodes_opaque_import(t.unqualified)
+    elif isinstance(t, AtomicType):
+        yield from _iter_type_nodes_opaque_import(t.value_type)
+    elif isinstance(t, EnumRef):
+        return
+    elif isinstance(t, Pointer):
         if t.pointee is None:
+            return
+        yield from _iter_type_nodes_opaque_import(t.pointee)
+    elif isinstance(t, Array):
+        yield from _iter_type_nodes_opaque_import(t.element)
+    elif isinstance(t, FunctionPtr):
+        return
+
+
+def _iter_type_nodes_imports(t: Type) -> Iterator[Type]:
+    """Preorder for SIMD/complex/atomic import checks (recurses through FunctionPtr)."""
+    yield t
+    if isinstance(t, TypeRef):
+        yield from _iter_type_nodes_imports(t.canonical)
+    elif isinstance(t, QualifiedType):
+        yield from _iter_type_nodes_imports(t.unqualified)
+    elif isinstance(t, AtomicType):
+        yield from _iter_type_nodes_imports(t.value_type)
+    elif isinstance(t, Pointer):
+        if t.pointee is not None:
+            yield from _iter_type_nodes_imports(t.pointee)
+    elif isinstance(t, Array):
+        yield from _iter_type_nodes_imports(t.element)
+    elif isinstance(t, FunctionPtr):
+        yield from _iter_type_nodes_imports(t.ret)
+        for p in t.params:
+            yield from _iter_type_nodes_imports(p)
+
+
+def _iter_type_nodes_fallbacks(t: Type) -> Iterator[Type]:
+    """Preorder matching :func:`_note_semantic_fallbacks` traversal."""
+    yield t
+    if isinstance(t, TypeRef):
+        yield from _iter_type_nodes_fallbacks(t.canonical)
+    elif isinstance(t, QualifiedType):
+        yield from _iter_type_nodes_fallbacks(t.unqualified)
+    elif isinstance(t, AtomicType):
+        yield from _iter_type_nodes_fallbacks(t.value_type)
+    elif isinstance(t, Pointer):
+        if t.pointee is not None:
+            yield from _iter_type_nodes_fallbacks(t.pointee)
+    elif isinstance(t, Array):
+        yield from _iter_type_nodes_fallbacks(t.element)
+    elif isinstance(t, FunctionPtr):
+        yield from _iter_type_nodes_fallbacks(t.ret)
+        for p in t.params:
+            yield from _iter_type_nodes_fallbacks(p)
+    elif isinstance(t, ComplexType):
+        return
+    elif isinstance(t, VectorType):
+        yield from _iter_type_nodes_fallbacks(t.element)
+
+
+def _type_needs_opaque_pointer_import(t: Type) -> bool:
+    for u in _iter_type_nodes_opaque_import(t):
+        if isinstance(u, Pointer) and u.pointee is None:
             return True
-        return _type_needs_opaque_pointer_import(t.pointee)
-    if isinstance(t, Array):
-        return _type_needs_opaque_pointer_import(t.element)
-    if isinstance(t, FunctionPtr):
-        return True
-    if isinstance(t, (OpaqueRecordRef, UnsupportedType)):
-        return True
+        if isinstance(u, FunctionPtr):
+            return True
+        if isinstance(u, (OpaqueRecordRef, UnsupportedType)):
+            return True
     return False
 
 
 def _type_needs_simd_import(t: Type) -> bool:
-    if isinstance(t, TypeRef):
-        return _type_needs_simd_import(t.canonical)
-    if isinstance(t, QualifiedType):
-        return _type_needs_simd_import(t.unqualified)
-    if isinstance(t, AtomicType):
-        return _type_needs_simd_import(t.value_type)
-    if isinstance(t, Pointer):
-        return t.pointee is not None and _type_needs_simd_import(t.pointee)
-    if isinstance(t, Array):
-        return _type_needs_simd_import(t.element)
-    if isinstance(t, FunctionPtr):
-        return _type_needs_simd_import(t.ret) or any(
-            _type_needs_simd_import(p) for p in t.params
-        )
-    if isinstance(t, VectorType):
-        return map_vector_simd(t) is not None
-    return False
+    return any(
+        isinstance(u, VectorType) and map_vector_simd(u) is not None
+        for u in _iter_type_nodes_imports(t)
+    )
 
 
 def _type_needs_complex_import(t: Type) -> bool:
-    if isinstance(t, TypeRef):
-        return _type_needs_complex_import(t.canonical)
-    if isinstance(t, QualifiedType):
-        return _type_needs_complex_import(t.unqualified)
-    if isinstance(t, AtomicType):
-        return _type_needs_complex_import(t.value_type)
-    if isinstance(t, Pointer):
-        return t.pointee is not None and _type_needs_complex_import(t.pointee)
-    if isinstance(t, Array):
-        return _type_needs_complex_import(t.element)
-    if isinstance(t, FunctionPtr):
-        return _type_needs_complex_import(t.ret) or any(
-            _type_needs_complex_import(p) for p in t.params
-        )
-    if isinstance(t, ComplexType):
-        return map_complex_simd(t) is not None
-    return False
+    return any(
+        isinstance(u, ComplexType) and map_complex_simd(u) is not None
+        for u in _iter_type_nodes_imports(t)
+    )
 
 
 def _type_needs_atomic_import(t: Type) -> bool:
-    if isinstance(t, TypeRef):
-        return _type_needs_atomic_import(t.canonical)
-    if isinstance(t, QualifiedType):
-        return _type_needs_atomic_import(t.unqualified)
-    if isinstance(t, AtomicType):
-        if map_atomic_type(t) is not None:
-            return True
-        return _type_needs_atomic_import(t.value_type)
-    if isinstance(t, Pointer):
-        return t.pointee is not None and _type_needs_atomic_import(t.pointee)
-    if isinstance(t, Array):
-        return _type_needs_atomic_import(t.element)
-    if isinstance(t, FunctionPtr):
-        return _type_needs_atomic_import(t.ret) or any(
-            _type_needs_atomic_import(p) for p in t.params
-        )
-    return False
+    return any(
+        isinstance(u, AtomicType) and map_atomic_type(u) is not None
+        for u in _iter_type_nodes_imports(t)
+    )
 
 
-def _note_semantic_fallbacks(t: Type, notes: set[str]) -> None:
-    if isinstance(t, TypeRef):
-        _note_semantic_fallbacks(t.canonical, notes)
-        return
-    if isinstance(t, QualifiedType):
-        _note_semantic_fallbacks(t.unqualified, notes)
-        return
-    if isinstance(t, AtomicType):
-        if map_atomic_type(t) is None:
+def _collect_fallback_notes_for_type(t: Type, notes: set[str]) -> None:
+    for u in _iter_type_nodes_fallbacks(t):
+        if isinstance(u, AtomicType) and map_atomic_type(u) is None:
             notes.add(
                 "some atomic types were mapped to their underlying non-atomic Mojo type because Atomic[dtype] was not representable"
             )
-        _note_semantic_fallbacks(t.value_type, notes)
-        return
-    if isinstance(t, Pointer):
-        if t.pointee is not None:
-            _note_semantic_fallbacks(t.pointee, notes)
-        return
-    if isinstance(t, Array):
-        _note_semantic_fallbacks(t.element, notes)
-        return
-    if isinstance(t, FunctionPtr):
-        _note_semantic_fallbacks(t.ret, notes)
-        for p in t.params:
-            _note_semantic_fallbacks(p, notes)
-        return
-    if isinstance(t, ComplexType):
-        if map_complex_simd(t) is None:
+        elif isinstance(u, ComplexType) and map_complex_simd(u) is None:
             notes.add(
                 "some complex C types were mapped as InlineArray[scalar, 2] because ComplexSIMD[dtype, 1] was not representable"
             )
-        return
-    if isinstance(t, VectorType):
-        if map_vector_simd(t) is None:
+        elif isinstance(u, VectorType) and map_vector_simd(u) is None:
             notes.add(
                 "some vector C types were mapped as InlineArray[...] because SIMD[dtype, size] was not representable"
             )
-        _note_semantic_fallbacks(t.element, notes)
 
 
-def _unit_uses_import(unit: Unit, predicate: Callable[[Type], bool]) -> bool:
-    for d in unit.decls:
-        if isinstance(d, Struct) and not d.is_union:
-            if any(predicate(f.type) for f in d.fields):
-                return True
-        elif isinstance(d, Function):
-            if predicate(d.ret) or any(predicate(p.type) for p in d.params):
-                return True
-        elif isinstance(d, Typedef):
-            if predicate(d.canonical):
-                return True
-        elif isinstance(d, GlobalVar):
-            if predicate(d.type):
-                return True
-    return False
+@dataclass(frozen=True)
+class ImportNeeds:
+    opaque: bool
+    simd: bool
+    complex: bool
+    atomic: bool
 
 
-def unit_needs_simd_import(unit: Unit) -> bool:
-    return _unit_uses_import(unit, _type_needs_simd_import)
-
-
-def unit_needs_complex_import(unit: Unit) -> bool:
-    return _unit_uses_import(unit, _type_needs_complex_import)
-
-
-def unit_needs_atomic_import(unit: Unit) -> bool:
-    return _unit_uses_import(unit, _type_needs_atomic_import)
-
-
-def unit_semantic_fallback_notes(unit: Unit) -> tuple[str, ...]:
+def collect_unit_import_and_fallback_needs(
+    unit: Unit,
+) -> tuple[ImportNeeds, tuple[str, ...]]:
+    """Single scan of ``unit.decls`` for import flags and semantic fallback notes."""
     notes: set[str] = set()
+    opaque = simd = complex = atomic = False
     for d in unit.decls:
         if isinstance(d, Struct) and not d.is_union:
             for f in d.fields:
-                _note_semantic_fallbacks(f.type, notes)
+                t = f.type
+                opaque = opaque or _type_needs_opaque_pointer_import(t)
+                simd = simd or _type_needs_simd_import(t)
+                complex = complex or _type_needs_complex_import(t)
+                atomic = atomic or _type_needs_atomic_import(t)
+                _collect_fallback_notes_for_type(t, notes)
         elif isinstance(d, Function):
-            _note_semantic_fallbacks(d.ret, notes)
+            opaque = opaque or _type_needs_opaque_pointer_import(d.ret)
+            simd = simd or _type_needs_simd_import(d.ret)
+            complex = complex or _type_needs_complex_import(d.ret)
+            atomic = atomic or _type_needs_atomic_import(d.ret)
+            _collect_fallback_notes_for_type(d.ret, notes)
             for p in d.params:
-                _note_semantic_fallbacks(p.type, notes)
+                t = p.type
+                opaque = opaque or _type_needs_opaque_pointer_import(t)
+                simd = simd or _type_needs_simd_import(t)
+                complex = complex or _type_needs_complex_import(t)
+                atomic = atomic or _type_needs_atomic_import(t)
+                _collect_fallback_notes_for_type(t, notes)
         elif isinstance(d, Typedef):
-            _note_semantic_fallbacks(d.canonical, notes)
+            t = d.canonical
+            opaque = opaque or _type_needs_opaque_pointer_import(t)
+            simd = simd or _type_needs_simd_import(t)
+            complex = complex or _type_needs_complex_import(t)
+            atomic = atomic or _type_needs_atomic_import(t)
+            _collect_fallback_notes_for_type(t, notes)
         elif isinstance(d, GlobalVar):
-            _note_semantic_fallbacks(d.type, notes)
-    return tuple(sorted(notes))
+            t = d.type
+            opaque = opaque or _type_needs_opaque_pointer_import(t)
+            simd = simd or _type_needs_simd_import(t)
+            complex = complex or _type_needs_complex_import(t)
+            atomic = atomic or _type_needs_atomic_import(t)
+            _collect_fallback_notes_for_type(t, notes)
+    return (
+        ImportNeeds(opaque=opaque, simd=simd, complex=complex, atomic=atomic),
+        tuple(sorted(notes)),
+    )
 
 
-def unit_needs_opaque_imports(unit: Unit) -> bool:
-    for d in unit.decls:
-        if isinstance(d, Struct) and not d.is_union:
-            for f in d.fields:
-                if _type_needs_opaque_pointer_import(f.type):
-                    return True
-        elif isinstance(d, Function):
-            if _type_needs_opaque_pointer_import(d.ret):
-                return True
-            for p in d.params:
-                if _type_needs_opaque_pointer_import(p.type):
-                    return True
-        elif isinstance(d, Typedef):
-            if _type_needs_opaque_pointer_import(d.canonical):
-                return True
-        elif isinstance(d, GlobalVar):
-            if _type_needs_opaque_pointer_import(d.type):
-                return True
-    return False
+# --- Layout / unions / register passability ----------------------------------------
 
 
 def _type_ok_for_unsafe_union_member(t: Type) -> bool:
@@ -430,6 +417,60 @@ def _type_ok_for_register_passable_field(
     return False
 
 
+def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bool]:
+    """Memoized register-passability for each complete struct ``decl_id``."""
+    cache: dict[str, bool] = {}
+    computing: set[str] = set()
+
+    def passable_for_struct(decl_id: str) -> bool:
+        if decl_id in cache:
+            return cache[decl_id]
+        if decl_id in computing:
+            return False
+        s = struct_by_id.get(decl_id)
+        if s is None or s.is_union:
+            cache[decl_id] = False
+            return False
+        computing.add(decl_id)
+        try:
+            ok = all(field_ok_cached(f.type) for f in s.fields)
+        finally:
+            computing.remove(decl_id)
+        cache[decl_id] = ok
+        return ok
+
+    def field_ok_cached(t: Type) -> bool:
+        if isinstance(t, TypeRef):
+            return field_ok_cached(t.canonical)
+        if isinstance(t, QualifiedType):
+            return field_ok_cached(t.unqualified)
+        if isinstance(t, AtomicType):
+            if map_atomic_type(t) is not None:
+                return False
+            return field_ok_cached(t.value_type)
+        if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
+            return True
+        if isinstance(t, UnsupportedType):
+            return False
+        if isinstance(t, VectorType):
+            return map_vector_simd(t) is not None
+        if isinstance(t, ComplexType):
+            return map_complex_simd(t) is not None
+        if isinstance(t, StructRef):
+            return passable_for_struct(t.decl_id)
+        if isinstance(t, Pointer):
+            if t.pointee is None:
+                return True
+            return field_ok_cached(t.pointee)
+        if isinstance(t, Array):
+            return t.array_kind != "fixed" and field_ok_cached(t.element)
+        return False
+
+    for decl_id in struct_by_id:
+        passable_for_struct(decl_id)
+    return cache
+
+
 def struct_decl_register_passable(
     decl: Struct, struct_by_id: dict[str, Struct]
 ) -> bool:
@@ -481,88 +522,18 @@ def _emitted_typedef_mojo_names(
     )
 
 
-def _analyze_struct(
-    decl: Struct,
-    struct_map: dict[str, Struct],
-    opts: MojoEmitOptions,
-    field_callback_aliases: dict[tuple[str, int], str] | None = None,
-) -> AnalyzedStruct:
-    register_passable = struct_decl_register_passable(decl, struct_map)
-    align_decorator: int | None = None
-    align_stride_warning = False
-    align_omit_comment: str | None = None
-    ab = decl.align_bytes
-    if opts.emit_align:
-        if mojo_align_decorator_ok(ab):
-            align_decorator = ab
-            if decl.size_bytes % ab != 0:
-                align_stride_warning = True
-        elif ab > 1:
-            align_omit_comment = f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
-    if decl.is_packed:
-        packed_comment = "# packed record: verify Mojo layout against the target C ABI."
-        align_omit_comment = (
-            packed_comment
-            if align_omit_comment is None
-            else f"{align_omit_comment} {packed_comment[2:]}"
-        )
-    fields = tuple(
-        AnalyzedField(
-            field=f,
-            index=i,
-            mojo_name=_field_mojo_name(f, i),
-            callback_alias_name=(
-                None
-                if field_callback_aliases is None
-                else field_callback_aliases.get((decl.decl_id, i))
-            ),
-        )
-        for i, f in enumerate(decl.fields)
-    )
-    return AnalyzedStruct(
-        decl=decl,
-        register_passable=register_passable,
-        align_decorator=align_decorator,
-        align_stride_warning=align_stride_warning,
-        align_omit_comment=align_omit_comment,
-        fields=fields,
-    )
+# --- Callback aliases --------------------------------------------------------------
 
 
-def _analyze_function(
-    fn: Function,
-    struct_map: dict[str, Struct],
-    type_mapper: TypeMapper,
-    ret_callback_alias_name: str | None = None,
-    param_callback_alias_names: tuple[str | None, ...] = (),
-) -> AnalyzedFunction:
-    param_names = tuple(type_mapper.param_names(fn.params))
-    if fn.is_variadic:
-        return AnalyzedFunction(
-            decl=fn,
-            kind="variadic_stub",
-            param_names=param_names,
-            ret_callback_alias_name=ret_callback_alias_name,
-            param_callback_alias_names=param_callback_alias_names,
-        )
-    ret_u = peel_wrappers(fn.ret)
-    if isinstance(ret_u, StructRef):
-        rs = struct_map.get(ret_u.decl_id)
-        if rs is not None and not struct_decl_register_passable(rs, struct_map):
-            return AnalyzedFunction(
-                decl=fn,
-                kind="non_register_return_stub",
-                param_names=param_names,
-                ret_callback_alias_name=ret_callback_alias_name,
-                param_callback_alias_names=param_callback_alias_names,
-            )
-    return AnalyzedFunction(
-        decl=fn,
-        kind="wrapper",
-        param_names=param_names,
-        ret_callback_alias_name=ret_callback_alias_name,
-        param_callback_alias_names=param_callback_alias_names,
-    )
+@dataclass(frozen=True)
+class CallbackAliasInfo:
+    aliases: tuple[CallbackAlias, ...]
+    signature_names: frozenset[str]
+    field_aliases: dict[tuple[str, int], str]
+    typedef_aliases: dict[str, str]
+    fn_param_aliases: dict[tuple[str, int], str]
+    fn_ret_aliases: dict[str, str]
+    global_aliases: dict[str, str]
 
 
 def _supports_callback_alias(fp: FunctionPtr) -> bool:
@@ -595,15 +566,7 @@ def _unique_callback_alias(base: str, used: set[str]) -> str:
 def _collect_callback_aliases(
     unit: Unit,
     emitted_typedef_names: frozenset[str],
-) -> tuple[
-    tuple[CallbackAlias, ...],
-    frozenset[str],
-    dict[tuple[str, int], str],
-    dict[str, str],
-    dict[tuple[str, int], str],
-    dict[str, str],
-    dict[str, str],
-]:
+) -> CallbackAliasInfo:
     aliases: list[CallbackAlias] = []
     alias_names: set[str] = set()
     field_aliases: dict[tuple[str, int], str] = {}
@@ -670,49 +633,170 @@ def _collect_callback_aliases(
                 else:
                     global_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_cb")
 
-    return (
-        tuple(aliases),
-        frozenset(alias_names),
-        field_aliases,
-        typedef_aliases,
-        fn_param_aliases,
-        fn_ret_aliases,
-        global_aliases,
+    return CallbackAliasInfo(
+        aliases=tuple(aliases),
+        signature_names=frozenset(alias_names),
+        field_aliases=field_aliases,
+        typedef_aliases=typedef_aliases,
+        fn_param_aliases=fn_param_aliases,
+        fn_ret_aliases=fn_ret_aliases,
+        global_aliases=global_aliases,
+    )
+
+
+# --- Orchestration -----------------------------------------------------------------
+
+
+@dataclass
+class _SemanticContext:
+    """Precomputed facts for one :func:`analyze_unit_semantics` run (module-internal)."""
+
+    options: MojoEmitOptions
+    struct_map: dict[str, Struct]
+    ordered_struct_decls: tuple[Struct, ...]
+    emitted_names: frozenset[str]
+    emitted_typedef_names: frozenset[str]
+    callback_info: CallbackAliasInfo
+    unsafe_union_names: frozenset[str]
+    register_passable_by_decl_id: dict[str, bool]
+    import_needs: ImportNeeds
+    semantic_fallback_notes: tuple[str, ...]
+    type_mapper: TypeMapper
+
+
+def _analyze_struct(
+    decl: Struct,
+    struct_map: dict[str, Struct],
+    opts: MojoEmitOptions,
+    field_callback_aliases: dict[tuple[str, int], str] | None,
+    *,
+    register_passable: bool,
+) -> AnalyzedStruct:
+    align_decorator: int | None = None
+    align_stride_warning = False
+    align_omit_comment: str | None = None
+    ab = decl.align_bytes
+    if opts.emit_align:
+        if mojo_align_decorator_ok(ab):
+            align_decorator = ab
+            if decl.size_bytes % ab != 0:
+                align_stride_warning = True
+        elif ab > 1:
+            align_omit_comment = f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
+    if decl.is_packed:
+        packed_comment = "# packed record: verify Mojo layout against the target C ABI."
+        align_omit_comment = (
+            packed_comment
+            if align_omit_comment is None
+            else f"{align_omit_comment} {packed_comment[2:]}"
+        )
+    fields = tuple(
+        AnalyzedField(
+            field=f,
+            index=i,
+            mojo_name=_field_mojo_name(f, i),
+            callback_alias_name=(
+                None
+                if field_callback_aliases is None
+                else field_callback_aliases.get((decl.decl_id, i))
+            ),
+        )
+        for i, f in enumerate(decl.fields)
+    )
+    return AnalyzedStruct(
+        decl=decl,
+        register_passable=register_passable,
+        align_decorator=align_decorator,
+        align_stride_warning=align_stride_warning,
+        align_omit_comment=align_omit_comment,
+        fields=fields,
+    )
+
+
+def _analyze_function(
+    fn: Function,
+    struct_map: dict[str, Struct],
+    type_mapper: TypeMapper,
+    register_passable_by_decl_id: dict[str, bool],
+    ret_callback_alias_name: str | None = None,
+    param_callback_alias_names: tuple[str | None, ...] = (),
+) -> AnalyzedFunction:
+    param_names = tuple(type_mapper.param_names(fn.params))
+    if fn.is_variadic:
+        return AnalyzedFunction(
+            decl=fn,
+            kind="variadic_stub",
+            param_names=param_names,
+            ret_callback_alias_name=ret_callback_alias_name,
+            param_callback_alias_names=param_callback_alias_names,
+        )
+    ret_u = peel_wrappers(fn.ret)
+    if isinstance(ret_u, StructRef):
+        rs = struct_map.get(ret_u.decl_id)
+        if rs is not None and not register_passable_by_decl_id.get(rs.decl_id, False):
+            return AnalyzedFunction(
+                decl=fn,
+                kind="non_register_return_stub",
+                param_names=param_names,
+                ret_callback_alias_name=ret_callback_alias_name,
+                param_callback_alias_names=param_callback_alias_names,
+            )
+    return AnalyzedFunction(
+        decl=fn,
+        kind="wrapper",
+        param_names=param_names,
+        ret_callback_alias_name=ret_callback_alias_name,
+        param_callback_alias_names=param_callback_alias_names,
     )
 
 
 def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
+    # Phase A: precompute unit-level semantic facts
     ordered_struct_decls = _ordered_struct_decls(unit)
     emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls)
     emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
-    (
-        callback_aliases,
-        callback_signature_names,
-        field_callback_aliases,
-        typedef_callback_aliases,
-        fn_param_callback_aliases,
-        fn_ret_callback_aliases,
-        global_callback_aliases,
-    ) = _collect_callback_aliases(unit, emitted_typedef_names)
+    callback_info = _collect_callback_aliases(unit, emitted_typedef_names)
     unsafe_union_names = eligible_unsafe_union_names(unit, options.ffi_origin)
     struct_map = struct_by_decl_id(unit)
+    register_passable_by_decl_id = build_register_passable_map(struct_map)
+    import_needs, semantic_fallback_notes = collect_unit_import_and_fallback_needs(unit)
     type_mapper = TypeMapper(
         ffi_origin=options.ffi_origin,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=emitted_typedef_names,
-        callback_signature_names=callback_signature_names,
+        callback_signature_names=callback_info.signature_names,
+    )
+    ctx = _SemanticContext(
+        options=options,
+        struct_map=struct_map,
+        ordered_struct_decls=ordered_struct_decls,
+        emitted_names=emitted_names,
+        emitted_typedef_names=emitted_typedef_names,
+        callback_info=callback_info,
+        unsafe_union_names=unsafe_union_names,
+        register_passable_by_decl_id=register_passable_by_decl_id,
+        import_needs=import_needs,
+        semantic_fallback_notes=semantic_fallback_notes,
+        type_mapper=type_mapper,
     )
 
+    # Phase B: materialize analyzed declarations
     ordered_structs = tuple(
-        _analyze_struct(decl, struct_map, options, field_callback_aliases)
-        for decl in ordered_struct_decls
+        _analyze_struct(
+            decl,
+            ctx.struct_map,
+            ctx.options,
+            ctx.callback_info.field_aliases,
+            register_passable=ctx.register_passable_by_decl_id.get(decl.decl_id, False),
+        )
+        for decl in ctx.ordered_struct_decls
     )
 
     unions = tuple(
         AnalyzedUnion(
             decl=d,
             uses_unsafe_union=f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union"
-            in unsafe_union_names,
+            in ctx.unsafe_union_names,
         )
         for d in unit.decls
         if isinstance(d, Struct) and d.is_union
@@ -724,19 +808,24 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
             tail_decls.append(
                 AnalyzedTypedef(
                     decl=d,
-                    skip_duplicate=mojo_ident(d.name) in emitted_names,
-                    callback_alias_name=typedef_callback_aliases.get(d.decl_id),
+                    skip_duplicate=mojo_ident(d.name) in ctx.emitted_names,
+                    callback_alias_name=ctx.callback_info.typedef_aliases.get(
+                        d.decl_id
+                    ),
                 )
             )
         elif isinstance(d, Function):
             tail_decls.append(
                 _analyze_function(
                     d,
-                    struct_map,
-                    type_mapper,
-                    ret_callback_alias_name=fn_ret_callback_aliases.get(d.decl_id),
+                    ctx.struct_map,
+                    ctx.type_mapper,
+                    ctx.register_passable_by_decl_id,
+                    ret_callback_alias_name=ctx.callback_info.fn_ret_aliases.get(
+                        d.decl_id
+                    ),
                     param_callback_alias_names=tuple(
-                        fn_param_callback_aliases.get((d.decl_id, i))
+                        ctx.callback_info.fn_param_aliases.get((d.decl_id, i))
                         for i in range(len(d.params))
                     ),
                 )
@@ -746,17 +835,17 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
 
     return AnalyzedUnit(
         unit=unit,
-        opts=options,
-        needs_opaque_imports=unit_needs_opaque_imports(unit),
-        needs_simd_import=unit_needs_simd_import(unit),
-        needs_complex_import=unit_needs_complex_import(unit),
-        needs_atomic_import=unit_needs_atomic_import(unit),
-        semantic_fallback_notes=unit_semantic_fallback_notes(unit),
-        unsafe_union_names=unsafe_union_names,
-        emitted_typedef_mojo_names=emitted_typedef_names,
-        callback_aliases=callback_aliases,
-        callback_signature_names=callback_signature_names,
-        global_callback_aliases=global_callback_aliases,
+        opts=ctx.options,
+        needs_opaque_imports=ctx.import_needs.opaque,
+        needs_simd_import=ctx.import_needs.simd,
+        needs_complex_import=ctx.import_needs.complex,
+        needs_atomic_import=ctx.import_needs.atomic,
+        semantic_fallback_notes=ctx.semantic_fallback_notes,
+        unsafe_union_names=ctx.unsafe_union_names,
+        emitted_typedef_mojo_names=ctx.emitted_typedef_names,
+        callback_aliases=ctx.callback_info.aliases,
+        callback_signature_names=ctx.callback_info.signature_names,
+        global_callback_aliases=ctx.callback_info.global_aliases,
         ordered_structs=ordered_structs,
         unions=unions,
         tail_decls=tuple(tail_decls),
@@ -769,7 +858,8 @@ def analyzed_struct_for_test(
     options: MojoEmitOptions,
     struct_by_name: dict[str, Struct],
 ) -> AnalyzedStruct:
-    return _analyze_struct(decl, struct_by_name, options, None)
+    reg = build_register_passable_map(struct_by_name).get(decl.decl_id, False)
+    return _analyze_struct(decl, struct_by_name, options, None, register_passable=reg)
 
 
 def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
