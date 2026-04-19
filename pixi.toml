@@ -38,6 +38,7 @@ pyright = ">=1.1.400, <2"
 
 [feature.dev.tasks]
 test = "pytest"
+test-light = "pytest -m 'not expensive'"
 lint = "ruff check mojo_bindgen tests"
 format = "ruff format mojo_bindgen tests"
 typecheck = "pyright mojo_bindgen"
