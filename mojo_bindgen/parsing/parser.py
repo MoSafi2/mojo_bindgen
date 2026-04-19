@@ -146,12 +146,22 @@ class ClangParser:
     ) -> list[Decl]:
         """Lower top-level cursors and append macro declarations."""
         decls: list[Decl] = []
+        completed_marker = 0
         for cursor in session.frontend.iter_primary_cursors(session.tu):
             lowered = decl_lowerer.lower_top_level_decl(cursor)
             if lowered is None:
                 continue
             if isinstance(lowered, list):
                 decls.extend(lowered)
+                continue
+            if cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
+                if cursor.is_definition() and cursor.spelling:
+                    completed_marker, completed_records = session.registry.completed_records_since(
+                        completed_marker
+                    )
+                    decls.extend(completed_records)
+                else:
+                    decls.append(lowered)
             else:
                 decls.append(lowered)
         decls.extend(decl_lowerer.collect_macros())
