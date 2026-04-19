@@ -4,7 +4,39 @@ channels = ["https://conda.modular.com/max-nightly/", "conda-forge"]
 name = "mojo_bindgen"
 platforms = ["linux-64"]
 
+# `default` includes the `dev` feature (full tooling). Use `-e install` for a smaller
+# runtime-only environment (Mojo + mojo-bindgen, no notebooks or dev PyPI tools).
+[environments]
+default = { features = ["dev"], solve-group = "main" }
+install = { features = [], solve-group = "main" }
+
 [tasks]
+example-zlib = "bash examples/zlib/generate.sh"
+example-cairo = "bash examples/cairo/generate.sh"
+example-libpng = "bash examples/libpng/generate.sh"
+example-sqlite = "bash examples/sqlite/generate.sh"
+
+[dependencies]
+mojo = ">=0.26.3.0.dev2026041905,<0.27"
+python = ">=3.14.4,<3.15"
+pip = ">=26.0.1,<27"
+rich = ">=15.0.0,<16"
+typer = ">=0.24.1,<0.25"
+
+[pypi-dependencies]
+mojo-bindgen = { path = ".", editable = true }
+
+[feature.dev.dependencies]
+ipykernel = ">=7.1.0,<8"
+jupyter = ">=1.1.1,<2"
+
+[feature.dev.pypi-dependencies]
+pytest = ">=9.0.3, <10"
+build = ">=1.4.3, <2"
+ruff = ">=0.8.0, <0.14"
+pyright = ">=1.1.400, <2"
+
+[feature.dev.tasks]
 test = "pytest"
 lint = "ruff check mojo_bindgen tests"
 format = "ruff format mojo_bindgen tests"
@@ -14,23 +46,3 @@ build = "python -m build"
 build-wheel = "python -m build --wheel"
 build-sdist = "python -m build --sdist"
 clean-dist = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in (Path('build'), Path('dist'))]; [shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True) for p in Path('.').glob('*.egg-info')]\""
-example-zlib = "bash examples/zlib/generate.sh"
-example-cairo = "bash examples/cairo/generate.sh"
-example-libpng = "bash examples/libpng/generate.sh"
-example-sqlite = "bash examples/sqlite/generate.sh"
-
-[dependencies]
-mojo = ">=0.26.3.0.dev2026041905,<0.27"
-python = ">=3.14.4,<3.15"
-ipykernel = ">=7.1.0,<8"
-jupyter = ">=1.1.1,<2"
-pip = ">=26.0.1,<27"
-rich = ">=15.0.0,<16"
-typer = ">=0.24.1,<0.25"
-
-[pypi-dependencies]
-mojo-bindgen = { path = ".", editable = true }
-pytest = ">=9.0.3, <10"
-build = ">=1.4.3, <2"
-ruff = ">=0.8.0, <0.14"
-pyright = ">=1.1.400, <2"

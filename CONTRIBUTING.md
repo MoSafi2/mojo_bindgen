@@ -8,6 +8,8 @@ This repository targets **Python 3.14+** and a **system libclang** compatible wi
 
 The [Pixi](https://pixi.sh) workspace is currently locked for **linux-64** only. On other platforms, use a plain virtualenv and `pip install -e ".[dev]"` instead.
 
+`pixi install` uses the **default** environment, which includes the `dev` feature (Jupyter, pytest, Ruff, Pyright, build, …). For a minimal install (Mojo, Python, and editable `mojo-bindgen` only), use `pixi install -e install` and `pixi shell -e install`.
+
 ```bash
 pixi install
 pixi shell
