@@ -1,2 +1,4 @@
 *.mojo
+!normal/stress_normal_external.mojo
+!normal/stress_normal_no_align.mojo
 *.jsonc

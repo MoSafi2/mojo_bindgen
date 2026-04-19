@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import mojo_bindgen.cli as cli
+
+# Rich-styled Typer help embeds ANSI sequences; strip for stable substring checks.
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;:]*m")
+
+
+def _strip_ansi(s: str) -> str:
+    return _ANSI_ESCAPE.sub("", s)
 
 
 class _DummyUnit:
@@ -16,9 +24,10 @@ def test_help_includes_examples(capsys) -> None:
     rc = cli.main(["--help"])
     captured = capsys.readouterr()
     assert rc == 0
-    assert "Generate Mojo FFI" in captured.out
-    assert "Examples:" in captured.out
-    assert "--compile-arg" in captured.out
+    plain = _strip_ansi(captured.out)
+    assert "Generate Mojo FFI" in plain
+    assert "Examples:" in plain
+    assert "--compile-arg" in plain
 
 
 def test_json_mode_uses_parser_and_stdout(monkeypatch, capsys, tmp_path: Path) -> None:
