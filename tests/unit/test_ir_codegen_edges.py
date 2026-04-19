@@ -155,13 +155,9 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD" in out
     assert "def _bindgen_dl() raises -> OwnedDLHandle:" in out
+    assert "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
     assert (
-        "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:"
-        in out
-    )
-    assert (
-        "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:"
-        in out
+        "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
     )
     assert 'comptime global_counter = GlobalVar[T=Int32, link="global_counter"]' in out
     assert 'comptime LIB_NAME = "bindgen"' in out
