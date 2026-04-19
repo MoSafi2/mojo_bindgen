@@ -1,7 +1,7 @@
 """Render analyzed Mojo codegen state to source text.
 
 This module is responsible only for formatting. It consumes
-:class:`~mojo_bindgen.codegen.analysis.AnalyzedUnit` plus the original IR
+:class:`~mojo_bindgen.passes.analyze_for_mojo.AnalyzedUnit` plus the original IR
 declarations referenced from that analysis and emits a single Mojo source file.
 """
 
@@ -25,7 +25,9 @@ from mojo_bindgen.ir import (
     UnaryExpr,
     VoidType,
 )
-from mojo_bindgen.codegen.analysis import (
+from mojo_bindgen.codegen.mojo_mapper import TypeMapper, map_scalar, mojo_ident
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.passes.analyze_for_mojo import (
     CallbackAlias,
     AnalyzedField,
     AnalyzedFunction,
@@ -35,8 +37,6 @@ from mojo_bindgen.codegen.analysis import (
     AnalyzedUnit,
     TailDecl,
 )
-from mojo_bindgen.codegen.mojo_mapper import TypeMapper, map_scalar, mojo_ident
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 
 
 class CodeBuilder:

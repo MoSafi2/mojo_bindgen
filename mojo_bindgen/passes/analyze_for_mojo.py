@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
 from typing import Callable
 
 from mojo_bindgen.codegen._struct_order import toposort_structs
-from mojo_bindgen.codegen.analysis import (
-    AnalyzedField,
-    AnalyzedFunction,
-    AnalyzedStruct,
-    AnalyzedTypedef,
-    AnalyzedUnion,
-    AnalyzedUnit,
-    CallbackAlias,
-    TailDecl,
-)
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import (
     FFIOriginStyle,
@@ -53,6 +45,91 @@ from mojo_bindgen.ir import (
 )
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
+
+
+@dataclass(frozen=True)
+class AnalyzedField:
+    """Derived field metadata needed by the renderer."""
+
+    field: Field
+    index: int
+    mojo_name: str
+    callback_alias_name: str | None = None
+
+
+@dataclass(frozen=True)
+class AnalyzedStruct:
+    """Derived struct-level emission decisions."""
+
+    decl: Struct
+    register_passable: bool
+    align_decorator: int | None
+    align_stride_warning: bool
+    align_omit_comment: str | None
+    fields: tuple[AnalyzedField, ...]
+
+
+@dataclass(frozen=True)
+class AnalyzedTypedef:
+    """Derived typedef policy."""
+
+    decl: Typedef
+    skip_duplicate: bool
+    callback_alias_name: str | None = None
+
+
+FunctionKind = Literal["wrapper", "variadic_stub", "non_register_return_stub"]
+
+
+@dataclass(frozen=True)
+class AnalyzedFunction:
+    """Derived function emission decisions."""
+
+    decl: Function
+    kind: FunctionKind
+    param_names: tuple[str, ...]
+    ret_callback_alias_name: str | None = None
+    param_callback_alias_names: tuple[str | None, ...] = ()
+
+
+@dataclass(frozen=True)
+class CallbackAlias:
+    """Generated callback signature alias for a surfaced function-pointer type."""
+
+    name: str
+    fp: FunctionPtr
+
+
+@dataclass(frozen=True)
+class AnalyzedUnion:
+    """Derived union lowering decisions."""
+
+    decl: Struct
+    uses_unsafe_union: bool
+
+
+TailDecl = Enum | Const | MacroDecl | GlobalVar | AnalyzedTypedef | AnalyzedFunction
+
+
+@dataclass(frozen=True)
+class AnalyzedUnit:
+    """Unit-level semantic analysis for Mojo generation."""
+
+    unit: Unit
+    opts: MojoEmitOptions
+    needs_opaque_imports: bool
+    needs_simd_import: bool
+    needs_complex_import: bool
+    needs_atomic_import: bool
+    semantic_fallback_notes: tuple[str, ...]
+    unsafe_union_names: frozenset[str]
+    emitted_typedef_mojo_names: frozenset[str]
+    callback_aliases: tuple[CallbackAlias, ...]
+    callback_signature_names: frozenset[str]
+    global_callback_aliases: dict[str, str]
+    ordered_structs: tuple[AnalyzedStruct, ...]
+    unions: tuple[AnalyzedUnion, ...]
+    tail_decls: tuple[TailDecl, ...]
 
 
 def _is_power_of_two(n: int) -> bool:
@@ -693,6 +770,13 @@ def analyzed_struct_for_test(
     struct_by_name: dict[str, Struct],
 ) -> AnalyzedStruct:
     return _analyze_struct(decl, struct_by_name, options, None)
+
+
+def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
+    """Run the IR pass pipeline and final semantic analysis over ``unit``."""
+    from mojo_bindgen.passes.pipeline import run_ir_passes
+
+    return analyze_unit_semantics(run_ir_passes(unit), options)
 
 
 class AnalyzeForMojoPass:

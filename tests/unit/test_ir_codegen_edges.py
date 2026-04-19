@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.codegen.analysis import analyze_unit
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_mapper import map_type
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
@@ -38,6 +37,7 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
+from mojo_bindgen.passes.analyze_for_mojo import analyze_unit
 
 
 def _i32() -> IntType:

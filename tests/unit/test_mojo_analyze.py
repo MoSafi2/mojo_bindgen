@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`mojo_bindgen.codegen.analysis` (no libclang)."""
+"""Unit tests for :mod:`mojo_bindgen.passes.analyze_for_mojo` (no libclang)."""
 
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ from mojo_bindgen.ir import (
 
 def _f32() -> FloatType:
     return FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
-from mojo_bindgen.codegen.analysis import AnalyzedFunction, analyze_unit
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.passes.analyze_for_mojo import AnalyzedFunction, analyze_unit
 
 
 def _i32() -> IntType:
