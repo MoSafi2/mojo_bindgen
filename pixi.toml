@@ -14,6 +14,7 @@ clean-dist = "python -c \"import shutil; from pathlib import Path; [shutil.rmtre
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"
+example-sqlite = "bash examples/sqlite/generate.sh"
 
 [dependencies]
 mojo = ">=0.26.3.0.dev2026041905,<0.27"
