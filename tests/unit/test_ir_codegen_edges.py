@@ -8,6 +8,7 @@ from mojo_bindgen.codegen.mojo_mapper import map_type
 from mojo_bindgen.ir import (
     AtomicType,
     BinaryExpr,
+    CastExpr,
     ComplexType,
     Const,
     Field,
@@ -45,6 +46,27 @@ def _i32() -> IntType:
 
 def _char() -> IntType:
     return IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
+
+
+def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
+    """``(size_t)-1`` style macros emit as one scalar constructor, not binary minus."""
+    size_t_like = IntType(int_kind=IntKind.ULONG, size_bytes=8, align_bytes=8)
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        decls=[
+            MacroDecl(
+                name="CURL_ZERO_TERMINATED",
+                tokens=["(", "(", "size_t", ")", "-", "1", ")"],
+                kind="object_like_supported",
+                expr=CastExpr(target=size_t_like, expr=IntLiteral(-1)),
+                type=size_t_like,
+            ),
+        ],
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    assert "comptime CURL_ZERO_TERMINATED = c_ulong(-1)" in out
 
 
 def test_map_opaque_record_ref_as_opaque_pointer() -> None:
@@ -710,3 +732,50 @@ def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
     assert "from std.ffi import external_call, c_int" in out
     assert 'def sf_add(a: c_int, b: c_int) abi("C") -> c_int:' in out
     assert 'return external_call["sf_add", c_int, c_int, c_int](a, b)' in out
+
+
+def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() -> None:
+    """Scalars inside FunctionPtr surfaces must appear in ``from std.ffi import`` even when
+    ``canonical`` on decl types never visits those scalars (e.g. ret-only function + typedef FP).
+    """
+    i32 = _i32()
+    fp = FunctionPtr(
+        ret=i32,
+        params=[i32, i32],
+        param_names=["a", "b"],
+        is_variadic=False,
+    )
+    fp_typedef = Typedef(
+        decl_id="typedef:only_cb_t",
+        name="only_cb_t",
+        aliased=fp,
+        canonical=fp,
+    )
+    fp_typedef_ref = TypeRef(
+        decl_id=fp_typedef.decl_id,
+        name="only_cb_t",
+        canonical=fp,
+    )
+    getter = Function(
+        decl_id="fn:get_only_cb",
+        name="get_only_cb",
+        link_name="get_only_cb",
+        ret=fp_typedef_ref,
+        params=[],
+        is_variadic=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            decls=[fp_typedef, getter],
+        )
+    )
+    assert "from std.ffi import external_call, c_int" in out
+    assert (
+        'comptime only_cb_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in out
+    )
+    assert (
+        'def get_only_cb() abi("C") -> UnsafePointer[only_cb_t, MutExternalOrigin]:' in out
+    )

@@ -7,6 +7,7 @@ names and type strings. This module does not decide what to emit.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import singledispatchmethod
 from typing import Literal
@@ -289,6 +290,35 @@ def pointer_origin_names(style: FFIOriginStyle) -> PointerOriginNames:
     return PointerOriginNames(mut="MutAnyOrigin", immut="ImmutAnyOrigin")
 
 
+def iter_function_ptrs_in_type(t: Type) -> Iterator[FunctionPtr]:
+    """Yield every :class:`~mojo_bindgen.ir.FunctionPtr` in ``t``, including nested signatures."""
+    while isinstance(t, TypeRef):
+        t = t.canonical
+    while isinstance(t, QualifiedType):
+        t = t.unqualified
+    while isinstance(t, AtomicType):
+        t = t.value_type
+
+    if isinstance(t, FunctionPtr):
+        yield t
+        yield from iter_function_ptrs_in_type(t.ret)
+        for p in t.params:
+            yield from iter_function_ptrs_in_type(p)
+        return
+    if isinstance(t, Pointer) and t.pointee is not None:
+        yield from iter_function_ptrs_in_type(t.pointee)
+        return
+    if isinstance(t, Array):
+        yield from iter_function_ptrs_in_type(t.element)
+        return
+    if isinstance(t, ComplexType):
+        yield from iter_function_ptrs_in_type(t.element)
+        return
+    if isinstance(t, VectorType):
+        yield from iter_function_ptrs_in_type(t.element)
+        return
+
+
 class TypeMapper:
     """Canonical and signature Mojo type mapping from IR :class:`~mojo_bindgen.ir.Type`."""
 
@@ -314,6 +344,18 @@ class TypeMapper:
         """Lower a scalar for emitted Mojo (respects ``ffi_scalar_style``)."""
         return self._map_scalar_emit(t)
 
+    def warm_ffi_scalars_from_function_ptr(self, fp: FunctionPtr) -> None:
+        """Record ``std.ffi`` scalars surfaced in callback signatures (matches ``callback_signature_alias_expr``)."""
+        self.surface(fp.ret)
+        for p in fp.params:
+            self.surface(p)
+
+    def _warm_types_for_ffi_imports(self, t: Type) -> None:
+        """Canonical lowering plus function-pointer signature surfaces (``canonical`` alone misses FP interiors)."""
+        self.canonical(t)
+        for fp in iter_function_ptrs_in_type(t):
+            self.warm_ffi_scalars_from_function_ptr(fp)
+
     def warm_ffi_scalar_imports_from_unit(self, unit: Unit) -> None:
         """Pre-resolve all lowered types so ``_ffi_scalar_imports`` is complete before the import line."""
         if self._ffi_scalar_style != "std_ffi_aliases":
@@ -324,21 +366,21 @@ class TypeMapper:
         for d in unit.decls:
             if isinstance(d, Struct):
                 for f in d.fields:
-                    self.canonical(f.type)
+                    self._warm_types_for_ffi_imports(f.type)
             elif isinstance(d, Function):
-                self.canonical(d.ret)
+                self._warm_types_for_ffi_imports(d.ret)
                 for p in d.params:
-                    self.canonical(p.type)
+                    self._warm_types_for_ffi_imports(p.type)
             elif isinstance(d, Typedef):
-                self.canonical(d.canonical)
+                self._warm_types_for_ffi_imports(d.canonical)
             elif isinstance(d, GlobalVar):
-                self.canonical(d.type)
+                self._warm_types_for_ffi_imports(d.type)
             elif isinstance(d, Enum):
-                self.canonical(d.underlying)
+                self._warm_types_for_ffi_imports(d.underlying)
             elif isinstance(d, Const):
-                self.canonical(d.type)
+                self._warm_types_for_ffi_imports(d.type)
             elif isinstance(d, MacroDecl) and d.type is not None:
-                self.canonical(d.type)
+                self._warm_types_for_ffi_imports(d.type)
 
     @property
     def ffi_scalar_import_names(self) -> frozenset[str]:

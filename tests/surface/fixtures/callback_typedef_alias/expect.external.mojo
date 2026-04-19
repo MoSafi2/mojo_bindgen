@@ -2,7 +2,7 @@
 # source: tests/surface/fixtures/callback_typedef_alias/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call
+from std.ffi import external_call, c_int
 from std.memory import ImmutOpaquePointer, MutOpaquePointer
 
 comptime cta_cb_t = def (arg0: c_int) thin abi("C") -> c_int

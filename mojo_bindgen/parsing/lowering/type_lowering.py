@@ -170,17 +170,45 @@ class TypeLowerer:
             cx.TypeKind.FUNCTIONPROTO,
             cx.TypeKind.FUNCTIONNOPROTO,
         ):
-            return self._lower_fnptr(canonical_pointee, ctx)
+            # Use the sugared function type when it is already a function prototype so
+            # parameter typedefs (e.g. curl_off_t) stay visible as ELABORATED/TYPEDEF
+            # in argument_types(). Passing get_canonical() strips those to plain long/int.
+            fn_shape = (
+                pointee
+                if pointee.kind
+                in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO)
+                else canonical_pointee
+            )
+            return self._lower_fnptr(fn_shape, ctx)
         return self._lower_pointer_to_value(pointee, qualifiers, ctx)
+
+    def _lower_fn_proto_parameter(self, sugared: cx.Type, canonical: cx.Type, ctx: TypeContext) -> Type:
+        """Lower one function-prototype parameter.
+
+        Prefer the sugared spelling so typedef names (e.g. ``curl_off_t``) become
+        :class:`~mojo_bindgen.ir.TypeRef` in the IR. When the sugared type is a
+        constant array but the canonical parameter adjusted type is a pointer
+        (C array parameter decay, including ``[static N]``), lower the canonical
+        pointer so the ABI matches C.
+        """
+        s = _normalize(sugared)
+        c = _normalize(canonical)
+        if s.kind == cx.TypeKind.CONSTANTARRAY and c.kind == cx.TypeKind.POINTER:
+            return self.lower(canonical, ctx)
+        return self.lower(sugared, ctx)
 
     def _lower_fnptr(self, t: cx.Type, ctx: TypeContext) -> FunctionPtr:
         ret = self.lower(t.get_result(), ctx)
-        params = (
-            [self.lower(arg, ctx) for arg in t.argument_types()]
-            if t.kind == cx.TypeKind.FUNCTIONPROTO
-            else []
-        )
-        is_variadic = t.is_function_variadic() if t.kind == cx.TypeKind.FUNCTIONPROTO else False
+        if t.kind == cx.TypeKind.FUNCTIONPROTO:
+            canon = _normalize(t.get_canonical())
+            params = [
+                self._lower_fn_proto_parameter(s, c, ctx)
+                for s, c in zip(t.argument_types(), canon.argument_types(), strict=True)
+            ]
+            is_variadic = t.is_function_variadic()
+        else:
+            params = []
+            is_variadic = False
         return FunctionPtr(
             ret=ret,
             params=params,

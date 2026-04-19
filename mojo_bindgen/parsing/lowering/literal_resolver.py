@@ -98,6 +98,7 @@ class LiteralResolver:
         self.compile_args = list(compile_args)
         self._parse_args = _parse_args_for_probe(self.compile_args)
         self._integer_suffix_cache: dict[str, IntType] = {}
+        self._type_spelling_int_cache: dict[str, IntType | None] = {}
 
         if prewarm:
             for suffix in _PREWARM_SUFFIXES:
@@ -123,4 +124,20 @@ class LiteralResolver:
 
         prim = self._probe_int_type(suffix)
         self._integer_suffix_cache[suffix] = prim
+        return prim
+
+    def int_type_for_type_spelling(self, spelling: str) -> IntType | None:
+        """Resolve a C type name (e.g. ``size_t``, ``uint32_t``) to an integer :class:`IntType`, or ``None``."""
+        if spelling in self._type_spelling_int_cache:
+            return self._type_spelling_int_cache[spelling]
+
+        idx = cx.Index.create()
+        tu = idx.parse(
+            _PROBE_FILENAME,
+            args=self._parse_args,
+            unsaved_files=[(_PROBE_FILENAME, _probe_source(spelling))],
+            options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
+        )
+        prim = _extract_probed_int_type(tu)
+        self._type_spelling_int_cache[spelling] = prim
         return prim

@@ -15,6 +15,7 @@ from mojo_bindgen.codegen.mojo_mapper import (
 )
 from mojo_bindgen.ir import (
     BinaryExpr,
+    CastExpr,
     CharLiteral,
     Const,
     Enum,
@@ -430,6 +431,17 @@ class MojoRenderer:
             if operand is None:
                 return None
             return f"{expr.op}({operand})"
+        if isinstance(expr, CastExpr):
+            target = expr.target
+            if not isinstance(target, IntType):
+                return None
+            t = self._types.emit_scalar(target)
+            if isinstance(expr.expr, IntLiteral):
+                return f"{t}({expr.expr.value})"
+            inner = self._render_const_expr(expr.expr, target)
+            if inner is None:
+                return None
+            return f"{t}({inner})"
         if isinstance(expr, BinaryExpr):
             lhs = self._render_const_expr(expr.lhs, decl_type)
             rhs = self._render_const_expr(expr.rhs, decl_type)

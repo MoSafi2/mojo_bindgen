@@ -7,7 +7,7 @@ from pathlib import Path
 import clang.cindex as cx
 import pytest
 
-from mojo_bindgen.ir import Struct
+from mojo_bindgen.ir import FunctionPtr, Struct, TypeRef
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
@@ -154,3 +154,34 @@ def test_type_lowerer_prefers_cached_lowered_record_over_nominal_resolution(tmp_
     lowered = type_lowerer.lower(node.type, TypeContext.FIELD)
     assert lowered.name == "node_cached"
     assert lowered.decl_id == cached.decl_id
+
+
+def test_fnptr_typedef_params_keep_typedef_names(tmp_path: Path) -> None:
+    """Pointer-to-fn typedef must preserve typedef parameter spellings (e.g. curl_off_t)."""
+    header = tmp_path / "fnptr_typedef_params.h"
+    header.write_text(
+        "typedef long my_off_t;\n"
+        "typedef int (*xfer_cb)(void *p, my_off_t a, my_off_t b);\n",
+        encoding="utf-8",
+    )
+
+    frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
+    tu = frontend.parse_translation_unit()
+    registry = RecordRegistry.build_from_translation_unit(tu, frontend)
+
+    xfer = next(
+        c
+        for c in frontend.iter_primary_cursors(tu)
+        if c.kind == cx.CursorKind.TYPEDEF_DECL and c.spelling == "xfer_cb"
+    )
+    type_lowerer = TypeLowerer(
+        registry=registry,
+        diagnostics=ParserDiagnosticSink(),
+        primitive_resolver=PrimitiveResolver(),
+    )
+    lowered = type_lowerer.lower(xfer.underlying_typedef_type, TypeContext.TYPEDEF)
+    assert isinstance(lowered, FunctionPtr)
+    assert isinstance(lowered.params[1], TypeRef)
+    assert lowered.params[1].name == "my_off_t"
+    assert isinstance(lowered.params[2], TypeRef)
+    assert lowered.params[2].name == "my_off_t"

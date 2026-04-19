@@ -35,6 +35,9 @@ _INT_LITERAL_RE = re.compile(
     r"^([+-]?)" r"(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)" r"([uUlL]*)$",
 )
 
+# Single-token type name for the ``(name) -1`` cast idiom (``(size_t)-1``, …).
+_CAST_TYPE_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 _FLOAT_LITERAL_RE = re.compile(
     r"^[+-]?(?:"
     r"(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?"
@@ -347,6 +350,22 @@ class ConstExprParser:
         if tok is None:
             return None
         if tok == "(":
+            # C cast: ``(typename) -1`` — not ``(typename) - (1)`` binary minus.
+            toks = stream._tokens
+            i = stream._index
+            if (
+                i + 2 < len(toks)
+                and _CAST_TYPE_IDENT_RE.match(toks[i] or "")
+                and toks[i + 1] == ")"
+                and toks[i + 2] in ("-", "+", "~", "(")
+            ):
+                it = self.literal_resolver.int_type_for_type_spelling(toks[i])
+                if it is not None:
+                    stream._index = i + 2
+                    operand = self._parse_prefix(stream)
+                    if operand is not None:
+                        return ParsedConstExpr(expr=CastExpr(target=it, expr=operand.expr), primitive=it)
+                    stream._index = i
             inner = self._parse_expr(stream, min_prec=0)
             if inner is None or stream.pop() != ")":
                 return None

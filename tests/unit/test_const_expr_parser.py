@@ -6,6 +6,7 @@ import pytest
 
 from mojo_bindgen.ir import (
     BinaryExpr,
+    CastExpr,
     FloatLiteral,
     FloatType,
     IntLiteral,
@@ -15,6 +16,7 @@ from mojo_bindgen.ir import (
     StringLiteral,
 )
 from mojo_bindgen.parsing.lowering import ConstExprParser, LiteralResolver
+from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr
 
 
 def _has_libclang() -> bool:
@@ -58,6 +60,19 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
     assert combined_expr.expr.op == "|"
     assert isinstance(combined_expr.primitive, IntType)
     assert combined_expr.primitive.int_kind.value == "UINT"
+
+
+def test_const_expr_parser_cast_size_t_minus_one() -> None:
+    """``(size_t)-1`` is a cast of ``-1``, not ``size_t`` minus ``1`` (see ``CURL_ZERO_TERMINATED``)."""
+    parser = ConstExprParser(LiteralResolver([]))
+    out = parser.parse_tokens(["(", "(", "size_t", ")", "-", "1", ")"])
+    assert out is not None
+    assert isinstance(out.expr, CastExpr)
+    assert isinstance(out.expr.target, IntType)
+    folded = fold_const_expr(out.expr)
+    assert isinstance(folded, CastExpr)
+    assert isinstance(folded.expr, IntLiteral)
+    assert folded.expr.value == -1
 
 
 def test_const_expr_parser_rejects_still_unsupported_expression_subset() -> None:
