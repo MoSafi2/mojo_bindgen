@@ -39,9 +39,11 @@ class _FieldDiscovery:
     """Discover normalized field sites for one record definition."""
 
     def __init__(self, registry: RecordRegistry) -> None:
+        """Store the registry used for stable decl IDs and record naming."""
         self.registry = registry
 
     def discover(self, record_cursor: cx.Cursor) -> list[FieldSite]:
+        """Collect field declarations and direct anonymous record members under the record."""
         parent_type = record_cursor.type
         sites: list[FieldSite] = []
         for child in record_cursor.get_children():
@@ -54,7 +56,10 @@ class _FieldDiscovery:
                     sites.append(site)
         return sites
 
-    def _field_decl_site(self, parent_type: cx.Type, field_cursor: cx.Cursor) -> FieldSite:
+    def _field_decl_site(
+        self, parent_type: cx.Type, field_cursor: cx.Cursor
+    ) -> FieldSite:
+        """Build a field site for one field declaration, including bitfields and inline records."""
         name = field_cursor.spelling
         bit_offset = self._field_bit_offset(parent_type, field_cursor)
         byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
@@ -80,7 +85,8 @@ class _FieldDiscovery:
             is_anonymous=not bool(name),
             attached_record=attached,
             uses_attached_record_ref=(
-                attached is not None and self._field_type_matches_record(field_cursor, attached)
+                attached is not None
+                and self._field_type_matches_record(field_cursor, attached)
             ),
         )
 
@@ -89,10 +95,13 @@ class _FieldDiscovery:
         parent_type: cx.Type,
         record_cursor: cx.Cursor,
     ) -> FieldSite | None:
+        """Build a field site for an anonymous struct/union that is a direct member without a name."""
         implicit_field = self._find_implicit_record_field(parent_type, record_cursor)
         bit_offset = self._field_bit_offset(parent_type, implicit_field)
         byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
-        field_type = implicit_field.type if implicit_field is not None else record_cursor.type
+        field_type = (
+            implicit_field.type if implicit_field is not None else record_cursor.type
+        )
         return FieldSite(
             name="",
             source_name="",
@@ -105,6 +114,7 @@ class _FieldDiscovery:
 
     @staticmethod
     def _attached_inline_record_definition(field_cursor: cx.Cursor) -> cx.Cursor | None:
+        """Return the nested struct/union definition cursor under a field, if any."""
         for child in field_cursor.get_children():
             if child.kind in _RECORD_DECL_KINDS and child.is_definition():
                 return child
@@ -115,6 +125,7 @@ class _FieldDiscovery:
         parent_cursor: cx.Cursor,
         child_cursor: cx.Cursor,
     ) -> bool:
+        """Whether the child is an anonymous record member without a separate field declaration."""
         return (
             child_cursor.kind in _RECORD_DECL_KINDS
             and child_cursor.is_definition()
@@ -127,6 +138,7 @@ class _FieldDiscovery:
         parent_cursor: cx.Cursor,
         record_cursor: cx.Cursor,
     ) -> bool:
+        """Whether the parent already has a named field whose record type refers to the nested record."""
         target_decl_id = self.registry.decl_id_for_cursor(record_cursor)
         for child in parent_cursor.get_children():
             if child.kind != cx.CursorKind.FIELD_DECL:
@@ -146,6 +158,7 @@ class _FieldDiscovery:
         parent_type: cx.Type,
         record_cursor: cx.Cursor,
     ) -> cx.Cursor | None:
+        """Find the field cursor Clang exposes for an anonymous record member, if present."""
         target_decl_id = self.registry.decl_id_for_cursor(record_cursor)
         for field_cursor in parent_type.get_fields():
             field_type = field_cursor.type.get_canonical()
@@ -158,17 +171,23 @@ class _FieldDiscovery:
                 return field_cursor
         return None
 
-    def _field_type_matches_record(self, field_cursor: cx.Cursor, record_cursor: cx.Cursor) -> bool:
+    def _field_type_matches_record(
+        self, field_cursor: cx.Cursor, record_cursor: cx.Cursor
+    ) -> bool:
+        """Whether the field's record type is the same definition as the given record cursor."""
         field_type = field_cursor.type.get_canonical()
         if field_type.kind != cx.TypeKind.RECORD:
             return False
         definition = field_type.get_declaration().get_definition()
         if definition is None:
             return False
-        return self.registry.decl_id_for_cursor(definition) == self.registry.decl_id_for_cursor(record_cursor)
+        return self.registry.decl_id_for_cursor(
+            definition
+        ) == self.registry.decl_id_for_cursor(record_cursor)
 
     @staticmethod
     def _field_bit_offset(parent_type: cx.Type, cursor: cx.Cursor | None) -> int:
+        """Bit offset of the field within the parent type, or -1 if unavailable."""
         if cursor is None:
             return -1
         if cursor.spelling:
@@ -193,6 +212,7 @@ class RecordLowerer:
         diagnostics: ParserDiagnosticSink,
         type_lowerer: TypeLowerer,
     ) -> None:
+        """Wire the registry, diagnostics sink, and type lowerer used for record IR."""
         self.registry = registry
         self.diagnostics = diagnostics
         self.type_lowerer = type_lowerer
@@ -227,7 +247,9 @@ class RecordLowerer:
         """Return lowered record definitions completed after one marker index."""
         decl_ids = self._completed_record_decl_ids[start:]
         return len(self._completed_record_decl_ids), [
-            self.registry.get(decl_id) for decl_id in decl_ids if self.registry.get(decl_id) is not None
+            self.registry.get(decl_id)
+            for decl_id in decl_ids
+            if self.registry.get(decl_id) is not None
         ]
 
     def lower_record_definition(self, cursor: cx.Cursor) -> Struct:
@@ -245,14 +267,17 @@ class RecordLowerer:
             fields=[],
             size_bytes=max(0, cursor.type.get_size()),
             align_bytes=max(1, cursor.type.get_align()),
-            is_union=(cursor.kind == cx.CursorKind.UNION_DECL),
+            is_union=cursor.kind == cx.CursorKind.UNION_DECL,
             is_anonymous=naming.is_anonymous,
         )
         self.registry.store(record)
 
         record.fields = [
             field
-            for field in (self._lower_field_site(site) for site in self._field_discovery.discover(cursor))
+            for field in (
+                self._lower_field_site(site)
+                for site in self._field_discovery.discover(cursor)
+            )
             if field is not None
         ]
         self._apply_attributes(record, cursor)
@@ -296,6 +321,7 @@ class RecordLowerer:
 
     @staticmethod
     def _apply_attributes(record: Struct, cursor: cx.Cursor) -> None:
+        """Set packed and requested alignment on the struct from Clang attribute children."""
         packed = False
         requested_align: int | None = None
         for child in cursor.get_children():
