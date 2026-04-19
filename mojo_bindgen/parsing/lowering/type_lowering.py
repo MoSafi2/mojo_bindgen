@@ -189,8 +189,7 @@ class TypeLowerer:
             # in argument_types(). Passing get_canonical() strips those to plain long/int.
             fn_shape = (
                 pointee
-                if pointee.kind
-                in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO)
+                if pointee.kind in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO)
                 else canonical_pointee
             )
             return self._lower_fnptr(fn_shape, ctx, source_cursor=source_cursor)
@@ -215,7 +214,9 @@ class TypeLowerer:
             return None
         return self._lower_pointer(t, ctx, source_cursor=source_cursor)
 
-    def _lower_fn_proto_parameter(self, sugared: cx.Type, canonical: cx.Type, ctx: TypeContext) -> Type:
+    def _lower_fn_proto_parameter(
+        self, sugared: cx.Type, canonical: cx.Type, ctx: TypeContext
+    ) -> Type:
         """Lower one function-prototype parameter.
 
         Prefer the sugared spelling so typedef names (e.g. ``curl_off_t``) become

@@ -773,9 +773,5 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
         )
     )
     assert "from std.ffi import external_call, c_int" in out
-    assert (
-        'comptime only_cb_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in out
-    )
-    assert (
-        'def get_only_cb() abi("C") -> UnsafePointer[only_cb_t, MutExternalOrigin]:' in out
-    )
+    assert 'comptime only_cb_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in out
+    assert 'def get_only_cb() abi("C") -> UnsafePointer[only_cb_t, MutExternalOrigin]:' in out

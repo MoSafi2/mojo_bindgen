@@ -160,8 +160,7 @@ def test_fnptr_typedef_params_keep_typedef_names(tmp_path: Path) -> None:
     """Pointer-to-fn typedef must preserve typedef parameter spellings (e.g. curl_off_t)."""
     header = tmp_path / "fnptr_typedef_params.h"
     header.write_text(
-        "typedef long my_off_t;\n"
-        "typedef int (*xfer_cb)(void *p, my_off_t a, my_off_t b);\n",
+        "typedef long my_off_t;\ntypedef int (*xfer_cb)(void *p, my_off_t a, my_off_t b);\n",
         encoding="utf-8",
     )
 

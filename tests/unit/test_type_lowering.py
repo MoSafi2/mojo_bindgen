@@ -128,7 +128,9 @@ def test_type_lowering_preserves_callback_parameter_names_across_positions(tmp_p
     assert chooser.ret.param_names == ["timeout_ms", "userdata"]
 
 
-def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(tmp_path: Path) -> None:
+def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(
+    tmp_path: Path,
+) -> None:
     header = tmp_path / "callback_codegen_names.h"
     header.write_text(
         (
@@ -148,7 +150,10 @@ def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(t
 
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
 
-    assert 'comptime named_cb_t = def (value: c_int, userdata: MutOpaquePointer[MutExternalOrigin]) thin abi("C") -> c_int' in out
+    assert (
+        'comptime named_cb_t = def (value: c_int, userdata: MutOpaquePointer[MutExternalOrigin]) thin abi("C") -> c_int'
+        in out
+    )
     assert (
         'comptime callbacks_t_poll_cb = def (timeout_ms: c_int, arg1: MutOpaquePointer[MutExternalOrigin]) thin abi("C") -> c_int'
         in out

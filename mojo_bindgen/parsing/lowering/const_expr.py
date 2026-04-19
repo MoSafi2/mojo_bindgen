@@ -364,7 +364,9 @@ class ConstExprParser:
                     stream._index = i + 2
                     operand = self._parse_prefix(stream)
                     if operand is not None:
-                        return ParsedConstExpr(expr=CastExpr(target=it, expr=operand.expr), primitive=it)
+                        return ParsedConstExpr(
+                            expr=CastExpr(target=it, expr=operand.expr), primitive=it
+                        )
                     stream._index = i
             inner = self._parse_expr(stream, min_prec=0)
             if inner is None or stream.pop() != ")":
