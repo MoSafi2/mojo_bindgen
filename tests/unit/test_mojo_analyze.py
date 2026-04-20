@@ -34,6 +34,14 @@ def _i32() -> IntType:
     return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
+def _u32() -> IntType:
+    return IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4)
+
+
+def _bool() -> IntType:
+    return IntType(int_kind=IntKind.BOOL, size_bytes=1, align_bytes=1)
+
+
 def test_analyze_variadic_function_kind() -> None:
     v = VoidType()
     fn = Function(
@@ -178,6 +186,92 @@ def test_analyze_typedef_name_in_function_signature_when_typedef_emitted() -> No
     assert af.kind == "wrapper"
     assert af.param_names == ("n",)
     assert "my_size_t" in au.emitted_typedef_mojo_names
+
+
+def test_analyze_pure_bitfield_struct_separates_storage_from_members() -> None:
+    u32 = _u32()
+    b = _bool()
+    st = Struct(
+        decl_id="struct:Bits",
+        name="Bits",
+        c_name="Bits",
+        fields=[
+            Field(
+                name="ready",
+                source_name="ready",
+                type=u32,
+                byte_offset=0,
+                is_bitfield=True,
+                bit_offset=0,
+                bit_width=1,
+            ),
+            Field(
+                name="error",
+                source_name="error",
+                type=u32,
+                byte_offset=0,
+                is_bitfield=True,
+                bit_offset=1,
+                bit_width=1,
+            ),
+            Field(
+                name="",
+                source_name="",
+                type=u32,
+                byte_offset=4,
+                is_anonymous=True,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=0,
+            ),
+            Field(
+                name="enabled",
+                source_name="enabled",
+                type=b,
+                byte_offset=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=1,
+            ),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
+    analyzed = au.ordered_structs[0]
+    assert analyzed.pure_bitfield is not None
+    assert [storage.name for storage in analyzed.pure_bitfield.storages] == ["__bf0", "__bf1"]
+    assert [member.mojo_name for member in analyzed.pure_bitfield.members] == ["ready", "error", "enabled"]
+    assert analyzed.pure_bitfield.members[0].storage_name == "__bf0"
+    assert analyzed.pure_bitfield.members[2].storage_name == "__bf1"
+    assert analyzed.pure_bitfield.members[2].is_bool is True
+
+
+def test_analyze_mixed_struct_does_not_use_pure_bitfield_path() -> None:
+    u32 = _u32()
+    st = Struct(
+        decl_id="struct:MixedBits",
+        name="MixedBits",
+        c_name="MixedBits",
+        fields=[
+            Field(name="tag", source_name="tag", type=u32, byte_offset=0),
+            Field(
+                name="ready",
+                source_name="ready",
+                type=u32,
+                byte_offset=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=1,
+            ),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
+    assert au.ordered_structs[0].pure_bitfield is None
 
 
 def test_analyze_function_pointer_returns_use_wrapper_kind() -> None:

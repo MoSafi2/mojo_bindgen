@@ -32,8 +32,11 @@ from mojo_bindgen.ir import (
     VoidType,
 )
 from mojo_bindgen.passes.analyze_for_mojo import (
+    AnalyzedBitfieldMember,
+    AnalyzedBitfieldStorage,
     AnalyzedField,
     AnalyzedFunction,
+    AnalyzedPureBitfieldStruct,
     AnalyzedGlobalVar,
     AnalyzedStruct,
     AnalyzedTypedef,
@@ -88,6 +91,12 @@ def _mojo_float_literal_text(c_spelling: str) -> str:
     return t
 
 
+def _storage_mask_text(width: int) -> str:
+    if width <= 0:
+        return "0"
+    return hex((1 << width) - 1)
+
+
 class MojoRenderer:
     """Turn :class:`AnalyzedUnit` into a generated Mojo module."""
 
@@ -128,7 +137,9 @@ class MojoRenderer:
                 f"# bitfield: C bits {field.bit_offset}..{field.bit_offset + field.bit_width - 1} "
                 f"({field.bit_width} bits) on {backing}"
             )
-        if analyzed_field.callback_alias_name is None and isinstance(field.type, FunctionPtr):
+        if analyzed_field.callback_alias_name is None and isinstance(
+            field.type, FunctionPtr
+        ):
             b.add(f"# {types.function_ptr_comment(field.type)}")
         if opts.warn_abi and field.is_bitfield:
             b.add("# ABI: verify bitfield layout matches target C compiler.")
@@ -143,7 +154,9 @@ class MojoRenderer:
         decl = analyzed.decl
         name = mojo_ident(decl.name.strip() or decl.c_name.strip())
         b = CodeBuilder()
-        b.add(f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target")
+        b.add(
+            f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target"
+        )
         b.add("@fieldwise_init")
         b.add(f"struct {name}(Copyable, Movable):")
         b.indent()
@@ -151,6 +164,68 @@ class MojoRenderer:
         b.dedent()
         b.add("")
         return b.render()
+
+    def _render_pure_bitfield_storage(
+        self,
+        b: CodeBuilder,
+        storage: AnalyzedBitfieldStorage,
+    ) -> None:
+        mapped = self._types.surface(storage.type)
+        if self._a.opts.warn_abi:
+            b.add(
+                f"# bitfield storage: bits {storage.start_bit}..{storage.start_bit + storage.width_bits - 1} "
+                f"at byte offset {storage.byte_offset}"
+            )
+        b.add(f"var {storage.name}: {mapped}")
+
+    def _render_pure_bitfield_member(
+        self,
+        b: CodeBuilder,
+        member: AnalyzedBitfieldMember,
+    ) -> None:
+        surface_type = self._types.surface(member.field.type)
+        storage_type = self._types.surface(member.storage_type)
+        mask_text = _storage_mask_text(member.bit_width)
+        shift = member.storage_local_bit_offset
+
+        if self._a.opts.warn_abi:
+            b.add(
+                f"# bitfield accessor: C bits {member.field.bit_offset}.."
+                f"{member.field.bit_offset + member.bit_width - 1} ({member.bit_width} bits)"
+            )
+
+        b.add(f"def {member.mojo_name}(self) -> {surface_type}:")
+        b.indent()
+        b.add(
+            f"var raw = (self.{member.storage_name} >> {shift}) & {storage_type}({mask_text})"
+        )
+        if member.is_bool:
+            b.add(f"return raw != {storage_type}(0)")
+        elif member.is_signed and member.bit_width > 0:
+            sign_bit_text = hex(1 << (member.bit_width - 1))
+            b.add(f"if raw & {storage_type}({sign_bit_text}) != {storage_type}(0):")
+            b.indent()
+            b.add(f"return {surface_type}(raw | ~{storage_type}({mask_text}))")
+            b.dedent()
+            b.add(f"return {surface_type}(raw)")
+        else:
+            b.add(f"return {surface_type}(raw)")
+        b.dedent()
+
+        b.add(f"def set_{member.mojo_name}(mut self, value: {surface_type}):")
+        b.indent()
+        if member.is_bool:
+            b.add(f"var raw_value = {storage_type}(1) if value else {storage_type}(0)")
+        else:
+            b.add(
+                f"var raw_value = {storage_type}(value) & {storage_type}({mask_text})"
+            )
+        b.add(f"var clear_mask = ~({storage_type}({mask_text}) << {shift})")
+        b.add(
+            f"self.{member.storage_name} = (self.{member.storage_name} & clear_mask) | "
+            f"((raw_value & {storage_type}({mask_text})) << {shift})"
+        )
+        b.dedent()
 
     def render_struct(self, analyzed: AnalyzedStruct) -> str:
         """Render a single analyzed non-union struct declaration."""
@@ -181,8 +256,14 @@ class MojoRenderer:
         b.add("@fieldwise_init")
         b.add(f"struct {name}{traits}:")
         b.indent()
-        for af in analyzed.fields:
-            self._emit_field_lines(self._a.opts, self._types, b, af)
+        if analyzed.pure_bitfield is not None:
+            for storage in analyzed.pure_bitfield.storages:
+                self._render_pure_bitfield_storage(b, storage)
+            for member in analyzed.pure_bitfield.members:
+                self._render_pure_bitfield_member(b, member)
+        else:
+            for af in analyzed.fields:
+                self._emit_field_lines(self._a.opts, self._types, b, af)
         b.dedent()
         b.add("")
         return b.render()
@@ -260,7 +341,10 @@ class MojoRenderer:
 
     def _dl_handle_helpers(self) -> str:
         """Render helper code for ``owned_dl_handle`` linking mode, if needed."""
-        if self._a.opts.linking == "external_call" and self._a.needs_global_symbol_helpers:
+        if (
+            self._a.opts.linking == "external_call"
+            and self._a.needs_global_symbol_helpers
+        ):
             return (
                 "# Resolve symbols from libraries already linked into this process (e.g. mojo link step).\n"
                 "def _bindgen_dl() raises -> OwnedDLHandle:\n"
@@ -269,7 +353,9 @@ class MojoRenderer:
         if self._a.opts.linking != "owned_dl_handle":
             return ""
         if self._a.opts.library_path_hint:
-            path_lit = self._a.opts.library_path_hint.replace("\\", "\\\\").replace('"', '\\"')
+            path_lit = self._a.opts.library_path_hint.replace("\\", "\\\\").replace(
+                '"', '\\"'
+            )
             return (
                 f'comptime _BINDGEN_LIB_PATH: String = "{path_lit}"\n\n'
                 "def _bindgen_dl() raises -> OwnedDLHandle:\n"
@@ -286,7 +372,9 @@ class MojoRenderer:
         if not union.uses_unsafe_union:
             return None
         name = mojo_ident(union.decl.name.strip() or union.decl.c_name.strip())
-        types_csv = ", ".join(self._union_member_types.canonical(f.type) for f in union.decl.fields)
+        types_csv = ", ".join(
+            self._union_member_types.canonical(f.type) for f in union.decl.fields
+        )
         return f"comptime {name}_Union = UnsafeUnion[{types_csv}]\n\n"
 
     def _union_comment_block(self, union: AnalyzedUnion) -> str:
@@ -308,7 +396,9 @@ class MojoRenderer:
             ]
         for field in decl.fields:
             label = field.name if field.name else "(anonymous)"
-            lines.append(f"#   {label}: {self._union_member_types.canonical(field.type)}")
+            lines.append(
+                f"#   {label}: {self._union_member_types.canonical(field.type)}"
+            )
         lines.append("")
         return "\n".join(lines)
 
@@ -354,7 +444,9 @@ class MojoRenderer:
         """Render collected callback aliases before the declaration body."""
         if not self._a.callback_aliases:
             return ""
-        return "".join(self._emit_callback_alias(alias) for alias in self._a.callback_aliases)
+        return "".join(
+            self._emit_callback_alias(alias) for alias in self._a.callback_aliases
+        )
 
     @staticmethod
     def _emit_typedef(analyzed: AnalyzedTypedef, types: TypeMapper) -> str:
@@ -389,7 +481,11 @@ class MojoRenderer:
         macro forms remain visible as comments with their original token text.
         """
         body = " ".join(decl.tokens)
-        if decl.kind == "object_like_supported" and decl.expr is not None and decl.type is not None:
+        if (
+            decl.kind == "object_like_supported"
+            and decl.expr is not None
+            and decl.type is not None
+        ):
             if isinstance(decl.expr, RefExpr):
                 reason = "identifier reference macro is not emitted directly; only literal macros are currently supported"
                 if body:
@@ -413,7 +509,9 @@ class MojoRenderer:
         self, expr: object, decl_type: IntType | FloatType | VoidType | object
     ) -> str | None:
         """Render the supported constant-expression subset to Mojo source."""
-        if isinstance(expr, IntLiteral) and isinstance(decl_type, (IntType, FloatType, VoidType)):
+        if isinstance(expr, IntLiteral) and isinstance(
+            decl_type, (IntType, FloatType, VoidType)
+        ):
             t = self._types.emit_scalar(decl_type)
             return f"{t}({expr.value})"
         if isinstance(expr, StringLiteral):
@@ -514,7 +612,9 @@ class MojoRenderer:
             f'comptime {name} = {wrapper}[T={ag.surface_type}, link="{link_lit}"]\n\n'
         )
 
-    def _function_signature(self, analyzed: AnalyzedFunction) -> tuple[str, str, str, bool, str]:
+    def _function_signature(
+        self, analyzed: AnalyzedFunction
+    ) -> tuple[str, str, str, bool, str]:
         """Build derived signature fragments used by function rendering."""
         fn = analyzed.decl
         ret_t = (
@@ -553,7 +653,9 @@ class MojoRenderer:
     def _emit_function_thin_wrapper(self, analyzed: AnalyzedFunction) -> str:
         """Render a callable thin-FFI wrapper for one supported function."""
         fn = analyzed.decl
-        ret_t, args_sig, call_args, is_void, ret_list = self._function_signature(analyzed)
+        ret_t, args_sig, call_args, is_void, ret_list = self._function_signature(
+            analyzed
+        )
         bracket_inner = self._types.function_type_param_list(
             fn,
             ret_list,

@@ -48,6 +48,14 @@ def _char() -> IntType:
     return IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
 
 
+def _u32() -> IntType:
+    return IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4)
+
+
+def _bool() -> IntType:
+    return IntType(int_kind=IntKind.BOOL, size_bytes=1, align_bytes=1)
+
+
 def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
     """``(size_t)-1`` style macros emit as one scalar constructor, not binary minus."""
     size_t_like = IntType(int_kind=IntKind.ULONG, size_bytes=8, align_bytes=8)
@@ -101,6 +109,99 @@ def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None
     assert au.ordered_structs == ()
     assert len(au.ordered_incomplete_structs) == 1
     assert au.ordered_incomplete_structs[0].decl.decl_id == st.decl_id
+
+
+def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> None:
+    u32 = _u32()
+    b = _bool()
+    st = Struct(
+        decl_id="struct:Bits",
+        name="Bits",
+        c_name="Bits",
+        fields=[
+            Field(
+                name="ready",
+                source_name="ready",
+                type=u32,
+                byte_offset=0,
+                is_bitfield=True,
+                bit_offset=0,
+                bit_width=1,
+            ),
+            Field(
+                name="state",
+                source_name="state",
+                type=u32,
+                byte_offset=0,
+                is_bitfield=True,
+                bit_offset=1,
+                bit_width=3,
+            ),
+            Field(
+                name="",
+                source_name="",
+                type=u32,
+                byte_offset=4,
+                is_anonymous=True,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=0,
+            ),
+            Field(
+                name="enabled",
+                source_name="enabled",
+                type=b,
+                byte_offset=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=1,
+            ),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    )
+    assert "var __bf0: c_uint" in out
+    assert "var __bf1: Bool" in out
+    assert "var __bf2:" not in out
+    assert "var ready: c_uint" not in out
+    assert "def ready(self) -> c_uint:" in out
+    assert "def set_ready(mut self, value: c_uint):" in out
+    assert "def enabled(self) -> Bool:" in out
+    assert "def set_enabled(mut self, value: Bool):" in out
+
+
+def test_generator_keeps_mixed_struct_bitfields_on_legacy_field_path() -> None:
+    u32 = _u32()
+    st = Struct(
+        decl_id="struct:MixedBits",
+        name="MixedBits",
+        c_name="MixedBits",
+        fields=[
+            Field(name="tag", source_name="tag", type=u32, byte_offset=0),
+            Field(
+                name="ready",
+                source_name="ready",
+                type=u32,
+                byte_offset=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=1,
+            ),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    )
+    assert "var tag: c_uint" in out
+    assert "var ready: c_uint" in out
+    assert "def ready(self) -> c_uint:" not in out
 
 
 def test_generator_renders_global_var_stub_and_macro_comments() -> None:

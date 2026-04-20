@@ -29,6 +29,7 @@ from mojo_bindgen.ir import (
     Function,
     FunctionPtr,
     GlobalVar,
+    IntKind,
     IntType,
     MacroDecl,
     OpaqueRecordRef,
@@ -60,6 +61,39 @@ class AnalyzedField:
 
 
 @dataclass(frozen=True)
+class AnalyzedBitfieldStorage:
+    """One synthesized physical storage member for a pure bitfield struct."""
+
+    name: str
+    type: Type
+    byte_offset: int
+    start_bit: int
+    width_bits: int
+
+
+@dataclass(frozen=True)
+class AnalyzedBitfieldMember:
+    """One logical named bitfield projected onto a synthesized storage member."""
+
+    field: Field
+    mojo_name: str
+    storage_name: str
+    storage_type: Type
+    storage_local_bit_offset: int
+    bit_width: int
+    is_signed: bool
+    is_bool: bool
+
+
+@dataclass(frozen=True)
+class AnalyzedPureBitfieldStruct:
+    """Derived storage/member split for a pure bitfield struct."""
+
+    storages: tuple[AnalyzedBitfieldStorage, ...]
+    members: tuple[AnalyzedBitfieldMember, ...]
+
+
+@dataclass(frozen=True)
 class AnalyzedStruct:
     """Derived struct-level emission decisions."""
 
@@ -69,6 +103,7 @@ class AnalyzedStruct:
     align_stride_warning: bool
     align_omit_comment: str | None
     fields: tuple[AnalyzedField, ...]
+    pure_bitfield: AnalyzedPureBitfieldStruct | None = None
 
 
 @dataclass(frozen=True)
@@ -509,6 +544,103 @@ def _field_mojo_name(f: Field, index: int) -> str:
     return f"_anon_{index}"
 
 
+def _is_pure_bitfield_struct(decl: Struct) -> bool:
+    return bool(decl.fields) and all(field.is_bitfield for field in decl.fields)
+
+
+def _bitfield_storage_width_bits(field: Field) -> int | None:
+    core = peel_wrappers(field.type)
+    if not isinstance(core, IntType):
+        return None
+    return core.size_bytes * 8 if core.size_bytes > 0 else None
+
+
+def _bitfield_field_is_signed(field: Field) -> bool:
+    core = peel_wrappers(field.type)
+    if not isinstance(core, IntType):
+        return False
+    return core.int_kind not in {
+        IntKind.BOOL,
+        IntKind.CHAR_U,
+        IntKind.UCHAR,
+        IntKind.USHORT,
+        IntKind.UINT,
+        IntKind.ULONG,
+        IntKind.ULONGLONG,
+        IntKind.UINT128,
+        IntKind.CHAR16,
+        IntKind.CHAR32,
+    }
+
+
+def _bitfield_field_is_bool(field: Field) -> bool:
+    core = peel_wrappers(field.type)
+    return isinstance(core, IntType) and core.int_kind == IntKind.BOOL
+
+
+def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) -> AnalyzedPureBitfieldStruct | None:
+    storages: list[AnalyzedBitfieldStorage] = []
+    members: list[AnalyzedBitfieldMember] = []
+    current: AnalyzedBitfieldStorage | None = None
+
+    for af in analyzed_fields:
+        field = af.field
+        width_bits = _bitfield_storage_width_bits(field)
+        if width_bits is None:
+            return None
+
+        if field.bit_width == 0:
+            current = None
+            continue
+
+        field_end_bit = field.bit_offset + field.bit_width
+        if current is None:
+            needs_new_storage = True
+        else:
+            widened_width_bits = max(current.width_bits, width_bits)
+            needs_new_storage = (
+                field.bit_offset < current.start_bit
+                or field_end_bit > current.start_bit + widened_width_bits
+            )
+        if needs_new_storage:
+            storage_start_bit = (field.bit_offset // width_bits) * width_bits
+            current = AnalyzedBitfieldStorage(
+                name=f"__bf{len(storages)}",
+                type=field.type,
+                byte_offset=storage_start_bit // 8,
+                start_bit=storage_start_bit,
+                width_bits=width_bits,
+            )
+            storages.append(current)
+        elif width_bits > current.width_bits:
+            current = AnalyzedBitfieldStorage(
+                name=current.name,
+                type=field.type,
+                byte_offset=current.byte_offset,
+                start_bit=current.start_bit,
+                width_bits=width_bits,
+            )
+            storages[-1] = current
+
+        if field.is_anonymous:
+            continue
+
+        members.append(
+            AnalyzedBitfieldMember(
+                field=field,
+                mojo_name=af.mojo_name,
+                storage_name=current.name,
+                storage_type=current.type,
+                storage_local_bit_offset=field.bit_offset - current.start_bit,
+                bit_width=field.bit_width,
+                is_signed=_bitfield_field_is_signed(field),
+                is_bool=_bitfield_field_is_bool(field),
+            )
+        )
+
+    return AnalyzedPureBitfieldStruct(storages=tuple(storages), members=tuple(members))
+
+
 def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     struct_decls = [
         d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
@@ -718,6 +850,7 @@ def _analyze_struct(
         )
         for i, f in enumerate(decl.fields)
     )
+    pure_bitfield = _analyze_pure_bitfield_struct(fields) if _is_pure_bitfield_struct(decl) else None
     return AnalyzedStruct(
         decl=decl,
         register_passable=register_passable,
@@ -725,6 +858,7 @@ def _analyze_struct(
         align_stride_warning=align_stride_warning,
         align_omit_comment=align_omit_comment,
         fields=fields,
+        pure_bitfield=pure_bitfield,
     )
 
 

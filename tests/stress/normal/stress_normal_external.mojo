@@ -81,9 +81,9 @@ comptime ev_binary_int_fn_t = def (arg0: c_int, arg1: c_int) thin abi("C") -> c_
 
 comptime ev_ret_int_ptr_fn_t = def (arg0: UnsafePointer[c_int, MutExternalOrigin]) thin abi("C") -> UnsafePointer[c_int, MutExternalOrigin]
 
-comptime ev_array_param_fn_t = def (arg0: UnsafePointer[c_int, MutExternalOrigin]) thin abi("C") -> NoneType
+comptime ev_array_param_fn_t = def (arr: UnsafePointer[c_int, MutExternalOrigin]) thin abi("C") -> NoneType
 
-comptime ev_vla_param_fn_t = def (arg0: c_ulong, arg1: UnsafePointer[c_int, MutExternalOrigin]) thin abi("C") -> c_int
+comptime ev_vla_param_fn_t = def (n: c_ulong, arr: UnsafePointer[c_int, MutExternalOrigin]) thin abi("C") -> c_int
 
 comptime ev_loop_transform_cb_t = def (arg0: UnsafePointer[ev_loop, MutExternalOrigin], arg1: MutOpaquePointer[MutExternalOrigin], arg2: c_int) thin abi("C") -> c_int
 
@@ -105,7 +105,7 @@ comptime ev_embedded_fnptrs_start_cb = def () thin abi("C") -> NoneType
 
 comptime ev_embedded_fnptrs_stop_cb = def (arg0: MutOpaquePointer[MutExternalOrigin]) thin abi("C") -> NoneType
 
-comptime ev_embedded_fnptrs_poll_cb = def (arg0: UnsafePointer[ev_loop, MutExternalOrigin], arg1: c_int) thin abi("C") -> c_int
+comptime ev_embedded_fnptrs_poll_cb = def (arg0: UnsafePointer[ev_loop, MutExternalOrigin], timeout_ms: c_int) thin abi("C") -> c_int
 
 comptime EV_UNDEF = c_int(-1)
 
@@ -366,27 +366,60 @@ struct ev_recursive_tree(Copyable, Movable):
 @align(4)
 @fieldwise_init
 struct ev_bits(Copyable, Movable, RegisterPassable):
-    # bitfield: C bits 0..0 (1 bits) on UINT
-    # ABI: verify bitfield layout matches target C compiler.
-    var ready: c_uint
-    # bitfield: C bits 1..1 (1 bits) on UINT
-    # ABI: verify bitfield layout matches target C compiler.
-    var error: c_uint
-    # bitfield: C bits 2..4 (3 bits) on UINT
-    # ABI: verify bitfield layout matches target C compiler.
-    var state: c_uint
-    # bitfield: C bits 5..15 (11 bits) on UINT
-    # ABI: verify bitfield layout matches target C compiler.
-    var code: c_uint
-    # bitfield: C bits 32..31 (0 bits) on UINT
-    # ABI: verify bitfield layout matches target C compiler.
-    var _anon_4: c_uint
-    # bitfield: C bits 32..38 (7 bits) on INT
-    # ABI: verify bitfield layout matches target C compiler.
-    var delta: c_int
-    # bitfield: C bits 39..39 (1 bits) on BOOL
-    # ABI: verify bitfield layout matches target C compiler.
-    var enabled: Bool
+    # bitfield storage: bits 0..31 at byte offset 0
+    var __bf0: c_uint
+    # bitfield storage: bits 32..63 at byte offset 4
+    var __bf1: c_int
+    # bitfield accessor: C bits 0..0 (1 bits)
+    def ready(self) -> c_uint:
+        var raw = (self.__bf0 >> 0) & c_uint(0x1)
+        return c_uint(raw)
+    def set_ready(mut self, value: c_uint):
+        var raw_value = c_uint(value) & c_uint(0x1)
+        var clear_mask = ~(c_uint(0x1) << 0)
+        self.__bf0 = (self.__bf0 & clear_mask) | ((raw_value & c_uint(0x1)) << 0)
+    # bitfield accessor: C bits 1..1 (1 bits)
+    def error(self) -> c_uint:
+        var raw = (self.__bf0 >> 1) & c_uint(0x1)
+        return c_uint(raw)
+    def set_error(mut self, value: c_uint):
+        var raw_value = c_uint(value) & c_uint(0x1)
+        var clear_mask = ~(c_uint(0x1) << 1)
+        self.__bf0 = (self.__bf0 & clear_mask) | ((raw_value & c_uint(0x1)) << 1)
+    # bitfield accessor: C bits 2..4 (3 bits)
+    def state(self) -> c_uint:
+        var raw = (self.__bf0 >> 2) & c_uint(0x7)
+        return c_uint(raw)
+    def set_state(mut self, value: c_uint):
+        var raw_value = c_uint(value) & c_uint(0x7)
+        var clear_mask = ~(c_uint(0x7) << 2)
+        self.__bf0 = (self.__bf0 & clear_mask) | ((raw_value & c_uint(0x7)) << 2)
+    # bitfield accessor: C bits 5..15 (11 bits)
+    def code(self) -> c_uint:
+        var raw = (self.__bf0 >> 5) & c_uint(0x7ff)
+        return c_uint(raw)
+    def set_code(mut self, value: c_uint):
+        var raw_value = c_uint(value) & c_uint(0x7ff)
+        var clear_mask = ~(c_uint(0x7ff) << 5)
+        self.__bf0 = (self.__bf0 & clear_mask) | ((raw_value & c_uint(0x7ff)) << 5)
+    # bitfield accessor: C bits 32..38 (7 bits)
+    def delta(self) -> c_int:
+        var raw = (self.__bf1 >> 0) & c_int(0x7f)
+        if raw & c_int(0x40) != c_int(0):
+            return c_int(raw | ~c_int(0x7f))
+        return c_int(raw)
+    def set_delta(mut self, value: c_int):
+        var raw_value = c_int(value) & c_int(0x7f)
+        var clear_mask = ~(c_int(0x7f) << 0)
+        self.__bf1 = (self.__bf1 & clear_mask) | ((raw_value & c_int(0x7f)) << 0)
+    # bitfield accessor: C bits 39..39 (1 bits)
+    def enabled(self) -> Bool:
+        var raw = (self.__bf1 >> 7) & c_int(0x1)
+        return raw != c_int(0)
+    def set_enabled(mut self, value: Bool):
+        var raw_value = c_int(1) if value else c_int(0)
+        var clear_mask = ~(c_int(0x1) << 7)
+        self.__bf1 = (self.__bf1 & clear_mask) | ((raw_value & c_int(0x1)) << 7)
 # struct ev_blob - size=8 align=8 (verify packed/aligned ABI)
 @align(8)
 @fieldwise_init
