@@ -164,7 +164,8 @@ class NormalizeMojoModulePass:
             return replace(
                 member,
                 storage_type=self._normalize_type(
-                    member.storage_type, (struct_name, member.storage_name or "bitfield_storage")
+                    member.storage_type,
+                    (struct_name, member.storage_name or "bitfield_storage"),
                 ),
                 fields=[
                     replace(
@@ -217,9 +218,14 @@ class NormalizeMojoModulePass:
             return replace(
                 t,
                 args=[
-                    replace(arg, type=self._normalize_type(arg.type, (*context, f"arg{i}")))
-                    if isinstance(arg, TypeArg)
-                    else arg
+                    (
+                        replace(
+                            arg,
+                            type=self._normalize_type(arg.type, (*context, f"arg{i}")),
+                        )
+                        if isinstance(arg, TypeArg)
+                        else arg
+                    )
                     for i, arg in enumerate(t.args)
                 ],
             )
@@ -527,7 +533,13 @@ class NormalizeMojoModulePass:
     ) -> None:
         if isinstance(
             expr,
-            (MojoIntLiteral, MojoFloatLiteral, MojoStringLiteral, MojoCharLiteral, MojoRefExpr),
+            (
+                MojoIntLiteral,
+                MojoFloatLiteral,
+                MojoStringLiteral,
+                MojoCharLiteral,
+                MojoRefExpr,
+            ),
         ):
             return
         if isinstance(expr, MojoUnaryExpr):

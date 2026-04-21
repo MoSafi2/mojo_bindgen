@@ -189,6 +189,7 @@ class MojoIRPrinter:
             return self._render_global_decl(decl)
         raise MojoIRPrintError(f"unsupported MojoDecl node: {type(decl).__name__!r}")
 
+    # TODO: Revise traits
     def _render_struct_decl(self, decl: StructDecl) -> str:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
@@ -213,8 +214,6 @@ class MojoIRPrinter:
     def _render_enum_decl(self, decl: EnumDecl) -> str:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
-        if decl.align_decorator is not None:
-            b.add(f"@align({decl.align_decorator})")
         b.add("struct " + decl.name + "(Copyable, Movable, RegisterPassable):")
         b.indent()
         base_text = self._render_type(decl.underlying_type)

@@ -264,6 +264,7 @@ MojoType = Union[
 ]
 
 
+# Check if those are replacable by CIR directly
 @dataclass(frozen=True)
 class MojoIntLiteral(SerDeMixin):
     value: int
