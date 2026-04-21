@@ -37,7 +37,7 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.passes.analyze_for_mojo import analyze_unit
+from mojo_bindgen.analysis.analyze_for_mojo import analyze_unit
 
 
 def _i32() -> IntType:

@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`mojo_bindgen.passes.analyze_for_mojo` (no libclang)."""
+"""Unit tests for :mod:`mojo_bindgen.analysis.analyze_for_mojo` (no libclang)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.passes.analyze_for_mojo import AnalyzedFunction, analyze_unit
+from mojo_bindgen.analysis.analyze_for_mojo import AnalyzedFunction, analyze_unit
 
 
 def _f32() -> FloatType:

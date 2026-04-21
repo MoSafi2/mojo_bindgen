@@ -1,210 +1,54 @@
-"""Concrete Mojo codegen analysis passes."""
+"""Struct-specific Mojo analysis."""
 
 from __future__ import annotations
 
-import ctypes
-from dataclasses import dataclass
-
-from mojo_bindgen.codegen.mojo_emit_options import FFIScalarStyle, MojoEmitOptions
-from mojo_bindgen.codegen.mojo_mapper import FFIOriginStyle, TypeMapper, mojo_ident, peel_wrappers
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_mapper import TypeMapper, mojo_ident, peel_wrappers
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
-    BinaryExpr,
-    CastExpr,
-    CharLiteral,
     ComplexType,
-    Const,
-    Enum,
     EnumRef,
     Field,
-    FloatLiteral,
     FloatType,
-    Function,
     FunctionPtr,
-    GlobalVar,
-    IntLiteral,
     IntType,
-    MacroDecl,
-    NullPtrLiteral,
     OpaqueRecordRef,
     Pointer,
     QualifiedType,
-    RefExpr,
-    StringLiteral,
     Struct,
     StructRef,
     Type,
     TypeRef,
-    Typedef,
-    UnaryExpr,
-    Unit,
     UnsupportedType,
     VectorType,
     VoidType,
 )
-from mojo_bindgen.passes.codegen_model import (
+from mojo_bindgen.analysis.common import (
+    _POINTER_ALIGN_BYTES,
+    _POINTER_SIZE_BYTES,
+    field_mojo_name,
+    mojo_align_decorator_ok,
+    scalar_comment_name,
+)
+from mojo_bindgen.analysis.model import (
     AnalyzedBitfieldLayout,
     AnalyzedBitfieldMember,
     AnalyzedBitfieldStorage,
-    AnalyzedCallbackAlias,
-    AnalyzedConst,
-    AnalyzedEnum,
     AnalyzedField,
-    AnalyzedFunction,
-    AnalyzedGlobalVar,
-    AnalyzedMacro,
     AnalyzedOpaqueStorage,
     AnalyzedPaddingField,
     AnalyzedStruct,
     AnalyzedStructInitializer,
     AnalyzedStructInitParam,
-    AnalyzedTypedef,
-    AnalyzedUnion,
-    TailDecl,
 )
-from mojo_bindgen.passes.semantic.callbacks import CallbackAliasInfo
-from mojo_bindgen.passes.semantic.imports import ImportNeeds
-from mojo_bindgen.passes.semantic.layout import (
-    LayoutFacts,
+from mojo_bindgen.analysis.layout import (
     bitfield_field_is_bool,
     bitfield_field_is_signed,
     bitfield_storage_width_bits,
     bitfield_unsigned_storage_type,
     struct_has_representable_atomic_storage,
 )
-from mojo_bindgen.passes.semantic.names import EmissionNameFacts
-
-_MOJO_MAX_ALIGN_BYTES = 1 << 29
-_POINTER_SIZE_BYTES = ctypes.sizeof(ctypes.c_void_p)
-_POINTER_ALIGN_BYTES = ctypes.alignment(ctypes.c_void_p)
-
-
-def _is_power_of_two(n: int) -> bool:
-    return n > 0 and (n & (n - 1)) == 0
-
-
-def mojo_align_decorator_ok(align_bytes: int) -> bool:
-    if align_bytes <= 1:
-        return False
-    if align_bytes > _MOJO_MAX_ALIGN_BYTES:
-        return False
-    return _is_power_of_two(align_bytes)
-
-
-def _scalar_comment_name(t: IntType | FloatType | VoidType) -> str:
-    if isinstance(t, IntType):
-        return t.int_kind.value
-    if isinstance(t, FloatType):
-        return t.float_kind.value
-    return "VOID"
-
-
-def _mojo_float_literal_text(c_spelling: str) -> str:
-    t = c_spelling.rstrip()
-    while t and t[-1] in "fFlL":
-        t = t[:-1]
-    return t
-
-
-def _field_mojo_name(f: Field, index: int) -> str:
-    if f.source_name:
-        return mojo_ident(f.source_name)
-    if f.name:
-        return mojo_ident(f.name)
-    return f"_anon_{index}"
-
-
-@dataclass(frozen=True)
-class UnionFacts:
-    unions: tuple[AnalyzedUnion, ...]
-    union_alias_names: frozenset[str]
-    unsafe_union_names: frozenset[str]
-
-
-class AnalyzeUnionLoweringPass:
-    """Analyze union lowering independently of other declaration kinds."""
-
-    def run(
-        self,
-        unit: Unit,
-        *,
-        ffi_origin: FFIOriginStyle,
-        ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases",
-    ) -> UnionFacts:
-        unions: list[AnalyzedUnion] = []
-        union_alias_names: set[str] = set()
-        unsafe_union_names: set[str] = set()
-        mapper = TypeMapper(
-            ffi_origin=ffi_origin,
-            union_alias_names=frozenset(),
-            unsafe_union_names=frozenset(),
-            typedef_mojo_names=frozenset(),
-            callback_signature_names=frozenset(),
-            ffi_scalar_style=ffi_scalar_style,
-        )
-        for decl in unit.decls:
-            if not isinstance(decl, Struct) or not decl.is_union or not decl.is_complete:
-                continue
-            mojo_name = mojo_ident(decl.name.strip() or decl.c_name.strip())
-            union_alias_names.add(mojo_name)
-            mapped_members: list[str] = []
-            supported = True
-            for field in decl.fields:
-                if isinstance(peel_wrappers(field.type), UnsupportedType):
-                    supported = False
-                    break
-                mapped = mapper.canonical(field.type)
-                if mapped == mojo_name or mapped in mapped_members:
-                    supported = False
-                    break
-                mapped_members.append(mapped)
-            if supported:
-                unsafe_union_names.add(mojo_name)
-                comptime_expr_text = f"UnsafeUnion[{', '.join(mapped_members)}]"
-                comment_lines = (
-                    f"# -- C union `{decl.c_name}` - comptime `{mojo_name}` = UnsafeUnion[...].",
-                    f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
-                    "# Members (reference only):",
-                ) + tuple(
-                    f"#   {field.name if field.name else '(anonymous)'}: {mapper.canonical(field.type)}"
-                    for field in decl.fields
-                ) + ("",)
-                unions.append(
-                    AnalyzedUnion(
-                        decl=decl,
-                        mojo_name=mojo_name,
-                        kind="unsafe_union",
-                        comptime_expr_text=comptime_expr_text,
-                        comment_lines=comment_lines,
-                        unsafe_member_types=tuple(mapped_members),
-                    )
-                )
-            else:
-                comptime_expr_text = f"InlineArray[UInt8, {decl.size_bytes}]"
-                comment_lines = (
-                    f"# -- C union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout.",
-                    "# It could not be represented as UnsafeUnion[...] with distinct supported member types.",
-                    f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
-                    "# Members (reference only):",
-                ) + tuple(
-                    f"#   {field.name if field.name else '(anonymous)'}: {mapper.canonical(field.type)}"
-                    for field in decl.fields
-                ) + ("",)
-                unions.append(
-                    AnalyzedUnion(
-                        decl=decl,
-                        mojo_name=mojo_name,
-                        kind="inline_array",
-                        comptime_expr_text=comptime_expr_text,
-                        comment_lines=comment_lines,
-                    )
-                )
-        return UnionFacts(
-            unions=tuple(unions),
-            union_alias_names=frozenset(union_alias_names),
-            unsafe_union_names=frozenset(unsafe_union_names),
-        )
 
 
 class AnalyzeStructLoweringPass:
@@ -233,16 +77,16 @@ class AnalyzeStructLoweringPass:
         all_fields = tuple(
             self._analyze_field(
                 decl_id=decl.decl_id,
-                field=f,
-                index=i,
+                field=field,
+                index=index,
                 field_callback_aliases=field_callback_aliases,
                 options=options,
                 type_mapper=type_mapper,
             )
-            for i, f in enumerate(decl.fields)
+            for index, field in enumerate(decl.fields)
         )
         bitfield_layout = self._analyze_bitfield_layout(all_fields, options=options, type_mapper=type_mapper)
-        fields = tuple(af for af in all_fields if not af.field.is_bitfield)
+        fields = tuple(analyzed_field for analyzed_field in all_fields if not analyzed_field.field.is_bitfield)
         representation_mode, padding_fields, opaque_storage, layout_notes = self._analyze_record_representation(
             decl,
             fields=fields,
@@ -260,7 +104,9 @@ class AnalyzeStructLoweringPass:
         if align_omit_comment is not None:
             decorator_lines.append(align_omit_comment)
         init_kind, synthesized_initializers = self._analyze_struct_initializers(
-            fields, bitfield_layout, type_mapper
+            fields,
+            bitfield_layout,
+            type_mapper,
         )
         has_atomic_storage = struct_has_representable_atomic_storage(decl)
         if has_atomic_storage:
@@ -429,26 +275,26 @@ class AnalyzeStructLoweringPass:
             natural_struct_align = 1
         align_omit_comment: str | None = None
         align_stride_warning = False
-        ab = decl.align_bytes
-        valid_mojo_align = mojo_align_decorator_ok(ab)
+        align_bytes = decl.align_bytes
+        valid_mojo_align = mojo_align_decorator_ok(align_bytes)
         explicit_layout_intent = decl.is_packed or decl.requested_align_bytes is not None
         if representation_mode == "opaque_storage_exact":
             natural_struct_align = 1
-            explicit_layout_intent = explicit_layout_intent or ab > 1
-        if ab < natural_struct_align:
+            explicit_layout_intent = explicit_layout_intent or align_bytes > 1
+        if align_bytes < natural_struct_align:
             return None, align_omit_comment, align_stride_warning
-        if ab <= natural_struct_align:
-            if options.strict_abi and ab > 1 and representation_mode != "opaque_storage_exact":
-                return ab, None, False
+        if align_bytes <= natural_struct_align:
+            if options.strict_abi and align_bytes > 1 and representation_mode != "opaque_storage_exact":
+                return align_bytes, None, False
             return None, None, False
         if not valid_mojo_align:
             if explicit_layout_intent:
                 align_omit_comment = (
-                    f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align "
+                    f"# @align omitted: C align_bytes={align_bytes} is not a valid Mojo @align "
                     "(power of 2, max 2**29)."
                 )
             return None, align_omit_comment, False
-        return ab, None, False
+        return align_bytes, None, False
 
     def _opaque_storage_for_decl(
         self,
@@ -507,7 +353,10 @@ class AnalyzeStructLoweringPass:
             if element_layout is None:
                 return core.size_bytes, core.size_bytes
             _, element_align = element_layout
-            return core.size_bytes, max(element_align, core.size_bytes if core.is_ext_vector else element_align)
+            return core.size_bytes, max(
+                element_align,
+                core.size_bytes if core.is_ext_vector else element_align,
+            )
         if isinstance(core, StructRef):
             if core.is_union:
                 return core.size_bytes, 1
@@ -562,7 +411,7 @@ class AnalyzeStructLoweringPass:
         comment_lines: list[str] = []
         if field.is_bitfield:
             backing = (
-                _scalar_comment_name(field.type)
+                scalar_comment_name(field.type)
                 if isinstance(field.type, (IntType, FloatType, VoidType))
                 else type(field.type).__name__
             )
@@ -581,7 +430,7 @@ class AnalyzeStructLoweringPass:
         return AnalyzedField(
             field=field,
             index=index,
-            mojo_name=_field_mojo_name(field, index),
+            mojo_name=field_mojo_name(field, index),
             surface_type_text=surface_type_text,
             comment_lines=tuple(comment_lines),
         )
@@ -597,8 +446,8 @@ class AnalyzeStructLoweringPass:
         members: list[AnalyzedBitfieldMember] = []
         saw_bitfield = False
         current: AnalyzedBitfieldStorage | None = None
-        for af in analyzed_fields:
-            field = af.field
+        for analyzed_field in analyzed_fields:
+            field = analyzed_field.field
             if not field.is_bitfield:
                 current = None
                 continue
@@ -630,7 +479,7 @@ class AnalyzeStructLoweringPass:
                     name=f"__bf{len(storages)}",
                     type=storage_type,
                     surface_type_text=type_mapper.surface(storage_type),
-                    field_index=af.index,
+                    field_index=analyzed_field.index,
                     byte_offset=storage_start_bit // 8,
                     start_bit=storage_start_bit,
                     width_bits=width_bits,
@@ -659,7 +508,7 @@ class AnalyzeStructLoweringPass:
             members.append(
                 AnalyzedBitfieldMember(
                     field=field,
-                    mojo_name=af.mojo_name,
+                    mojo_name=analyzed_field.mojo_name,
                     surface_type_text=type_mapper.surface(field.type),
                     storage_name=current.name,
                     storage_type=current.type,
@@ -697,237 +546,4 @@ class AnalyzeStructLoweringPass:
         return "synthesized", tuple(initializers)
 
 
-class AnalyzeTailDeclPass:
-    """Analyze non-struct declaration lowering into render-ready facts."""
-
-    def run(
-        self,
-        unit: Unit,
-        *,
-        name_facts: EmissionNameFacts,
-        callback_info: CallbackAliasInfo,
-        layout_facts: LayoutFacts,
-        type_mapper: TypeMapper,
-    ) -> tuple[tuple[TailDecl, ...], tuple[AnalyzedCallbackAlias, ...]]:
-        callback_aliases = tuple(self._analyze_callback_alias(alias, type_mapper) for alias in callback_info.aliases)
-        tail_decls: list[TailDecl] = []
-        for decl in unit.decls:
-            if isinstance(decl, Typedef):
-                tail_decls.append(
-                    AnalyzedTypedef(
-                        decl=decl,
-                        skip_duplicate=mojo_ident(decl.name) in name_facts.emitted_names,
-                        mojo_name=mojo_ident(decl.name),
-                        rhs_text=type_mapper.surface(decl.aliased),
-                        callback_alias_name=callback_info.typedef_aliases.get(decl.decl_id),
-                    )
-                )
-            elif isinstance(decl, Function):
-                tail_decls.append(
-                    self._analyze_function(
-                        decl,
-                        layout_facts.struct_map,
-                        layout_facts.register_passable_by_decl_id,
-                        callback_info,
-                        type_mapper,
-                    )
-                )
-            elif isinstance(decl, GlobalVar):
-                tail_decls.append(self._analyze_global_var(decl, callback_info, type_mapper))
-            elif isinstance(decl, Enum):
-                tail_decls.append(self._analyze_enum(decl, type_mapper))
-            elif isinstance(decl, Const):
-                tail_decls.append(self._analyze_const(decl, type_mapper))
-            elif isinstance(decl, MacroDecl):
-                tail_decls.append(self._analyze_macro(decl, type_mapper))
-        return tuple(tail_decls), callback_aliases
-
-    def _analyze_callback_alias(self, alias, type_mapper: TypeMapper) -> AnalyzedCallbackAlias:
-        expr = type_mapper.callback_signature_alias_expr(alias.fp)
-        if expr is None:
-            return AnalyzedCallbackAlias(
-                name=alias.name,
-                emit_expr_text=None,
-                comment_lines=(
-                    f"# callback alias {alias.name}: unsupported callback signature shape",
-                    f"# {type_mapper.function_ptr_comment(alias.fp)}",
-                    "",
-                ),
-            )
-        return AnalyzedCallbackAlias(name=alias.name, emit_expr_text=expr)
-
-    def _analyze_global_var(self, decl: GlobalVar, callback_info: CallbackAliasInfo, type_mapper: TypeMapper) -> AnalyzedGlobalVar:
-        callback_alias = callback_info.global_aliases.get(decl.decl_id)
-        surface_type = (
-            type_mapper.callback_pointer_type(callback_alias)
-            if callback_alias is not None
-            else type_mapper.surface(decl.type)
-        )
-        reason = self._global_var_stub_reason(decl)
-        return AnalyzedGlobalVar(
-            decl=decl,
-            kind="stub" if reason is not None else "wrapper",
-            surface_type=surface_type,
-            mojo_name=mojo_ident(decl.name),
-            stub_reason=reason,
-        )
-
-    def _global_var_stub_reason(self, decl: GlobalVar) -> str | None:
-        t = decl.type
-        while True:
-            if isinstance(t, AtomicType):
-                return "atomic global requires manual binding (use Atomic APIs on a pointer)"
-            if isinstance(t, TypeRef):
-                t = t.canonical
-                continue
-            if isinstance(t, QualifiedType):
-                t = t.unqualified
-                continue
-            break
-        core = peel_wrappers(decl.type)
-        if isinstance(core, UnsupportedType) and (core.size_bytes is None or core.size_bytes == 0):
-            return "unsupported global type layout"
-        return None
-
-    def _analyze_function(
-        self,
-        fn: Function,
-        struct_map: dict[str, Struct],
-        register_passable_by_decl_id: dict[str, bool],
-        callback_info: CallbackAliasInfo,
-        type_mapper: TypeMapper,
-    ) -> AnalyzedFunction:
-        param_names = tuple(type_mapper.param_names(fn.params))
-        ret_callback_alias_name = callback_info.fn_ret_aliases.get(fn.decl_id)
-        param_callback_alias_names = tuple(
-            callback_info.fn_param_aliases.get((fn.decl_id, i)) for i in range(len(fn.params))
-        )
-        kind = "wrapper"
-        if fn.is_variadic:
-            kind = "variadic_stub"
-        else:
-            ret_u = peel_wrappers(fn.ret)
-            if isinstance(ret_u, StructRef):
-                rs = struct_map.get(ret_u.decl_id)
-                if rs is not None and not register_passable_by_decl_id.get(rs.decl_id, False):
-                    kind = "non_register_return_stub"
-        ret_t = (
-            type_mapper.callback_pointer_type(ret_callback_alias_name)
-            if ret_callback_alias_name is not None
-            else type_mapper.signature(fn.ret)
-        )
-        args_sig = ", ".join(
-            f"{name}: {type_mapper.callback_pointer_type(alias) if alias is not None else type_mapper.signature(param.type)}"
-            for name, param, alias in zip(param_names, fn.params, param_callback_alias_names, strict=True)
-        )
-        call_args = ", ".join(param_names)
-        ret_abi = type_mapper.canonical(fn.ret)
-        is_void = ret_abi == "NoneType"
-        ret_list = "NoneType" if is_void else ret_abi
-        bracket_inner = type_mapper.function_type_param_list(
-            fn,
-            ret_list,
-            ret_callback_alias_name=ret_callback_alias_name,
-            param_callback_alias_names=param_callback_alias_names,
-        )
-        return AnalyzedFunction(
-            decl=fn,
-            kind=kind,
-            emitted_name=mojo_ident(fn.name),
-            param_names=param_names,
-            ret_callback_alias_name=ret_callback_alias_name,
-            param_callback_alias_names=param_callback_alias_names,
-            rendered_return_type_text=ret_t,
-            rendered_args_sig=args_sig,
-            rendered_call_args=call_args,
-            rendered_ret_list_text=ret_list,
-            rendered_bracket_inner_text=bracket_inner,
-        )
-
-    def _analyze_enum(self, decl: Enum, type_mapper: TypeMapper) -> AnalyzedEnum:
-        base = type_mapper.emit_scalar(decl.underlying)
-        return AnalyzedEnum(
-            decl=decl,
-            mojo_name=mojo_ident(decl.name),
-            base_text=base,
-            comment_line=f"# enum {decl.c_name} - underlying {_scalar_comment_name(decl.underlying)} -> {base} (verify C ABI)",
-            enumerants=tuple(
-                (mojo_ident(e.name), f"Self({base}({e.value}))") for e in decl.enumerants
-            ),
-        )
-
-    def _analyze_const(self, decl: Const, type_mapper: TypeMapper) -> AnalyzedConst:
-        rendered = self._render_const_expr(decl.expr, decl.type, type_mapper)
-        reason = None
-        if rendered is None:
-            if isinstance(decl.expr, NullPtrLiteral):
-                reason = "null pointer macro is not emitted directly"
-            else:
-                reason = "unsupported constant expression form"
-        return AnalyzedConst(
-            decl=decl,
-            mojo_name=mojo_ident(decl.name),
-            rendered_value_text=rendered,
-            unsupported_reason=reason,
-        )
-
-    def _analyze_macro(self, decl: MacroDecl, type_mapper: TypeMapper) -> AnalyzedMacro:
-        body = " ".join(decl.tokens)
-        rendered = None
-        reason = decl.diagnostic or decl.kind.replace("_", " ")
-        if decl.kind == "object_like_supported" and decl.expr is not None and decl.type is not None:
-            if isinstance(decl.expr, RefExpr):
-                reason = "identifier reference macro is not emitted directly; only literal macros are currently supported"
-            else:
-                rendered = self._render_const_expr(decl.expr, decl.type, type_mapper)
-                if rendered is None:
-                    reason = (
-                        "null pointer macro is not emitted directly"
-                        if isinstance(decl.expr, NullPtrLiteral)
-                        else "parsed macro expression is not emitted directly"
-                    )
-        return AnalyzedMacro(
-            decl=decl,
-            mojo_name=mojo_ident(decl.name),
-            rendered_value_text=rendered,
-            reason=reason,
-            body_text=body,
-        )
-
-    def _render_const_expr(
-        self,
-        expr: object,
-        decl_type: IntType | FloatType | VoidType | object,
-        type_mapper: TypeMapper,
-    ) -> str | None:
-        if isinstance(expr, IntLiteral) and isinstance(decl_type, (IntType, FloatType, VoidType)):
-            return f"{type_mapper.emit_scalar(decl_type)}({expr.value})"
-        if isinstance(expr, StringLiteral):
-            value = expr.value.replace("\\", "\\\\").replace('"', '\\"')
-            return f'"{value}"'
-        if isinstance(expr, CharLiteral):
-            value = expr.value.replace("\\", "\\\\").replace("'", "\\'")
-            return f"'{value}'"
-        if isinstance(expr, FloatLiteral):
-            return _mojo_float_literal_text(expr.value)
-        if isinstance(expr, RefExpr):
-            return mojo_ident(expr.name)
-        if isinstance(expr, UnaryExpr):
-            operand = self._render_const_expr(expr.operand, decl_type, type_mapper)
-            return None if operand is None else f"{expr.op}({operand})"
-        if isinstance(expr, CastExpr):
-            target = expr.target
-            if not isinstance(target, IntType):
-                return None
-            t = type_mapper.emit_scalar(target)
-            if isinstance(expr.expr, IntLiteral):
-                return f"{t}({expr.expr.value})"
-            inner = self._render_const_expr(expr.expr, target, type_mapper)
-            return None if inner is None else f"{t}({inner})"
-        if isinstance(expr, BinaryExpr):
-            lhs = self._render_const_expr(expr.lhs, decl_type, type_mapper)
-            rhs = self._render_const_expr(expr.rhs, decl_type, type_mapper)
-            return None if lhs is None or rhs is None else f"({lhs} {expr.op} {rhs})"
-        if isinstance(expr, NullPtrLiteral):
-            return None
-        return None
+__all__ = ["AnalyzeStructLoweringPass"]

@@ -14,7 +14,7 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
 )
-from mojo_bindgen.passes.semantic.type_walk import iter_type_nodes
+from mojo_bindgen.analysis.type_walk import iter_type_nodes
 
 
 class IRValidationError(ValueError):

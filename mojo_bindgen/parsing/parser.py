@@ -31,7 +31,7 @@ from mojo_bindgen.parsing.lowering import (
     TypeLowerer,
 )
 from mojo_bindgen.parsing.registry import RecordRegistry
-from mojo_bindgen.passes.pipeline import run_ir_passes
+from mojo_bindgen.analysis.pipeline import run_ir_passes
 
 
 @dataclass(frozen=True)

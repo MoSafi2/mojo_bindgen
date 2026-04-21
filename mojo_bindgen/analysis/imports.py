@@ -20,7 +20,7 @@ from mojo_bindgen.ir import (
     UnsupportedType,
     VectorType,
 )
-from mojo_bindgen.passes.semantic.type_walk import TypeWalkOptions, any_type_node, iter_type_nodes
+from mojo_bindgen.analysis.type_walk import TypeWalkOptions, any_type_node, iter_type_nodes
 
 _OPAQUE_IMPORT_WALK = TypeWalkOptions(
     descend_function_ptr=False,

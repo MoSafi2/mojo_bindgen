@@ -12,7 +12,7 @@
   C-facing facts extracted from clang. This is the source of truth for declarations and types.
 - [`mojo_bindgen/codegen/mojo_mapper.py`](../mojo_bindgen/codegen/mojo_mapper.py)
   Pure helpers for identifier sanitization and Mojo type strings (`TypeMapper` / `canonical` / `surface`).
-- [`mojo_bindgen/passes/analyze_for_mojo.py`](../mojo_bindgen/passes/analyze_for_mojo.py)
+- [`mojo_bindgen/analysis/analyze_for_mojo.py`](../mojo_bindgen/analysis/analyze_for_mojo.py)
   Unit-level codegen analysis. This decides ordering, import requirements, union strategy, passability, typedef exposure, and function wrapper classification.
 - [`mojo_bindgen/codegen/render.py`](../mojo_bindgen/codegen/render.py)
   Pure rendering. This turns `AnalyzedUnit` plus IR declarations into text.

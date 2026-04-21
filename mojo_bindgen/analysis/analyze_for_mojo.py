@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import TypeMapper
 from mojo_bindgen.ir import Struct, Unit
-from mojo_bindgen.passes.codegen_model import (
+from mojo_bindgen.analysis.model import (
     AnalyzedBitfieldLayout,
     AnalyzedBitfieldMember,
     AnalyzedBitfieldStorage,
@@ -29,22 +29,20 @@ from mojo_bindgen.passes.codegen_model import (
     GlobalVarKind,
     TailDecl,
 )
-from mojo_bindgen.passes.codegen_passes import (
-    AnalyzeStructLoweringPass,
-    AnalyzeTailDeclPass,
-    AnalyzeUnionLoweringPass,
-)
-from mojo_bindgen.passes.semantic.callbacks import (
+from mojo_bindgen.analysis.callbacks import (
     CallbackAlias,
     CallbackAliasInfo,
     CollectCallbackAliasesPass,
 )
-from mojo_bindgen.passes.semantic.imports import (
+from mojo_bindgen.analysis.imports import (
     CollectSemanticNeedsPass,
     ImportNeeds,
 )
-from mojo_bindgen.passes.semantic.layout import ComputeLayoutFactsPass, build_register_passable_map, struct_by_decl_id
-from mojo_bindgen.passes.semantic.names import CollectEmissionNamesPass
+from mojo_bindgen.analysis.layout import ComputeLayoutFactsPass, build_register_passable_map, struct_by_decl_id
+from mojo_bindgen.analysis.names import CollectEmissionNamesPass
+from mojo_bindgen.analysis.struct_analysis import AnalyzeStructLoweringPass
+from mojo_bindgen.analysis.tail_decl_analysis import AnalyzeTailDeclPass
+from mojo_bindgen.analysis.union_analysis import AnalyzeUnionLoweringPass
 
 
 @dataclass
@@ -206,7 +204,7 @@ def analyzed_struct_for_test(
 
 def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     """Run the IR pass pipeline and final semantic analysis over ``unit``."""
-    from mojo_bindgen.passes.pipeline import run_ir_passes
+    from mojo_bindgen.analysis.pipeline import run_ir_passes
 
     return analyze_unit_semantics(run_ir_passes(unit), options)
 

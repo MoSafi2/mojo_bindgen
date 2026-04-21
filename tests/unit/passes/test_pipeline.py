@@ -15,9 +15,9 @@ from mojo_bindgen.ir import (
     Unit,
     VoidType,
 )
-from mojo_bindgen.passes import AnalyzeForMojoPass, IRValidationError
-from mojo_bindgen.passes.pipeline import run_ir_passes
-from mojo_bindgen.passes.validate_ir import ValidateIRPass
+from mojo_bindgen.analysis import AnalyzeForMojoPass, IRValidationError
+from mojo_bindgen.analysis.pipeline import run_ir_passes
+from mojo_bindgen.analysis.validate_ir import ValidateIRPass
 
 
 def _i32() -> IntType:

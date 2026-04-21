@@ -5,7 +5,7 @@ from __future__ import annotations
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import pointer_origin_names
 from mojo_bindgen.ir import Unit
-from mojo_bindgen.passes.analyze_for_mojo import (
+from mojo_bindgen.analysis.analyze_for_mojo import (
     AnalyzedBitfieldMember,
     AnalyzedBitfieldStorage,
     AnalyzedCallbackAlias,

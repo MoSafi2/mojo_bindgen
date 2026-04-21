@@ -14,7 +14,7 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.passes.semantic.type_walk import TypeWalkOptions, iter_type_nodes
+from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 
 
 def _i32() -> IntType:
