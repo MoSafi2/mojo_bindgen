@@ -27,6 +27,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.surface)
             item.add_marker(pytest.mark.integration)
 
+        if "stress" in parts:
+            item.add_marker(pytest.mark.stress)
+            item.add_marker(pytest.mark.integration)
+
         if "corpus" in parts:
             item.add_marker(pytest.mark.corpus)
             item.add_marker(pytest.mark.integration)

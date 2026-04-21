@@ -18,6 +18,8 @@ from mojo_bindgen.passes.codegen_model import (
     AnalyzedFunction,
     AnalyzedGlobalVar,
     AnalyzedMacro,
+    AnalyzedOpaqueStorage,
+    AnalyzedPaddingField,
     AnalyzedStruct,
     AnalyzedStructInitializer,
     AnalyzedStructInitParam,
@@ -134,6 +136,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
     ordered_incomplete_structs = tuple(
         struct_pass.run(
             decl,
+            struct_map=layout_facts.struct_map,
             register_passable=layout_facts.register_passable_by_decl_id.get(decl.decl_id, False),
             field_callback_aliases=callback_info.field_aliases,
             options=options,
@@ -144,6 +147,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
     ordered_structs = tuple(
         struct_pass.run(
             decl,
+            struct_map=layout_facts.struct_map,
             register_passable=layout_facts.register_passable_by_decl_id.get(decl.decl_id, False),
             field_callback_aliases=callback_info.field_aliases,
             options=options,
@@ -192,6 +196,7 @@ def analyzed_struct_for_test(
     )
     return AnalyzeStructLoweringPass().run(
         decl,
+        struct_map=struct_by_name,
         register_passable=reg,
         field_callback_aliases=None,
         options=options or MojoEmitOptions(),
@@ -228,6 +233,8 @@ __all__ = [
     "AnalyzedFunction",
     "AnalyzedGlobalVar",
     "AnalyzedMacro",
+    "AnalyzedOpaqueStorage",
+    "AnalyzedPaddingField",
     "AnalyzedStruct",
     "AnalyzedStructInitializer",
     "AnalyzedStructInitParam",

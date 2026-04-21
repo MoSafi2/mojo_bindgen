@@ -7,11 +7,16 @@ ABI behavior fail in different places.
 
 - `tests/unit/`
   Focused unit and integration tests for IR lowering, parser helpers, analysis,
-  renderer behavior, and broad regression fixtures such as
-  `tests/stress/normal/stress_normal_input.h`.
+  and renderer behavior.
+- `tests/stress/`
+  Pathological parser/IR/emit coverage. These fixtures are intentionally broad,
+  do not use goldens, and exercise Mojo generation in both portable and strict
+  ABI modes.
 - `tests/surface/`
   Parser-driven Mojo surface goldens for representative headers. These tests are
-  about emitted source shape, not runtime execution.
+  about emitted source shape, not runtime execution. This includes both the
+  usual strict-ABI goldens and alignment-policy fixtures that compare strict
+  and portable output.
 - `tests/corpus/`
   Header-zoo parser and IR checks. These cases may be parse-only or IR-only and
   do not need Mojo generation or runtime success.
@@ -27,6 +32,8 @@ Tests are marked automatically by directory:
   Applied to files under `tests/unit/`.
 - `surface`
   Applied to files under `tests/surface/`.
+- `stress`
+  Applied to files under `tests/stress/`.
 - `corpus`
   Applied to files under `tests/corpus/`.
 - `e2e`
@@ -44,7 +51,7 @@ Useful commands:
   Run only fast unit tests.
 - `pixi run pytest -q -m "not expensive"`
   Skip the expensive runtime/toolchain tests.
-- `pixi run pytest -q -m "surface or corpus"`
+- `pixi run pytest -q -m "stress or surface or corpus"`
   Run parser/IR and emit-oriented integration checks without e2e runtime tests.
 - `pixi run pytest -q -m e2e`
   Run only the expensive runtime suite.
@@ -53,16 +60,18 @@ Useful commands:
 
 - Add a unit test under `tests/unit/` when the behavior can be expressed with
   hand-built IR.
+- Add a stress fixture when a broad pathological header should parse, round-trip
+  through IR, and emit successfully without snapshotting exact text.
 - Add a surface fixture when the parser and renderer should agree on exact Mojo
-  output for a representative header.
+  output. Most surface fixtures pin strict ABI mode; alignment-policy fixtures
+  under `tests/surface/alignment/` compare strict and portable output.
 - Add a corpus case when a header shape should parse and round-trip in IR even
   if codegen/runtime support is incomplete.
 - Prefer corpus cases for common, representative C constructs that should work
   normally, including anonymous-member patterns that are part of the supported
   surface.
-- Use stress fixtures for pathological or extension-heavy anonymous-member
-  shapes, especially deeply nested or mixed-layout forms that are easy to
-  regress and may still be partially supported.
+- Use stress fixtures for pathological, composite declarations that are broad
+  breakage detectors rather than exact-output checks.
 - Add an e2e fixture only when compiled/runtime ABI behavior matters.
 
 ## Corpus Cases
@@ -99,16 +108,14 @@ Each case under `tests/surface/fixtures/<case>/` contains:
 - `input.h`
 - `expect.external.mojo`
 
-These are parser-driven goldens for representative emitted bindings.
+These are parser-driven goldens for exact emitted bindings.
 
 Golden policy:
 
-- Surface and broad stress Mojo goldens intentionally run with
-  `MojoEmitOptions(strict_abi=True)` so the checked-in expected output stays
-  pinned to the historical ABI-strict emission shape.
-- Product defaults may evolve for portability; golden tests should opt into
-  strict ABI mode unless the fixture is specifically meant to validate the new
-  default portable behavior.
+- Surface goldens intentionally run with `MojoEmitOptions(strict_abi=True)` so
+  the checked-in expected output stays pinned to the ABI-strict emission shape.
+- Alignment-policy matrix cases live under `tests/surface/alignment/fixtures/`
+  and are emitted twice: once in strict ABI mode and once in portable mode.
 
 Surface authoring rules:
 
@@ -116,6 +123,14 @@ Surface authoring rules:
 - Prefer tiny headers over broad composite examples.
 - Comment-stub output is a valid golden when the current intended behavior is to
   surface an unsupported shape honestly rather than emit a callable wrapper.
+- Alignment-policy surface fixtures under `tests/surface/alignment/fixtures/`
+  use `input.h`, `expect.strict.external.mojo`, and
+  `expect.portable.external.mojo`.
+- Use those alignment fixtures for packed records, explicit `aligned(...)`
+  requests, and field-level alignment cases that should or should not preserve
+  `@align`.
+- Keep behavior-level assertions that are easier to express with hand-built IR
+  in `tests/unit/test_emit_align.py`.
 
 ## Prior Art
 

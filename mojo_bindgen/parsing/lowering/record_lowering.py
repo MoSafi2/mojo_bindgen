@@ -329,5 +329,12 @@ class RecordLowerer:
                 packed = True
             elif child.kind == cx.CursorKind.ALIGNED_ATTR:
                 requested_align = record.align_bytes
+        if requested_align is None:
+            try:
+                token_spellings = tuple(token.spelling for token in cursor.get_tokens())
+            except Exception:
+                token_spellings = ()
+            if any(spelling in {"_Alignas", "alignas"} for spelling in token_spellings):
+                requested_align = record.align_bytes
         record.is_packed = packed
         record.requested_align_bytes = requested_align

@@ -236,7 +236,8 @@ def test_analyze_precomputes_struct_align_and_passability() -> None:
     s = au.ordered_structs[0]
     assert s.register_passable is True
     assert s.align_decorator == 8
-    assert s.align_stride_warning is True
+    assert s.align_stride_warning is False
+    assert s.representation_mode == "fieldwise_exact"
 
 
 def test_analyze_default_mode_omits_plain_struct_align() -> None:
@@ -275,6 +276,8 @@ def test_analyze_default_mode_keeps_explicit_alignment() -> None:
     s = au.ordered_structs[0]
     assert s.align_decorator == 16
     assert s.align_stride_warning is False
+    assert s.representation_mode == "fieldwise_padded_exact"
+    assert len(s.padding_fields) == 1
 
 
 def test_analyze_typedef_name_in_function_signature_when_typedef_emitted() -> None:

@@ -59,6 +59,11 @@ class AnalyzedBitfieldLayout:
 
 
 StructInitKind = Literal["fieldwise", "synthesized"]
+StructRepresentationMode = Literal[
+    "fieldwise_exact",
+    "fieldwise_padded_exact",
+    "opaque_storage_exact",
+]
 
 
 @dataclass(frozen=True)
@@ -78,12 +83,34 @@ class AnalyzedStructInitializer:
 
 
 @dataclass(frozen=True)
+class AnalyzedPaddingField:
+    """One synthesized raw-byte padding member used to preserve C layout exactly."""
+
+    name: str
+    surface_type_text: str
+    byte_offset: int
+    byte_count: int
+    comment_lines: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AnalyzedOpaqueStorage:
+    """Opaque byte-storage fallback metadata for records that cannot be fieldwise-represented."""
+
+    field_name: str
+    surface_type_text: str
+    size_bytes: int
+    reason_comment_lines: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class AnalyzedStruct:
     """Derived struct-level emission decisions."""
 
     decl: Struct
     mojo_name: str
     register_passable: bool
+    representation_mode: StructRepresentationMode
     align_decorator: int | None
     align_stride_warning: bool
     align_omit_comment: str | None
@@ -92,6 +119,8 @@ class AnalyzedStruct:
     trait_names: tuple[str, ...]
     emit_fieldwise_init: bool
     fields: tuple[AnalyzedField, ...]
+    padding_fields: tuple[AnalyzedPaddingField, ...] = ()
+    opaque_storage: AnalyzedOpaqueStorage | None = None
     bitfield_layout: AnalyzedBitfieldLayout | None = None
     init_kind: StructInitKind = "fieldwise"
     synthesized_initializers: tuple[AnalyzedStructInitializer, ...] = ()

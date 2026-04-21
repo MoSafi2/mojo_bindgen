@@ -16,7 +16,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_absolute_path() -> None:
-    p = _REPO_ROOT / "tests" / "stress" / "normal" / "stress_normal_input.h"
+    p = _REPO_ROOT / "tests" / "stress" / "fixtures" / "pathological_core" / "input.h"
     resolved = _resolve_header_path(p)
     assert resolved.is_file()
     assert resolved == p.resolve()
@@ -37,7 +37,7 @@ def test_relative_via_cwd_without_dev() -> None:
 
 def test_relative_header_resolves_from_cwd_only() -> None:
     """Relative paths are resolved against the process cwd (no repo-root magic)."""
-    rel = "tests/stress/normal/stress_normal_input.h"
+    rel = "tests/stress/fixtures/pathological_core/input.h"
     repo_file = _REPO_ROOT / rel
     assert repo_file.is_file()
     old_cwd = os.getcwd()

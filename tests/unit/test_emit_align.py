@@ -1,4 +1,4 @@
-"""Tests for @align emission from C struct alignment."""
+"""Tests for principled record layout alignment and fallback emission."""
 
 from __future__ import annotations
 
@@ -28,14 +28,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_stride_comment_when_size_not_multiple_of_align() -> None:
-    """Covers the FFI array-stride warning (size_of stride vs align_of)."""
+def test_packed_aligned_record_falls_back_to_opaque_storage() -> None:
     from mojo_bindgen.parsing.parser import ClangParser
 
-    header = _REPO_ROOT / "tests" / "stress" / "normal" / "stress_normal_input.h"
-    parser = ClangParser(header, library="stress_normal", link_name="stress_normal")
+    header = (
+        _REPO_ROOT / "tests" / "stress" / "fixtures" / "pathological_layout" / "input.h"
+    )
+    parser = ClangParser(header, library="pathological_layout", link_name="pathological_layout")
     unit = parser.run()
-    orig = next(d for d in unit.decls if getattr(d, "c_name", None) == "ev_aligned_data")
+    orig = next(d for d in unit.decls if getattr(d, "c_name", None) == "pl_packed_aligned")
     assert isinstance(orig, Struct)
     patched = Struct(
         decl_id=orig.decl_id,
@@ -59,8 +60,10 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
         options=opts,
     )
     text = render_struct(analyzed, opts)
+    assert analyzed.representation_mode == "opaque_storage_exact"
     assert "@align(16)" in text
-    assert "FFI: array stride" in text
+    assert "var storage: InlineArray[UInt8, 20]" in text
+    assert "not representable as a typed Mojo struct" in text
 
 
 def test_default_portable_mode_omits_plain_struct_align() -> None:
@@ -82,11 +85,12 @@ def test_default_portable_mode_omits_plain_struct_align() -> None:
         options=opts,
     )
     text = render_struct(analyzed, opts)
+    assert analyzed.representation_mode == "fieldwise_exact"
     assert "@align(" not in text
 
 
 def test_align_omitted_comment_for_invalid_explicit_c_align_bytes() -> None:
-    """Non-power-of-two explicit alignment cannot be expressed as Mojo @align."""
+    """Non-power-of-two explicit alignment cannot be expressed as an exact typed layout."""
     p = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
     f = Field(name="x", source_name="x", type=p, byte_offset=0)
     bad = Struct(
@@ -106,9 +110,11 @@ def test_align_omitted_comment_for_invalid_explicit_c_align_bytes() -> None:
         options=opts,
     )
     text = render_struct(analyzed, opts)
+    assert analyzed.representation_mode == "opaque_storage_exact"
     assert "@align(" not in text
     assert "align_bytes=3" in text
     assert "omitted" in text
+    assert "InlineArray[UInt8, 8]" in text
 
 
 def test_strict_abi_mode_preserves_plain_struct_align() -> None:
@@ -130,4 +136,88 @@ def test_strict_abi_mode_preserves_plain_struct_align() -> None:
         options=opts,
     )
     text = render_struct(analyzed, opts)
+    assert analyzed.representation_mode == "fieldwise_padded_exact"
     assert "@align(8)" in text
+    assert "var __pad0: InlineArray[UInt8, 4]" in text
+
+
+def test_explicit_overalignment_uses_trailing_padding() -> None:
+    c_char = IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
+    c_int = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+    st = Struct(
+        decl_id="explicit_padded",
+        name="explicit_padded",
+        c_name="explicit_padded",
+        fields=[
+            Field(name="tag", source_name="tag", type=c_char, byte_offset=0),
+            Field(name="value", source_name="value", type=c_int, byte_offset=4),
+        ],
+        size_bytes=16,
+        align_bytes=16,
+        is_union=False,
+        requested_align_bytes=16,
+    )
+    analyzed = analyzed_struct_for_test(
+        st,
+        struct_by_name={st.decl_id: st},
+        options=MojoEmitOptions(warn_abi=False),
+    )
+    text = render_struct(analyzed, MojoEmitOptions(warn_abi=False))
+    assert analyzed.representation_mode == "fieldwise_padded_exact"
+    assert "@align(16)" in text
+    assert "var value: c_int" in text
+    assert "var __pad0: InlineArray[UInt8, 8]" in text
+    assert "trailing padding" in text
+
+
+def test_field_alignment_uses_interior_and_trailing_padding() -> None:
+    c_char = IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
+    c_int = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+    st = Struct(
+        decl_id="field_aligned",
+        name="field_aligned",
+        c_name="field_aligned",
+        fields=[
+            Field(name="tag", source_name="tag", type=c_char, byte_offset=0),
+            Field(name="value", source_name="value", type=c_int, byte_offset=16),
+        ],
+        size_bytes=32,
+        align_bytes=16,
+        is_union=False,
+    )
+    analyzed = analyzed_struct_for_test(
+        st,
+        struct_by_name={st.decl_id: st},
+        options=MojoEmitOptions(warn_abi=False),
+    )
+    text = render_struct(analyzed, MojoEmitOptions(warn_abi=False))
+    assert analyzed.representation_mode == "fieldwise_padded_exact"
+    assert "@align(16)" in text
+    assert "synthesized padding: bytes 4..15" in text
+    assert "synthesized trailing padding: bytes 20..31" in text
+
+
+def test_pragma_pack2_falls_back_to_opaque_storage_without_typed_fields() -> None:
+    c_char = IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1)
+    c_int = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+    st = Struct(
+        decl_id="pragma_pack2",
+        name="pragma_pack2",
+        c_name="pragma_pack2",
+        fields=[
+            Field(name="tag", source_name="tag", type=c_char, byte_offset=0),
+            Field(name="value", source_name="value", type=c_int, byte_offset=2),
+        ],
+        size_bytes=6,
+        align_bytes=2,
+        is_union=False,
+    )
+    analyzed = analyzed_struct_for_test(
+        st,
+        struct_by_name={st.decl_id: st},
+        options=MojoEmitOptions(warn_abi=False),
+    )
+    text = render_struct(analyzed, MojoEmitOptions(warn_abi=False))
+    assert analyzed.representation_mode == "opaque_storage_exact"
+    assert "var storage: InlineArray[UInt8, 6]" in text
+    assert "var value: c_int" not in text

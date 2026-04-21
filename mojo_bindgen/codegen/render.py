@@ -14,6 +14,8 @@ from mojo_bindgen.passes.analyze_for_mojo import (
     AnalyzedFunction,
     AnalyzedGlobalVar,
     AnalyzedMacro,
+    AnalyzedOpaqueStorage,
+    AnalyzedPaddingField,
     AnalyzedStruct,
     AnalyzedStructInitializer,
     AnalyzedStructInitParam,
@@ -61,6 +63,12 @@ class MojoRenderer:
         for line in analyzed_field.comment_lines:
             b.add(line)
         b.add(f"var {analyzed_field.mojo_name}: {analyzed_field.surface_type_text}")
+
+    @staticmethod
+    def _emit_padding_field_lines(b: CodeBuilder, padding_field: AnalyzedPaddingField) -> None:
+        for line in padding_field.comment_lines:
+            b.add(line)
+        b.add(f"var {padding_field.name}: {padding_field.surface_type_text}")
 
     def _render_opaque_struct_stub(self, analyzed: AnalyzedStruct) -> str:
         b = CodeBuilder()
@@ -137,7 +145,22 @@ class MojoRenderer:
         return f"{param.name}: {param.surface_type_text}"
 
     def _render_struct_body(self, b: CodeBuilder, analyzed: AnalyzedStruct) -> None:
-        vars_in_order: list[tuple[int, str, object]] = [(af.index, "field", af) for af in analyzed.fields]
+        if analyzed.representation_mode == "opaque_storage_exact":
+            assert analyzed.opaque_storage is not None
+            for line in analyzed.opaque_storage.reason_comment_lines:
+                b.add(line)
+            b.add(
+                f"var {analyzed.opaque_storage.field_name}: {analyzed.opaque_storage.surface_type_text}"
+            )
+            return
+
+        vars_in_order: list[tuple[int, str, object]] = [
+            (af.field.byte_offset, "field", af) for af in analyzed.fields
+        ]
+        vars_in_order.extend(
+            (padding_field.byte_offset, "padding", padding_field)
+            for padding_field in analyzed.padding_fields
+        )
         if analyzed.bitfield_layout is not None:
             vars_in_order.extend(
                 (storage.field_index, "storage", storage)
@@ -147,6 +170,8 @@ class MojoRenderer:
         for _, kind, item in vars_in_order:
             if kind == "field":
                 self._emit_field_lines(b, item)
+            elif kind == "padding":
+                self._emit_padding_field_lines(b, item)
             else:
                 self._render_pure_bitfield_storage(b, item)
         if analyzed.init_kind == "synthesized":
