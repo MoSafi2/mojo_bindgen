@@ -1,14 +1,19 @@
 """Explicit IR pass pipeline for post-parse transformations."""
 
 from mojo_bindgen.passes.analyze_for_mojo import (
+    AnalyzedCallbackAlias,
+    AnalyzedConst,
+    AnalyzedEnum,
     AnalyzedField,
     AnalyzedFunction,
     AnalyzedGlobalVar,
+    AnalyzedMacro,
     AnalyzedStruct,
     AnalyzedTypedef,
     AnalyzedUnion,
     AnalyzedUnit,
     AnalyzeForMojoPass,
+    AssembleEmitModelPass,
     CallbackAlias,
     GlobalVarKind,
     TailDecl,
@@ -16,6 +21,11 @@ from mojo_bindgen.passes.analyze_for_mojo import (
     analyze_unit_semantics,
     analyzed_struct_for_test,
     struct_by_decl_id,
+)
+from mojo_bindgen.passes.codegen_passes import (
+    AnalyzeStructLoweringPass,
+    AnalyzeTailDeclPass,
+    AnalyzeUnionLoweringPass,
 )
 from mojo_bindgen.passes.pipeline import run_ir_passes
 from mojo_bindgen.passes.reachability import (
@@ -36,13 +46,21 @@ from mojo_bindgen.passes.validate_ir import IRValidationError, ValidateIRPass
 
 __all__ = [
     "AnalyzeForMojoPass",
+    "AnalyzeStructLoweringPass",
+    "AnalyzeTailDeclPass",
+    "AnalyzeUnionLoweringPass",
+    "AnalyzedCallbackAlias",
+    "AnalyzedConst",
+    "AnalyzedEnum",
     "AnalyzedField",
     "AnalyzedFunction",
     "AnalyzedGlobalVar",
+    "AnalyzedMacro",
     "AnalyzedStruct",
     "AnalyzedTypedef",
     "AnalyzedUnion",
     "AnalyzedUnit",
+    "AssembleEmitModelPass",
     "CallbackAlias",
     "CollectCallbackAliasesPass",
     "CollectEmissionNamesPass",
