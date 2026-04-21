@@ -341,16 +341,22 @@ def _analyze_struct(
     field_callback_aliases: dict[tuple[str, int], str] | None,
     *,
     register_passable: bool,
+    options: MojoEmitOptions,
 ) -> AnalyzedStruct:
     align_decorator: int | None = None
     align_stride_warning = False
     align_omit_comment: str | None = None
     ab = decl.align_bytes
-    if mojo_align_decorator_ok(ab):
+    valid_mojo_align = mojo_align_decorator_ok(ab)
+    explicit_layout_intent = decl.is_packed or decl.requested_align_bytes is not None
+    should_emit_align = valid_mojo_align and (
+        options.strict_abi or explicit_layout_intent
+    )
+    if should_emit_align:
         align_decorator = ab
         if decl.size_bytes % ab != 0:
             align_stride_warning = True
-    elif ab > 1:
+    elif ab > 1 and explicit_layout_intent and not valid_mojo_align:
         align_omit_comment = f"# @align omitted: C align_bytes={ab} is not a valid Mojo @align (power of 2, max 2**29)."
     if decl.is_packed:
         packed_comment = "# packed record: verify Mojo layout against the target C ABI."
@@ -509,6 +515,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
             ctx.struct_map,
             ctx.callback_info.field_aliases,
             register_passable=ctx.register_passable_by_decl_id.get(decl.decl_id, False),
+            options=ctx.options,
         )
         for decl in incomplete_struct_decls
     )
@@ -518,6 +525,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
             ctx.struct_map,
             ctx.callback_info.field_aliases,
             register_passable=ctx.register_passable_by_decl_id.get(decl.decl_id, False),
+            options=ctx.options,
         )
         for decl in ctx.ordered_struct_decls
     )
@@ -596,9 +604,16 @@ def analyzed_struct_for_test(
     decl: Struct,
     *,
     struct_by_name: dict[str, Struct],
+    options: MojoEmitOptions | None = None,
 ) -> AnalyzedStruct:
     reg = build_register_passable_map(struct_by_name).get(decl.decl_id, False)
-    return _analyze_struct(decl, struct_by_name, None, register_passable=reg)
+    return _analyze_struct(
+        decl,
+        struct_by_name,
+        None,
+        register_passable=reg,
+        options=options or MojoEmitOptions(),
+    )
 
 
 def analyze_unit(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:

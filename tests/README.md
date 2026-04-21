@@ -101,6 +101,15 @@ Each case under `tests/surface/fixtures/<case>/` contains:
 
 These are parser-driven goldens for representative emitted bindings.
 
+Golden policy:
+
+- Surface and broad stress Mojo goldens intentionally run with
+  `MojoEmitOptions(strict_abi=True)` so the checked-in expected output stays
+  pinned to the historical ABI-strict emission shape.
+- Product defaults may evolve for portability; golden tests should opt into
+  strict ABI mode unless the fixture is specifically meant to validate the new
+  default portable behavior.
+
 Surface authoring rules:
 
 - Keep one primary codegen behavior per fixture.

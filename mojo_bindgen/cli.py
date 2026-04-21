@@ -74,6 +74,13 @@ def run(
             help="Path hint for OwnedDLHandle when --linking owned_dl_handle.",
         ),
     ] = None,
+    strict_abi: Annotated[
+        bool,
+        typer.Option(
+            "--strict-abi",
+            help="Preserve parsed C alignment emission behavior. By default, omit @align for ordinary records and keep ABI comments only.",
+        ),
+    ] = False,
 ) -> int:
     """Generate Mojo FFI from a C header using libclang.
 
@@ -106,6 +113,7 @@ def run(
         opts = MojoEmitOptions(
             linking=linking,
             library_path_hint=library_path_hint,
+            strict_abi=strict_abi,
         )
         text = MojoGenerator(opts).generate(unit)
 

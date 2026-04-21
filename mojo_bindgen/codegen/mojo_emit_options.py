@@ -33,6 +33,9 @@ class MojoEmitOptions:
     warn_abi: bool = True
     """Emit comments reminding that packed/aligned layouts need verification."""
 
+    strict_abi: bool = False
+    """When true, preserve parsed C alignment emission behavior. When false, emit ``@align`` only for records with explicit layout intent such as packed or attribute-aligned declarations."""
+
     ffi_origin: FFIOriginStyle = "external"
     """Pointer provenance for mapped types: ``external`` → Mut/Immut*ExternalOrigin (recommended for C FFI); ``any`` → *AnyOrigin."""
 

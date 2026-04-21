@@ -158,12 +158,50 @@ def test_analyze_precomputes_struct_align_and_passability() -> None:
         is_union=False,
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
-    au = analyze_unit(unit, MojoEmitOptions())
+    au = analyze_unit(unit, MojoEmitOptions(strict_abi=True))
     assert len(au.ordered_structs) == 1
     s = au.ordered_structs[0]
     assert s.register_passable is True
     assert s.align_decorator == 8
     assert s.align_stride_warning is True
+
+
+def test_analyze_default_mode_omits_plain_struct_align() -> None:
+    i32 = _i32()
+    st = Struct(
+        decl_id="struct:PortableA",
+        name="PortableA",
+        c_name="PortableA",
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0)],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    au = analyze_unit(unit, MojoEmitOptions())
+    s = au.ordered_structs[0]
+    assert s.register_passable is True
+    assert s.align_decorator is None
+    assert s.align_stride_warning is False
+
+
+def test_analyze_default_mode_keeps_explicit_alignment() -> None:
+    i32 = _i32()
+    st = Struct(
+        decl_id="struct:ExplicitAlign",
+        name="ExplicitAlign",
+        c_name="ExplicitAlign",
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0)],
+        size_bytes=32,
+        align_bytes=16,
+        is_union=False,
+        requested_align_bytes=16,
+    )
+    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    au = analyze_unit(unit, MojoEmitOptions())
+    s = au.ordered_structs[0]
+    assert s.align_decorator == 16
+    assert s.align_stride_warning is False
 
 
 def test_analyze_typedef_name_in_function_signature_when_typedef_emitted() -> None:

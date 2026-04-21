@@ -15,3 +15,7 @@ Broad regression fixtures live here.
 
 Use `generate_stress_fixtures.py` to regenerate emitted Mojo and annotated IR
 artifacts.
+
+Stress Mojo goldens are regenerated in ABI-strict mode
+(`MojoEmitOptions(strict_abi=True)`) so the checked-in emitted fixtures remain
+stable even though the default product emission policy is now more portable.

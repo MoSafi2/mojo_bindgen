@@ -35,6 +35,8 @@ from mojo_bindgen.parsing.parser import ClangParser
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STRESS_ROOT = REPO_ROOT / "tests" / "stress"
+GOLDEN_EMIT_OPTIONS = MojoEmitOptions(strict_abi=True)
+"""Preserve existing stress Mojo goldens while product defaults stay portable."""
 
 
 @dataclass(frozen=True)
@@ -194,7 +196,7 @@ def _write_case(case: StressCase, *, ir_only: bool) -> None:
     base = case.header.parent / case.key.split("/")[-1]
 
     if case.emit and not ir_only:
-        external = MojoGenerator(MojoEmitOptions()).generate(unit)
+        external = MojoGenerator(GOLDEN_EMIT_OPTIONS).generate(unit)
         (base.parent / f"{base.name}_external.mojo").write_text(
             _normalize_source_line(external, case.header),
             encoding="utf-8",

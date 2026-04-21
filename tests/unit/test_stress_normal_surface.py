@@ -15,6 +15,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _CANON_SOURCE = "# source: tests/stress/normal/stress_normal_input.h"
 _SOURCE_LINE = re.compile(r"^# source: .+$", re.MULTILINE)
+_GOLDEN_EMIT_OPTIONS = MojoEmitOptions(strict_abi=True)
+"""Keep broad stress goldens pinned to the historical ABI-strict emitted shape."""
 
 
 def _normalize_source_line(text: str) -> str:
@@ -60,6 +62,6 @@ def test_emit_stress_normal_matches_golden() -> None:
         link_name="stress_normal",
     )
     unit = parser.run()
-    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    out = MojoGenerator(_GOLDEN_EMIT_OPTIONS).generate(unit)
     expected = golden_path.read_text(encoding="utf-8")
     assert _normalize_source_line(out) == _normalize_source_line(expected)

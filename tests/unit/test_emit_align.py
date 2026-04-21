@@ -52,18 +52,41 @@ def test_stride_comment_when_size_not_multiple_of_align() -> None:
     )
     struct_by_name = dict(struct_by_decl_id(unit))
     struct_by_name[patched.decl_id] = patched
-    opts = MojoEmitOptions(warn_abi=False)
+    opts = MojoEmitOptions(warn_abi=False, strict_abi=True)
     analyzed = analyzed_struct_for_test(
         patched,
         struct_by_name=struct_by_name,
+        options=opts,
     )
     text = render_struct(analyzed, opts)
     assert "@align(16)" in text
     assert "FFI: array stride" in text
 
 
-def test_align_omitted_comment_for_invalid_c_align_bytes() -> None:
-    """Non-power-of-two alignment cannot be expressed as Mojo @align."""
+def test_default_portable_mode_omits_plain_struct_align() -> None:
+    p = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+    f = Field(name="x", source_name="x", type=p, byte_offset=0)
+    plain = Struct(
+        decl_id="plain_align",
+        name="plain_align",
+        c_name="plain_align",
+        fields=[f],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    opts = MojoEmitOptions(warn_abi=False)
+    analyzed = analyzed_struct_for_test(
+        plain,
+        struct_by_name={plain.decl_id: plain},
+        options=opts,
+    )
+    text = render_struct(analyzed, opts)
+    assert "@align(" not in text
+
+
+def test_align_omitted_comment_for_invalid_explicit_c_align_bytes() -> None:
+    """Non-power-of-two explicit alignment cannot be expressed as Mojo @align."""
     p = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
     f = Field(name="x", source_name="x", type=p, byte_offset=0)
     bad = Struct(
@@ -74,13 +97,37 @@ def test_align_omitted_comment_for_invalid_c_align_bytes() -> None:
         size_bytes=8,
         align_bytes=3,
         is_union=False,
+        requested_align_bytes=3,
     )
     opts = MojoEmitOptions(warn_abi=False)
     analyzed = analyzed_struct_for_test(
         bad,
         struct_by_name={bad.decl_id: bad},
+        options=opts,
     )
     text = render_struct(analyzed, opts)
     assert "@align(" not in text
     assert "align_bytes=3" in text
     assert "omitted" in text
+
+
+def test_strict_abi_mode_preserves_plain_struct_align() -> None:
+    p = IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+    f = Field(name="x", source_name="x", type=p, byte_offset=0)
+    plain = Struct(
+        decl_id="strict_plain_align",
+        name="strict_plain_align",
+        c_name="strict_plain_align",
+        fields=[f],
+        size_bytes=8,
+        align_bytes=8,
+        is_union=False,
+    )
+    opts = MojoEmitOptions(warn_abi=False, strict_abi=True)
+    analyzed = analyzed_struct_for_test(
+        plain,
+        struct_by_name={plain.decl_id: plain},
+        options=opts,
+    )
+    text = render_struct(analyzed, opts)
+    assert "@align(8)" in text

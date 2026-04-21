@@ -14,6 +14,8 @@ from mojo_bindgen.parsing.parser import ClangParser
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SURFACE_ROOT = _REPO_ROOT / "tests" / "surface" / "fixtures"
 _SOURCE_LINE = re.compile(r"^# source: .+$", re.MULTILINE)
+_GOLDEN_EMIT_OPTIONS = MojoEmitOptions(strict_abi=True)
+"""Keep surface goldens pinned to the historical ABI-strict emitted shape."""
 
 
 def _has_libclang() -> bool:
@@ -42,7 +44,7 @@ def _normalize_source_line(text: str, relative_header: str) -> str:
 def test_surface_fixture_external(case_dir: Path) -> None:
     header = case_dir / "input.h"
     unit = ClangParser(header, library="surface_globals", link_name="surface_globals").run()
-    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    out = MojoGenerator(_GOLDEN_EMIT_OPTIONS).generate(unit)
     expected = (case_dir / "expect.external.mojo").read_text(encoding="utf-8")
     relative_header = str(header.relative_to(_REPO_ROOT))
     assert _normalize_source_line(out, relative_header) == expected
