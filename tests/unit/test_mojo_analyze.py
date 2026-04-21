@@ -142,8 +142,52 @@ def test_analyze_eligible_union_gets_comptime_block() -> None:
     unit = Unit(source_header="t.h", library="t", link_name="t", decls=[u])
     au = analyze_unit(unit, MojoEmitOptions())
     assert len(au.unions) == 1
-    assert au.unions[0].uses_unsafe_union is True
-    assert "U_Union" in au.unsafe_union_names
+    assert au.unions[0].kind == "unsafe_union"
+    assert au.unions[0].mojo_name == "U"
+    assert "U" in au.union_alias_names
+    assert "U" in au.unsafe_union_names
+
+
+def test_analyze_union_with_struct_arm_uses_unsafe_union() -> None:
+    i32 = _i32()
+    parts = Struct(
+        decl_id="struct:Parts",
+        name="Parts",
+        c_name="Parts",
+        fields=[
+            Field(name="lo", source_name="lo", type=i32, byte_offset=0),
+            Field(name="hi", source_name="hi", type=i32, byte_offset=4),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    parts_ref = StructRef(
+        decl_id=parts.decl_id,
+        name=parts.name,
+        c_name=parts.c_name,
+        size_bytes=parts.size_bytes,
+        is_union=False,
+    )
+    union_decl = Struct(
+        decl_id="union:WithStruct",
+        name="WithStruct",
+        c_name="union WithStruct",
+        fields=[
+            Field(name="raw", source_name="raw", type=i32, byte_offset=0),
+            Field(name="parts", source_name="parts", type=parts_ref, byte_offset=0),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=True,
+    )
+    au = analyze_unit(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[parts, union_decl]),
+        MojoEmitOptions(),
+    )
+    analyzed_union = au.unions[0]
+    assert analyzed_union.kind == "unsafe_union"
+    assert analyzed_union.unsafe_member_types == ("c_int", "Parts")
 
 
 def test_analyze_precomputes_struct_align_and_passability() -> None:
@@ -278,15 +322,16 @@ def test_analyze_pure_bitfield_struct_separates_storage_from_members() -> None:
     )
     au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
     analyzed = au.ordered_structs[0]
-    assert analyzed.pure_bitfield is not None
-    assert [storage.name for storage in analyzed.pure_bitfield.storages] == ["__bf0", "__bf1"]
-    assert [member.mojo_name for member in analyzed.pure_bitfield.members] == ["ready", "error", "enabled"]
-    assert analyzed.pure_bitfield.members[0].storage_name == "__bf0"
-    assert analyzed.pure_bitfield.members[2].storage_name == "__bf1"
-    assert analyzed.pure_bitfield.members[2].is_bool is True
+    assert analyzed.bitfield_layout is not None
+    assert analyzed.fields == ()
+    assert [storage.name for storage in analyzed.bitfield_layout.storages] == ["__bf0", "__bf1"]
+    assert [member.mojo_name for member in analyzed.bitfield_layout.members] == ["ready", "error", "enabled"]
+    assert analyzed.bitfield_layout.members[0].storage_name == "__bf0"
+    assert analyzed.bitfield_layout.members[2].storage_name == "__bf1"
+    assert analyzed.bitfield_layout.members[2].is_bool is True
 
 
-def test_analyze_mixed_struct_does_not_use_pure_bitfield_path() -> None:
+def test_analyze_mixed_struct_uses_bitfield_layout_for_bitfield_run() -> None:
     u32 = _u32()
     st = Struct(
         decl_id="struct:MixedBits",
@@ -309,7 +354,11 @@ def test_analyze_mixed_struct_does_not_use_pure_bitfield_path() -> None:
         is_union=False,
     )
     au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
-    assert au.ordered_structs[0].pure_bitfield is None
+    analyzed = au.ordered_structs[0]
+    assert [field.mojo_name for field in analyzed.fields] == ["tag"]
+    assert analyzed.bitfield_layout is not None
+    assert [storage.name for storage in analyzed.bitfield_layout.storages] == ["__bf0"]
+    assert [member.mojo_name for member in analyzed.bitfield_layout.members] == ["ready"]
 
 
 def test_analyze_function_pointer_returns_use_wrapper_kind() -> None:

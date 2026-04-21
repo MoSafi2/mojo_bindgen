@@ -49,7 +49,6 @@ from mojo_bindgen.passes.semantic.layout import (
     bitfield_field_is_signed,
     bitfield_storage_width_bits,
     build_register_passable_map,
-    is_pure_bitfield_struct as _is_pure_bitfield_struct,
     struct_by_decl_id,
 )
 from mojo_bindgen.passes.semantic.names import CollectEmissionNamesPass
@@ -71,10 +70,11 @@ class AnalyzedField:
 
 @dataclass(frozen=True)
 class AnalyzedBitfieldStorage:
-    """One synthesized physical storage member for a pure bitfield struct."""
+    """One synthesized physical storage member for a bitfield run."""
 
     name: str
     type: Type
+    field_index: int
     byte_offset: int
     start_bit: int
     width_bits: int
@@ -95,8 +95,8 @@ class AnalyzedBitfieldMember:
 
 
 @dataclass(frozen=True)
-class AnalyzedPureBitfieldStruct:
-    """Derived storage/member split for a pure bitfield struct."""
+class AnalyzedBitfieldLayout:
+    """Derived storage/member split for the bitfield portions of a struct."""
 
     storages: tuple[AnalyzedBitfieldStorage, ...]
     members: tuple[AnalyzedBitfieldMember, ...]
@@ -112,7 +112,7 @@ class AnalyzedStruct:
     align_stride_warning: bool
     align_omit_comment: str | None
     fields: tuple[AnalyzedField, ...]
-    pure_bitfield: AnalyzedPureBitfieldStruct | None = None
+    bitfield_layout: AnalyzedBitfieldLayout | None = None
 
 
 @dataclass(frozen=True)
@@ -138,12 +138,17 @@ class AnalyzedFunction:
     param_callback_alias_names: tuple[str | None, ...] = ()
 
 
+UnionLoweringKind = Literal["unsafe_union", "inline_array"]
+
+
 @dataclass(frozen=True)
 class AnalyzedUnion:
     """Derived union lowering decisions."""
 
     decl: Struct
-    uses_unsafe_union: bool
+    mojo_name: str
+    kind: UnionLoweringKind
+    unsafe_member_types: tuple[str, ...] = ()
 
 
 GlobalVarKind = Literal["wrapper", "stub"]
@@ -180,6 +185,7 @@ class AnalyzedUnit:
     """True when at least one global uses ``OwnedDLHandle.get_symbol`` (wrapper globals)."""
 
     semantic_fallback_notes: tuple[str, ...]
+    union_alias_names: frozenset[str]
     unsafe_union_names: frozenset[str]
     emitted_typedef_mojo_names: frozenset[str]
     callback_aliases: tuple[CallbackAlias, ...]
@@ -206,42 +212,64 @@ def mojo_align_decorator_ok(align_bytes: int) -> bool:
 # --- Layout / unions / register passability ----------------------------------------
 
 
-def _type_ok_for_unsafe_union_member(t: Type) -> bool:
-    u = peel_wrappers(t)
-    return isinstance(u, (IntType, FloatType, Pointer, FunctionPtr, OpaqueRecordRef))
-
-
 def _try_unsafe_union_type_list(
     decl: Struct, ffi_origin: FFIOriginStyle, ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases"
 ) -> list[str] | None:
-    if not decl.is_union or not decl.fields:
+    if not decl.is_union or not decl.is_complete or not decl.fields:
         return None
+    union_name = mojo_ident(decl.name.strip() or decl.c_name.strip())
     mapper = TypeMapper(
         ffi_origin=ffi_origin,
+        union_alias_names=frozenset(),
         unsafe_union_names=frozenset(),
         typedef_mojo_names=frozenset(),
         ffi_scalar_style=ffi_scalar_style,
     )
     mapped_members: list[str] = []
     for f in decl.fields:
-        if not _type_ok_for_unsafe_union_member(f.type):
+        if isinstance(peel_wrappers(f.type), UnsupportedType):
             return None
-        mapped_members.append(mapper.canonical(f.type))
+        mapped = mapper.canonical(f.type)
+        if mapped == union_name:
+            return None
+        mapped_members.append(mapped)
     if len(set(mapped_members)) != len(mapped_members):
         return None
     return mapped_members
 
 
-def eligible_unsafe_union_names(
+def analyze_unions(
     unit: Unit, ffi_origin: FFIOriginStyle, ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases"
-) -> frozenset[str]:
-    out: set[str] = set()
+) -> tuple[tuple[AnalyzedUnion, ...], frozenset[str], frozenset[str]]:
+    unions: list[AnalyzedUnion] = []
+    union_alias_names: set[str] = set()
+    unsafe_union_names: set[str] = set()
     for d in unit.decls:
         if isinstance(d, Struct) and d.is_union:
-            tl = _try_unsafe_union_type_list(d, ffi_origin, ffi_scalar_style)
-            if tl is not None:
-                out.add(f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union")
-    return frozenset(out)
+            if not d.is_complete:
+                continue
+            mojo_name = mojo_ident(d.name.strip() or d.c_name.strip())
+            union_alias_names.add(mojo_name)
+            unsafe_member_types = _try_unsafe_union_type_list(d, ffi_origin, ffi_scalar_style)
+            if unsafe_member_types is not None:
+                unsafe_union_names.add(mojo_name)
+                unions.append(
+                    AnalyzedUnion(
+                        decl=d,
+                        mojo_name=mojo_name,
+                        kind="unsafe_union",
+                        unsafe_member_types=tuple(unsafe_member_types),
+                    )
+                )
+            else:
+                unions.append(
+                    AnalyzedUnion(
+                        decl=d,
+                        mojo_name=mojo_name,
+                        kind="inline_array",
+                    )
+                )
+    return tuple(unions), frozenset(union_alias_names), frozenset(unsafe_union_names)
 
 
 def _field_mojo_name(f: Field, index: int) -> str:
@@ -252,13 +280,20 @@ def _field_mojo_name(f: Field, index: int) -> str:
     return f"_anon_{index}"
 
 
-def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) -> AnalyzedPureBitfieldStruct | None:
+def _analyze_bitfield_layout(
+    analyzed_fields: tuple[AnalyzedField, ...],
+) -> AnalyzedBitfieldLayout | None:
     storages: list[AnalyzedBitfieldStorage] = []
     members: list[AnalyzedBitfieldMember] = []
+    saw_bitfield = False
     current: AnalyzedBitfieldStorage | None = None
 
     for af in analyzed_fields:
         field = af.field
+        if not field.is_bitfield:
+            current = None
+            continue
+        saw_bitfield = True
         width_bits = bitfield_storage_width_bits(field)
         if width_bits is None:
             return None
@@ -281,6 +316,7 @@ def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) ->
             current = AnalyzedBitfieldStorage(
                 name=f"__bf{len(storages)}",
                 type=field.type,
+                field_index=af.index,
                 byte_offset=storage_start_bit // 8,
                 start_bit=storage_start_bit,
                 width_bits=width_bits,
@@ -290,6 +326,7 @@ def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) ->
             current = AnalyzedBitfieldStorage(
                 name=current.name,
                 type=field.type,
+                field_index=current.field_index,
                 byte_offset=current.byte_offset,
                 start_bit=current.start_bit,
                 width_bits=width_bits,
@@ -312,7 +349,9 @@ def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) ->
             )
         )
 
-    return AnalyzedPureBitfieldStruct(storages=tuple(storages), members=tuple(members))
+    if not saw_bitfield:
+        return None
+    return AnalyzedBitfieldLayout(storages=tuple(storages), members=tuple(members))
 
 
 # --- Orchestration -----------------------------------------------------------------
@@ -328,6 +367,7 @@ class _SemanticContext:
     emitted_names: frozenset[str]
     emitted_typedef_names: frozenset[str]
     callback_info: CallbackAliasInfo
+    union_alias_names: frozenset[str]
     unsafe_union_names: frozenset[str]
     register_passable_by_decl_id: dict[str, bool]
     import_needs: ImportNeeds
@@ -365,7 +405,7 @@ def _analyze_struct(
             if align_omit_comment is None
             else f"{align_omit_comment} {packed_comment[2:]}"
         )
-    fields = tuple(
+    all_fields = tuple(
         AnalyzedField(
             field=f,
             index=i,
@@ -378,7 +418,8 @@ def _analyze_struct(
         )
         for i, f in enumerate(decl.fields)
     )
-    pure_bitfield = _analyze_pure_bitfield_struct(fields) if _is_pure_bitfield_struct(decl) else None
+    bitfield_layout = _analyze_bitfield_layout(all_fields)
+    fields = tuple(af for af in all_fields if not af.field.is_bitfield)
     return AnalyzedStruct(
         decl=decl,
         register_passable=register_passable,
@@ -386,7 +427,7 @@ def _analyze_struct(
         align_stride_warning=align_stride_warning,
         align_omit_comment=align_omit_comment,
         fields=fields,
-        pure_bitfield=pure_bitfield,
+        bitfield_layout=bitfield_layout,
     )
 
 
@@ -483,12 +524,13 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         unit,
         emitted_typedef_names=name_facts.emitted_typedef_names,
     )
-    unsafe_union_names = eligible_unsafe_union_names(
+    unions, union_alias_names, unsafe_union_names = analyze_unions(
         unit, options.ffi_origin, options.ffi_scalar_style
     )
     import_needs, semantic_fallback_notes = CollectSemanticNeedsPass().run(unit)
     type_mapper = TypeMapper(
         ffi_origin=options.ffi_origin,
+        union_alias_names=union_alias_names,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=name_facts.emitted_typedef_names,
         callback_signature_names=callback_info.signature_names,
@@ -501,6 +543,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         emitted_names=name_facts.emitted_names,
         emitted_typedef_names=name_facts.emitted_typedef_names,
         callback_info=callback_info,
+        union_alias_names=union_alias_names,
         unsafe_union_names=unsafe_union_names,
         register_passable_by_decl_id=layout_facts.register_passable_by_decl_id,
         import_needs=import_needs,
@@ -528,16 +571,6 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
             options=ctx.options,
         )
         for decl in ctx.ordered_struct_decls
-    )
-
-    unions = tuple(
-        AnalyzedUnion(
-            decl=d,
-            uses_unsafe_union=f"{mojo_ident(d.name.strip() or d.c_name.strip())}_Union"
-            in ctx.unsafe_union_names,
-        )
-        for d in unit.decls
-        if isinstance(d, Struct) and d.is_union
     )
 
     tail_decls: list[TailDecl] = []
@@ -587,6 +620,7 @@ def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit
         needs_atomic_import=ctx.import_needs.atomic,
         needs_global_symbol_helpers=needs_global_symbol_helpers,
         semantic_fallback_notes=ctx.semantic_fallback_notes,
+        union_alias_names=ctx.union_alias_names,
         unsafe_union_names=ctx.unsafe_union_names,
         emitted_typedef_mojo_names=ctx.emitted_typedef_names,
         callback_aliases=ctx.callback_info.aliases,

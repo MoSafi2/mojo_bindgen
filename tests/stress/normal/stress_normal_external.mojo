@@ -149,42 +149,46 @@ comptime EV_ARRAY_LEN = c_int(16)
 
 comptime EV_NAME_LITERAL = "stress-normal-input"
 
-# -- C union `ev_any_watcher` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 48] unless you wrap a manual UnsafeUnion (unique trivial members).
+comptime ev_any_watcher = UnsafeUnion[ev_io, ev_stat]
+
+# -- C union `ev_any_watcher` - comptime `ev_any_watcher` = UnsafeUnion[...].
 # C size=48 bytes, align=8.
 # Members (reference only):
 #   io: ev_io
 #   stat: ev_stat
-# -- C union `ev_nested_anon__anon_union_1` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 4] unless you wrap a manual UnsafeUnion (unique trivial members).
+comptime ev_nested_anon__anon_union_1 = UnsafeUnion[c_uint, c_float, ev_nested_anon__anon_union_1__anon_struct_1]
+
+# -- C union `ev_nested_anon__anon_union_1` - comptime `ev_nested_anon__anon_union_1` = UnsafeUnion[...].
 # C size=4 bytes, align=4.
 # Members (reference only):
 #   u32: c_uint
 #   f32: c_float
 #   (anonymous): ev_nested_anon__anon_union_1__anon_struct_1
-# -- C union `ev_deep_node__anon_union_1` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 4] unless you wrap a manual UnsafeUnion (unique trivial members).
+comptime ev_deep_node__anon_union_1 = UnsafeUnion[c_int, ev_deep_node__anon_union_1__anon_struct_1]
+
+# -- C union `ev_deep_node__anon_union_1` - comptime `ev_deep_node__anon_union_1` = UnsafeUnion[...].
 # C size=4 bytes, align=4.
 # Members (reference only):
 #   as_int: c_int
 #   pair: ev_deep_node__anon_union_1__anon_struct_1
-comptime ev_recursive_tree__anon_union_1_Union = UnsafeUnion[c_int, c_double, MutOpaquePointer[MutExternalOrigin]]
+comptime ev_recursive_tree__anon_union_1 = UnsafeUnion[c_int, c_double, MutOpaquePointer[MutExternalOrigin]]
 
-# -- C union `ev_recursive_tree__anon_union_1` - comptime `ev_recursive_tree__anon_union_1_Union` = UnsafeUnion[...] (trivial members; see std.ffi).
+# -- C union `ev_recursive_tree__anon_union_1` - comptime `ev_recursive_tree__anon_union_1` = UnsafeUnion[...].
 # C size=8 bytes, align=8.
 # Members (reference only):
 #   i: c_int
 #   d: c_double
 #   p: MutOpaquePointer[MutExternalOrigin]
-# -- C union `ev_bits_overlay` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 8] unless you wrap a manual UnsafeUnion (unique trivial members).
+comptime ev_bits_overlay = UnsafeUnion[ev_bits, c_uint]
+
+# -- C union `ev_bits_overlay` - comptime `ev_bits_overlay` = UnsafeUnion[...].
 # C size=8 bytes, align=4.
 # Members (reference only):
 #   bits: ev_bits
 #   raw: c_uint
-comptime ev_number_Union = UnsafeUnion[c_int, c_uint, c_long, c_float, c_double, MutOpaquePointer[MutExternalOrigin]]
+comptime ev_number = UnsafeUnion[c_int, c_uint, c_long, c_float, c_double, MutOpaquePointer[MutExternalOrigin]]
 
-# -- C union `ev_number` - comptime `ev_number_Union` = UnsafeUnion[...] (trivial members; see std.ffi).
+# -- C union `ev_number` - comptime `ev_number` = UnsafeUnion[...].
 # C size=8 bytes, align=8.
 # Members (reference only):
 #   i: c_int
@@ -193,9 +197,9 @@ comptime ev_number_Union = UnsafeUnion[c_int, c_uint, c_long, c_float, c_double,
 #   f: c_float
 #   d: c_double
 #   p: MutOpaquePointer[MutExternalOrigin]
-comptime ev_ptr_cast_Union = UnsafeUnion[MutOpaquePointer[MutExternalOrigin], ImmutOpaquePointer[ImmutExternalOrigin], c_ulong, UnsafePointer[c_char, MutExternalOrigin], UnsafePointer[c_int, MutExternalOrigin]]
+comptime ev_ptr_cast = UnsafeUnion[MutOpaquePointer[MutExternalOrigin], ImmutOpaquePointer[ImmutExternalOrigin], c_ulong, UnsafePointer[c_char, MutExternalOrigin], UnsafePointer[c_int, MutExternalOrigin]]
 
-# -- C union `ev_ptr_cast` - comptime `ev_ptr_cast_Union` = UnsafeUnion[...] (trivial members; see std.ffi).
+# -- C union `ev_ptr_cast` - comptime `ev_ptr_cast` = UnsafeUnion[...].
 # C size=8 bytes, align=8.
 # Members (reference only):
 #   vp: MutOpaquePointer[MutExternalOrigin]
@@ -203,42 +207,40 @@ comptime ev_ptr_cast_Union = UnsafeUnion[MutOpaquePointer[MutExternalOrigin], Im
 #   addr: c_ulong
 #   cp: UnsafePointer[c_char, MutExternalOrigin]
 #   ip: UnsafePointer[c_int, MutExternalOrigin]
-# -- C union `ev_incomplete_union` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 0] unless you wrap a manual UnsafeUnion (unique trivial members).
-# C size=0 bytes, align=0.
-# Members (reference only):
-comptime ev_typedef_union_Union = UnsafeUnion[c_int, c_float]
+comptime ev_typedef_union = UnsafeUnion[c_int, c_float]
 
-# -- C union `ev_typedef_union` - comptime `ev_typedef_union_Union` = UnsafeUnion[...] (trivial members; see std.ffi).
+# -- C union `ev_typedef_union` - comptime `ev_typedef_union` = UnsafeUnion[...].
 # C size=4 bytes, align=4.
 # Members (reference only):
 #   i: c_int
 #   f: c_float
-# -- C union `ev_vector_union` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 16] unless you wrap a manual UnsafeUnion (unique trivial members).
+comptime ev_vector_union = UnsafeUnion[SIMD[DType.int32, 4], SIMD[DType.float32, 4], InlineArray[c_int, 4], InlineArray[c_float, 4]]
+
+# -- C union `ev_vector_union` - comptime `ev_vector_union` = UnsafeUnion[...].
 # C size=16 bytes, align=16.
 # Members (reference only):
 #   vi: SIMD[DType.int32, 4]
 #   vf: SIMD[DType.float32, 4]
 #   scalars: InlineArray[c_int, 4]
 #   lanes: InlineArray[c_float, 4]
-comptime ev_designated__anon_union_1_Union = UnsafeUnion[c_int, c_double]
+comptime ev_designated__anon_union_1 = UnsafeUnion[c_int, c_double]
 
-# -- C union `ev_designated__anon_union_1` - comptime `ev_designated__anon_union_1_Union` = UnsafeUnion[...] (trivial members; see std.ffi).
+# -- C union `ev_designated__anon_union_1` - comptime `ev_designated__anon_union_1` = UnsafeUnion[...].
 # C size=8 bytes, align=8.
 # Members (reference only):
 #   i: c_int
 #   d: c_double
-# -- C union `ev_nested_union` - not emitted as a struct.
-# By-value uses InlineArray[UInt8, 8] unless you wrap a manual UnsafeUnion (unique trivial members).
+comptime ev_nested_union = UnsafeUnion[ev_nested_union__anon_struct_1, c_ulong, c_double]
+
+# -- C union `ev_nested_union` - comptime `ev_nested_union` = UnsafeUnion[...].
 # C size=8 bytes, align=8.
 # Members (reference only):
 #   bytes: ev_nested_union__anon_struct_1
 #   raw64: c_ulong
 #   as_double: c_double
-comptime ev_tagged_payload__anon_union_1_Union = UnsafeUnion[c_int, c_float, MutOpaquePointer[MutExternalOrigin]]
+comptime ev_tagged_payload__anon_union_1 = UnsafeUnion[c_int, c_float, MutOpaquePointer[MutExternalOrigin]]
 
-# -- C union `ev_tagged_payload__anon_union_1` - comptime `ev_tagged_payload__anon_union_1_Union` = UnsafeUnion[...] (trivial members; see std.ffi).
+# -- C union `ev_tagged_payload__anon_union_1` - comptime `ev_tagged_payload__anon_union_1` = UnsafeUnion[...].
 # C size=8 bytes, align=8.
 # Members (reference only):
 #   i: c_int
@@ -354,14 +356,14 @@ struct ev_deep_node__anon_union_1__anon_struct_1(Copyable, Movable, RegisterPass
 @fieldwise_init
 struct ev_deep_node(Copyable, Movable):
     var next: UnsafePointer[ev_deep_node, MutExternalOrigin]
-    var payload: InlineArray[UInt8, 4]
+    var payload: ev_deep_node__anon_union_1
 # struct ev_recursive_tree - size=24 align=8 (verify packed/aligned ABI)
 @align(8)
 @fieldwise_init
 struct ev_recursive_tree(Copyable, Movable):
     var left: UnsafePointer[ev_recursive_tree, MutExternalOrigin]
     var right: UnsafePointer[ev_recursive_tree, MutExternalOrigin]
-    var value: ev_recursive_tree__anon_union_1_Union
+    var value: ev_recursive_tree__anon_union_1
 # struct ev_bits - size=8 align=4 (verify packed/aligned ABI)
 @align(4)
 @fieldwise_init
@@ -514,7 +516,7 @@ struct ev_embedded_fnptrs(Copyable, Movable, RegisterPassable):
 @fieldwise_init
 struct ev_tagged_payload(Copyable, Movable):
     var kind: ev_payload_kind
-    var as_: ev_tagged_payload__anon_union_1_Union
+    var as_: ev_tagged_payload__anon_union_1
 # struct ev_text - size=192 align=4 (verify packed/aligned ABI)
 @align(4)
 @fieldwise_init
@@ -537,7 +539,7 @@ struct ev_stat(Copyable, Movable, RegisterPassable):
 struct ev_nested_anon(Copyable, Movable):
     var tag: c_int
     var _anon_1: ev_nested_anon__anon_struct_1
-    var _anon_2: InlineArray[UInt8, 4]
+    var _anon_2: ev_nested_anon__anon_union_1
 # struct ev_designated - size=32 align=8 (verify packed/aligned ABI)
 @align(8)
 @fieldwise_init
@@ -545,7 +547,7 @@ struct ev_designated(Copyable, Movable):
     var id: c_int
     var name: UnsafePointer[c_char, ImmutExternalOrigin]
     var version: ev_designated__anon_struct_1
-    var data: ev_designated__anon_union_1_Union
+    var data: ev_designated__anon_union_1
 # enum ev_backend - underlying UINT -> c_uint (verify C ABI)
 @fieldwise_init
 struct ev_backend(Copyable, Movable, RegisterPassable):
@@ -560,7 +562,7 @@ struct ev_run_flags(Copyable, Movable, RegisterPassable):
     var value: c_uint
     comptime EVRUN_NOWAIT = Self(c_uint(1))
     comptime EVRUN_ONCE = Self(c_uint(2))
-comptime ev_any_watcher = InlineArray[UInt8, 48]
+comptime ev_any_watcher = ev_any_watcher
 
 comptime ev_tstamp = c_double
 
@@ -705,7 +707,7 @@ comptime ev_string_table_2x3 = InlineArray[InlineArray[UnsafePointer[c_char, Imm
 
 comptime ev_variadic_cb_t = MutOpaquePointer[MutExternalOrigin]
 
-comptime ev_bits_overlay = InlineArray[UInt8, 8]
+comptime ev_bits_overlay = ev_bits_overlay
 
 comptime ev_atomic_int_t = Atomic[DType.int32]
 
@@ -735,15 +737,15 @@ comptime ev_row_ptr_t = UnsafePointer[InlineArray[c_int, 4], MutExternalOrigin]
 
 comptime ev_signal_table_t = InlineArray[MutOpaquePointer[MutExternalOrigin], 3]
 
-comptime ev_number = ev_number_Union
+comptime ev_number = ev_number
 
-comptime ev_ptr_cast = ev_ptr_cast_Union
+comptime ev_ptr_cast = ev_ptr_cast
 
 comptime ev_incomplete_only_t = ev_incomplete_only
 
 comptime ev_incomplete_union_t = InlineArray[UInt8, 0]
 
-comptime ev_typedef_union = ev_typedef_union_Union
+comptime ev_typedef_union = ev_typedef_union
 
 # enum ev_typedef_enum - underlying UINT -> c_uint (verify C ABI)
 @fieldwise_init
@@ -765,7 +767,7 @@ comptime ev_v4si = SIMD[DType.int32, 4]
 
 comptime ev_v4sf = SIMD[DType.float32, 4]
 
-comptime ev_vector_union = InlineArray[UInt8, 16]
+comptime ev_vector_union = ev_vector_union
 
 def ev_take_const_ptr(p: UnsafePointer[c_int, ImmutExternalOrigin]) abi("C") -> None:
     external_call["ev_take_const_ptr", NoneType, UnsafePointer[c_int, ImmutExternalOrigin]](p)
@@ -836,7 +838,7 @@ comptime ev_array_of_fn_ptrs = GlobalVar[T=InlineArray[MutOpaquePointer[MutExter
 def ev_fn_returning_array_ptr() abi("C") -> UnsafePointer[InlineArray[UnsafePointer[c_int, MutExternalOrigin], 4], MutExternalOrigin]:
     return external_call["ev_fn_returning_array_ptr", UnsafePointer[InlineArray[UnsafePointer[c_int, MutExternalOrigin], 4], MutExternalOrigin]]()
 
-comptime ev_nested_union = InlineArray[UInt8, 8]
+comptime ev_nested_union = ev_nested_union
 
 # enum ev_payload_kind - underlying UINT -> c_uint (verify C ABI)
 @fieldwise_init
@@ -860,8 +862,8 @@ comptime ev_build_id = GlobalVar[T=UnsafePointer[c_char, MutExternalOrigin], lin
 # global `ev_global_list_head` -> ev_node
 comptime ev_global_list_head = GlobalVar[T=ev_node, link="ev_global_list_head"]
 
-# global `ev_global_number` -> ev_number_Union
-comptime ev_global_number = GlobalVar[T=ev_number_Union, link="ev_global_number"]
+# global `ev_global_number` -> ev_number
+comptime ev_global_number = GlobalVar[T=ev_number, link="ev_global_number"]
 
 # global `ev_global_callbacks` -> ev_callbacks
 comptime ev_global_callbacks = GlobalVar[T=ev_callbacks, link="ev_global_callbacks"]

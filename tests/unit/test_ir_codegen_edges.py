@@ -174,7 +174,7 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
     assert "def set_enabled(mut self, value: Bool):" in out
 
 
-def test_generator_keeps_mixed_struct_bitfields_on_legacy_field_path() -> None:
+def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> None:
     u32 = _u32()
     st = Struct(
         decl_id="struct:MixedBits",
@@ -200,8 +200,60 @@ def test_generator_keeps_mixed_struct_bitfields_on_legacy_field_path() -> None:
         Unit(source_header="t.h", library="t", link_name="t", decls=[st])
     )
     assert "var tag: c_uint" in out
-    assert "var ready: c_uint" in out
-    assert "def ready(self) -> c_uint:" not in out
+    assert "var ready: c_uint" not in out
+    assert "var __bf0: c_uint" in out
+    assert "def ready(self) -> c_uint:" in out
+    assert "def set_ready(mut self, value: c_uint):" in out
+
+
+def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_struct() -> None:
+    u32 = _u32()
+    st = Struct(
+        decl_id="struct:ZeroWidthMixed",
+        name="ZeroWidthMixed",
+        c_name="ZeroWidthMixed",
+        fields=[
+            Field(name="tag", source_name="tag", type=u32, byte_offset=0),
+            Field(
+                name="left",
+                source_name="left",
+                type=u32,
+                byte_offset=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=1,
+            ),
+            Field(
+                name="",
+                source_name="",
+                type=u32,
+                byte_offset=4,
+                is_anonymous=True,
+                is_bitfield=True,
+                bit_offset=63,
+                bit_width=0,
+            ),
+            Field(
+                name="right",
+                source_name="right",
+                type=u32,
+                byte_offset=8,
+                is_bitfield=True,
+                bit_offset=64,
+                bit_width=1,
+            ),
+        ],
+        size_bytes=12,
+        align_bytes=4,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    )
+    assert "var __bf0: c_uint" in out
+    assert "var __bf1: c_uint" in out
+    assert "def left(self) -> c_uint:" in out
+    assert "def right(self) -> c_uint:" in out
 
 
 def test_generator_renders_global_var_stub_and_macro_comments() -> None:
@@ -685,6 +737,111 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
     assert "var xCreate: UnsafePointer[sqlite3_module_xCreate_cb, MutExternalOrigin]" in out
     assert "var xConnect: UnsafePointer[sqlite3_module_xConnect_cb, MutExternalOrigin]" in out
     assert "# function pointer (fixed):" not in out
+
+
+def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
+    i32 = _i32()
+    parts = Struct(
+        decl_id="struct:Parts",
+        name="Parts",
+        c_name="Parts",
+        fields=[
+            Field(name="lo", source_name="lo", type=i32, byte_offset=0),
+            Field(name="hi", source_name="hi", type=i32, byte_offset=4),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    payload = Struct(
+        decl_id="union:Payload",
+        name="Payload",
+        c_name="Payload",
+        fields=[
+            Field(name="raw", source_name="raw", type=i32, byte_offset=0),
+            Field(
+                name="parts",
+                source_name="parts",
+                type=StructRef(
+                    decl_id=parts.decl_id,
+                    name=parts.name,
+                    c_name=parts.c_name,
+                    size_bytes=parts.size_bytes,
+                    is_union=False,
+                ),
+                byte_offset=0,
+            ),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=True,
+    )
+    holder = Struct(
+        decl_id="struct:Holder",
+        name="Holder",
+        c_name="Holder",
+        fields=[
+            Field(name="payload", source_name="payload", type=StructRef(
+                decl_id=payload.decl_id,
+                name=payload.name,
+                c_name=payload.c_name,
+                size_bytes=payload.size_bytes,
+                is_union=True,
+            ), byte_offset=0)
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[parts, payload, holder])
+    )
+    assert "comptime Payload = UnsafeUnion[c_int, Parts]" in out
+    assert "var payload: Payload" in out
+
+
+def test_generator_emits_documented_inline_array_fallback_for_ineligible_union() -> None:
+    i32 = _i32()
+    union_decl = Struct(
+        decl_id="union:Dup",
+        name="Dup",
+        c_name="Dup",
+        fields=[
+            Field(name="a", source_name="a", type=i32, byte_offset=0),
+            Field(name="b", source_name="b", type=i32, byte_offset=0),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=True,
+    )
+    holder = Struct(
+        decl_id="struct:HolderDup",
+        name="HolderDup",
+        c_name="HolderDup",
+        fields=[
+            Field(
+                name="payload",
+                source_name="payload",
+                type=StructRef(
+                    decl_id=union_decl.decl_id,
+                    name=union_decl.name,
+                    c_name=union_decl.c_name,
+                    size_bytes=union_decl.size_bytes,
+                    is_union=True,
+                ),
+                byte_offset=0,
+            )
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[union_decl, holder])
+    )
+    assert "comptime Dup = InlineArray[UInt8, 4]" in out
+    assert "lowered as InlineArray[UInt8, 4] to preserve layout" in out
+    assert "var payload: Dup" in out
 
 
 def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:

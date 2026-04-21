@@ -33,10 +33,10 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.passes.analyze_for_mojo import (
     AnalyzedBitfieldMember,
+    AnalyzedBitfieldLayout,
     AnalyzedBitfieldStorage,
     AnalyzedField,
     AnalyzedFunction,
-    AnalyzedPureBitfieldStruct,
     AnalyzedGlobalVar,
     AnalyzedStruct,
     AnalyzedTypedef,
@@ -105,6 +105,7 @@ class MojoRenderer:
         self._a = analyzed
         self._types = TypeMapper(
             ffi_origin=analyzed.opts.ffi_origin,
+            union_alias_names=analyzed.union_alias_names,
             unsafe_union_names=analyzed.unsafe_union_names,
             typedef_mojo_names=analyzed.emitted_typedef_mojo_names,
             callback_signature_names=analyzed.callback_signature_names,
@@ -112,6 +113,7 @@ class MojoRenderer:
         )
         self._union_member_types = TypeMapper(
             ffi_origin=analyzed.opts.ffi_origin,
+            union_alias_names=frozenset(),
             unsafe_union_names=frozenset(),
             typedef_mojo_names=frozenset(),
             callback_signature_names=frozenset(),
@@ -227,6 +229,28 @@ class MojoRenderer:
         )
         b.dedent()
 
+    def _render_struct_body(self, b: CodeBuilder, analyzed: AnalyzedStruct) -> None:
+        """Emit stored vars first, then synthesized bitfield accessors."""
+        vars_in_order: list[tuple[int, str, object]] = [
+            (af.index, "field", af) for af in analyzed.fields
+        ]
+        if analyzed.bitfield_layout is not None:
+            vars_in_order.extend(
+                (storage.field_index, "storage", storage)
+                for storage in analyzed.bitfield_layout.storages
+            )
+        vars_in_order.sort(key=lambda item: item[0])
+
+        for _, kind, item in vars_in_order:
+            if kind == "field":
+                self._emit_field_lines(self._a.opts, self._types, b, item)
+            else:
+                self._render_pure_bitfield_storage(b, item)
+
+        if analyzed.bitfield_layout is not None:
+            for member in analyzed.bitfield_layout.members:
+                self._render_pure_bitfield_member(b, member)
+
     def render_struct(self, analyzed: AnalyzedStruct) -> str:
         """Render a single analyzed non-union struct declaration."""
         decl = analyzed.decl
@@ -256,14 +280,7 @@ class MojoRenderer:
         b.add("@fieldwise_init")
         b.add(f"struct {name}{traits}:")
         b.indent()
-        if analyzed.pure_bitfield is not None:
-            for storage in analyzed.pure_bitfield.storages:
-                self._render_pure_bitfield_storage(b, storage)
-            for member in analyzed.pure_bitfield.members:
-                self._render_pure_bitfield_member(b, member)
-        else:
-            for af in analyzed.fields:
-                self._emit_field_lines(self._a.opts, self._types, b, af)
+        self._render_struct_body(b, analyzed)
         b.dedent()
         b.add("")
         return b.render()
@@ -367,30 +384,26 @@ class MojoRenderer:
             "    return OwnedDLHandle(DEFAULT_RTLD)\n\n"
         )
 
-    def _emit_unsafe_union_comptime_line(self, union: AnalyzedUnion) -> str | None:
-        """Render the ``UnsafeUnion`` alias line for an eligible union."""
-        if not union.uses_unsafe_union:
-            return None
-        name = mojo_ident(union.decl.name.strip() or union.decl.c_name.strip())
-        types_csv = ", ".join(
-            self._union_member_types.canonical(f.type) for f in union.decl.fields
-        )
-        return f"comptime {name}_Union = UnsafeUnion[{types_csv}]\n\n"
+    def _emit_union_comptime_line(self, union: AnalyzedUnion) -> str:
+        """Render the nominal alias line for one union."""
+        if union.kind == "unsafe_union":
+            types_csv = ", ".join(union.unsafe_member_types)
+            return f"comptime {union.mojo_name} = UnsafeUnion[{types_csv}]\n\n"
+        return f"comptime {union.mojo_name} = InlineArray[UInt8, {union.decl.size_bytes}]\n\n"
 
     def _union_comment_block(self, union: AnalyzedUnion) -> str:
         """Render the reference comment block describing a C union."""
         decl = union.decl
-        name = mojo_ident(decl.name.strip() or decl.c_name.strip())
-        if union.uses_unsafe_union:
+        if union.kind == "unsafe_union":
             lines = [
-                f"# -- C union `{decl.c_name}` - comptime `{name}_Union` = UnsafeUnion[...] (trivial members; see std.ffi).",
+                f"# -- C union `{decl.c_name}` - comptime `{union.mojo_name}` = UnsafeUnion[...].",
                 f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
                 "# Members (reference only):",
             ]
         else:
             lines = [
-                f"# -- C union `{decl.c_name}` - not emitted as a struct.",
-                f"# By-value uses InlineArray[UInt8, {decl.size_bytes}] unless you wrap a manual UnsafeUnion (unique trivial members).",
+                f"# -- C union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout.",
+                "# It could not be represented as UnsafeUnion[...] with distinct supported member types.",
                 f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
                 "# Members (reference only):",
             ]
@@ -406,9 +419,7 @@ class MojoRenderer:
         """Render all union aliases and reference comments for the module."""
         chunks: list[str] = []
         for union in self._a.unions:
-            comptime = self._emit_unsafe_union_comptime_line(union)
-            if comptime is not None:
-                chunks.append(comptime)
+            chunks.append(self._emit_union_comptime_line(union))
             chunks.append(self._union_comment_block(union))
         return "".join(chunks)
 
@@ -728,6 +739,7 @@ def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
         needs_atomic_import=False,
         needs_global_symbol_helpers=False,
         semantic_fallback_notes=tuple(),
+        union_alias_names=frozenset(),
         unsafe_union_names=frozenset(),
         emitted_typedef_mojo_names=frozenset(),
         callback_aliases=tuple(),

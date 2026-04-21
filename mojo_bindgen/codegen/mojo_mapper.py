@@ -326,7 +326,8 @@ class TypeMapper:
         self,
         *,
         ffi_origin: FFIOriginStyle,
-        unsafe_union_names: frozenset[str] | None,
+        union_alias_names: frozenset[str] | None = None,
+        unsafe_union_names: frozenset[str] | None = None,
         typedef_mojo_names: frozenset[str] | None = None,
         callback_signature_names: frozenset[str] | None = None,
         ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases",
@@ -334,6 +335,7 @@ class TypeMapper:
         """Configure pointer origins, optional ``UnsafeUnion`` names, and typedef aliases for ``signature``."""
         self._ffi_origin = ffi_origin
         self._origin = pointer_origin_names(ffi_origin)
+        self._union_alias_names = union_alias_names or frozenset()
         self._unsafe_union_names = unsafe_union_names or frozenset()
         self._typedef_mojo_names = typedef_mojo_names or frozenset()
         self._callback_signature_names = callback_signature_names or frozenset()
@@ -585,11 +587,10 @@ class TypeMapper:
         return self._canonical_record_struct_ref(t)
 
     def _canonical_union_struct_ref(self, t: StructRef) -> str:
-        """Map a union reference to an ``UnsafeUnion`` alias or byte storage."""
+        """Map a union reference to its emitted nominal alias or fallback bytes."""
         mid = mojo_ident(t.name.strip())
-        uq = f"{mid}_Union"
-        if uq in self._unsafe_union_names:
-            return uq
+        if mid in self._union_alias_names:
+            return mid
         return f"InlineArray[UInt8, {t.size_bytes}]"
 
     def _canonical_record_struct_ref(self, t: StructRef) -> str:
@@ -659,12 +660,14 @@ def map_type(
     t: Type,
     *,
     ffi_origin: FFIOriginStyle = "external",
+    union_alias_names: frozenset[str] | None = None,
     unsafe_union_names: frozenset[str] | None = None,
     ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases",
 ) -> str:
     """Map IR Type to a Mojo type string (ABI / canonical; typedef names erased)."""
     return TypeMapper(
         ffi_origin=ffi_origin,
+        union_alias_names=union_alias_names,
         unsafe_union_names=unsafe_union_names,
         typedef_mojo_names=frozenset(),
         callback_signature_names=frozenset(),
