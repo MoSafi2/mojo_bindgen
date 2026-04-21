@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Unit
 from mojo_bindgen.analysis.reachability import ReachabilityMaterializePass
 from mojo_bindgen.analysis.validate_ir import ValidateIRPass
+from mojo_bindgen.ir import Unit
 
 
 def run_ir_passes(unit: Unit) -> Unit:

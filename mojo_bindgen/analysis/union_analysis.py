@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.model import AnalyzedUnion
 from mojo_bindgen.codegen.mojo_emit_options import FFIScalarStyle
 from mojo_bindgen.codegen.mojo_mapper import FFIOriginStyle, TypeMapper, mojo_ident, peel_wrappers
 from mojo_bindgen.ir import Struct, Unit, UnsupportedType
-from mojo_bindgen.analysis.model import AnalyzedUnion
 
 
 @dataclass(frozen=True)

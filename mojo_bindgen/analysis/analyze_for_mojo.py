@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.codegen.mojo_mapper import TypeMapper
-from mojo_bindgen.ir import Struct, Unit
+from mojo_bindgen.analysis.callbacks import (
+    CallbackAlias,
+    CallbackAliasInfo,
+    CollectCallbackAliasesPass,
+)
+from mojo_bindgen.analysis.imports import (
+    CollectSemanticNeedsPass,
+    ImportNeeds,
+)
+from mojo_bindgen.analysis.layout import (
+    ComputeLayoutFactsPass,
+    build_register_passable_map,
+    struct_by_decl_id,
+)
 from mojo_bindgen.analysis.model import (
     AnalyzedBitfieldLayout,
     AnalyzedBitfieldMember,
@@ -29,24 +40,13 @@ from mojo_bindgen.analysis.model import (
     GlobalVarKind,
     TailDecl,
 )
-from mojo_bindgen.analysis.callbacks import (
-    CallbackAlias,
-    CallbackAliasInfo,
-    CollectCallbackAliasesPass,
-)
-from mojo_bindgen.analysis.imports import (
-    CollectSemanticNeedsPass,
-    ImportNeeds,
-)
-from mojo_bindgen.analysis.layout import (
-    ComputeLayoutFactsPass,
-    build_register_passable_map,
-    struct_by_decl_id,
-)
 from mojo_bindgen.analysis.names import CollectEmissionNamesPass
 from mojo_bindgen.analysis.struct_analysis import AnalyzeStructLoweringPass
 from mojo_bindgen.analysis.tail_decl_analysis import AnalyzeTailDeclPass
 from mojo_bindgen.analysis.union_analysis import AnalyzeUnionLoweringPass
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_mapper import TypeMapper
+from mojo_bindgen.ir import Struct, Unit
 
 
 @dataclass

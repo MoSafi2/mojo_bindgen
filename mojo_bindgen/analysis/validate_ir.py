@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.type_walk import iter_type_nodes
 from mojo_bindgen.ir import (
     Function,
     GlobalVar,
@@ -10,11 +11,10 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Type,
-    TypeRef,
     Typedef,
+    TypeRef,
     Unit,
 )
-from mojo_bindgen.analysis.type_walk import iter_type_nodes
 
 
 class IRValidationError(ValueError):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.type_walk import TypeWalkOptions, any_type_node, iter_type_nodes
 from mojo_bindgen.codegen.mojo_mapper import map_atomic_type, map_complex_simd, map_vector_simd
 from mojo_bindgen.ir import (
     AtomicType,
@@ -20,7 +21,6 @@ from mojo_bindgen.ir import (
     UnsupportedType,
     VectorType,
 )
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, any_type_node, iter_type_nodes
 
 _OPAQUE_IMPORT_WALK = TypeWalkOptions(
     descend_function_ptr=False,

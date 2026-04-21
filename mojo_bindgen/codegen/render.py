@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.codegen.mojo_mapper import pointer_origin_names
-from mojo_bindgen.ir import Unit
 from mojo_bindgen.analysis.analyze_for_mojo import (
     AnalyzedBitfieldMember,
     AnalyzedBitfieldStorage,
@@ -14,16 +11,17 @@ from mojo_bindgen.analysis.analyze_for_mojo import (
     AnalyzedFunction,
     AnalyzedGlobalVar,
     AnalyzedMacro,
-    AnalyzedOpaqueStorage,
     AnalyzedPaddingField,
     AnalyzedStruct,
     AnalyzedStructInitializer,
     AnalyzedStructInitParam,
     AnalyzedTypedef,
-    AnalyzedUnion,
     AnalyzedUnit,
     TailDecl,
 )
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.codegen.mojo_mapper import pointer_origin_names
+from mojo_bindgen.ir import Unit
 
 
 class CodeBuilder:

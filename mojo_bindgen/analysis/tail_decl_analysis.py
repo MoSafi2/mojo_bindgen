@@ -2,34 +2,6 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.codegen.mojo_mapper import TypeMapper, mojo_ident, peel_wrappers
-from mojo_bindgen.ir import (
-    AtomicType,
-    BinaryExpr,
-    CastExpr,
-    CharLiteral,
-    Const,
-    Enum,
-    FloatLiteral,
-    Function,
-    GlobalVar,
-    IntLiteral,
-    IntType,
-    MacroDecl,
-    NullPtrLiteral,
-    QualifiedType,
-    RefExpr,
-    StringLiteral,
-    Struct,
-    StructRef,
-    TypeRef,
-    Typedef,
-    UnaryExpr,
-    Unit,
-    UnsupportedType,
-    VoidType,
-    FloatType,
-)
 from mojo_bindgen.analysis.callbacks import CallbackAliasInfo
 from mojo_bindgen.analysis.common import mojo_float_literal_text, scalar_comment_name
 from mojo_bindgen.analysis.layout import LayoutFacts
@@ -44,6 +16,34 @@ from mojo_bindgen.analysis.model import (
     TailDecl,
 )
 from mojo_bindgen.analysis.names import EmissionNameFacts
+from mojo_bindgen.codegen.mojo_mapper import TypeMapper, mojo_ident, peel_wrappers
+from mojo_bindgen.ir import (
+    AtomicType,
+    BinaryExpr,
+    CastExpr,
+    CharLiteral,
+    Const,
+    Enum,
+    FloatLiteral,
+    FloatType,
+    Function,
+    GlobalVar,
+    IntLiteral,
+    IntType,
+    MacroDecl,
+    NullPtrLiteral,
+    QualifiedType,
+    RefExpr,
+    StringLiteral,
+    Struct,
+    StructRef,
+    Typedef,
+    TypeRef,
+    UnaryExpr,
+    Unit,
+    UnsupportedType,
+    VoidType,
+)
 
 
 class AnalyzeTailDeclPass:

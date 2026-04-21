@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from mojo_bindgen.analysis.analyze_for_mojo import analyzed_struct_for_test, struct_by_decl_id
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.render import render_struct
 from mojo_bindgen.ir import Field, IntKind, IntType, Struct
-from mojo_bindgen.analysis.analyze_for_mojo import analyzed_struct_for_test, struct_by_decl_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

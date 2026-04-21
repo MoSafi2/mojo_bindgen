@@ -2,6 +2,31 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.common import (
+    _POINTER_ALIGN_BYTES,
+    _POINTER_SIZE_BYTES,
+    field_mojo_name,
+    mojo_align_decorator_ok,
+    scalar_comment_name,
+)
+from mojo_bindgen.analysis.layout import (
+    bitfield_field_is_bool,
+    bitfield_field_is_signed,
+    bitfield_storage_width_bits,
+    bitfield_unsigned_storage_type,
+    struct_has_representable_atomic_storage,
+)
+from mojo_bindgen.analysis.model import (
+    AnalyzedBitfieldLayout,
+    AnalyzedBitfieldMember,
+    AnalyzedBitfieldStorage,
+    AnalyzedField,
+    AnalyzedOpaqueStorage,
+    AnalyzedPaddingField,
+    AnalyzedStruct,
+    AnalyzedStructInitializer,
+    AnalyzedStructInitParam,
+)
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import TypeMapper, mojo_ident, peel_wrappers
 from mojo_bindgen.ir import (
@@ -23,31 +48,6 @@ from mojo_bindgen.ir import (
     UnsupportedType,
     VectorType,
     VoidType,
-)
-from mojo_bindgen.analysis.common import (
-    _POINTER_ALIGN_BYTES,
-    _POINTER_SIZE_BYTES,
-    field_mojo_name,
-    mojo_align_decorator_ok,
-    scalar_comment_name,
-)
-from mojo_bindgen.analysis.model import (
-    AnalyzedBitfieldLayout,
-    AnalyzedBitfieldMember,
-    AnalyzedBitfieldStorage,
-    AnalyzedField,
-    AnalyzedOpaqueStorage,
-    AnalyzedPaddingField,
-    AnalyzedStruct,
-    AnalyzedStructInitializer,
-    AnalyzedStructInitParam,
-)
-from mojo_bindgen.analysis.layout import (
-    bitfield_field_is_bool,
-    bitfield_field_is_signed,
-    bitfield_storage_width_bits,
-    bitfield_unsigned_storage_type,
-    struct_has_representable_atomic_storage,
 )
 
 

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from clang import cindex as cx
 
+from mojo_bindgen.analysis.pipeline import run_ir_passes
 from mojo_bindgen.ir import Decl, Unit
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
@@ -31,7 +32,6 @@ from mojo_bindgen.parsing.lowering import (
     TypeLowerer,
 )
 from mojo_bindgen.parsing.registry import RecordRegistry
-from mojo_bindgen.analysis.pipeline import run_ir_passes
 
 
 @dataclass(frozen=True)

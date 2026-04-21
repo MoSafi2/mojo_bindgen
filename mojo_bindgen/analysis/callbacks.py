@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.codegen.mojo_mapper import mojo_ident, peel_wrappers
-from mojo_bindgen.ir import Function, FunctionPtr, GlobalVar, Struct, Type, TypeRef, Typedef, Unit
+from mojo_bindgen.ir import Function, FunctionPtr, GlobalVar, Struct, Type, Typedef, TypeRef, Unit
 
 
 @dataclass(frozen=True)

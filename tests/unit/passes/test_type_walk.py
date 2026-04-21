@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
@@ -14,7 +15,6 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 
 
 def _i32() -> IntType:

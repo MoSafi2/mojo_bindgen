@@ -20,7 +20,7 @@ pixi run test
 ```
 
 This repository also ships a local Git pre-commit hook at `.git/hooks/pre-commit`.
-It runs `pixi run format`, `pixi run lint`, and `pixi run test-light`, then re-stages any formatting changes before the commit continues.
+It runs `pixi run format`, applies safe Ruff fixes, runs `pixi run lint`, and then `pixi run test-light`, re-staging any formatting or lint-fix changes before the commit continues.
 
 ### Virtualenv (any supported OS)
 

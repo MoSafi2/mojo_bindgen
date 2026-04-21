@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.type_walk import (
+    TypeWalkOptions,
+    any_type_node,
+    iter_type_nodes,
+)
 from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.mojo_mapper import (
     map_atomic_type,
@@ -30,11 +35,6 @@ from mojo_bindgen.ir import (
     Unit,
     UnsupportedType,
     VectorType,
-)
-from mojo_bindgen.analysis.type_walk import (
-    TypeWalkOptions,
-    any_type_node,
-    iter_type_nodes,
 )
 
 

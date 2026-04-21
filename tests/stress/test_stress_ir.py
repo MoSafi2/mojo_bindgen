@@ -17,7 +17,6 @@ from mojo_bindgen.ir import (
     Typedef,
     Unit,
 )
-
 from tests.stress._helpers import case_dirs, has_libclang, parse_case
 
 pytestmark = pytest.mark.skipif(

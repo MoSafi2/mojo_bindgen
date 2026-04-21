@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.reachability import (
+    ReachabilityMaterializePass,
+    ReachabilityOptions,
+    materialize_reachable_struct_refs,
+)
 from mojo_bindgen.ir import (
     Function,
     FunctionPtr,
@@ -13,11 +18,6 @@ from mojo_bindgen.ir import (
     StructRef,
     Unit,
     VoidType,
-)
-from mojo_bindgen.analysis.reachability import (
-    ReachabilityMaterializePass,
-    ReachabilityOptions,
-    materialize_reachable_struct_refs,
 )
 
 

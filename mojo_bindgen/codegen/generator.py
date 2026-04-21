@@ -6,11 +6,11 @@ analysis and rendering together manually.
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis import AnalyzeForMojoPass, run_ir_passes
+from mojo_bindgen.analysis.analyze_for_mojo import AnalyzedUnit
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.render import MojoRenderer
 from mojo_bindgen.ir import Unit
-from mojo_bindgen.analysis import AnalyzeForMojoPass, run_ir_passes
-from mojo_bindgen.analysis.analyze_for_mojo import AnalyzedUnit
 
 
 class MojoGenerator:

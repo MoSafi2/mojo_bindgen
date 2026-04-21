@@ -14,7 +14,10 @@ fi
 echo "pre-commit: formatting"
 "${RUNNER[@]}" format
 
-echo "pre-commit: restaging formatted changes"
+echo "pre-commit: applying safe lint fixes"
+"${RUNNER[@]}" ruff check --fix mojo_bindgen tests
+
+echo "pre-commit: restaging formatted and lint-fixed changes"
 git add -A
 
 echo "pre-commit: linting"
