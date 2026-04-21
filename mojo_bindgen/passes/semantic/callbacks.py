@@ -91,22 +91,33 @@ def collect_callback_aliases(
         elif isinstance(decl, Function):
             fp = _function_ptr_from_type(decl.ret)
             if fp is not None and _supports_callback_alias(fp):
-                if isinstance(decl.ret, TypeRef) and mojo_ident(decl.ret.name) in emitted_typedef_names:
+                if (
+                    isinstance(decl.ret, TypeRef)
+                    and mojo_ident(decl.ret.name) in emitted_typedef_names
+                ):
                     fn_ret_aliases[decl.decl_id] = mojo_ident(decl.ret.name)
                 else:
                     fn_ret_aliases[decl.decl_id] = ensure_alias(fp, f"{decl.name}_return_cb")
             for i, param in enumerate(decl.params):
                 fp = _function_ptr_from_type(param.type)
                 if fp is not None and _supports_callback_alias(fp):
-                    if isinstance(param.type, TypeRef) and mojo_ident(param.type.name) in emitted_typedef_names:
+                    if (
+                        isinstance(param.type, TypeRef)
+                        and mojo_ident(param.type.name) in emitted_typedef_names
+                    ):
                         fn_param_aliases[(decl.decl_id, i)] = mojo_ident(param.type.name)
                     else:
                         pname = param.name or f"arg{i}"
-                        fn_param_aliases[(decl.decl_id, i)] = ensure_alias(fp, f"{decl.name}_{pname}_cb")
+                        fn_param_aliases[(decl.decl_id, i)] = ensure_alias(
+                            fp, f"{decl.name}_{pname}_cb"
+                        )
         elif isinstance(decl, GlobalVar):
             fp = _function_ptr_from_type(decl.type)
             if fp is not None and _supports_callback_alias(fp):
-                if isinstance(decl.type, TypeRef) and mojo_ident(decl.type.name) in emitted_typedef_names:
+                if (
+                    isinstance(decl.type, TypeRef)
+                    and mojo_ident(decl.type.name) in emitted_typedef_names
+                ):
                     global_aliases[decl.decl_id] = mojo_ident(decl.type.name)
                 else:
                     global_aliases[decl.decl_id] = ensure_alias(fp, f"{decl.name}_cb")

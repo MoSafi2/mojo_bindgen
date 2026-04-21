@@ -164,10 +164,18 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
     out = MojoGenerator(MojoEmitOptions()).generate(
         Unit(source_header="t.h", library="t", link_name="t", decls=[st])
     )
+    assert "@fieldwise_init\nstruct Bits" not in out
     assert "var __bf0: c_uint" in out
-    assert "var __bf1: Bool" in out
+    assert "var __bf1: c_uchar" in out
     assert "var __bf2:" not in out
     assert "var ready: c_uint" not in out
+    assert "def __init__(out self):" in out
+    assert "def __init__(out self, ready: c_uint, state: c_uint, enabled: Bool):" in out
+    assert "self.__bf0 = c_uint(0)" in out
+    assert "self.__bf1 = c_uchar(0)" in out
+    assert "self.set_ready(ready)" in out
+    assert "self.set_state(state)" in out
+    assert "self.set_enabled(enabled)" in out
     assert "def ready(self) -> c_uint:" in out
     assert "def set_ready(mut self, value: c_uint):" in out
     assert "def enabled(self) -> Bool:" in out
@@ -199,9 +207,11 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
     out = MojoGenerator(MojoEmitOptions()).generate(
         Unit(source_header="t.h", library="t", link_name="t", decls=[st])
     )
+    assert "@fieldwise_init\nstruct MixedBits" in out
     assert "var tag: c_uint" in out
     assert "var ready: c_uint" not in out
     assert "var __bf0: c_uint" in out
+    assert "def __init__(out self" not in out
     assert "def ready(self) -> c_uint:" in out
     assert "def set_ready(mut self, value: c_uint):" in out
 
@@ -254,6 +264,65 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
     assert "var __bf1: c_uint" in out
     assert "def left(self) -> c_uint:" in out
     assert "def right(self) -> c_uint:" in out
+
+
+def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct() -> None:
+    u32 = _u32()
+    st = Struct(
+        decl_id="struct:OnlyAnonBits",
+        name="OnlyAnonBits",
+        c_name="OnlyAnonBits",
+        fields=[
+            Field(
+                name="",
+                source_name="",
+                type=u32,
+                byte_offset=0,
+                is_anonymous=True,
+                is_bitfield=True,
+                bit_offset=0,
+                bit_width=8,
+            ),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    )
+    assert "@fieldwise_init\nstruct OnlyAnonBits" not in out
+    assert "def __init__(out self):" in out
+    assert "def __init__(out self," not in out
+
+
+def test_generator_omits_self_alias_typedef_for_complete_union_name() -> None:
+    i32 = _i32()
+    union_decl = Struct(
+        decl_id="union:U",
+        name="U",
+        c_name="union U",
+        fields=[
+            Field(name="a", source_name="a", type=i32, byte_offset=0),
+            Field(name="b", source_name="b", type=_u32(), byte_offset=0),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=True,
+    )
+    union_ref = StructRef(
+        decl_id=union_decl.decl_id,
+        name=union_decl.name,
+        c_name=union_decl.c_name,
+        is_union=True,
+        size_bytes=union_decl.size_bytes,
+    )
+    td = Typedef(decl_id="typedef:U", name="U", aliased=union_ref, canonical=union_ref)
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[union_decl, td])
+    )
+    assert "comptime U = UnsafeUnion[c_int, c_uint]" in out
+    assert out.count("comptime U =") == 1
 
 
 def test_generator_renders_global_var_stub_and_macro_comments() -> None:
@@ -485,6 +554,48 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
         "# global variable counter: Atomic[DType.int32] (atomic global requires manual "
         "binding (use Atomic APIs on a pointer))" in out
     )
+
+
+def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields() -> None:
+    i32 = _i32()
+    u32 = _u32()
+    atomic_holder = Struct(
+        decl_id="struct:AtomicHolder",
+        name="AtomicHolder",
+        c_name="AtomicHolder",
+        fields=[
+            Field(
+                name="counter",
+                source_name="counter",
+                type=AtomicType(value_type=i32),
+                byte_offset=0,
+            ),
+            Field(
+                name="flags",
+                source_name="flags",
+                type=AtomicType(value_type=u32),
+                byte_offset=4,
+            ),
+            Field(
+                name="user",
+                source_name="user",
+                type=Pointer(pointee=None),
+                byte_offset=8,
+            ),
+        ],
+        size_bytes=16,
+        align_bytes=8,
+        is_union=False,
+    )
+    out = MojoGenerator(MojoEmitOptions()).generate(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[atomic_holder])
+    )
+    assert "@fieldwise_init\nstruct AtomicHolder" not in out
+    assert "struct AtomicHolder(Copyable" not in out
+    assert "struct AtomicHolder(Movable" not in out
+    assert "struct AtomicHolder:" in out
+    assert "var counter: Atomic[DType.int32]" in out
+    assert "var flags: Atomic[DType.uint32]" in out
 
 
 def test_generator_emits_global_const_wrapper_for_const_qualified_scalar() -> None:
@@ -781,13 +892,18 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         name="Holder",
         c_name="Holder",
         fields=[
-            Field(name="payload", source_name="payload", type=StructRef(
-                decl_id=payload.decl_id,
-                name=payload.name,
-                c_name=payload.c_name,
-                size_bytes=payload.size_bytes,
-                is_union=True,
-            ), byte_offset=0)
+            Field(
+                name="payload",
+                source_name="payload",
+                type=StructRef(
+                    decl_id=payload.decl_id,
+                    name=payload.name,
+                    c_name=payload.c_name,
+                    size_bytes=payload.size_bytes,
+                    is_union=True,
+                ),
+                byte_offset=0,
+            )
         ],
         size_bytes=8,
         align_bytes=4,

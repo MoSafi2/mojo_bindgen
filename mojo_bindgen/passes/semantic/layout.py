@@ -5,9 +5,37 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.codegen._struct_order import toposort_structs
-from mojo_bindgen.codegen.mojo_mapper import map_atomic_type, map_complex_simd, map_vector_simd, peel_wrappers
-from mojo_bindgen.ir import Array, AtomicType, ComplexType, EnumRef, Field, FloatType, FunctionPtr, IntKind, IntType, OpaqueRecordRef, Pointer, Struct, StructRef, Type, TypeRef, Unit, UnsupportedType, VectorType
-from mojo_bindgen.passes.semantic.type_walk import TypeWalkOptions, iter_type_nodes
+from mojo_bindgen.codegen.mojo_mapper import (
+    map_atomic_type,
+    map_complex_simd,
+    map_vector_simd,
+    peel_wrappers,
+)
+from mojo_bindgen.ir import (
+    Array,
+    AtomicType,
+    ComplexType,
+    EnumRef,
+    Field,
+    FloatType,
+    FunctionPtr,
+    IntKind,
+    IntType,
+    OpaqueRecordRef,
+    Pointer,
+    Struct,
+    StructRef,
+    Type,
+    TypeRef,
+    Unit,
+    UnsupportedType,
+    VectorType,
+)
+from mojo_bindgen.passes.semantic.type_walk import (
+    TypeWalkOptions,
+    any_type_node,
+    iter_type_nodes,
+)
 
 
 def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
@@ -21,7 +49,9 @@ def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
 
 def ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     """Complete non-union structs in dependency order."""
-    struct_decls = [d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete]
+    struct_decls = [
+        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
+    ]
     return tuple(toposort_structs(struct_decls))
 
 
@@ -169,6 +199,29 @@ def struct_decl_register_passable(decl: Struct, struct_by_id: dict[str, Struct])
     )
 
 
+_EMBEDDED_ATOMIC_WALK = TypeWalkOptions(
+    peel_typeref=True,
+    peel_qualified=True,
+    peel_atomic=False,
+    descend_pointer=False,
+    descend_array=True,
+    descend_function_ptr=False,
+    descend_vector_element=False,
+)
+
+
+def field_contains_representable_atomic_storage(field: Field) -> bool:
+    return any_type_node(
+        field.type,
+        lambda node: isinstance(node, AtomicType) and map_atomic_type(node) is not None,
+        options=_EMBEDDED_ATOMIC_WALK,
+    )
+
+
+def struct_has_representable_atomic_storage(decl: Struct) -> bool:
+    return any(field_contains_representable_atomic_storage(field) for field in decl.fields)
+
+
 def is_pure_bitfield_struct(decl: Struct) -> bool:
     return bool(decl.fields) and all(field.is_bitfield for field in decl.fields)
 
@@ -185,7 +238,7 @@ def bitfield_unsigned_storage_type(field: Field) -> IntType | None:
     if not isinstance(core, IntType):
         return None
     unsigned_kind = {
-        IntKind.BOOL: IntKind.BOOL,
+        IntKind.BOOL: IntKind.UCHAR,
         IntKind.CHAR_S: IntKind.CHAR_U,
         IntKind.CHAR_U: IntKind.CHAR_U,
         IntKind.SCHAR: IntKind.UCHAR,

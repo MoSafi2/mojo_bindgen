@@ -69,9 +69,7 @@ def test_iter_type_nodes_can_descend_vector_elements_when_requested() -> None:
     shallow = tuple(type(node).__name__ for node in iter_type_nodes(vector))
     deep = tuple(
         type(node).__name__
-        for node in iter_type_nodes(
-            vector, options=TypeWalkOptions(descend_vector_element=True)
-        )
+        for node in iter_type_nodes(vector, options=TypeWalkOptions(descend_vector_element=True))
     )
 
     assert shallow == ("VectorType",)

@@ -5,7 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
-from mojo_bindgen.ir import Array, AtomicType, FunctionPtr, Pointer, QualifiedType, Type, TypeRef, VectorType
+from mojo_bindgen.ir import (
+    Array,
+    AtomicType,
+    FunctionPtr,
+    Pointer,
+    QualifiedType,
+    Type,
+    TypeRef,
+    VectorType,
+)
 
 
 @dataclass(frozen=True)

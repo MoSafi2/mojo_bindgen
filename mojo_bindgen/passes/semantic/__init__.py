@@ -16,11 +16,13 @@ from mojo_bindgen.passes.semantic.layout import (
     LayoutFacts,
     bitfield_field_is_bool,
     bitfield_field_is_signed,
+    field_contains_representable_atomic_storage,
     bitfield_storage_width_bits,
     build_register_passable_map,
     incomplete_struct_decls,
     is_pure_bitfield_struct,
     ordered_struct_decls,
+    struct_has_representable_atomic_storage,
     struct_by_decl_id,
     struct_decl_register_passable,
 )
@@ -30,7 +32,12 @@ from mojo_bindgen.passes.semantic.names import (
     emitted_struct_enum_names,
     emitted_typedef_mojo_names,
 )
-from mojo_bindgen.passes.semantic.type_walk import TypeWalkOptions, any_type_node, collect_type_nodes, iter_type_nodes
+from mojo_bindgen.passes.semantic.type_walk import (
+    TypeWalkOptions,
+    any_type_node,
+    collect_type_nodes,
+    iter_type_nodes,
+)
 
 __all__ = [
     "CallbackAlias",
@@ -46,6 +53,7 @@ __all__ = [
     "any_type_node",
     "bitfield_field_is_bool",
     "bitfield_field_is_signed",
+    "field_contains_representable_atomic_storage",
     "bitfield_storage_width_bits",
     "build_register_passable_map",
     "collect_callback_aliases",
@@ -57,6 +65,7 @@ __all__ = [
     "is_pure_bitfield_struct",
     "iter_type_nodes",
     "ordered_struct_decls",
+    "struct_has_representable_atomic_storage",
     "struct_by_decl_id",
     "struct_decl_register_passable",
 ]

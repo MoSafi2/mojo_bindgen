@@ -148,6 +148,35 @@ def test_analyze_eligible_union_gets_comptime_block() -> None:
     assert "U" in au.unsafe_union_names
 
 
+def test_analyze_typedef_skips_duplicate_name_for_complete_union_alias() -> None:
+    i32 = _i32()
+    union_decl = Struct(
+        decl_id="union:U",
+        name="U",
+        c_name="union U",
+        fields=[
+            Field(name="a", source_name="a", type=i32, byte_offset=0),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=True,
+    )
+    union_ref = StructRef(
+        decl_id=union_decl.decl_id,
+        name=union_decl.name,
+        c_name=union_decl.c_name,
+        is_union=True,
+        size_bytes=union_decl.size_bytes,
+    )
+    td = Typedef(decl_id="typedef:U", name="U", aliased=union_ref, canonical=union_ref)
+    au = analyze_unit(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[union_decl, td]),
+        MojoEmitOptions(),
+    )
+    analyzed_typedef = next(d for d in au.tail_decls if not isinstance(d, AnalyzedFunction))
+    assert analyzed_typedef.skip_duplicate is True
+
+
 def test_analyze_union_with_struct_arm_uses_unsafe_union() -> None:
     i32 = _i32()
     parts = Struct(
@@ -320,12 +349,26 @@ def test_analyze_pure_bitfield_struct_separates_storage_from_members() -> None:
         align_bytes=4,
         is_union=False,
     )
-    au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
+    au = analyze_unit(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions()
+    )
     analyzed = au.ordered_structs[0]
     assert analyzed.bitfield_layout is not None
     assert analyzed.fields == ()
+    assert analyzed.init_kind == "synthesized"
+    assert len(analyzed.synthesized_initializers) == 2
+    assert analyzed.synthesized_initializers[0].params == ()
+    assert [param.name for param in analyzed.synthesized_initializers[1].params] == [
+        "ready",
+        "error",
+        "enabled",
+    ]
     assert [storage.name for storage in analyzed.bitfield_layout.storages] == ["__bf0", "__bf1"]
-    assert [member.mojo_name for member in analyzed.bitfield_layout.members] == ["ready", "error", "enabled"]
+    assert [member.mojo_name for member in analyzed.bitfield_layout.members] == [
+        "ready",
+        "error",
+        "enabled",
+    ]
     assert analyzed.bitfield_layout.members[0].storage_name == "__bf0"
     assert analyzed.bitfield_layout.members[2].storage_name == "__bf1"
     assert analyzed.bitfield_layout.storages[1].type.int_kind == IntKind.UCHAR
@@ -354,12 +397,48 @@ def test_analyze_mixed_struct_uses_bitfield_layout_for_bitfield_run() -> None:
         align_bytes=4,
         is_union=False,
     )
-    au = analyze_unit(Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions())
+    au = analyze_unit(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions()
+    )
     analyzed = au.ordered_structs[0]
     assert [field.mojo_name for field in analyzed.fields] == ["tag"]
     assert analyzed.bitfield_layout is not None
+    assert analyzed.init_kind == "fieldwise"
+    assert analyzed.synthesized_initializers == ()
     assert [storage.name for storage in analyzed.bitfield_layout.storages] == ["__bf0"]
     assert [member.mojo_name for member in analyzed.bitfield_layout.members] == ["ready"]
+
+
+def test_analyze_anonymous_only_pure_bitfield_struct_gets_zero_init_only() -> None:
+    u32 = _u32()
+    st = Struct(
+        decl_id="struct:OnlyAnonBits",
+        name="OnlyAnonBits",
+        c_name="OnlyAnonBits",
+        fields=[
+            Field(
+                name="",
+                source_name="",
+                type=u32,
+                byte_offset=0,
+                is_anonymous=True,
+                is_bitfield=True,
+                bit_offset=0,
+                bit_width=8,
+            ),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    au = analyze_unit(
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st]),
+        MojoEmitOptions(),
+    )
+    analyzed = au.ordered_structs[0]
+    assert analyzed.init_kind == "synthesized"
+    assert len(analyzed.synthesized_initializers) == 1
+    assert analyzed.synthesized_initializers[0].params == ()
 
 
 def test_analyze_function_pointer_returns_use_wrapper_kind() -> None:
@@ -479,4 +558,8 @@ def test_analyze_atomic_import_and_register_passable_policy() -> None:
     assert au.needs_atomic_import is True
     assert any("atomic types were mapped" in note for note in au.semantic_fallback_notes)
     assert au.ordered_structs[0].register_passable is False
+    assert au.ordered_structs[0].trait_names == ()
+    assert au.ordered_structs[0].emit_fieldwise_init is False
     assert au.ordered_structs[1].register_passable is True
+    assert au.ordered_structs[1].trait_names == ("Copyable", "Movable", "RegisterPassable")
+    assert au.ordered_structs[1].emit_fieldwise_init is True

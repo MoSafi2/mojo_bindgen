@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Function, GlobalVar, OpaqueRecordRef, Param, Struct, StructRef, Type, TypeRef, Typedef, Unit
+from mojo_bindgen.ir import (
+    Function,
+    GlobalVar,
+    OpaqueRecordRef,
+    Param,
+    Struct,
+    StructRef,
+    Type,
+    TypeRef,
+    Typedef,
+    Unit,
+)
 from mojo_bindgen.passes.semantic.type_walk import iter_type_nodes
 
 

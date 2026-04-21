@@ -366,12 +366,23 @@ struct ev_recursive_tree(Copyable, Movable):
     var value: ev_recursive_tree__anon_union_1
 # struct ev_bits - size=8 align=4 (verify packed/aligned ABI)
 @align(4)
-@fieldwise_init
 struct ev_bits(Copyable, Movable, RegisterPassable):
     # bitfield storage: bits 0..31 at byte offset 0
     var __bf0: c_uint
     # bitfield storage: bits 32..63 at byte offset 4
-    var __bf1: c_int
+    var __bf1: c_uint
+    def __init__(out self):
+        self.__bf0 = c_uint(0)
+        self.__bf1 = c_uint(0)
+    def __init__(out self, ready: c_uint, error: c_uint, state: c_uint, code: c_uint, delta: c_int, enabled: Bool):
+        self.__bf0 = c_uint(0)
+        self.__bf1 = c_uint(0)
+        self.set_ready(ready)
+        self.set_error(error)
+        self.set_state(state)
+        self.set_code(code)
+        self.set_delta(delta)
+        self.set_enabled(enabled)
     # bitfield accessor: C bits 0..0 (1 bits)
     def ready(self) -> c_uint:
         var raw = (self.__bf0 >> 0) & c_uint(0x1)
@@ -406,22 +417,22 @@ struct ev_bits(Copyable, Movable, RegisterPassable):
         self.__bf0 = (self.__bf0 & clear_mask) | ((raw_value & c_uint(0x7ff)) << 5)
     # bitfield accessor: C bits 32..38 (7 bits)
     def delta(self) -> c_int:
-        var raw = (self.__bf1 >> 0) & c_int(0x7f)
-        if raw & c_int(0x40) != c_int(0):
-            return c_int(raw | ~c_int(0x7f))
+        var raw = (self.__bf1 >> 0) & c_uint(0x7f)
+        if raw & c_uint(0x40) != c_uint(0):
+            return c_int(raw | ~c_uint(0x7f))
         return c_int(raw)
     def set_delta(mut self, value: c_int):
-        var raw_value = c_int(value) & c_int(0x7f)
-        var clear_mask = ~(c_int(0x7f) << 0)
-        self.__bf1 = (self.__bf1 & clear_mask) | ((raw_value & c_int(0x7f)) << 0)
+        var raw_value = c_uint(value) & c_uint(0x7f)
+        var clear_mask = ~(c_uint(0x7f) << 0)
+        self.__bf1 = (self.__bf1 & clear_mask) | ((raw_value & c_uint(0x7f)) << 0)
     # bitfield accessor: C bits 39..39 (1 bits)
     def enabled(self) -> Bool:
-        var raw = (self.__bf1 >> 7) & c_int(0x1)
-        return raw != c_int(0)
+        var raw = (self.__bf1 >> 7) & c_uint(0x1)
+        return raw != c_uint(0)
     def set_enabled(mut self, value: Bool):
-        var raw_value = c_int(1) if value else c_int(0)
-        var clear_mask = ~(c_int(0x1) << 7)
-        self.__bf1 = (self.__bf1 & clear_mask) | ((raw_value & c_int(0x1)) << 7)
+        var raw_value = c_uint(1) if value else c_uint(0)
+        var clear_mask = ~(c_uint(0x1) << 7)
+        self.__bf1 = (self.__bf1 & clear_mask) | ((raw_value & c_uint(0x1)) << 7)
 # struct ev_blob - size=8 align=8 (verify packed/aligned ABI)
 @align(8)
 @fieldwise_init
@@ -436,8 +447,7 @@ struct ev_blob0(Copyable, Movable):
     var data: InlineArray[c_uchar, 0]
 # struct ev_atomic_holder - size=16 align=8 (verify packed/aligned ABI)
 @align(8)
-@fieldwise_init
-struct ev_atomic_holder(Copyable, Movable):
+struct ev_atomic_holder:
     var counter: Atomic[DType.int32]
     var flags: Atomic[DType.uint32]
     var user: MutOpaquePointer[MutExternalOrigin]
@@ -562,8 +572,6 @@ struct ev_run_flags(Copyable, Movable, RegisterPassable):
     var value: c_uint
     comptime EVRUN_NOWAIT = Self(c_uint(1))
     comptime EVRUN_ONCE = Self(c_uint(2))
-comptime ev_any_watcher = ev_any_watcher
-
 comptime ev_tstamp = c_double
 
 comptime ev_time_t = ev_tstamp
@@ -707,8 +715,6 @@ comptime ev_string_table_2x3 = InlineArray[InlineArray[UnsafePointer[c_char, Imm
 
 comptime ev_variadic_cb_t = MutOpaquePointer[MutExternalOrigin]
 
-comptime ev_bits_overlay = ev_bits_overlay
-
 comptime ev_atomic_int_t = Atomic[DType.int32]
 
 comptime ev_atomic_uint_t = Atomic[DType.uint32]
@@ -737,15 +743,9 @@ comptime ev_row_ptr_t = UnsafePointer[InlineArray[c_int, 4], MutExternalOrigin]
 
 comptime ev_signal_table_t = InlineArray[MutOpaquePointer[MutExternalOrigin], 3]
 
-comptime ev_number = ev_number
-
-comptime ev_ptr_cast = ev_ptr_cast
-
 comptime ev_incomplete_only_t = ev_incomplete_only
 
 comptime ev_incomplete_union_t = InlineArray[UInt8, 0]
-
-comptime ev_typedef_union = ev_typedef_union
 
 # enum ev_typedef_enum - underlying UINT -> c_uint (verify C ABI)
 @fieldwise_init
@@ -766,8 +766,6 @@ comptime ev_u128 = UInt128
 comptime ev_v4si = SIMD[DType.int32, 4]
 
 comptime ev_v4sf = SIMD[DType.float32, 4]
-
-comptime ev_vector_union = ev_vector_union
 
 def ev_take_const_ptr(p: UnsafePointer[c_int, ImmutExternalOrigin]) abi("C") -> None:
     external_call["ev_take_const_ptr", NoneType, UnsafePointer[c_int, ImmutExternalOrigin]](p)
@@ -838,8 +836,6 @@ comptime ev_array_of_fn_ptrs = GlobalVar[T=InlineArray[MutOpaquePointer[MutExter
 def ev_fn_returning_array_ptr() abi("C") -> UnsafePointer[InlineArray[UnsafePointer[c_int, MutExternalOrigin], 4], MutExternalOrigin]:
     return external_call["ev_fn_returning_array_ptr", UnsafePointer[InlineArray[UnsafePointer[c_int, MutExternalOrigin], 4], MutExternalOrigin]]()
 
-comptime ev_nested_union = ev_nested_union
-
 # enum ev_payload_kind - underlying UINT -> c_uint (verify C ABI)
 @fieldwise_init
 struct ev_payload_kind(Copyable, Movable, RegisterPassable):
@@ -870,15 +866,6 @@ comptime ev_global_callbacks = GlobalVar[T=ev_callbacks, link="ev_global_callbac
 
 # global `ev_tls_errno_like` -> c_int
 comptime ev_tls_errno_like = GlobalVar[T=c_int, link="ev_tls_errno_like"]
-
-def ev_is_active(loop: UnsafePointer[ev_loop, MutExternalOrigin]) abi("C") -> Bool:
-    return external_call["ev_is_active", Bool, UnsafePointer[ev_loop, MutExternalOrigin]](loop)
-
-def ev_atomic_add(counter: UnsafePointer[c_int, MutExternalOrigin], amount: c_int) abi("C") -> None:
-    external_call["ev_atomic_add", NoneType, UnsafePointer[c_int, MutExternalOrigin], c_int](counter, amount)
-
-def ev_memory_copy(dest: MutOpaquePointer[MutExternalOrigin], src: ImmutOpaquePointer[ImmutExternalOrigin], n: c_ulong) abi("C") -> None:
-    external_call["ev_memory_copy", NoneType, MutOpaquePointer[MutExternalOrigin], ImmutOpaquePointer[ImmutExternalOrigin], c_ulong](dest, src, n)
 
 def ev_store_atomic(dst: UnsafePointer[Atomic[DType.int32], MutExternalOrigin], value: c_int) abi("C") -> None:
     external_call["ev_store_atomic", NoneType, UnsafePointer[Atomic[DType.int32], MutExternalOrigin], c_int](dst, value)

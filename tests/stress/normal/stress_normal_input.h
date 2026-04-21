@@ -627,9 +627,6 @@ extern __thread int ev_tls_errno_like;
 /* API surface covering many forms                                           */
 /* ------------------------------------------------------------------------- */
 
-bool ev_is_active(struct ev_loop *loop);
-void ev_atomic_add(volatile int *counter, int amount);
-void ev_memory_copy(void *restrict dest, const void *restrict src, size_t n);
 
 void ev_store_atomic(_Atomic int *dst, int value);
 int ev_load_atomic(const _Atomic int *src);

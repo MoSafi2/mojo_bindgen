@@ -19,6 +19,9 @@ def emitted_struct_enum_names(
     for struct_decl in incomplete_structs:
         emitted_names.add(mojo_ident(struct_decl.name.strip() or struct_decl.c_name.strip()))
     for decl in unit.decls:
+        if isinstance(decl, Struct) and decl.is_union and decl.is_complete:
+            emitted_names.add(mojo_ident(decl.name.strip() or decl.c_name.strip()))
+    for decl in unit.decls:
         if isinstance(decl, Enum):
             emitted_names.add(mojo_ident(decl.name))
     return frozenset(emitted_names)

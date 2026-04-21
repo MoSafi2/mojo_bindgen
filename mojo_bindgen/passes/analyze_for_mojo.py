@@ -50,6 +50,7 @@ from mojo_bindgen.passes.semantic.layout import (
     bitfield_unsigned_storage_type,
     bitfield_storage_width_bits,
     build_register_passable_map,
+    struct_has_representable_atomic_storage,
     struct_by_decl_id,
 )
 from mojo_bindgen.passes.semantic.names import CollectEmissionNamesPass
@@ -103,6 +104,24 @@ class AnalyzedBitfieldLayout:
     members: tuple[AnalyzedBitfieldMember, ...]
 
 
+StructInitKind = Literal["fieldwise", "synthesized"]
+
+
+@dataclass(frozen=True)
+class AnalyzedStructInitParam:
+    """One surfaced parameter in a synthesized struct initializer."""
+
+    name: str
+    type: Type
+
+
+@dataclass(frozen=True)
+class AnalyzedStructInitializer:
+    """One synthesized ``__init__`` overload for a struct."""
+
+    params: tuple[AnalyzedStructInitParam, ...]
+
+
 @dataclass(frozen=True)
 class AnalyzedStruct:
     """Derived struct-level emission decisions."""
@@ -112,8 +131,12 @@ class AnalyzedStruct:
     align_decorator: int | None
     align_stride_warning: bool
     align_omit_comment: str | None
+    trait_names: tuple[str, ...]
+    emit_fieldwise_init: bool
     fields: tuple[AnalyzedField, ...]
     bitfield_layout: AnalyzedBitfieldLayout | None = None
+    init_kind: StructInitKind = "fieldwise"
+    synthesized_initializers: tuple[AnalyzedStructInitializer, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -210,6 +233,8 @@ def mojo_align_decorator_ok(align_bytes: int) -> bool:
     if align_bytes > _MOJO_MAX_ALIGN_BYTES:
         return False
     return _is_power_of_two(align_bytes)
+
+
 # --- Layout / unions / register passability ----------------------------------------
 
 
@@ -358,6 +383,23 @@ def _analyze_bitfield_layout(
     return AnalyzedBitfieldLayout(storages=tuple(storages), members=tuple(members))
 
 
+def _analyze_struct_initializers(
+    fields: tuple[AnalyzedField, ...],
+    bitfield_layout: AnalyzedBitfieldLayout | None,
+) -> tuple[StructInitKind, tuple[AnalyzedStructInitializer, ...]]:
+    if fields or bitfield_layout is None:
+        return "fieldwise", ()
+
+    typed_params = tuple(
+        AnalyzedStructInitParam(name=member.mojo_name, type=member.field.type)
+        for member in bitfield_layout.members
+    )
+    initializers = [AnalyzedStructInitializer(params=())]
+    if typed_params:
+        initializers.append(AnalyzedStructInitializer(params=typed_params))
+    return "synthesized", tuple(initializers)
+
+
 # --- Orchestration -----------------------------------------------------------------
 
 
@@ -393,9 +435,7 @@ def _analyze_struct(
     ab = decl.align_bytes
     valid_mojo_align = mojo_align_decorator_ok(ab)
     explicit_layout_intent = decl.is_packed or decl.requested_align_bytes is not None
-    should_emit_align = valid_mojo_align and (
-        options.strict_abi or explicit_layout_intent
-    )
+    should_emit_align = valid_mojo_align and (options.strict_abi or explicit_layout_intent)
     if should_emit_align:
         align_decorator = ab
         if decl.size_bytes % ab != 0:
@@ -424,14 +464,28 @@ def _analyze_struct(
     )
     bitfield_layout = _analyze_bitfield_layout(all_fields)
     fields = tuple(af for af in all_fields if not af.field.is_bitfield)
+    init_kind, synthesized_initializers = _analyze_struct_initializers(fields, bitfield_layout)
+    has_atomic_storage = struct_has_representable_atomic_storage(decl)
+    trait_names: tuple[str, ...]
+    if has_atomic_storage:
+        trait_names = ()
+    else:
+        traits = ["Copyable", "Movable"]
+        if register_passable:
+            traits.append("RegisterPassable")
+        trait_names = tuple(traits)
     return AnalyzedStruct(
         decl=decl,
         register_passable=register_passable,
         align_decorator=align_decorator,
         align_stride_warning=align_stride_warning,
         align_omit_comment=align_omit_comment,
+        trait_names=trait_names,
+        emit_fieldwise_init=init_kind == "fieldwise" and not has_atomic_storage,
         fields=fields,
         bitfield_layout=bitfield_layout,
+        init_kind=init_kind,
+        synthesized_initializers=synthesized_initializers,
     )
 
 

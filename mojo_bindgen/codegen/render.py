@@ -38,7 +38,9 @@ from mojo_bindgen.passes.analyze_for_mojo import (
     AnalyzedField,
     AnalyzedFunction,
     AnalyzedGlobalVar,
+    AnalyzedStructInitializer,
     AnalyzedStruct,
+    AnalyzedStructInitParam,
     AnalyzedTypedef,
     AnalyzedUnion,
     AnalyzedUnit,
@@ -139,9 +141,7 @@ class MojoRenderer:
                 f"# bitfield: C bits {field.bit_offset}..{field.bit_offset + field.bit_width - 1} "
                 f"({field.bit_width} bits) on {backing}"
             )
-        if analyzed_field.callback_alias_name is None and isinstance(
-            field.type, FunctionPtr
-        ):
+        if analyzed_field.callback_alias_name is None and isinstance(field.type, FunctionPtr):
             b.add(f"# {types.function_ptr_comment(field.type)}")
         if opts.warn_abi and field.is_bitfield:
             b.add("# ABI: verify bitfield layout matches target C compiler.")
@@ -156,9 +156,7 @@ class MojoRenderer:
         decl = analyzed.decl
         name = mojo_ident(decl.name.strip() or decl.c_name.strip())
         b = CodeBuilder()
-        b.add(
-            f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target"
-        )
+        b.add(f"# incomplete C struct `{decl.c_name}` — opaque; use only as pointer target")
         b.add("@fieldwise_init")
         b.add(f"struct {name}(Copyable, Movable):")
         b.indent()
@@ -198,9 +196,7 @@ class MojoRenderer:
 
         b.add(f"def {member.mojo_name}(self) -> {surface_type}:")
         b.indent()
-        b.add(
-            f"var raw = (self.{member.storage_name} >> {shift}) & {storage_type}({mask_text})"
-        )
+        b.add(f"var raw = (self.{member.storage_name} >> {shift}) & {storage_type}({mask_text})")
         if member.is_bool:
             b.add(f"return raw != {storage_type}(0)")
         elif member.is_signed and member.bit_width > 0:
@@ -219,9 +215,7 @@ class MojoRenderer:
         if member.is_bool:
             b.add(f"var raw_value = {storage_type}(1) if value else {storage_type}(0)")
         else:
-            b.add(
-                f"var raw_value = {storage_type}(value) & {storage_type}({mask_text})"
-            )
+            b.add(f"var raw_value = {storage_type}(value) & {storage_type}({mask_text})")
         b.add(f"var clear_mask = ~({storage_type}({mask_text}) << {shift})")
         b.add(
             f"self.{member.storage_name} = (self.{member.storage_name} & clear_mask) | "
@@ -229,8 +223,42 @@ class MojoRenderer:
         )
         b.dedent()
 
+    def _render_struct_initializers(
+        self,
+        b: CodeBuilder,
+        analyzed: AnalyzedStruct,
+    ) -> None:
+        if analyzed.init_kind != "synthesized":
+            return
+        for initializer in analyzed.synthesized_initializers:
+            self._render_struct_initializer(b, analyzed, initializer)
+
+    def _render_struct_initializer(
+        self,
+        b: CodeBuilder,
+        analyzed: AnalyzedStruct,
+        initializer: AnalyzedStructInitializer,
+    ) -> None:
+        params = ", ".join(self._render_struct_init_param(param) for param in initializer.params)
+        if params:
+            b.add(f"def __init__(out self, {params}):")
+        else:
+            b.add("def __init__(out self):")
+        b.indent()
+        bitfield_layout = analyzed.bitfield_layout
+        assert bitfield_layout is not None
+        for storage in bitfield_layout.storages:
+            storage_type = self._types.surface(storage.type)
+            b.add(f"self.{storage.name} = {storage_type}(0)")
+        for param in initializer.params:
+            b.add(f"self.set_{param.name}({param.name})")
+        b.dedent()
+
+    def _render_struct_init_param(self, param: AnalyzedStructInitParam) -> str:
+        return f"{param.name}: {self._types.surface(param.type)}"
+
     def _render_struct_body(self, b: CodeBuilder, analyzed: AnalyzedStruct) -> None:
-        """Emit stored vars first, then synthesized bitfield accessors."""
+        """Emit stored vars first, then synthesized initializers/accessors."""
         vars_in_order: list[tuple[int, str, object]] = [
             (af.index, "field", af) for af in analyzed.fields
         ]
@@ -247,6 +275,8 @@ class MojoRenderer:
             else:
                 self._render_pure_bitfield_storage(b, item)
 
+        self._render_struct_initializers(b, analyzed)
+
         if analyzed.bitfield_layout is not None:
             for member in analyzed.bitfield_layout.members:
                 self._render_pure_bitfield_member(b, member)
@@ -257,11 +287,7 @@ class MojoRenderer:
         if not decl.is_complete:
             return self._render_opaque_struct_stub(analyzed)
         name = mojo_ident(decl.name.strip() or decl.c_name.strip())
-        traits = (
-            "(Copyable, Movable, RegisterPassable)"
-            if analyzed.register_passable
-            else "(Copyable, Movable)"
-        )
+        traits = f"({', '.join(analyzed.trait_names)})" if analyzed.trait_names else ""
         b = CodeBuilder()
         if self._a.opts.warn_abi:
             b.add(
@@ -277,7 +303,8 @@ class MojoRenderer:
                 )
         elif analyzed.align_omit_comment is not None:
             b.add(analyzed.align_omit_comment)
-        b.add("@fieldwise_init")
+        if analyzed.emit_fieldwise_init:
+            b.add("@fieldwise_init")
         b.add(f"struct {name}{traits}:")
         b.indent()
         self._render_struct_body(b, analyzed)
@@ -358,10 +385,7 @@ class MojoRenderer:
 
     def _dl_handle_helpers(self) -> str:
         """Render helper code for ``owned_dl_handle`` linking mode, if needed."""
-        if (
-            self._a.opts.linking == "external_call"
-            and self._a.needs_global_symbol_helpers
-        ):
+        if self._a.opts.linking == "external_call" and self._a.needs_global_symbol_helpers:
             return (
                 "# Resolve symbols from libraries already linked into this process (e.g. mojo link step).\n"
                 "def _bindgen_dl() raises -> OwnedDLHandle:\n"
@@ -370,9 +394,7 @@ class MojoRenderer:
         if self._a.opts.linking != "owned_dl_handle":
             return ""
         if self._a.opts.library_path_hint:
-            path_lit = self._a.opts.library_path_hint.replace("\\", "\\\\").replace(
-                '"', '\\"'
-            )
+            path_lit = self._a.opts.library_path_hint.replace("\\", "\\\\").replace('"', '\\"')
             return (
                 f'comptime _BINDGEN_LIB_PATH: String = "{path_lit}"\n\n'
                 "def _bindgen_dl() raises -> OwnedDLHandle:\n"
@@ -409,9 +431,7 @@ class MojoRenderer:
             ]
         for field in decl.fields:
             label = field.name if field.name else "(anonymous)"
-            lines.append(
-                f"#   {label}: {self._union_member_types.canonical(field.type)}"
-            )
+            lines.append(f"#   {label}: {self._union_member_types.canonical(field.type)}")
         lines.append("")
         return "\n".join(lines)
 
@@ -455,9 +475,7 @@ class MojoRenderer:
         """Render collected callback aliases before the declaration body."""
         if not self._a.callback_aliases:
             return ""
-        return "".join(
-            self._emit_callback_alias(alias) for alias in self._a.callback_aliases
-        )
+        return "".join(self._emit_callback_alias(alias) for alias in self._a.callback_aliases)
 
     @staticmethod
     def _emit_typedef(analyzed: AnalyzedTypedef, types: TypeMapper) -> str:
@@ -492,11 +510,7 @@ class MojoRenderer:
         macro forms remain visible as comments with their original token text.
         """
         body = " ".join(decl.tokens)
-        if (
-            decl.kind == "object_like_supported"
-            and decl.expr is not None
-            and decl.type is not None
-        ):
+        if decl.kind == "object_like_supported" and decl.expr is not None and decl.type is not None:
             if isinstance(decl.expr, RefExpr):
                 reason = "identifier reference macro is not emitted directly; only literal macros are currently supported"
                 if body:
@@ -520,9 +534,7 @@ class MojoRenderer:
         self, expr: object, decl_type: IntType | FloatType | VoidType | object
     ) -> str | None:
         """Render the supported constant-expression subset to Mojo source."""
-        if isinstance(expr, IntLiteral) and isinstance(
-            decl_type, (IntType, FloatType, VoidType)
-        ):
+        if isinstance(expr, IntLiteral) and isinstance(decl_type, (IntType, FloatType, VoidType)):
             t = self._types.emit_scalar(decl_type)
             return f"{t}({expr.value})"
         if isinstance(expr, StringLiteral):
@@ -623,9 +635,7 @@ class MojoRenderer:
             f'comptime {name} = {wrapper}[T={ag.surface_type}, link="{link_lit}"]\n\n'
         )
 
-    def _function_signature(
-        self, analyzed: AnalyzedFunction
-    ) -> tuple[str, str, str, bool, str]:
+    def _function_signature(self, analyzed: AnalyzedFunction) -> tuple[str, str, str, bool, str]:
         """Build derived signature fragments used by function rendering."""
         fn = analyzed.decl
         ret_t = (
@@ -664,9 +674,7 @@ class MojoRenderer:
     def _emit_function_thin_wrapper(self, analyzed: AnalyzedFunction) -> str:
         """Render a callable thin-FFI wrapper for one supported function."""
         fn = analyzed.decl
-        ret_t, args_sig, call_args, is_void, ret_list = self._function_signature(
-            analyzed
-        )
+        ret_t, args_sig, call_args, is_void, ret_list = self._function_signature(analyzed)
         bracket_inner = self._types.function_type_param_list(
             fn,
             ret_list,
