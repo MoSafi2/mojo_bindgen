@@ -353,7 +353,8 @@ def test_analyze_pure_bitfield_struct_separates_storage_from_members() -> None:
         is_union=False,
     )
     au = analyze_unit(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions()
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st]),
+        MojoEmitOptions(),
     )
     analyzed = au.ordered_structs[0]
     assert analyzed.bitfield_layout is not None
@@ -366,7 +367,10 @@ def test_analyze_pure_bitfield_struct_separates_storage_from_members() -> None:
         "error",
         "enabled",
     ]
-    assert [storage.name for storage in analyzed.bitfield_layout.storages] == ["__bf0", "__bf1"]
+    assert [storage.name for storage in analyzed.bitfield_layout.storages] == [
+        "__bf0",
+        "__bf1",
+    ]
     assert [member.mojo_name for member in analyzed.bitfield_layout.members] == [
         "ready",
         "error",
@@ -401,7 +405,8 @@ def test_analyze_mixed_struct_uses_bitfield_layout_for_bitfield_run() -> None:
         is_union=False,
     )
     au = analyze_unit(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st]), MojoEmitOptions()
+        Unit(source_header="t.h", library="t", link_name="t", decls=[st]),
+        MojoEmitOptions(),
     )
     analyzed = au.ordered_structs[0]
     assert [field.mojo_name for field in analyzed.fields] == ["tag"]
@@ -564,5 +569,9 @@ def test_analyze_atomic_import_and_register_passable_policy() -> None:
     assert au.ordered_structs[0].trait_names == ()
     assert au.ordered_structs[0].emit_fieldwise_init is False
     assert au.ordered_structs[1].register_passable is True
-    assert au.ordered_structs[1].trait_names == ("Copyable", "Movable", "RegisterPassable")
+    assert au.ordered_structs[1].trait_names == (
+        "Copyable",
+        "Movable",
+        "RegisterPassable",
+    )
     assert au.ordered_structs[1].emit_fieldwise_init is True
