@@ -20,7 +20,8 @@ pixi run test
 ```
 
 This repository also ships a local Git pre-commit hook at `.git/hooks/pre-commit`.
-It runs `pixi run format`, applies safe Ruff fixes, runs `pixi run lint`, and then `pixi run test-light`, re-staging any formatting or lint-fix changes before the commit continues.
+It runs `pixi run format`, applies safe Ruff fixes, re-stages those changes, and then executes `pixi run check-light`.
+That shared validation task is also what CI runs, and it covers `format-check`, `lint`, `typecheck`, and `test-light`.
 
 ### Virtualenv (any supported OS)
 
@@ -37,9 +38,8 @@ Set `LIBCLANG_PATH` if the shared library is not on the default loader path.
 
 ## Checks before you push
 
-- `ruff check mojo_bindgen tests` and `ruff format mojo_bindgen tests`
-- `pyright mojo_bindgen` (parsing code under `mojo_bindgen/parsing/` is excluded; libclang has no usable stubs)
-- `pytest -m "not e2e"` for fast feedback
+- `pixi run check-light` for the same validation suite CI uses
+- `pixi run format` if you want the repository to auto-apply formatting before validation
 
 End-to-end tests (`tests/e2e/`) need a C toolchain, Mojo, and more setup; see [tests/e2e/README.md](tests/e2e/README.md).
 

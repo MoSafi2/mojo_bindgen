@@ -26,6 +26,8 @@ from mojo_bindgen.analysis.model import (
     AnalyzedStruct,
     AnalyzedStructInitializer,
     AnalyzedStructInitParam,
+    StructInitKind,
+    StructRepresentationMode,
 )
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import TypeMapper, mojo_ident, peel_wrappers
@@ -156,7 +158,7 @@ class AnalyzeStructLoweringPass:
         fields: tuple[AnalyzedField, ...],
         struct_map: dict[str, Struct],
     ) -> tuple[
-        str,
+        StructRepresentationMode,
         tuple[AnalyzedPaddingField, ...],
         AnalyzedOpaqueStorage | None,
         tuple[str, ...],
@@ -166,7 +168,7 @@ class AnalyzeStructLoweringPass:
         if any(field.is_bitfield for field in decl.fields):
             return "fieldwise_exact", (), None, ()
 
-        placements: list[tuple[int, str, object]] = []
+        padding_fields: list[AnalyzedPaddingField] = []
         current_offset = 0
         used_padding = False
         natural_struct_align = 1
@@ -197,22 +199,17 @@ class AnalyzeStructLoweringPass:
             explicit_padding_bytes = c_offset - natural_offset
             if explicit_padding_bytes > 0:
                 used_padding = True
-                placements.append(
-                    (
-                        explicit_padding_start,
-                        "padding",
-                        AnalyzedPaddingField(
-                            name=f"__pad{len([item for _, kind, item in placements if kind == 'padding'])}",
-                            surface_type_text=f"InlineArray[UInt8, {explicit_padding_bytes}]",
-                            byte_offset=explicit_padding_start,
-                            byte_count=explicit_padding_bytes,
-                            comment_lines=(
-                                f"# synthesized padding: bytes {explicit_padding_start}..{c_offset - 1}",
-                            ),
+                padding_fields.append(
+                    AnalyzedPaddingField(
+                        name=f"__pad{len(padding_fields)}",
+                        surface_type_text=f"InlineArray[UInt8, {explicit_padding_bytes}]",
+                        byte_offset=explicit_padding_start,
+                        byte_count=explicit_padding_bytes,
+                        comment_lines=(
+                            f"# synthesized padding: bytes {explicit_padding_start}..{c_offset - 1}",
                         ),
                     )
                 )
-            placements.append((c_offset, "field", analyzed_field))
             current_offset = c_offset + field_size
 
         if opaque_reasons:
@@ -251,32 +248,27 @@ class AnalyzeStructLoweringPass:
 
         if current_offset < decl.size_bytes:
             used_padding = True
-            placements.append(
-                (
-                    current_offset,
-                    "padding",
-                    AnalyzedPaddingField(
-                        name=f"__pad{len([item for _, kind, item in placements if kind == 'padding'])}",
-                        surface_type_text=f"InlineArray[UInt8, {decl.size_bytes - current_offset}]",
-                        byte_offset=current_offset,
-                        byte_count=decl.size_bytes - current_offset,
-                        comment_lines=(
-                            f"# synthesized trailing padding: bytes {current_offset}..{decl.size_bytes - 1}",
-                        ),
+            padding_fields.append(
+                AnalyzedPaddingField(
+                    name=f"__pad{len(padding_fields)}",
+                    surface_type_text=f"InlineArray[UInt8, {decl.size_bytes - current_offset}]",
+                    byte_offset=current_offset,
+                    byte_count=decl.size_bytes - current_offset,
+                    comment_lines=(
+                        f"# synthesized trailing padding: bytes {current_offset}..{decl.size_bytes - 1}",
                     ),
                 )
             )
 
-        padding_fields = tuple(item for _, kind, item in placements if kind == "padding")
         if used_padding:
-            return "fieldwise_padded_exact", padding_fields, None, ()
+            return "fieldwise_padded_exact", tuple(padding_fields), None, ()
         return "fieldwise_exact", (), None, ()
 
     def _analyze_record_alignment(
         self,
         decl: Struct,
         *,
-        representation_mode: str,
+        representation_mode: StructRepresentationMode,
         struct_map: dict[str, Struct],
         options: MojoEmitOptions,
     ) -> tuple[int | None, str | None, bool]:
@@ -477,6 +469,7 @@ class AnalyzeStructLoweringPass:
             if current is None:
                 needs_new_storage = True
             else:
+                assert current is not None
                 widened_width_bits = max(current.width_bits, width_bits)
                 needs_new_storage = (
                     field.bit_offset < current.start_bit
@@ -500,18 +493,20 @@ class AnalyzeStructLoweringPass:
                     comment_lines=comment_lines,
                 )
                 storages.append(current)
-            elif width_bits > current.width_bits:
-                current = AnalyzedBitfieldStorage(
-                    name=current.name,
-                    type=storage_type,
-                    surface_type_text=type_mapper.surface(storage_type),
-                    field_index=current.field_index,
-                    byte_offset=current.byte_offset,
-                    start_bit=current.start_bit,
-                    width_bits=width_bits,
-                    comment_lines=current.comment_lines,
-                )
-                storages[-1] = current
+            else:
+                assert current is not None
+                if width_bits > current.width_bits:
+                    current = AnalyzedBitfieldStorage(
+                        name=current.name,
+                        type=storage_type,
+                        surface_type_text=type_mapper.surface(storage_type),
+                        field_index=current.field_index,
+                        byte_offset=current.byte_offset,
+                        start_bit=current.start_bit,
+                        width_bits=width_bits,
+                        comment_lines=current.comment_lines,
+                    )
+                    storages[-1] = current
             if field.is_anonymous:
                 continue
             comment_lines = ()
@@ -519,6 +514,7 @@ class AnalyzeStructLoweringPass:
                 comment_lines = (
                     f"# bitfield accessor: C bits {field.bit_offset}..{field.bit_offset + field.bit_width - 1} ({field.bit_width} bits)",
                 )
+            assert current is not None
             members.append(
                 AnalyzedBitfieldMember(
                     field=field,
@@ -543,7 +539,7 @@ class AnalyzeStructLoweringPass:
         fields: tuple[AnalyzedField, ...],
         bitfield_layout: AnalyzedBitfieldLayout | None,
         type_mapper: TypeMapper,
-    ) -> tuple[str, tuple[AnalyzedStructInitializer, ...]]:
+    ) -> tuple[StructInitKind, tuple[AnalyzedStructInitializer, ...]]:
         if fields or bitfield_layout is None:
             return "fieldwise", ()
         typed_params = tuple(

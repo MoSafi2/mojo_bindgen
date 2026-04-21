@@ -57,7 +57,8 @@ def _walk_type(
     traverse_function_ptrs: bool,
 ) -> None:
     out.extend(
-        collect_type_nodes(
+        node
+        for node in collect_type_nodes(
             t,
             lambda node: isinstance(node, StructRef),
             options=TypeWalkOptions(
@@ -65,6 +66,7 @@ def _walk_type(
                 descend_vector_element=True,
             ),
         )
+        if isinstance(node, StructRef)
     )
 
 

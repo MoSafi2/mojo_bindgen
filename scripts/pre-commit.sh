@@ -20,8 +20,5 @@ echo "pre-commit: applying safe lint fixes"
 echo "pre-commit: restaging formatted and lint-fixed changes"
 git add -A
 
-echo "pre-commit: linting"
-"${RUNNER[@]}" lint
-
-echo "pre-commit: running light tests"
-"${RUNNER[@]}" test-light
+echo "pre-commit: running the same validation suite as CI"
+bash "$ROOT_DIR/scripts/check-light.sh"

@@ -5,7 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.ir import Field, Function, GlobalVar, Struct, Type, Typedef, Unit
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.ir import (
+    Const,
+    Enum,
+    Field,
+    Function,
+    GlobalVar,
+    MacroDecl,
+    Struct,
+    Type,
+    Typedef,
+    Unit,
+)
 
 
 @dataclass(frozen=True)
@@ -150,7 +162,7 @@ class AnalyzedTypedef:
 class AnalyzedEnum:
     """Render-ready enum wrapper facts."""
 
-    decl: object
+    decl: Enum
     mojo_name: str
     base_text: str
     comment_line: str
@@ -161,7 +173,7 @@ class AnalyzedEnum:
 class AnalyzedConst:
     """Render-ready constant lowering."""
 
-    decl: object
+    decl: Const
     mojo_name: str
     rendered_value_text: str | None
     unsupported_reason: str | None = None
@@ -171,7 +183,7 @@ class AnalyzedConst:
 class AnalyzedMacro:
     """Render-ready macro lowering."""
 
-    decl: object
+    decl: MacroDecl
     mojo_name: str
     rendered_value_text: str | None
     reason: str
@@ -242,7 +254,7 @@ class AnalyzedUnit:
     """Unit-level semantic analysis for Mojo generation."""
 
     unit: Unit
-    opts: object
+    opts: MojoEmitOptions
     needs_opaque_imports: bool
     needs_simd_import: bool
     needs_complex_import: bool

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from mojo_bindgen.analysis.analyze_for_mojo import (
     AnalyzedBitfieldMember,
     AnalyzedBitfieldStorage,
     AnalyzedCallbackAlias,
     AnalyzedConst,
     AnalyzedEnum,
+    AnalyzedField,
     AnalyzedFunction,
     AnalyzedGlobalVar,
     AnalyzedMacro,
@@ -22,6 +25,8 @@ from mojo_bindgen.analysis.analyze_for_mojo import (
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import pointer_origin_names
 from mojo_bindgen.ir import Unit
+
+type StructBodyItem = AnalyzedField | AnalyzedPaddingField | AnalyzedBitfieldStorage
 
 
 class CodeBuilder:
@@ -57,7 +62,7 @@ class MojoRenderer:
         self._a = analyzed
 
     @staticmethod
-    def _emit_field_lines(b: CodeBuilder, analyzed_field) -> None:
+    def _emit_field_lines(b: CodeBuilder, analyzed_field: AnalyzedField) -> None:
         for line in analyzed_field.comment_lines:
             b.add(line)
         b.add(f"var {analyzed_field.mojo_name}: {analyzed_field.surface_type_text}")
@@ -156,7 +161,7 @@ class MojoRenderer:
             )
             return
 
-        vars_in_order: list[tuple[int, str, object]] = [
+        vars_in_order: list[tuple[int, str, StructBodyItem]] = [
             (af.field.byte_offset, "field", af) for af in analyzed.fields
         ]
         vars_in_order.extend(
@@ -171,11 +176,11 @@ class MojoRenderer:
         vars_in_order.sort(key=lambda item: item[0])
         for _, kind, item in vars_in_order:
             if kind == "field":
-                self._emit_field_lines(b, item)
+                self._emit_field_lines(b, cast(AnalyzedField, item))
             elif kind == "padding":
-                self._emit_padding_field_lines(b, item)
+                self._emit_padding_field_lines(b, cast(AnalyzedPaddingField, item))
             else:
-                self._render_pure_bitfield_storage(b, item)
+                self._render_pure_bitfield_storage(b, cast(AnalyzedBitfieldStorage, item))
         if analyzed.init_kind == "synthesized":
             for initializer in analyzed.synthesized_initializers:
                 self._render_struct_initializer(b, analyzed, initializer)
