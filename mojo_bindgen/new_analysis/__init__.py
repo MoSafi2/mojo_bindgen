@@ -14,12 +14,20 @@ from mojo_bindgen.new_analysis.type_lowering import (
     TypeLoweringError,
     lower_type,
 )
+from mojo_bindgen.new_analysis.unit_lowering import (
+    LowerUnitPass,
+    UnitLoweringError,
+    lower_unit,
+)
 
 __all__ = [
     "ConstExprLoweringError",
     "LowerConstExprPass",
     "LowerTypePass",
+    "LowerUnitPass",
     "TypeLoweringError",
+    "UnitLoweringError",
     "lower_const_expr",
     "lower_type",
+    "lower_unit",
 ]
