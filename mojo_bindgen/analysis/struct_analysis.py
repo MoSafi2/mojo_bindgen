@@ -5,17 +5,11 @@ from __future__ import annotations
 from mojo_bindgen.analysis.common import (
     _POINTER_ALIGN_BYTES,
     _POINTER_SIZE_BYTES,
+    _mojo_align_decorator_ok,
     field_mojo_name,
-    mojo_align_decorator_ok,
     scalar_comment_name,
 )
-from mojo_bindgen.analysis.layout import (
-    bitfield_field_is_bool,
-    bitfield_field_is_signed,
-    bitfield_storage_width_bits,
-    bitfield_unsigned_storage_type,
-    struct_has_representable_atomic_storage,
-)
+from mojo_bindgen.analysis.layout import field_contains_representable_atomic_storage
 from mojo_bindgen.analysis.model import (
     AnalyzedBitfieldLayout,
     AnalyzedBitfieldMember,
@@ -39,6 +33,7 @@ from mojo_bindgen.ir import (
     Field,
     FloatType,
     FunctionPtr,
+    IntKind,
     IntType,
     OpaqueRecordRef,
     Pointer,
@@ -51,6 +46,73 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
+
+
+def struct_has_representable_atomic_storage(decl: Struct) -> bool:
+    return any(field_contains_representable_atomic_storage(field) for field in decl.fields)
+def bitfield_storage_width_bits(field: Field) -> int | None:
+    core = peel_wrappers(field.type)
+    if not isinstance(core, IntType):
+        return None
+    return core.size_bytes * 8 if core.size_bytes > 0 else None
+
+
+def bitfield_field_is_signed(field: Field) -> bool:
+    core = peel_wrappers(field.type)
+    if not isinstance(core, IntType):
+        return False
+    return core.int_kind not in {
+        IntKind.BOOL,
+        IntKind.CHAR_U,
+        IntKind.UCHAR,
+        IntKind.USHORT,
+        IntKind.UINT,
+        IntKind.ULONG,
+        IntKind.ULONGLONG,
+        IntKind.UINT128,
+        IntKind.CHAR16,
+        IntKind.CHAR32,
+    }
+
+
+def bitfield_field_is_bool(field: Field) -> bool:
+    core = peel_wrappers(field.type)
+    return isinstance(core, IntType) and core.int_kind == IntKind.BOOL
+
+
+def bitfield_unsigned_storage_type(field: Field) -> IntType | None:
+    core = peel_wrappers(field.type)
+    if not isinstance(core, IntType):
+        return None
+    unsigned_kind = {
+        IntKind.BOOL: IntKind.UCHAR,
+        IntKind.CHAR_S: IntKind.CHAR_U,
+        IntKind.CHAR_U: IntKind.CHAR_U,
+        IntKind.SCHAR: IntKind.UCHAR,
+        IntKind.UCHAR: IntKind.UCHAR,
+        IntKind.SHORT: IntKind.USHORT,
+        IntKind.USHORT: IntKind.USHORT,
+        IntKind.INT: IntKind.UINT,
+        IntKind.UINT: IntKind.UINT,
+        IntKind.LONG: IntKind.ULONG,
+        IntKind.ULONG: IntKind.ULONG,
+        IntKind.LONGLONG: IntKind.ULONGLONG,
+        IntKind.ULONGLONG: IntKind.ULONGLONG,
+        IntKind.INT128: IntKind.UINT128,
+        IntKind.UINT128: IntKind.UINT128,
+        IntKind.WCHAR: IntKind.WCHAR,
+        IntKind.CHAR16: IntKind.CHAR16,
+        IntKind.CHAR32: IntKind.CHAR32,
+        IntKind.EXT_INT: IntKind.EXT_INT,
+    }.get(core.int_kind)
+    if unsigned_kind is None:
+        return None
+    return IntType(
+        int_kind=unsigned_kind,
+        size_bytes=core.size_bytes,
+        align_bytes=core.align_bytes,
+        ext_bits=core.ext_bits,
+    )
 
 
 class AnalyzeStructLoweringPass:
@@ -278,7 +340,7 @@ class AnalyzeStructLoweringPass:
         align_omit_comment: str | None = None
         align_stride_warning = False
         align_bytes = decl.align_bytes
-        valid_mojo_align = mojo_align_decorator_ok(align_bytes)
+        valid_mojo_align = _mojo_align_decorator_ok(align_bytes)
         explicit_layout_intent = decl.is_packed or decl.requested_align_bytes is not None
         if representation_mode == "opaque_storage_exact":
             natural_struct_align = 1

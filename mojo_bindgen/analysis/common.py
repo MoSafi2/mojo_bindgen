@@ -8,6 +8,8 @@ from mojo_bindgen.codegen.mojo_mapper import mojo_ident
 from mojo_bindgen.ir import Field, FloatType, IntType, VoidType
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
+# TODO: FIX: Probably wrong to use ctypes here, should be derived from clang to allow cross-compilation if needed.
+# TODO:In general Target Information should be obtained from clang.index from the frontend and saved for later
 _POINTER_SIZE_BYTES = ctypes.sizeof(ctypes.c_void_p)
 _POINTER_ALIGN_BYTES = ctypes.alignment(ctypes.c_void_p)
 
@@ -16,7 +18,7 @@ def _is_power_of_two(n: int) -> bool:
     return n > 0 and (n & (n - 1)) == 0
 
 
-def mojo_align_decorator_ok(align_bytes: int) -> bool:
+def _mojo_align_decorator_ok(align_bytes: int) -> bool:
     if align_bytes <= 1:
         return False
     if align_bytes > _MOJO_MAX_ALIGN_BYTES:
@@ -51,7 +53,7 @@ __all__ = [
     "_POINTER_ALIGN_BYTES",
     "_POINTER_SIZE_BYTES",
     "field_mojo_name",
-    "mojo_align_decorator_ok",
+    "_mojo_align_decorator_ok",
     "mojo_float_literal_text",
     "scalar_comment_name",
 ]

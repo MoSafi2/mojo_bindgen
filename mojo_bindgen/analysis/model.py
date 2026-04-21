@@ -249,6 +249,7 @@ TailDecl = (
 )
 
 
+# TODO: Alot of redundancy with the new analysis facts, remodel to consolidate around analysis facts which the renderer can use
 @dataclass(frozen=True)
 class AnalyzedUnit:
     """Unit-level semantic analysis for Mojo generation."""

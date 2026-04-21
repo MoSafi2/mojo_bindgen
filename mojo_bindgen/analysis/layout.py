@@ -47,6 +47,7 @@ def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
     return out
 
 
+# TODO: Remove, not really needed in mojo.
 def ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     """Complete non-union structs in dependency order."""
     struct_decls = [
@@ -62,13 +63,14 @@ def incomplete_struct_decls(unit: Unit) -> tuple[Struct, ...]:
     )
 
 
+# TODO: Something feels superflous here
 def _type_ok_for_register_passable_field(
     t: Type,
     struct_by_id: dict[str, Struct],
     visiting: set[str] | None = None,
 ) -> bool:
     if visiting is None:
-        visiting = set()
+        visiting: set[str] = set()
     if isinstance(t, TypeRef):
         return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
     if isinstance(t, AtomicType):
@@ -210,85 +212,16 @@ _EMBEDDED_ATOMIC_WALK = TypeWalkOptions(
 )
 
 
+def is_pure_bitfield_struct(decl: Struct) -> bool:
+    return bool(decl.fields) and all(field.is_bitfield for field in decl.fields)
+
+
 def field_contains_representable_atomic_storage(field: Field) -> bool:
     return any_type_node(
         field.type,
         lambda node: isinstance(node, AtomicType) and map_atomic_type(node) is not None,
         options=_EMBEDDED_ATOMIC_WALK,
     )
-
-
-def struct_has_representable_atomic_storage(decl: Struct) -> bool:
-    return any(field_contains_representable_atomic_storage(field) for field in decl.fields)
-
-
-def is_pure_bitfield_struct(decl: Struct) -> bool:
-    return bool(decl.fields) and all(field.is_bitfield for field in decl.fields)
-
-
-def bitfield_storage_width_bits(field: Field) -> int | None:
-    core = peel_wrappers(field.type)
-    if not isinstance(core, IntType):
-        return None
-    return core.size_bytes * 8 if core.size_bytes > 0 else None
-
-
-def bitfield_unsigned_storage_type(field: Field) -> IntType | None:
-    core = peel_wrappers(field.type)
-    if not isinstance(core, IntType):
-        return None
-    unsigned_kind = {
-        IntKind.BOOL: IntKind.UCHAR,
-        IntKind.CHAR_S: IntKind.CHAR_U,
-        IntKind.CHAR_U: IntKind.CHAR_U,
-        IntKind.SCHAR: IntKind.UCHAR,
-        IntKind.UCHAR: IntKind.UCHAR,
-        IntKind.SHORT: IntKind.USHORT,
-        IntKind.USHORT: IntKind.USHORT,
-        IntKind.INT: IntKind.UINT,
-        IntKind.UINT: IntKind.UINT,
-        IntKind.LONG: IntKind.ULONG,
-        IntKind.ULONG: IntKind.ULONG,
-        IntKind.LONGLONG: IntKind.ULONGLONG,
-        IntKind.ULONGLONG: IntKind.ULONGLONG,
-        IntKind.INT128: IntKind.UINT128,
-        IntKind.UINT128: IntKind.UINT128,
-        IntKind.WCHAR: IntKind.WCHAR,
-        IntKind.CHAR16: IntKind.CHAR16,
-        IntKind.CHAR32: IntKind.CHAR32,
-        IntKind.EXT_INT: IntKind.EXT_INT,
-    }.get(core.int_kind)
-    if unsigned_kind is None:
-        return None
-    return IntType(
-        int_kind=unsigned_kind,
-        size_bytes=core.size_bytes,
-        align_bytes=core.align_bytes,
-        ext_bits=core.ext_bits,
-    )
-
-
-def bitfield_field_is_signed(field: Field) -> bool:
-    core = peel_wrappers(field.type)
-    if not isinstance(core, IntType):
-        return False
-    return core.int_kind not in {
-        IntKind.BOOL,
-        IntKind.CHAR_U,
-        IntKind.UCHAR,
-        IntKind.USHORT,
-        IntKind.UINT,
-        IntKind.ULONG,
-        IntKind.ULONGLONG,
-        IntKind.UINT128,
-        IntKind.CHAR16,
-        IntKind.CHAR32,
-    }
-
-
-def bitfield_field_is_bool(field: Field) -> bool:
-    core = peel_wrappers(field.type)
-    return isinstance(core, IntType) and core.int_kind == IntKind.BOOL
 
 
 @dataclass(frozen=True)

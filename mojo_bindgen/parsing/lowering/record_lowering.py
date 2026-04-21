@@ -240,7 +240,7 @@ class RecordLowerer:
             )
         return None
 
-    def completed_records_since(self, start: int) -> tuple[int, list[Struct]]:
+    def completed_records_since(self, start: int) -> tuple[int, list[Struct | None]]:
         """Return lowered record definitions completed after one marker index."""
         decl_ids = self._completed_record_decl_ids[start:]
         return len(self._completed_record_decl_ids), [
