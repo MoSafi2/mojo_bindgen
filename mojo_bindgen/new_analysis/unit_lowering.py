@@ -10,7 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.codegen.mojo_mapper import mojo_ident
-from mojo_bindgen.ir import Const, Decl, Enum, Function, GlobalVar, MacroDecl, Struct, Typedef, Unit
+from mojo_bindgen.ir import (
+    Const,
+    Decl,
+    Enum,
+    Function,
+    GlobalVar,
+    MacroDecl,
+    Struct,
+    Typedef,
+    Unit,
+)
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -30,7 +40,10 @@ from mojo_bindgen.mojo_ir import (
     StructDecl,
     StructKind,
 )
-from mojo_bindgen.new_analysis.const_lowering import ConstExprLoweringError, LowerConstExprPass
+from mojo_bindgen.new_analysis.const_lowering import (
+    ConstExprLoweringError,
+    LowerConstExprPass,
+)
 from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 
@@ -148,13 +161,13 @@ class UnitDeclLowerer:
             link_name=decl.link_name,
             params=[
                 Param(
-                    name=mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}",
+                    name=(mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}"),
                     type=self.session.type_lowerer.run(param.type),
                 )
                 for i, param in enumerate(decl.params)
             ],
             return_type=self.session.type_lowerer.run(decl.ret),
-            kind=FunctionKind.VARIADIC_STUB if decl.is_variadic else FunctionKind.WRAPPER,
+            kind=(FunctionKind.VARIADIC_STUB if decl.is_variadic else FunctionKind.WRAPPER),
             call_target=CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol=decl.link_name),
         )
 
