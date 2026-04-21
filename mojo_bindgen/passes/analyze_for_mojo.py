@@ -1,35 +1,26 @@
-"""Final semantic analysis pass producing AnalyzedUnit."""
+"""Final Mojo semantic assembly pass producing :class:`AnalyzedUnit`."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.mojo_emit_options import FFIScalarStyle, MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import (
     FFIOriginStyle,
     TypeMapper,
-    map_atomic_type,
-    map_complex_simd,
-    map_vector_simd,
     mojo_ident,
     peel_wrappers,
 )
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
-    ComplexType,
     Const,
     Enum,
-    EnumRef,
     Field,
     FloatType,
     Function,
     FunctionPtr,
     GlobalVar,
-    IntKind,
     IntType,
     MacroDecl,
     OpaqueRecordRef,
@@ -42,8 +33,26 @@ from mojo_bindgen.ir import (
     TypeRef,
     Unit,
     UnsupportedType,
-    VectorType,
 )
+from mojo_bindgen.passes.semantic.callbacks import (
+    CallbackAlias,
+    CallbackAliasInfo,
+    CollectCallbackAliasesPass,
+)
+from mojo_bindgen.passes.semantic.imports import (
+    CollectSemanticNeedsPass,
+    ImportNeeds,
+)
+from mojo_bindgen.passes.semantic.layout import (
+    ComputeLayoutFactsPass,
+    bitfield_field_is_bool,
+    bitfield_field_is_signed,
+    bitfield_storage_width_bits,
+    build_register_passable_map,
+    is_pure_bitfield_struct as _is_pure_bitfield_struct,
+    struct_by_decl_id,
+)
+from mojo_bindgen.passes.semantic.names import CollectEmissionNamesPass
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
 
@@ -130,14 +139,6 @@ class AnalyzedFunction:
 
 
 @dataclass(frozen=True)
-class CallbackAlias:
-    """Generated callback signature alias for a surfaced function-pointer type."""
-
-    name: str
-    fp: FunctionPtr
-
-
-@dataclass(frozen=True)
 class AnalyzedUnion:
     """Derived union lowering decisions."""
 
@@ -202,189 +203,6 @@ def mojo_align_decorator_ok(align_bytes: int) -> bool:
     if align_bytes > _MOJO_MAX_ALIGN_BYTES:
         return False
     return _is_power_of_two(align_bytes)
-
-
-def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
-    """Map struct ``decl_id`` to :class:`Struct`, including incomplete (opaque) records."""
-    out: dict[str, Struct] = {}
-    for d in unit.decls:
-        if isinstance(d, Struct) and not d.is_union:
-            out[d.decl_id] = d
-    return out
-
-
-# --- Type traversal + import / fallback queries ------------------------------------
-
-
-def _iter_type_nodes_opaque_import(t: Type) -> Iterator[Type]:
-    """Preorder; does not descend into FunctionPtr children (opaque-import semantics)."""
-    yield t
-    if isinstance(t, TypeRef):
-        yield from _iter_type_nodes_opaque_import(t.canonical)
-    elif isinstance(t, QualifiedType):
-        yield from _iter_type_nodes_opaque_import(t.unqualified)
-    elif isinstance(t, AtomicType):
-        yield from _iter_type_nodes_opaque_import(t.value_type)
-    elif isinstance(t, EnumRef):
-        return
-    elif isinstance(t, Pointer):
-        if t.pointee is None:
-            return
-        yield from _iter_type_nodes_opaque_import(t.pointee)
-    elif isinstance(t, Array):
-        yield from _iter_type_nodes_opaque_import(t.element)
-    elif isinstance(t, FunctionPtr):
-        return
-
-
-def _iter_type_nodes_imports(t: Type) -> Iterator[Type]:
-    """Preorder for SIMD/complex/atomic import checks (recurses through FunctionPtr)."""
-    yield t
-    if isinstance(t, TypeRef):
-        yield from _iter_type_nodes_imports(t.canonical)
-    elif isinstance(t, QualifiedType):
-        yield from _iter_type_nodes_imports(t.unqualified)
-    elif isinstance(t, AtomicType):
-        yield from _iter_type_nodes_imports(t.value_type)
-    elif isinstance(t, Pointer):
-        if t.pointee is not None:
-            yield from _iter_type_nodes_imports(t.pointee)
-    elif isinstance(t, Array):
-        yield from _iter_type_nodes_imports(t.element)
-    elif isinstance(t, FunctionPtr):
-        yield from _iter_type_nodes_imports(t.ret)
-        for p in t.params:
-            yield from _iter_type_nodes_imports(p)
-
-
-def _iter_type_nodes_fallbacks(t: Type) -> Iterator[Type]:
-    """Preorder matching :func:`_note_semantic_fallbacks` traversal."""
-    yield t
-    if isinstance(t, TypeRef):
-        yield from _iter_type_nodes_fallbacks(t.canonical)
-    elif isinstance(t, QualifiedType):
-        yield from _iter_type_nodes_fallbacks(t.unqualified)
-    elif isinstance(t, AtomicType):
-        yield from _iter_type_nodes_fallbacks(t.value_type)
-    elif isinstance(t, Pointer):
-        if t.pointee is not None:
-            yield from _iter_type_nodes_fallbacks(t.pointee)
-    elif isinstance(t, Array):
-        yield from _iter_type_nodes_fallbacks(t.element)
-    elif isinstance(t, FunctionPtr):
-        yield from _iter_type_nodes_fallbacks(t.ret)
-        for p in t.params:
-            yield from _iter_type_nodes_fallbacks(p)
-    elif isinstance(t, ComplexType):
-        return
-    elif isinstance(t, VectorType):
-        yield from _iter_type_nodes_fallbacks(t.element)
-
-
-def _type_needs_opaque_pointer_import(t: Type) -> bool:
-    for u in _iter_type_nodes_opaque_import(t):
-        if isinstance(u, Pointer) and u.pointee is None:
-            return True
-        if isinstance(u, FunctionPtr):
-            return True
-        if isinstance(u, (OpaqueRecordRef, UnsupportedType)):
-            return True
-    return False
-
-
-def _type_needs_simd_import(t: Type) -> bool:
-    return any(
-        isinstance(u, VectorType) and map_vector_simd(u) is not None
-        for u in _iter_type_nodes_imports(t)
-    )
-
-
-def _type_needs_complex_import(t: Type) -> bool:
-    return any(
-        isinstance(u, ComplexType) and map_complex_simd(u) is not None
-        for u in _iter_type_nodes_imports(t)
-    )
-
-
-def _type_needs_atomic_import(t: Type) -> bool:
-    return any(
-        isinstance(u, AtomicType) and map_atomic_type(u) is not None
-        for u in _iter_type_nodes_imports(t)
-    )
-
-
-def _collect_fallback_notes_for_type(t: Type, notes: set[str]) -> None:
-    for u in _iter_type_nodes_fallbacks(t):
-        if isinstance(u, AtomicType) and map_atomic_type(u) is None:
-            notes.add(
-                "some atomic types were mapped to their underlying non-atomic Mojo type because Atomic[dtype] was not representable"
-            )
-        elif isinstance(u, ComplexType) and map_complex_simd(u) is None:
-            notes.add(
-                "some complex C types were mapped as InlineArray[scalar, 2] because ComplexSIMD[dtype, 1] was not representable"
-            )
-        elif isinstance(u, VectorType) and map_vector_simd(u) is None:
-            notes.add(
-                "some vector C types were mapped as InlineArray[...] because SIMD[dtype, size] was not representable"
-            )
-
-
-@dataclass(frozen=True)
-class ImportNeeds:
-    opaque: bool
-    simd: bool
-    complex: bool
-    atomic: bool
-
-
-def collect_unit_import_and_fallback_needs(
-    unit: Unit,
-) -> tuple[ImportNeeds, tuple[str, ...]]:
-    """Single scan of ``unit.decls`` for import flags and semantic fallback notes."""
-    notes: set[str] = set()
-    opaque = simd = complex = atomic = False
-    for d in unit.decls:
-        if isinstance(d, Struct) and not d.is_union:
-            for f in d.fields:
-                t = f.type
-                opaque = opaque or _type_needs_opaque_pointer_import(t)
-                simd = simd or _type_needs_simd_import(t)
-                complex = complex or _type_needs_complex_import(t)
-                atomic = atomic or _type_needs_atomic_import(t)
-                _collect_fallback_notes_for_type(t, notes)
-        elif isinstance(d, Function):
-            opaque = opaque or _type_needs_opaque_pointer_import(d.ret)
-            simd = simd or _type_needs_simd_import(d.ret)
-            complex = complex or _type_needs_complex_import(d.ret)
-            atomic = atomic or _type_needs_atomic_import(d.ret)
-            _collect_fallback_notes_for_type(d.ret, notes)
-            for p in d.params:
-                t = p.type
-                opaque = opaque or _type_needs_opaque_pointer_import(t)
-                simd = simd or _type_needs_simd_import(t)
-                complex = complex or _type_needs_complex_import(t)
-                atomic = atomic or _type_needs_atomic_import(t)
-                _collect_fallback_notes_for_type(t, notes)
-        elif isinstance(d, Typedef):
-            t = d.canonical
-            opaque = opaque or _type_needs_opaque_pointer_import(t)
-            simd = simd or _type_needs_simd_import(t)
-            complex = complex or _type_needs_complex_import(t)
-            atomic = atomic or _type_needs_atomic_import(t)
-            _collect_fallback_notes_for_type(t, notes)
-        elif isinstance(d, GlobalVar):
-            t = d.type
-            opaque = opaque or _type_needs_opaque_pointer_import(t)
-            simd = simd or _type_needs_simd_import(t)
-            complex = complex or _type_needs_complex_import(t)
-            atomic = atomic or _type_needs_atomic_import(t)
-            _collect_fallback_notes_for_type(t, notes)
-    return (
-        ImportNeeds(opaque=opaque, simd=simd, complex=complex, atomic=atomic),
-        tuple(sorted(notes)),
-    )
-
-
 # --- Layout / unions / register passability ----------------------------------------
 
 
@@ -426,156 +244,12 @@ def eligible_unsafe_union_names(
     return frozenset(out)
 
 
-def _type_ok_for_register_passable_field(
-    t: Type,
-    struct_by_id: dict[str, Struct],
-    visiting: set[str] | None = None,
-) -> bool:
-    if visiting is None:
-        visiting = set()
-    if isinstance(t, TypeRef):
-        return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
-    if isinstance(t, QualifiedType):
-        return _type_ok_for_register_passable_field(t.unqualified, struct_by_id, visiting)
-    if isinstance(t, AtomicType):
-        if map_atomic_type(t) is not None:
-            return False
-        return _type_ok_for_register_passable_field(t.value_type, struct_by_id, visiting)
-    if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
-        return True
-    if isinstance(t, UnsupportedType):
-        return False
-    if isinstance(t, VectorType):
-        return map_vector_simd(t) is not None
-    if isinstance(t, ComplexType):
-        return map_complex_simd(t) is not None
-    if isinstance(t, StructRef):
-        if t.decl_id in visiting:
-            return False
-        s = struct_by_id.get(t.decl_id)
-        if s is None or s.is_union or not s.is_complete:
-            return False
-        visiting.add(t.decl_id)
-        try:
-            return all(
-                _type_ok_for_register_passable_field(f.type, struct_by_id, visiting)
-                for f in s.fields
-            )
-        finally:
-            visiting.remove(t.decl_id)
-    if isinstance(t, Pointer):
-        if t.pointee is None:
-            return True
-        return _type_ok_for_register_passable_field(t.pointee, struct_by_id, visiting)
-    if isinstance(t, Array):
-        return t.array_kind != "fixed" and _type_ok_for_register_passable_field(
-            t.element, struct_by_id, visiting
-        )
-    return False
-
-
-def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bool]:
-    """Memoized register-passability for each complete struct ``decl_id``."""
-    cache: dict[str, bool] = {}
-    computing: set[str] = set()
-
-    def passable_for_struct(decl_id: str) -> bool:
-        if decl_id in cache:
-            return cache[decl_id]
-        if decl_id in computing:
-            return False
-        s = struct_by_id.get(decl_id)
-        if s is None or s.is_union or not s.is_complete:
-            cache[decl_id] = False
-            return False
-        computing.add(decl_id)
-        try:
-            ok = all(field_ok_cached(f.type) for f in s.fields)
-        finally:
-            computing.remove(decl_id)
-        cache[decl_id] = ok
-        return ok
-
-    def field_ok_cached(t: Type) -> bool:
-        if isinstance(t, TypeRef):
-            return field_ok_cached(t.canonical)
-        if isinstance(t, QualifiedType):
-            return field_ok_cached(t.unqualified)
-        if isinstance(t, AtomicType):
-            if map_atomic_type(t) is not None:
-                return False
-            return field_ok_cached(t.value_type)
-        if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
-            return True
-        if isinstance(t, UnsupportedType):
-            return False
-        if isinstance(t, VectorType):
-            return map_vector_simd(t) is not None
-        if isinstance(t, ComplexType):
-            return map_complex_simd(t) is not None
-        if isinstance(t, StructRef):
-            return passable_for_struct(t.decl_id)
-        if isinstance(t, Pointer):
-            if t.pointee is None:
-                return True
-            return field_ok_cached(t.pointee)
-        if isinstance(t, Array):
-            return t.array_kind != "fixed" and field_ok_cached(t.element)
-        return False
-
-    for decl_id in struct_by_id:
-        passable_for_struct(decl_id)
-    return cache
-
-
-def struct_decl_register_passable(decl: Struct, struct_by_id: dict[str, Struct]) -> bool:
-    if decl.is_union or not decl.is_complete:
-        return False
-    return all(
-        _type_ok_for_register_passable_field(f.type, struct_by_id, None) for f in decl.fields
-    )
-
-
 def _field_mojo_name(f: Field, index: int) -> str:
     if f.source_name:
         return mojo_ident(f.source_name)
     if f.name:
         return mojo_ident(f.name)
     return f"_anon_{index}"
-
-
-def _is_pure_bitfield_struct(decl: Struct) -> bool:
-    return bool(decl.fields) and all(field.is_bitfield for field in decl.fields)
-
-
-def _bitfield_storage_width_bits(field: Field) -> int | None:
-    core = peel_wrappers(field.type)
-    if not isinstance(core, IntType):
-        return None
-    return core.size_bytes * 8 if core.size_bytes > 0 else None
-
-
-def _bitfield_field_is_signed(field: Field) -> bool:
-    core = peel_wrappers(field.type)
-    if not isinstance(core, IntType):
-        return False
-    return core.int_kind not in {
-        IntKind.BOOL,
-        IntKind.CHAR_U,
-        IntKind.UCHAR,
-        IntKind.USHORT,
-        IntKind.UINT,
-        IntKind.ULONG,
-        IntKind.ULONGLONG,
-        IntKind.UINT128,
-        IntKind.CHAR16,
-        IntKind.CHAR32,
-    }
-
-
-def _bitfield_field_is_bool(field: Field) -> bool:
-    core = peel_wrappers(field.type)
-    return isinstance(core, IntType) and core.int_kind == IntKind.BOOL
 
 
 def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) -> AnalyzedPureBitfieldStruct | None:
@@ -585,7 +259,7 @@ def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) ->
 
     for af in analyzed_fields:
         field = af.field
-        width_bits = _bitfield_storage_width_bits(field)
+        width_bits = bitfield_storage_width_bits(field)
         if width_bits is None:
             return None
 
@@ -633,164 +307,12 @@ def _analyze_pure_bitfield_struct(analyzed_fields: tuple[AnalyzedField, ...]) ->
                 storage_type=current.type,
                 storage_local_bit_offset=field.bit_offset - current.start_bit,
                 bit_width=field.bit_width,
-                is_signed=_bitfield_field_is_signed(field),
-                is_bool=_bitfield_field_is_bool(field),
+                is_signed=bitfield_field_is_signed(field),
+                is_bool=bitfield_field_is_bool(field),
             )
         )
 
     return AnalyzedPureBitfieldStruct(storages=tuple(storages), members=tuple(members))
-
-
-def _ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
-    struct_decls = [
-        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
-    ]
-    return tuple(toposort_structs(struct_decls))
-
-
-def _incomplete_struct_decls(unit: Unit) -> tuple[Struct, ...]:
-    """Forward-declared / incomplete non-union structs, in TU declaration order."""
-    return tuple(
-        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and not d.is_complete
-    )
-
-
-def _emitted_struct_enum_names(
-    unit: Unit,
-    ordered_structs: tuple[Struct, ...],
-    incomplete_structs: tuple[Struct, ...],
-) -> frozenset[str]:
-    emitted_names: set[str] = set()
-    for s in ordered_structs:
-        emitted_names.add(mojo_ident(s.name.strip() or s.c_name.strip()))
-    for s in incomplete_structs:
-        emitted_names.add(mojo_ident(s.name.strip() or s.c_name.strip()))
-    for d in unit.decls:
-        if isinstance(d, Enum):
-            emitted_names.add(mojo_ident(d.name))
-    return frozenset(emitted_names)
-
-
-def _emitted_typedef_mojo_names(
-    unit: Unit, emitted_struct_enum_names: frozenset[str]
-) -> frozenset[str]:
-    return frozenset(
-        mojo_ident(d.name)
-        for d in unit.decls
-        if isinstance(d, Typedef) and mojo_ident(d.name) not in emitted_struct_enum_names
-    )
-
-
-# --- Callback aliases --------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class CallbackAliasInfo:
-    aliases: tuple[CallbackAlias, ...]
-    signature_names: frozenset[str]
-    field_aliases: dict[tuple[str, int], str]
-    typedef_aliases: dict[str, str]
-    fn_param_aliases: dict[tuple[str, int], str]
-    fn_ret_aliases: dict[str, str]
-    global_aliases: dict[str, str]
-
-
-def _supports_callback_alias(fp: FunctionPtr) -> bool:
-    if fp.is_variadic:
-        return False
-    if fp.calling_convention is None:
-        return True
-    return fp.calling_convention.lower() in {"c", "cdecl", "default"}
-
-
-def _function_ptr_from_type(t: Type) -> FunctionPtr | None:
-    u = peel_wrappers(t)
-    return u if isinstance(u, FunctionPtr) else None
-
-
-def _unique_callback_alias(base: str, used: set[str]) -> str:
-    candidate = mojo_ident(base)
-    if candidate not in used:
-        used.add(candidate)
-        return candidate
-    i = 2
-    while True:
-        named = f"{candidate}_{i}"
-        if named not in used:
-            used.add(named)
-            return named
-        i += 1
-
-
-def _collect_callback_aliases(
-    unit: Unit,
-    emitted_typedef_names: frozenset[str],
-) -> CallbackAliasInfo:
-    aliases: list[CallbackAlias] = []
-    alias_names: set[str] = set()
-    field_aliases: dict[tuple[str, int], str] = {}
-    typedef_aliases: dict[str, str] = {}
-    fn_param_aliases: dict[tuple[str, int], str] = {}
-    fn_ret_aliases: dict[str, str] = {}
-    global_aliases: dict[str, str] = {}
-
-    def ensure_alias(fp: FunctionPtr, preferred: str) -> str:
-        alias = _unique_callback_alias(preferred, alias_names)
-        aliases.append(CallbackAlias(name=alias, fp=fp))
-        return alias
-
-    for d in unit.decls:
-        if isinstance(d, Typedef):
-            fp = _function_ptr_from_type(d.aliased)
-            if (
-                fp is not None
-                and _supports_callback_alias(fp)
-                and mojo_ident(d.name) in emitted_typedef_names
-            ):
-                typedef_aliases[d.decl_id] = ensure_alias(fp, d.name)
-        elif isinstance(d, Struct) and not d.is_union:
-            base = d.name.strip() or d.c_name.strip()
-            for i, field in enumerate(d.fields):
-                fp = _function_ptr_from_type(field.type)
-                if fp is not None and _supports_callback_alias(fp):
-                    field_name = field.source_name or field.name or f"field_{i}"
-                    suffix = field_name if field_name.endswith("cb") else f"{field_name}_cb"
-                    field_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{base}_{suffix}")
-        elif isinstance(d, Function):
-            fp = _function_ptr_from_type(d.ret)
-            if fp is not None and _supports_callback_alias(fp):
-                if isinstance(d.ret, TypeRef) and mojo_ident(d.ret.name) in emitted_typedef_names:
-                    fn_ret_aliases[d.decl_id] = mojo_ident(d.ret.name)
-                else:
-                    fn_ret_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_return_cb")
-            for i, param in enumerate(d.params):
-                fp = _function_ptr_from_type(param.type)
-                if fp is not None and _supports_callback_alias(fp):
-                    if (
-                        isinstance(param.type, TypeRef)
-                        and mojo_ident(param.type.name) in emitted_typedef_names
-                    ):
-                        fn_param_aliases[(d.decl_id, i)] = mojo_ident(param.type.name)
-                    else:
-                        pname = param.name or f"arg{i}"
-                        fn_param_aliases[(d.decl_id, i)] = ensure_alias(fp, f"{d.name}_{pname}_cb")
-        elif isinstance(d, GlobalVar):
-            fp = _function_ptr_from_type(d.type)
-            if fp is not None and _supports_callback_alias(fp):
-                if isinstance(d.type, TypeRef) and mojo_ident(d.type.name) in emitted_typedef_names:
-                    global_aliases[d.decl_id] = mojo_ident(d.type.name)
-                else:
-                    global_aliases[d.decl_id] = ensure_alias(fp, f"{d.name}_cb")
-
-    return CallbackAliasInfo(
-        aliases=tuple(aliases),
-        signature_names=frozenset(alias_names),
-        field_aliases=field_aliases,
-        typedef_aliases=typedef_aliases,
-        fn_param_aliases=fn_param_aliases,
-        fn_ret_aliases=fn_ret_aliases,
-        global_aliases=global_aliases,
-    )
 
 
 # --- Orchestration -----------------------------------------------------------------
@@ -943,33 +465,38 @@ def _analyze_function(
 
 def analyze_unit_semantics(unit: Unit, options: MojoEmitOptions) -> AnalyzedUnit:
     # Phase A: precompute unit-level semantic facts
-    ordered_struct_decls = _ordered_struct_decls(unit)
-    incomplete_struct_decls = _incomplete_struct_decls(unit)
-    emitted_names = _emitted_struct_enum_names(unit, ordered_struct_decls, incomplete_struct_decls)
-    emitted_typedef_names = _emitted_typedef_mojo_names(unit, emitted_names)
-    callback_info = _collect_callback_aliases(unit, emitted_typedef_names)
+    layout_facts = ComputeLayoutFactsPass().run(unit)
+    ordered_struct_decls = layout_facts.ordered_structs
+    incomplete_struct_decls = layout_facts.incomplete_structs
+    name_facts = CollectEmissionNamesPass().run(
+        unit,
+        ordered_structs=ordered_struct_decls,
+        incomplete_structs=incomplete_struct_decls,
+    )
+    callback_info = CollectCallbackAliasesPass().run(
+        unit,
+        emitted_typedef_names=name_facts.emitted_typedef_names,
+    )
     unsafe_union_names = eligible_unsafe_union_names(
         unit, options.ffi_origin, options.ffi_scalar_style
     )
-    struct_map = struct_by_decl_id(unit)
-    register_passable_by_decl_id = build_register_passable_map(struct_map)
-    import_needs, semantic_fallback_notes = collect_unit_import_and_fallback_needs(unit)
+    import_needs, semantic_fallback_notes = CollectSemanticNeedsPass().run(unit)
     type_mapper = TypeMapper(
         ffi_origin=options.ffi_origin,
         unsafe_union_names=unsafe_union_names,
-        typedef_mojo_names=emitted_typedef_names,
+        typedef_mojo_names=name_facts.emitted_typedef_names,
         callback_signature_names=callback_info.signature_names,
         ffi_scalar_style=options.ffi_scalar_style,
     )
     ctx = _SemanticContext(
         options=options,
-        struct_map=struct_map,
+        struct_map=layout_facts.struct_map,
         ordered_struct_decls=ordered_struct_decls,
-        emitted_names=emitted_names,
-        emitted_typedef_names=emitted_typedef_names,
+        emitted_names=name_facts.emitted_names,
+        emitted_typedef_names=name_facts.emitted_typedef_names,
         callback_info=callback_info,
         unsafe_union_names=unsafe_union_names,
-        register_passable_by_decl_id=register_passable_by_decl_id,
+        register_passable_by_decl_id=layout_facts.register_passable_by_decl_id,
         import_needs=import_needs,
         semantic_fallback_notes=semantic_fallback_notes,
         type_mapper=type_mapper,

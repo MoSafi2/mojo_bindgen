@@ -24,6 +24,14 @@ from mojo_bindgen.passes.reachability import (
     ReachabilityOptions,
     materialize_reachable_struct_refs,
 )
+from mojo_bindgen.passes.semantic import (
+    CollectCallbackAliasesPass,
+    CollectEmissionNamesPass,
+    CollectSemanticNeedsPass,
+    ComputeLayoutFactsPass,
+    TypeWalkOptions,
+    iter_type_nodes,
+)
 from mojo_bindgen.passes.validate_ir import IRValidationError, ValidateIRPass
 
 __all__ = [
@@ -36,12 +44,18 @@ __all__ = [
     "AnalyzedUnion",
     "AnalyzedUnit",
     "CallbackAlias",
+    "CollectCallbackAliasesPass",
+    "CollectEmissionNamesPass",
+    "CollectSemanticNeedsPass",
+    "ComputeLayoutFactsPass",
     "GlobalVarKind",
     "IRValidationError",
     "TailDecl",
     "analyze_unit",
     "analyze_unit_semantics",
     "analyzed_struct_for_test",
+    "TypeWalkOptions",
+    "iter_type_nodes",
     "struct_by_decl_id",
     "ReachabilityMaterializePass",
     "ReachabilityMaterializeResult",

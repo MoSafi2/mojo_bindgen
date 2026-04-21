@@ -13,28 +13,23 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from mojo_bindgen.ir import (
-    Array,
-    AtomicType,
     BinaryExpr,
     CastExpr,
     Const,
     ConstExpr,
     Decl,
     Function,
-    FunctionPtr,
     GlobalVar,
     MacroDecl,
-    Pointer,
-    QualifiedType,
     SizeOfExpr,
     Struct,
     StructRef,
     Type,
     Typedef,
-    TypeRef,
     UnaryExpr,
     Unit,
 )
+from mojo_bindgen.passes.semantic.type_walk import TypeWalkOptions, collect_type_nodes
 
 
 @dataclass(frozen=True)
@@ -61,33 +56,16 @@ def _walk_type(
     *,
     traverse_function_ptrs: bool,
 ) -> None:
-    if isinstance(t, StructRef):
-        out.append(t)
-        return
-    if isinstance(t, TypeRef):
-        _walk_type(t.canonical, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(t, QualifiedType):
-        _walk_type(t.unqualified, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(t, AtomicType):
-        _walk_type(t.value_type, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(t, Pointer):
-        if t.pointee is not None:
-            _walk_type(t.pointee, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(t, Array):
-        _walk_type(t.element, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(t, FunctionPtr):
-        if traverse_function_ptrs:
-            _walk_type(t.ret, out, traverse_function_ptrs=traverse_function_ptrs)
-            for p in t.params:
-                _walk_type(p, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    # VoidType, IntType, FloatType, EnumRef, OpaqueRecordRef, UnsupportedType,
-    # ComplexType, VectorType — no StructRef children.
+    out.extend(
+        collect_type_nodes(
+            t,
+            lambda node: isinstance(node, StructRef),
+            options=TypeWalkOptions(
+                descend_function_ptr=traverse_function_ptrs,
+                descend_vector_element=True,
+            ),
+        )
+    )
 
 
 def _walk_const_expr(

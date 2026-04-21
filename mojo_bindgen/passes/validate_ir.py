@@ -2,23 +2,8 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import (
-    Array,
-    AtomicType,
-    Function,
-    FunctionPtr,
-    GlobalVar,
-    OpaqueRecordRef,
-    Param,
-    Pointer,
-    QualifiedType,
-    Struct,
-    StructRef,
-    Type,
-    Typedef,
-    TypeRef,
-    Unit,
-)
+from mojo_bindgen.ir import Function, GlobalVar, OpaqueRecordRef, Param, Struct, StructRef, Type, TypeRef, Typedef, Unit
+from mojo_bindgen.passes.semantic.type_walk import iter_type_nodes
 
 
 class IRValidationError(ValueError):
@@ -67,33 +52,10 @@ class ValidateIRPass:
         self._validate_type(param.type, struct_ids)
 
     def _validate_type(self, t: Type, struct_ids: set[str]) -> None:
-        if isinstance(t, TypeRef):
-            if not t.decl_id:
-                raise IRValidationError(f"TypeRef {t.name!r} is missing decl_id")
-            self._validate_type(t.canonical, struct_ids)
-            return
-        if isinstance(t, StructRef):
-            if not t.decl_id:
-                raise IRValidationError(f"StructRef {t.name!r} is missing decl_id")
-            return
-        if isinstance(t, OpaqueRecordRef):
-            if not t.decl_id:
-                raise IRValidationError(f"OpaqueRecordRef {t.name!r} is missing decl_id")
-            return
-        if isinstance(t, QualifiedType):
-            self._validate_type(t.unqualified, struct_ids)
-            return
-        if isinstance(t, AtomicType):
-            self._validate_type(t.value_type, struct_ids)
-            return
-        if isinstance(t, Pointer):
-            if t.pointee is not None:
-                self._validate_type(t.pointee, struct_ids)
-            return
-        if isinstance(t, Array):
-            self._validate_type(t.element, struct_ids)
-            return
-        if isinstance(t, FunctionPtr):
-            self._validate_type(t.ret, struct_ids)
-            for param in t.params:
-                self._validate_type(param, struct_ids)
+        for node in iter_type_nodes(t):
+            if isinstance(node, TypeRef) and not node.decl_id:
+                raise IRValidationError(f"TypeRef {node.name!r} is missing decl_id")
+            if isinstance(node, StructRef) and not node.decl_id:
+                raise IRValidationError(f"StructRef {node.name!r} is missing decl_id")
+            if isinstance(node, OpaqueRecordRef) and not node.decl_id:
+                raise IRValidationError(f"OpaqueRecordRef {node.name!r} is missing decl_id")
