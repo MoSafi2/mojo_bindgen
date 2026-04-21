@@ -147,12 +147,17 @@ class SerDeMixin:
     ) -> Callable[[dict[str, Any]], Any] | None:
         module = sys.modules[owner_cls.__module__]
         module_vars = vars(module)
-        if annotated_type == module_vars.get("Type"):
-            return cast(Callable[[dict[str, Any]], Any], module_vars.get("type_from_json"))
-        if annotated_type == module_vars.get("ConstExpr"):
-            return cast(Callable[[dict[str, Any]], Any], module_vars.get("const_expr_from_json"))
-        if annotated_type == module_vars.get("Decl"):
-            return cast(Callable[[dict[str, Any]], Any], module_vars.get("decl_from_json"))
+        dispatch_pairs = (
+            ("Type", "type_from_json"),
+            ("ConstExpr", "const_expr_from_json"),
+            ("Decl", "decl_from_json"),
+            ("MojoType", "mojo_type_from_json"),
+            ("StructMember", "struct_member_from_json"),
+            ("MojoDecl", "mojo_decl_from_json"),
+        )
+        for alias_name, helper_name in dispatch_pairs:
+            if annotated_type == module_vars.get(alias_name):
+                return cast(Callable[[dict[str, Any]], Any], module_vars.get(helper_name))
         return None
 
     def to_json_dict(self) -> dict[str, Any]:
