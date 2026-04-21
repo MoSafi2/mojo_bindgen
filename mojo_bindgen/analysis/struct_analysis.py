@@ -50,6 +50,8 @@ from mojo_bindgen.ir import (
 
 def struct_has_representable_atomic_storage(decl: Struct) -> bool:
     return any(field_contains_representable_atomic_storage(field) for field in decl.fields)
+
+
 def bitfield_storage_width_bits(field: Field) -> int | None:
     core = peel_wrappers(field.type)
     if not isinstance(core, IntType):

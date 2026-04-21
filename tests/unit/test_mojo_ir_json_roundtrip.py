@@ -335,20 +335,14 @@
 
 # def test_builtin_lookup_tables_cover_expected_scalars() -> None:
 #     from mojo_bindgen.ir import FloatKind, IntKind
-#     from mojo_bindgen.mojo_ir import (
-#         FIXED_WIDTH_FLOAT_BUILTINS,
-#         FIXED_WIDTH_INT_BUILTINS,
-#         STD_FFI_FLOAT_BUILTINS,
-#         STD_FFI_INT_BUILTINS,
-#         MojoBuiltin,
-#     )
+#     from mojo_bindgen.mojo_ir import MojoBuiltin, PRIMITIVE_BUILTINS
 
-#     assert FIXED_WIDTH_INT_BUILTINS[(True, 4)] == MojoBuiltin.C_INT
-#     assert FIXED_WIDTH_INT_BUILTINS[(False, 8)] == MojoBuiltin.C_ULONG_LONG
-#     assert STD_FFI_INT_BUILTINS[IntKind.INT] == MojoBuiltin.C_INT
-#     assert STD_FFI_INT_BUILTINS[IntKind.ULONG] == MojoBuiltin.C_ULONG
-#     assert FIXED_WIDTH_FLOAT_BUILTINS[FloatKind.FLOAT] == MojoBuiltin.C_FLOAT
-#     assert STD_FFI_FLOAT_BUILTINS[FloatKind.DOUBLE] == MojoBuiltin.C_DOUBLE
+#     assert PRIMITIVE_BUILTINS["void"] == MojoBuiltin.NONE
+#     assert PRIMITIVE_BUILTINS[IntKind.BOOL] == MojoBuiltin.BOOL
+#     assert PRIMITIVE_BUILTINS[IntKind.INT] == MojoBuiltin.C_INT
+#     assert PRIMITIVE_BUILTINS[IntKind.ULONG] == MojoBuiltin.C_ULONG
+#     assert PRIMITIVE_BUILTINS[FloatKind.FLOAT] == MojoBuiltin.C_FLOAT
+#     assert PRIMITIVE_BUILTINS[FloatKind.DOUBLE] == MojoBuiltin.C_DOUBLE
 
 
 # def test_unknown_struct_member_kind_raises() -> None:

@@ -374,6 +374,8 @@ class Struct(SerDeMixin):
     requested_align_bytes: int | None = None
 
 
+PRIMITIVES_KINDS = Union[IntKind, FloatKind, VoidType]
+
 # Recursive type nodes (no inline Struct/Bitfield — layouts are Struct decls + Field metadata)
 Type = Union[
     VoidType,

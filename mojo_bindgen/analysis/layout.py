@@ -14,7 +14,6 @@ from mojo_bindgen.codegen.mojo_mapper import (
     map_atomic_type,
     map_complex_simd,
     map_vector_simd,
-    peel_wrappers,
 )
 from mojo_bindgen.ir import (
     Array,
@@ -24,7 +23,6 @@ from mojo_bindgen.ir import (
     Field,
     FloatType,
     FunctionPtr,
-    IntKind,
     IntType,
     OpaqueRecordRef,
     Pointer,
@@ -67,7 +65,7 @@ def incomplete_struct_decls(unit: Unit) -> tuple[Struct, ...]:
 def _type_ok_for_register_passable_field(
     t: Type,
     struct_by_id: dict[str, Struct],
-    visiting: set[str] | None = None,
+    visiting: set[str] | None = None,  # pyright: ignore[reportRedeclaration]
 ) -> bool:
     if visiting is None:
         visiting: set[str] = set()

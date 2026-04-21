@@ -17,18 +17,48 @@ from mojo_bindgen.ir import ConstExpr, FloatKind, IntKind, const_expr_from_json
 from mojo_bindgen.serde import SerdeFieldSpec, SerDeMixin, SerdeSpec
 
 
-class StructKind(StrEnum):
-    PLAIN = "plain"
-    ENUM = "enum"
-    OPAQUE = "opaque"
+class MojoBuiltin(StrEnum):
+    NONE = "NoneType"
+    BOOL = "Bool"
+    INT128 = "Int128"
+    UINT128 = "UInt128"
+    FLOAT16 = "Float16"
+    C_CHAR = "c_char"
+    C_UCHAR = "c_uchar"
+    C_SHORT = "c_short"
+    C_USHORT = "c_ushort"
+    C_INT = "c_int"
+    C_UINT = "c_uint"
+    C_LONG = "c_long"
+    C_ULONG = "c_ulong"
+    C_LONG_LONG = "c_long_long"
+    C_ULONG_LONG = "c_ulong_long"
+    C_FLOAT = "c_float"
+    C_DOUBLE = "c_double"
+    UNSUPPORTED = "unsupported"
 
 
-class AliasKind(StrEnum):
-    TYPE_ALIAS = "type_alias"
-    CALLBACK_SIGNATURE = "callback_signature"
-    UNION_LAYOUT = "union_layout"
-    CONST_VALUE = "const_value"
-    MACRO_VALUE = "macro_value"
+PRIMITIVE_BUILTINS: dict[IntKind | FloatKind | str, MojoBuiltin] = {
+    "void": MojoBuiltin.NONE,
+    IntKind.BOOL: MojoBuiltin.BOOL,
+    IntKind.CHAR_S: MojoBuiltin.C_CHAR,
+    IntKind.SCHAR: MojoBuiltin.C_CHAR,
+    IntKind.CHAR_U: MojoBuiltin.C_UCHAR,
+    IntKind.UCHAR: MojoBuiltin.C_UCHAR,
+    IntKind.SHORT: MojoBuiltin.C_SHORT,
+    IntKind.USHORT: MojoBuiltin.C_USHORT,
+    IntKind.INT: MojoBuiltin.C_INT,
+    IntKind.UINT: MojoBuiltin.C_UINT,
+    IntKind.LONG: MojoBuiltin.C_LONG,
+    IntKind.ULONG: MojoBuiltin.C_ULONG,
+    IntKind.LONGLONG: MojoBuiltin.C_LONG_LONG,
+    IntKind.ULONGLONG: MojoBuiltin.C_ULONG_LONG,
+    FloatKind.FLOAT16: MojoBuiltin.FLOAT16,
+    FloatKind.FLOAT: MojoBuiltin.C_FLOAT,
+    FloatKind.DOUBLE: MojoBuiltin.C_DOUBLE,
+    FloatKind.LONG_DOUBLE: MojoBuiltin.C_DOUBLE,
+    FloatKind.FLOAT128: MojoBuiltin.UNSUPPORTED,
+}
 
 
 class GlobalKind(StrEnum):
@@ -52,79 +82,10 @@ class PointerMutability(StrEnum):
     IMMUT = "immut"
 
 
-class PointerOrigin(StrEnum):
-    EXTERNAL = "external"
-    ANY = "any"
-
-
 class LoweringSeverity(StrEnum):
     NOTE = "note"
     WARNING = "warning"
     ERROR = "error"
-
-
-class MojoBuiltin(StrEnum):
-    NONE = "NoneType"
-    BOOL = "Bool"
-    INT128 = "Int128"
-    UINT128 = "UInt128"
-    FLOAT16 = "Float16"
-    C_CHAR = "c_char"
-    C_UCHAR = "c_uchar"
-    C_SHORT = "c_short"
-    C_USHORT = "c_ushort"
-    C_INT = "c_int"
-    C_UINT = "c_uint"
-    C_LONG = "c_long"
-    C_ULONG = "c_ulong"
-    C_LONG_LONG = "c_long_long"
-    C_ULONG_LONG = "c_ulong_long"
-    C_FLOAT = "c_float"
-    C_DOUBLE = "c_double"
-
-
-FIXED_WIDTH_INT_BUILTINS: dict[tuple[bool, int], MojoBuiltin] = {
-    (True, 1): MojoBuiltin.C_CHAR,
-    (True, 2): MojoBuiltin.C_SHORT,
-    (True, 4): MojoBuiltin.C_INT,
-    (True, 8): MojoBuiltin.C_LONG_LONG,
-    (True, 16): MojoBuiltin.INT128,
-    (False, 1): MojoBuiltin.C_UCHAR,
-    (False, 2): MojoBuiltin.C_USHORT,
-    (False, 4): MojoBuiltin.C_UINT,
-    (False, 8): MojoBuiltin.C_ULONG_LONG,
-    (False, 16): MojoBuiltin.UINT128,
-}
-
-
-STD_FFI_INT_BUILTINS: dict[IntKind, MojoBuiltin] = {
-    IntKind.CHAR_S: MojoBuiltin.C_CHAR,
-    IntKind.SCHAR: MojoBuiltin.C_CHAR,
-    IntKind.CHAR_U: MojoBuiltin.C_UCHAR,
-    IntKind.UCHAR: MojoBuiltin.C_UCHAR,
-    IntKind.SHORT: MojoBuiltin.C_SHORT,
-    IntKind.USHORT: MojoBuiltin.C_USHORT,
-    IntKind.INT: MojoBuiltin.C_INT,
-    IntKind.UINT: MojoBuiltin.C_UINT,
-    IntKind.LONG: MojoBuiltin.C_LONG,
-    IntKind.ULONG: MojoBuiltin.C_ULONG,
-    IntKind.LONGLONG: MojoBuiltin.C_LONG_LONG,
-    IntKind.ULONGLONG: MojoBuiltin.C_ULONG_LONG,
-}
-
-
-FIXED_WIDTH_FLOAT_BUILTINS: dict[FloatKind, MojoBuiltin] = {
-    FloatKind.FLOAT16: MojoBuiltin.FLOAT16,
-    FloatKind.FLOAT: MojoBuiltin.C_FLOAT,
-    FloatKind.DOUBLE: MojoBuiltin.C_DOUBLE,
-}
-
-
-STD_FFI_FLOAT_BUILTINS: dict[FloatKind, MojoBuiltin] = {
-    FloatKind.FLOAT16: MojoBuiltin.FLOAT16,
-    FloatKind.FLOAT: MojoBuiltin.C_FLOAT,
-    FloatKind.DOUBLE: MojoBuiltin.C_DOUBLE,
-}
 
 
 @dataclass(frozen=True)
@@ -164,7 +125,6 @@ class NamedType(SerDeMixin):
 class PointerType(SerDeMixin):
     pointee: MojoType | None
     mutability: PointerMutability
-    origin: PointerOrigin
 
 
 @dataclass(frozen=True)
@@ -183,8 +143,6 @@ class ParametricType(SerDeMixin):
 class FunctionType(SerDeMixin):
     params: list[MojoType] = field(default_factory=list)
     ret: MojoType = field(default_factory=lambda: BuiltinType(MojoBuiltin.NONE))
-    abi: str = "C"
-    thin: bool = True
 
 
 MojoType = Union[
@@ -197,6 +155,7 @@ MojoType = Union[
 ]
 
 
+# TODO: check if size is needed here
 @dataclass(frozen=True)
 class StoredMember(SerDeMixin):
     name: str
@@ -260,12 +219,33 @@ class Initializer(SerDeMixin):
     params: list[InitializerParam] = field(default_factory=list)
 
 
+class StructTraits(StrEnum):
+    COPYABLE = "Copyable"
+    IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
+    MOVABLE = "Movable"
+    REGISTER_PASSABLE = "RegisterPassable"
+
+
+class StructKind(StrEnum):
+    PLAIN = "plain"
+    ENUM = "enum"
+    OPAQUE = "opaque"
+
+
+class AliasKind(StrEnum):
+    TYPE_ALIAS = "type_alias"
+    CALLBACK_SIGNATURE = "callback_signature"
+    UNION_LAYOUT = "union_layout"
+    CONST_VALUE = "const_value"
+    MACRO_VALUE = "macro_value"
+
+
 @dataclass
 class StructDecl(SerDeMixin):
     SERDE = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="struct_kind")})
 
     name: str
-    traits: list[str] = field(default_factory=list)
+    traits: list[StructTraits] = field(default_factory=list)
     align: int | None = None
     fieldwise_init: bool = False
     kind: StructKind = StructKind.PLAIN
@@ -444,16 +424,12 @@ __all__ = [
     "Param",
     "ParametricType",
     "PointerMutability",
-    "PointerOrigin",
     "PointerType",
+    "PRIMITIVE_BUILTINS",
     "StoredMember",
     "StructDecl",
     "StructKind",
     "StructMember",
-    "FIXED_WIDTH_FLOAT_BUILTINS",
-    "FIXED_WIDTH_INT_BUILTINS",
-    "STD_FFI_FLOAT_BUILTINS",
-    "STD_FFI_INT_BUILTINS",
     "const_expr_from_json",
     "mojo_decl_from_json",
     "mojo_type_from_json",
