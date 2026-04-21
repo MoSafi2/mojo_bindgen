@@ -1,3 +1,3 @@
 struct asu_wrap
-var _anon_0: InlineArray[UInt8, 4]
+var _anon_0: asu_wrap__anon_union_1
 def asu_sanity(

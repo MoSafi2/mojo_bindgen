@@ -38,7 +38,11 @@ from mojo_bindgen.analysis.imports import (
     CollectSemanticNeedsPass,
     ImportNeeds,
 )
-from mojo_bindgen.analysis.layout import ComputeLayoutFactsPass, build_register_passable_map, struct_by_decl_id
+from mojo_bindgen.analysis.layout import (
+    ComputeLayoutFactsPass,
+    build_register_passable_map,
+    struct_by_decl_id,
+)
 from mojo_bindgen.analysis.names import CollectEmissionNamesPass
 from mojo_bindgen.analysis.struct_analysis import AnalyzeStructLoweringPass
 from mojo_bindgen.analysis.tail_decl_analysis import AnalyzeTailDeclPass

@@ -58,13 +58,17 @@ class AnalyzeUnionLoweringPass:
                 unsafe_union_names.add(mojo_name)
                 comptime_expr_text = f"UnsafeUnion[{', '.join(mapped_members)}]"
                 comment_lines = (
-                    f"# -- C union `{decl.c_name}` - comptime `{mojo_name}` = UnsafeUnion[...].",
-                    f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
-                    "# Members (reference only):",
-                ) + tuple(
-                    f"#   {field.name if field.name else '(anonymous)'}: {mapper.canonical(field.type)}"
-                    for field in decl.fields
-                ) + ("",)
+                    (
+                        f"# -- C union `{decl.c_name}` - comptime `{mojo_name}` = UnsafeUnion[...].",
+                        f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
+                        "# Members (reference only):",
+                    )
+                    + tuple(
+                        f"#   {field.name if field.name else '(anonymous)'}: {mapper.canonical(field.type)}"
+                        for field in decl.fields
+                    )
+                    + ("",)
+                )
                 unions.append(
                     AnalyzedUnion(
                         decl=decl,
@@ -78,14 +82,18 @@ class AnalyzeUnionLoweringPass:
             else:
                 comptime_expr_text = f"InlineArray[UInt8, {decl.size_bytes}]"
                 comment_lines = (
-                    f"# -- C union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout.",
-                    "# It could not be represented as UnsafeUnion[...] with distinct supported member types.",
-                    f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
-                    "# Members (reference only):",
-                ) + tuple(
-                    f"#   {field.name if field.name else '(anonymous)'}: {mapper.canonical(field.type)}"
-                    for field in decl.fields
-                ) + ("",)
+                    (
+                        f"# -- C union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout.",
+                        "# It could not be represented as UnsafeUnion[...] with distinct supported member types.",
+                        f"# C size={decl.size_bytes} bytes, align={decl.align_bytes}.",
+                        "# Members (reference only):",
+                    )
+                    + tuple(
+                        f"#   {field.name if field.name else '(anonymous)'}: {mapper.canonical(field.type)}"
+                        for field in decl.fields
+                    )
+                    + ("",)
+                )
                 unions.append(
                     AnalyzedUnion(
                         decl=decl,

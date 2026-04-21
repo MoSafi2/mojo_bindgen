@@ -72,7 +72,9 @@ class MojoRenderer:
 
     def _render_opaque_struct_stub(self, analyzed: AnalyzedStruct) -> str:
         b = CodeBuilder()
-        b.add(f"# incomplete C struct `{analyzed.decl.c_name}` — opaque; use only as pointer target")
+        b.add(
+            f"# incomplete C struct `{analyzed.decl.c_name}` — opaque; use only as pointer target"
+        )
         b.add("@fieldwise_init")
         b.add(f"struct {analyzed.mojo_name}(Copyable, Movable):")
         b.indent()
@@ -81,7 +83,9 @@ class MojoRenderer:
         b.add("")
         return b.render()
 
-    def _render_pure_bitfield_storage(self, b: CodeBuilder, storage: AnalyzedBitfieldStorage) -> None:
+    def _render_pure_bitfield_storage(
+        self, b: CodeBuilder, storage: AnalyzedBitfieldStorage
+    ) -> None:
         for line in storage.comment_lines:
             b.add(line)
         b.add(f"var {storage.name}: {storage.surface_type_text}")
@@ -292,8 +296,10 @@ class MojoRenderer:
         return f"comptime {alias.name} = {alias.emit_expr_text}\n\n"
 
     def _emit_callback_alias_section(self) -> str:
-        return "" if not self._a.callback_aliases else "".join(
-            self._emit_callback_alias(alias) for alias in self._a.callback_aliases
+        return (
+            ""
+            if not self._a.callback_aliases
+            else "".join(self._emit_callback_alias(alias) for alias in self._a.callback_aliases)
         )
 
     def _emit_union_section(self) -> str:
@@ -409,22 +415,36 @@ class MojoRenderer:
         b = CodeBuilder()
         if self._a.opts.linking == "external_call":
             if is_void:
-                b.add(f'def {analyzed.emitted_name}({analyzed.rendered_args_sig}) abi("C") -> None:')
+                b.add(
+                    f'def {analyzed.emitted_name}({analyzed.rendered_args_sig}) abi("C") -> None:'
+                )
                 b.indent()
-                b.add(f"external_call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})")
+                b.add(
+                    f"external_call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})"
+                )
             else:
-                b.add(f'def {analyzed.emitted_name}({analyzed.rendered_args_sig}) abi("C") -> {analyzed.rendered_return_type_text}:')
+                b.add(
+                    f'def {analyzed.emitted_name}({analyzed.rendered_args_sig}) abi("C") -> {analyzed.rendered_return_type_text}:'
+                )
                 b.indent()
-                b.add(f"return external_call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})")
+                b.add(
+                    f"return external_call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})"
+                )
         else:
             if is_void:
                 b.add(f"def {analyzed.emitted_name}({analyzed.rendered_args_sig}) raises -> None:")
                 b.indent()
-                b.add(f"_bindgen_dl().call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})")
+                b.add(
+                    f"_bindgen_dl().call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})"
+                )
             else:
-                b.add(f"def {analyzed.emitted_name}({analyzed.rendered_args_sig}) raises -> {analyzed.rendered_return_type_text}:")
+                b.add(
+                    f"def {analyzed.emitted_name}({analyzed.rendered_args_sig}) raises -> {analyzed.rendered_return_type_text}:"
+                )
                 b.indent()
-                b.add(f"return _bindgen_dl().call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})")
+                b.add(
+                    f"return _bindgen_dl().call[{analyzed.rendered_bracket_inner_text}]({analyzed.rendered_call_args})"
+                )
         b.dedent()
         b.add("")
         return b.render() + "\n"

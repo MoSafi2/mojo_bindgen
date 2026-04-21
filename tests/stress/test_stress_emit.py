@@ -19,9 +19,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("options, mode_name", [(MojoEmitOptions(), "portable"), (MojoEmitOptions(strict_abi=True), "strict")])
+@pytest.mark.parametrize(
+    "options, mode_name",
+    [(MojoEmitOptions(), "portable"), (MojoEmitOptions(strict_abi=True), "strict")],
+)
 @pytest.mark.parametrize("case_dir", case_dirs(), ids=lambda path: path.name)
-def test_stress_fixture_emits_non_empty_source(case_dir, options: MojoEmitOptions, mode_name: str) -> None:
+def test_stress_fixture_emits_non_empty_source(
+    case_dir, options: MojoEmitOptions, mode_name: str
+) -> None:
     unit = parse_case(case_dir)
     out = MojoGenerator(options).generate(unit)
 

@@ -45,7 +45,12 @@ def test_pathological_core_preserves_selected_hard_declarations() -> None:
 
     assert {"pc_callback_t", "pc_callback_alias_t", "pc_callback_chain_t"} <= typedefs.keys()
     assert {"pc_choose_callback", "pc_pick_transform", "pc_complex_mul"} <= functions.keys()
-    assert {"pc_global_incomplete", "pc_global_union", "pc_global_payload", "pc_ptr_to_array"} <= globals_by_name.keys()
+    assert {
+        "pc_global_incomplete",
+        "pc_global_union",
+        "pc_global_payload",
+        "pc_ptr_to_array",
+    } <= globals_by_name.keys()
 
     incomplete = globals_by_name["pc_global_incomplete"]
     assert isinstance(incomplete.type, Pointer)

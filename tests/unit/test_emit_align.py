@@ -31,9 +31,7 @@ pytestmark = pytest.mark.skipif(
 def test_packed_aligned_record_falls_back_to_opaque_storage() -> None:
     from mojo_bindgen.parsing.parser import ClangParser
 
-    header = (
-        _REPO_ROOT / "tests" / "stress" / "fixtures" / "pathological_layout" / "input.h"
-    )
+    header = _REPO_ROOT / "tests" / "stress" / "fixtures" / "pathological_layout" / "input.h"
     parser = ClangParser(header, library="pathological_layout", link_name="pathological_layout")
     unit = parser.run()
     orig = next(d for d in unit.decls if getattr(d, "c_name", None) == "pl_packed_aligned")

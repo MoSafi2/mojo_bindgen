@@ -58,7 +58,9 @@ class AnalyzeTailDeclPass:
         layout_facts: LayoutFacts,
         type_mapper: TypeMapper,
     ) -> tuple[tuple[TailDecl, ...], tuple[AnalyzedCallbackAlias, ...]]:
-        callback_aliases = tuple(self._analyze_callback_alias(alias, type_mapper) for alias in callback_info.aliases)
+        callback_aliases = tuple(
+            self._analyze_callback_alias(alias, type_mapper) for alias in callback_info.aliases
+        )
         tail_decls: list[TailDecl] = []
         for decl in unit.decls:
             if isinstance(decl, Typedef):
@@ -163,7 +165,9 @@ class AnalyzeTailDeclPass:
             ret_unwrapped = peel_wrappers(fn.ret)
             if isinstance(ret_unwrapped, StructRef):
                 struct_decl = struct_map.get(ret_unwrapped.decl_id)
-                if struct_decl is not None and not register_passable_by_decl_id.get(struct_decl.decl_id, False):
+                if struct_decl is not None and not register_passable_by_decl_id.get(
+                    struct_decl.decl_id, False
+                ):
                     kind = "non_register_return_stub"
         rendered_return_type_text = (
             type_mapper.callback_pointer_type(ret_callback_alias_name)
@@ -172,7 +176,9 @@ class AnalyzeTailDeclPass:
         )
         args_sig = ", ".join(
             f"{name}: {type_mapper.callback_pointer_type(alias) if alias is not None else type_mapper.signature(param.type)}"
-            for name, param, alias in zip(param_names, fn.params, param_callback_alias_names, strict=True)
+            for name, param, alias in zip(
+                param_names, fn.params, param_callback_alias_names, strict=True
+            )
         )
         call_args = ", ".join(param_names)
         ret_abi = type_mapper.canonical(fn.ret)

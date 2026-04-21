@@ -85,19 +85,27 @@ class AnalyzeStructLoweringPass:
             )
             for index, field in enumerate(decl.fields)
         )
-        bitfield_layout = self._analyze_bitfield_layout(all_fields, options=options, type_mapper=type_mapper)
-        fields = tuple(analyzed_field for analyzed_field in all_fields if not analyzed_field.field.is_bitfield)
-        representation_mode, padding_fields, opaque_storage, layout_notes = self._analyze_record_representation(
-            decl,
-            fields=fields,
-            struct_map=struct_map,
+        bitfield_layout = self._analyze_bitfield_layout(
+            all_fields, options=options, type_mapper=type_mapper
+        )
+        fields = tuple(
+            analyzed_field for analyzed_field in all_fields if not analyzed_field.field.is_bitfield
+        )
+        representation_mode, padding_fields, opaque_storage, layout_notes = (
+            self._analyze_record_representation(
+                decl,
+                fields=fields,
+                struct_map=struct_map,
+            )
         )
         decorator_lines.extend(layout_notes)
-        align_decorator_value, align_omit_comment, align_stride_warning = self._analyze_record_alignment(
-            decl,
-            representation_mode=representation_mode,
-            struct_map=struct_map,
-            options=options,
+        align_decorator_value, align_omit_comment, align_stride_warning = (
+            self._analyze_record_alignment(
+                decl,
+                representation_mode=representation_mode,
+                struct_map=struct_map,
+                options=options,
+            )
         )
         if align_decorator_value is not None:
             decorator_lines.insert(0, f"@align({align_decorator_value})")
@@ -234,7 +242,9 @@ class AnalyzeStructLoweringPass:
                 (),
                 self._opaque_storage_for_decl(
                     decl,
-                    (f"typed Mojo fields consume {current_offset} bytes, exceeding C size {decl.size_bytes}",),
+                    (
+                        f"typed Mojo fields consume {current_offset} bytes, exceeding C size {decl.size_bytes}",
+                    ),
                 ),
                 (),
             )
@@ -284,7 +294,11 @@ class AnalyzeStructLoweringPass:
         if align_bytes < natural_struct_align:
             return None, align_omit_comment, align_stride_warning
         if align_bytes <= natural_struct_align:
-            if options.strict_abi and align_bytes > 1 and representation_mode != "opaque_storage_exact":
+            if (
+                options.strict_abi
+                and align_bytes > 1
+                and representation_mode != "opaque_storage_exact"
+            ):
                 return align_bytes, None, False
             return None, None, False
         if not valid_mojo_align:

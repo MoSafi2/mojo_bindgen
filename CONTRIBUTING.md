@@ -19,6 +19,9 @@ pixi run typecheck
 pixi run test
 ```
 
+This repository also ships a local Git pre-commit hook at `.git/hooks/pre-commit`.
+It runs `pixi run format`, `pixi run lint`, and `pixi run test-light`, then re-stages any formatting changes before the commit continues.
+
 ### Virtualenv (any supported OS)
 
 Install Clang and libclang using your OS package manager (see [README.md](README.md)), then:

@@ -47,9 +47,11 @@ class ImportNeeds:
 def _type_needs_opaque_pointer_import(t: Type) -> bool:
     return any_type_node(
         t,
-        lambda u: isinstance(u, FunctionPtr)
-        or (isinstance(u, Pointer) and u.pointee is None)
-        or isinstance(u, (OpaqueRecordRef, UnsupportedType)),
+        lambda u: (
+            isinstance(u, FunctionPtr)
+            or (isinstance(u, Pointer) and u.pointee is None)
+            or isinstance(u, (OpaqueRecordRef, UnsupportedType))
+        ),
         options=_OPAQUE_IMPORT_WALK,
     )
 
