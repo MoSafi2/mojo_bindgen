@@ -150,8 +150,10 @@ class SerDeMixin:
         dispatch_pairs = (
             ("Type", "type_from_json"),
             ("ConstExpr", "const_expr_from_json"),
+            ("MojoConstExpr", "mojo_const_expr_from_json"),
             ("Decl", "decl_from_json"),
             ("MojoType", "mojo_type_from_json"),
+            ("ParametricArg", "parametric_arg_from_json"),
             ("StructMember", "struct_member_from_json"),
             ("MojoDecl", "mojo_decl_from_json"),
         )

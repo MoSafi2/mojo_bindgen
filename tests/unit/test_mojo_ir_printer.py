@@ -8,8 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
-from mojo_bindgen.ir import BinaryExpr, IntLiteral
+from mojo_bindgen.codegen.mojo_ir_printer import (
+    MojoIRPrinter,
+    MojoIRPrintOptions,
+    render_mojo_module,
+)
+from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -17,45 +21,71 @@ from mojo_bindgen.mojo_ir import (
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
+    CallbackParam,
+    CallbackType,
     CallTarget,
+    ConstArg,
+    DTypeArg,
+    EnumDecl,
     EnumMember,
     FunctionDecl,
     FunctionKind,
-    FunctionType,
     GlobalDecl,
     GlobalKind,
     Initializer,
     InitializerParam,
     LinkMode,
+    ModuleImport,
+    MojoBinaryExpr,
     MojoBuiltin,
+    MojoIntLiteral,
     MojoModule,
     NamedType,
     Param,
+    ParametricBase,
     ParametricType,
     PointerMutability,
     PointerType,
     StoredMember,
     StructDecl,
-    StructKind,
     StructTraits,
+    SupportDecl,
+    SupportDeclKind,
+    TypeArg,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_struct_decl_enum_roundtrip_keeps_underlying_type() -> None:
-    decl = StructDecl(
+def test_enum_decl_roundtrip_keeps_underlying_type() -> None:
+    decl = EnumDecl(
         name="Flags",
-        kind=StructKind.ENUM,
         underlying_type=BuiltinType(MojoBuiltin.C_INT),
-        enum_members=[EnumMember(name="READY", value=1)],
+        enumerants=[EnumMember(name="READY", value=1)],
+    )
+
+    raw = decl.to_json_dict()
+    restored = EnumDecl.from_json_dict(raw)
+
+    assert raw["underlying_type"] == {"kind": "BuiltinType", "name": "c_int"}
+    assert restored.underlying_type == BuiltinType(MojoBuiltin.C_INT)
+
+
+def test_struct_decl_roundtrip_keeps_explicit_align_decorator() -> None:
+    decl = StructDecl(
+        name="Widget",
+        align=64,
+        align_decorator=16,
+        members=[],
     )
 
     raw = decl.to_json_dict()
     restored = StructDecl.from_json_dict(raw)
 
-    assert raw["underlying_type"] == {"kind": "BuiltinType", "name": "c_int"}
-    assert restored.underlying_type == BuiltinType(MojoBuiltin.C_INT)
+    assert raw["align"] == 64
+    assert raw["align_decorator"] == 16
+    assert restored.align == 64
+    assert restored.align_decorator == 16
 
 
 def test_render_mojo_module_external_surface_with_synthesized_callback_aliases() -> None:
@@ -65,16 +95,10 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
         decls=[
-            StructDecl(
+            EnumDecl(
                 name="Flags",
-                kind=StructKind.ENUM,
-                traits=[
-                    StructTraits.COPYABLE,
-                    StructTraits.MOVABLE,
-                    StructTraits.REGISTER_PASSABLE,
-                ],
                 underlying_type=BuiltinType(MojoBuiltin.C_INT),
-                enum_members=[
+                enumerants=[
                     EnumMember(name="READY", value=1),
                     EnumMember(name="ERROR", value=2),
                 ],
@@ -87,12 +111,9 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                     StoredMember(name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
                     StoredMember(
                         name="handler",
-                        type=PointerType(
-                            pointee=FunctionType(
-                                params=[BuiltinType(MojoBuiltin.C_INT)],
-                                ret=BuiltinType(MojoBuiltin.C_INT),
-                            ),
-                            mutability=PointerMutability.MUT,
+                        type=CallbackType(
+                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                            ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=8,
                     ),
@@ -137,12 +158,22 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
             AliasDecl(
                 name="Packet",
                 kind=AliasKind.UNION_LAYOUT,
-                type_value=ParametricType(base="UnsafeUnion", args=["c_int", "Widget"]),
+                type_value=ParametricType(
+                    base=ParametricBase.UNSAFE_UNION,
+                    args=[
+                        TypeArg(BuiltinType(MojoBuiltin.C_INT)),
+                        TypeArg(NamedType("Widget")),
+                    ],
+                ),
             ),
             AliasDecl(
                 name="LIMIT",
                 kind=AliasKind.CONST_VALUE,
-                const_value=BinaryExpr(op="+", lhs=IntLiteral(1), rhs=IntLiteral(2)),
+                const_value=MojoBinaryExpr(
+                    op="+",
+                    lhs=MojoIntLiteral(1),
+                    rhs=MojoIntLiteral(2),
+                ),
             ),
             FunctionDecl(
                 name="install",
@@ -150,12 +181,9 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 params=[
                     Param(
                         name="cb",
-                        type=PointerType(
-                            pointee=FunctionType(
-                                params=[BuiltinType(MojoBuiltin.C_INT)],
-                                ret=BuiltinType(MojoBuiltin.C_INT),
-                            ),
-                            mutability=PointerMutability.MUT,
+                        type=CallbackType(
+                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                            ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                     ),
                     Param(
@@ -192,6 +220,110 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
     )
 
 
+def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.OWNED_DL_HANDLE,
+        decls=[
+            StructDecl(
+                name="Widget",
+                traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
+                members=[
+                    StoredMember(
+                        name="handler",
+                        type=CallbackType(
+                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                            ret=BuiltinType(MojoBuiltin.C_INT),
+                        ),
+                        byte_offset=0,
+                    )
+                ],
+            ),
+            GlobalDecl(
+                name="global_counter",
+                link_name="global_counter",
+                value_type=BuiltinType(MojoBuiltin.C_INT),
+                is_const=False,
+                kind=GlobalKind.WRAPPER,
+            ),
+        ],
+    )
+
+    normalized = normalize_mojo_module(module)
+
+    assert normalized.imports == [
+        ModuleImport(
+            module="std.ffi",
+            names=["DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
+        )
+    ]
+    assert normalized.support_decls == [
+        SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
+        SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS),
+    ]
+    assert isinstance(normalized.decls[0], AliasDecl)
+    assert normalized.decls[0].name == "Widget_handler_cb"
+    widget = next(decl for decl in normalized.decls if isinstance(decl, StructDecl))
+    assert isinstance(widget.members[0], StoredMember)
+    assert widget.members[0].type == PointerType(
+        pointee=NamedType("Widget_handler_cb"),
+        mutability=PointerMutability.MUT,
+    )
+
+
+def test_normalize_mojo_module_sets_align_decorator_before_printing() -> None:
+    normalized = normalize_mojo_module(
+        MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+            decls=[
+                StructDecl(
+                    name="Widget",
+                    align=8,
+                    members=[],
+                )
+            ],
+        )
+    )
+
+    widget = next(decl for decl in normalized.decls if isinstance(decl, StructDecl))
+
+    assert widget.align == 8
+    assert widget.align_decorator == 8
+
+
+def test_printer_uses_explicit_align_decorator_only() -> None:
+    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(
+        MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+            decls=[
+                StructDecl(
+                    name="RawAlignOnly",
+                    align=8,
+                    members=[],
+                ),
+                StructDecl(
+                    name="ExplicitAlign",
+                    align=64,
+                    align_decorator=16,
+                    members=[],
+                ),
+            ],
+        )
+    )
+
+    assert "@align(16)" in rendered
+    assert "@align(8)" not in rendered
+    assert "@align(64)" not in rendered
+
+
 @pytest.mark.skipif(shutil.which("pixi") is None, reason="requires pixi with mojo toolchain")
 def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> None:
     module = MojoModule(
@@ -203,24 +335,21 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
             AliasDecl(
                 name="binary_cb_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=FunctionType(
+                type_value=CallbackType(
                     params=[
-                        BuiltinType(MojoBuiltin.C_INT),
-                        PointerType(pointee=None, mutability=PointerMutability.MUT),
+                        CallbackParam(name="arg0", type=BuiltinType(MojoBuiltin.C_INT)),
+                        CallbackParam(
+                            name="arg1",
+                            type=PointerType(pointee=None, mutability=PointerMutability.MUT),
+                        ),
                     ],
                     ret=BuiltinType(MojoBuiltin.C_INT),
                 ),
             ),
-            StructDecl(
+            EnumDecl(
                 name="Flags",
-                kind=StructKind.ENUM,
-                traits=[
-                    StructTraits.COPYABLE,
-                    StructTraits.MOVABLE,
-                    StructTraits.REGISTER_PASSABLE,
-                ],
                 underlying_type=BuiltinType(MojoBuiltin.C_INT),
-                enum_members=[EnumMember(name="READY", value=1)],
+                enumerants=[EnumMember(name="READY", value=1)],
             ),
             StructDecl(
                 name="Widget",
@@ -229,12 +358,9 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                     StoredMember(name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
                     StoredMember(
                         name="callback",
-                        type=PointerType(
-                            pointee=FunctionType(
-                                params=[BuiltinType(MojoBuiltin.C_INT)],
-                                ret=BuiltinType(MojoBuiltin.C_INT),
-                            ),
-                            mutability=PointerMutability.MUT,
+                        type=CallbackType(
+                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                            ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=8,
                     ),
@@ -248,7 +374,10 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
             AliasDecl(
                 name="Value",
                 kind=AliasKind.TYPE_ALIAS,
-                type_value=ParametricType(base="SIMD", args=["DType.float32", "4"]),
+                type_value=ParametricType(
+                    base=ParametricBase.SIMD,
+                    args=[DTypeArg("DType.float32"), ConstArg(4)],
+                ),
             ),
             GlobalDecl(
                 name="global_counter",

@@ -4,6 +4,11 @@ This package is intentionally separate from :mod:`mojo_bindgen.analysis` while
 the new CIR -> MojoIR pipeline is still being built out.
 """
 
+from mojo_bindgen.new_analysis.const_lowering import (
+    ConstExprLoweringError,
+    LowerConstExprPass,
+    lower_const_expr,
+)
 from mojo_bindgen.new_analysis.type_lowering import (
     LowerTypePass,
     TypeLoweringError,
@@ -11,7 +16,10 @@ from mojo_bindgen.new_analysis.type_lowering import (
 )
 
 __all__ = [
+    "ConstExprLoweringError",
+    "LowerConstExprPass",
     "LowerTypePass",
     "TypeLoweringError",
+    "lower_const_expr",
     "lower_type",
 ]

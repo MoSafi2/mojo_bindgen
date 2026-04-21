@@ -1,71 +1,66 @@
-"""Pretty-print the standalone MojoIR model to Mojo source."""
+"""Pretty-print normalized MojoIR to Mojo source."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_float_literal_text
-from mojo_bindgen.codegen.mojo_mapper import FFIOriginStyle, mojo_ident, pointer_origin_names
-from mojo_bindgen.ir import (
-    BinaryExpr,
-    CastExpr,
-    CharLiteral,
-    ConstExpr,
-    FloatLiteral,
-    FloatType,
-    IntLiteral,
-    IntType,
-    NullPtrLiteral,
-    RefExpr,
-    SizeOfExpr,
-    StringLiteral,
-    UnaryExpr,
-    VoidType,
-)
+from mojo_bindgen.analysis.common import mojo_float_literal_text
+from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.mojo_ir import (
-    PRIMITIVE_BUILTINS,
     AliasDecl,
     AliasKind,
     ArrayType,
     BitfieldGroupMember,
     BuiltinType,
+    CallbackParam,
+    CallbackType,
     CallTarget,
+    EnumDecl,
     FunctionDecl,
     FunctionKind,
-    FunctionType,
     GlobalDecl,
     GlobalKind,
     Initializer,
     LinkMode,
     LoweringNote,
+    ModuleImport,
+    MojoBinaryExpr,
     MojoBuiltin,
+    MojoCastExpr,
+    MojoCharLiteral,
+    MojoConstExpr,
     MojoDecl,
+    MojoFloatLiteral,
+    MojoIntLiteral,
     MojoModule,
+    MojoRefExpr,
+    MojoSizeOfExpr,
+    MojoStringLiteral,
     MojoType,
+    MojoUnaryExpr,
     NamedType,
     OpaqueStorageMember,
-    PaddingMember,
     ParametricType,
     PointerMutability,
+    PointerOrigin,
     PointerType,
     StoredMember,
     StructDecl,
     StructKind,
-    StructMember,
+    SupportDecl,
+    SupportDeclKind,
 )
 
 
 @dataclass(frozen=True)
 class MojoIRPrintOptions:
-    """Rendering-only policy for standalone MojoIR pretty-printing."""
-
-    ffi_origin: FFIOriginStyle = "external"
     module_comment: bool = True
 
 
 class MojoIRPrintError(ValueError):
-    """Raised when one MojoIR node cannot be rendered as valid Mojo source."""
+    """Raised when normalized MojoIR cannot be rendered as valid Mojo source."""
 
 
 class CodeBuilder:
@@ -92,344 +87,100 @@ class CodeBuilder:
         return "" if not self._lines else "\n".join(self._lines)
 
 
-@dataclass
-class _SynthCallbackAlias:
-    path: tuple[str, ...]
-    name: str
-    fn_type: FunctionType
-
-
-@dataclass
-class _ImportState:
-    ffi_names: set[str] = field(default_factory=set)
-    needs_opaque_imports: bool = False
-    needs_simd_import: bool = False
-    needs_complex_import: bool = False
-    needs_atomic_import: bool = False
-    needs_dl_handle_helpers: bool = False
-    needs_global_helpers: bool = False
-
-
 class MojoIRPrinter:
-    """Render a standalone :class:`~mojo_bindgen.mojo_ir.MojoModule` to source text."""
+    """Render normalized :class:`~mojo_bindgen.mojo_ir.MojoModule` to source text."""
 
     def __init__(self, options: MojoIRPrintOptions | None = None) -> None:
         self._options = options or MojoIRPrintOptions()
-        self._origin = pointer_origin_names(self._options.ffi_origin)
 
     @property
     def options(self) -> MojoIRPrintOptions:
         return self._options
 
     def render(self, module: MojoModule) -> str:
-        self._module = module
-        self._imports = _ImportState()
-        self._reserved_names = {decl.name for decl in module.decls}
-        self._synth_aliases: list[_SynthCallbackAlias] = []
-        self._synth_aliases_by_path: dict[tuple[str, ...], _SynthCallbackAlias] = {}
-        self._collect_render_requirements(module)
-        self._prepass_callback_aliases(module)
-
-        synth_alias_chunks = [
-            self._render_synth_callback_alias(alias) for alias in self._synth_aliases
-        ]
-        decl_chunks = [self._render_decl(decl) for decl in module.decls]
-
         parts: list[str] = []
         if self._options.module_comment:
-            parts.append(self._render_module_header())
-        import_block = self._render_import_block()
-        if import_block:
-            parts.append(import_block)
-        helper_block = self._render_helper_blocks()
-        if helper_block:
-            parts.append(helper_block)
-        if synth_alias_chunks:
-            parts.append("".join(synth_alias_chunks))
-        parts.extend(chunk for chunk in decl_chunks if chunk)
-        return "".join(parts)
+            parts.append(self._render_module_header(module))
+        if module.imports:
+            parts.append(self._render_import_block(module.imports))
+        support_block = self._render_support_decls(module.support_decls)
+        if support_block:
+            parts.append(support_block)
+        parts.extend(self._render_decl(decl) for decl in module.decls)
+        return "\n\n".join(chunk for chunk in parts if chunk) + ("\n" if parts else "")
 
-    def _collect_render_requirements(self, module: MojoModule) -> None:
-        if module.capabilities.needs_dl_handle_helpers:
-            self._imports.needs_dl_handle_helpers = True
-        if module.capabilities.needs_global_helpers:
-            self._imports.needs_global_helpers = True
-            self._imports.needs_dl_handle_helpers = True
-        if module.capabilities.needs_unsafe_union:
-            self._imports.ffi_names.add("UnsafeUnion")
-        if module.capabilities.needs_simd:
-            self._imports.needs_simd_import = True
-        if module.capabilities.needs_complex:
-            self._imports.needs_complex_import = True
-        if module.capabilities.needs_atomic:
-            self._imports.needs_atomic_import = True
-        if module.capabilities.needs_opaque_pointer_types:
-            self._imports.needs_opaque_imports = True
-
-        for decl in module.decls:
-            if isinstance(decl, FunctionDecl):
-                link_mode = self._function_link_mode(decl)
-                if decl.kind == FunctionKind.WRAPPER:
-                    if link_mode == LinkMode.EXTERNAL_CALL:
-                        self._imports.ffi_names.add("external_call")
-                    else:
-                        self._imports.needs_dl_handle_helpers = True
-                self._walk_decl_types(decl)
-            elif isinstance(decl, GlobalDecl):
-                if decl.kind == GlobalKind.WRAPPER:
-                    self._imports.needs_global_helpers = True
-                    self._imports.needs_dl_handle_helpers = True
-                self._walk_decl_types(decl)
-            else:
-                self._walk_decl_types(decl)
-
-    def _walk_decl_types(self, decl: MojoDecl) -> None:
-        if isinstance(decl, StructDecl):
-            if decl.underlying_type is not None:
-                self._walk_type(decl.underlying_type, ())
-            for member in decl.members:
-                self._walk_member_type(member, ())
-            for initializer in decl.initializers:
-                for param in initializer.params:
-                    self._walk_type(param.type, ())
-        elif isinstance(decl, AliasDecl) and decl.type_value is not None:
-            self._walk_type(decl.type_value, ())
-        elif isinstance(decl, FunctionDecl):
-            self._walk_type(decl.return_type, ())
-            for param in decl.params:
-                self._walk_type(param.type, ())
-        elif isinstance(decl, GlobalDecl):
-            self._walk_type(decl.value_type, ())
-
-    def _walk_member_type(self, member: StructMember, context: tuple[str, ...]) -> None:
-        if isinstance(member, StoredMember):
-            self._walk_type(member.type, context)
-        elif isinstance(member, BitfieldGroupMember):
-            self._walk_type(member.storage_type, context)
-            for field in member.fields:
-                self._walk_type(field.logical_type, context)
-
-    def _walk_type(self, t: MojoType, context: tuple[str, ...]) -> None:
-        if isinstance(t, BuiltinType):
-            if t.name.value.startswith("c_"):
-                self._imports.ffi_names.add(t.name.value)
-            return
-        if isinstance(t, NamedType):
-            return
-        if isinstance(t, PointerType):
-            if t.pointee is None:
-                self._imports.needs_opaque_imports = True
-                return
-            self._walk_type(t.pointee, (*context, "pointee"))
-            return
-        if isinstance(t, ArrayType):
-            self._walk_type(t.element, (*context, "element"))
-            return
-        if isinstance(t, ParametricType):
-            if t.base == "SIMD":
-                self._imports.needs_simd_import = True
-            elif t.base == "ComplexSIMD":
-                self._imports.needs_complex_import = True
-            elif t.base == "Atomic":
-                self._imports.needs_atomic_import = True
-            elif t.base == "UnsafeUnion":
-                self._imports.ffi_names.add("UnsafeUnion")
-            for arg in t.args:
-                if arg.startswith("c_"):
-                    self._imports.ffi_names.add(arg)
-            return
-        if isinstance(t, FunctionType):
-            self._walk_type(t.ret, (*context, "return"))
-            for i, param in enumerate(t.params):
-                self._walk_type(param, (*context, f"arg{i}"))
-            return
-        raise MojoIRPrintError(f"unsupported MojoType node: {type(t).__name__!r}")
-
-    def _prepass_callback_aliases(self, module: MojoModule) -> None:
-        for decl in module.decls:
-            if isinstance(decl, StructDecl):
-                if decl.kind == StructKind.ENUM and decl.underlying_type is not None:
-                    self._prepass_type(decl.underlying_type, (decl.name, "underlying"))
-                for member in decl.members:
-                    if isinstance(member, StoredMember):
-                        self._prepass_type(member.type, (decl.name, member.name or "field"))
-                    elif isinstance(member, BitfieldGroupMember):
-                        self._prepass_type(
-                            member.storage_type,
-                            (decl.name, member.storage_name or "bitfield_storage"),
-                        )
-                        for field in member.fields:
-                            self._prepass_type(
-                                field.logical_type,
-                                (decl.name, field.name or "bitfield"),
-                            )
-                for initializer in decl.initializers:
-                    for i, param in enumerate(initializer.params):
-                        self._prepass_type(
-                            param.type,
-                            (decl.name, param.name or f"init_{i}"),
-                        )
-            elif isinstance(decl, AliasDecl):
-                if decl.kind == AliasKind.CALLBACK_SIGNATURE:
-                    fn_type = self._callback_signature_type_for_decl(decl)
-                    if fn_type is not None:
-                        self._prepass_function_signature(fn_type, (decl.name,))
-                elif decl.type_value is not None:
-                    self._prepass_type(decl.type_value, (decl.name,))
-            elif isinstance(decl, FunctionDecl):
-                self._prepass_type(decl.return_type, (decl.name, "return"))
-                for i, param in enumerate(decl.params):
-                    self._prepass_type(
-                        param.type,
-                        (decl.name, param.name or f"param{i}"),
-                    )
-            elif isinstance(decl, GlobalDecl):
-                self._prepass_type(decl.value_type, (decl.name, "value"))
-
-    def _prepass_type(self, t: MojoType, context: tuple[str, ...]) -> None:
-        if isinstance(t, PointerType) and isinstance(t.pointee, FunctionType):
-            self._prepass_function_signature(t.pointee, (*context, "signature"))
-            self._ensure_callback_alias((*context, "callback"), t.pointee)
-            return
-        if isinstance(t, PointerType) and t.pointee is not None:
-            self._prepass_type(t.pointee, (*context, "pointee"))
-            return
-        if isinstance(t, ArrayType):
-            self._prepass_type(t.element, (*context, "element"))
-            return
-        if isinstance(t, FunctionType):
-            self._prepass_function_signature(t, context)
-
-    def _prepass_function_signature(self, fn_type: FunctionType, context: tuple[str, ...]) -> None:
-        self._prepass_type(fn_type.ret, (*context, "return"))
-        for i, param in enumerate(fn_type.params):
-            self._prepass_type(param, (*context, f"arg{i}"))
-
-    def _ensure_callback_alias(
-        self,
-        path: tuple[str, ...],
-        fn_type: FunctionType,
-    ) -> _SynthCallbackAlias:
-        existing = self._synth_aliases_by_path.get(path)
-        if existing is not None:
-            return existing
-
-        logical_parts = [part for part in path if part]
-        while logical_parts and logical_parts[-1] in {
-            "callback",
-            "signature",
-            "pointee",
-            "element",
-        }:
-            logical_parts.pop()
-        base = mojo_ident("_".join(logical_parts), fallback="callback")
-        if not base.endswith("_cb"):
-            base = f"{base}_cb"
-        name = base
-        suffix = 2
-        while name in self._reserved_names:
-            name = f"{base}_{suffix}"
-            suffix += 1
-        self._reserved_names.add(name)
-
-        alias = _SynthCallbackAlias(path=path, name=name, fn_type=fn_type)
-        self._synth_aliases_by_path[path] = alias
-        self._synth_aliases.append(alias)
-        return alias
-
-    def _render_module_header(self) -> str:
+    def _render_module_header(self, module: MojoModule) -> str:
         return "\n".join(
             [
                 "# Generated from standalone MojoIR.",
-                f"# source: {self._module.source_header}",
-                f"# library: {self._module.library}  link_name: {self._module.link_name}",
-                f"# default link mode: {self._module.link_mode.value}",
-                "",
+                f"# source: {module.source_header}",
+                f"# library: {module.library}  link_name: {module.link_name}",
+                f"# default link mode: {module.link_mode.value}",
             ]
         )
 
-    def _render_import_block(self) -> str:
-        lines: list[str] = []
-        ffi_names: list[str] = []
-        if "external_call" in self._imports.ffi_names:
-            ffi_names.append("external_call")
-        if self._imports.needs_dl_handle_helpers:
-            ffi_names.extend(["DEFAULT_RTLD", "OwnedDLHandle"])
-        if "UnsafeUnion" in self._imports.ffi_names:
-            ffi_names.append("UnsafeUnion")
-        scalar_imports = sorted(name for name in self._imports.ffi_names if name.startswith("c_"))
-        ffi_names.extend(name for name in scalar_imports if name not in ffi_names)
-        if ffi_names:
-            lines.append(f"from std.ffi import {', '.join(ffi_names)}")
-        if self._imports.needs_opaque_imports:
-            lines.append("from std.memory import ImmutOpaquePointer, MutOpaquePointer")
-        if self._imports.needs_simd_import:
-            lines.append("from std.builtin.simd import SIMD")
-        if self._imports.needs_complex_import:
-            lines.append("from std.complex import ComplexSIMD")
-        if self._imports.needs_atomic_import:
-            lines.append("from std.atomic import Atomic")
-        return "" if not lines else "\n".join(lines) + "\n\n"
+    @staticmethod
+    def _render_import_block(imports: list[ModuleImport]) -> str:
+        lines = [f"from {imp.module} import {', '.join(imp.names)}" for imp in imports]
+        return "\n".join(lines)
 
-    def _render_helper_blocks(self) -> str:
+    def _render_support_decls(self, support_decls: list[SupportDecl]) -> str:
         chunks: list[str] = []
-        if self._imports.needs_dl_handle_helpers:
-            chunks.append(
-                "# Resolve symbols from libraries already linked into this process.\n"
-                "def _bindgen_dl() raises -> OwnedDLHandle:\n"
-                "    return OwnedDLHandle(DEFAULT_RTLD)\n\n"
-            )
-        if self._imports.needs_global_helpers:
-            chunks.append(
-                "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
-                "    @staticmethod\n"
-                "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
-                "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
-                "        if not opt:\n"
-                '            raise Error(String("bindgen: missing C global symbol"))\n'
-                "        return opt.value()\n"
-                "\n"
-                "    @staticmethod\n"
-                f"    def ptr() raises -> UnsafePointer[Self.T, {self._origin.mut}]:\n"
-                f"        return rebind[UnsafePointer[Self.T, {self._origin.mut}]](Self._raw())\n"
-                "\n"
-                "    @staticmethod\n"
-                "    def load() raises -> Self.T:\n"
-                "        return Self._raw()[].copy()\n"
-                "\n"
-                "    @staticmethod\n"
-                "    def store(value: Self.T) raises -> None:\n"
-                f"        var p = rebind[UnsafePointer[Self.T, {self._origin.mut}]](Self._raw())\n"
-                "        p[] = value.copy()\n"
-                "\n"
-                "\n"
-                "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
-                "    @staticmethod\n"
-                "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
-                "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
-                "        if not opt:\n"
-                '            raise Error(String("bindgen: missing C global symbol"))\n'
-                "        return opt.value()\n"
-                "\n"
-                "    @staticmethod\n"
-                f"    def ptr() raises -> UnsafePointer[Self.T, {self._origin.immut}]:\n"
-                f"        return rebind[UnsafePointer[Self.T, {self._origin.immut}]](Self._raw())\n"
-                "\n"
-                "    @staticmethod\n"
-                "    def load() raises -> Self.T:\n"
-                "        return Self._raw()[].copy()\n"
-                "\n"
-                "\n"
-            )
-        return "".join(chunks)
-
-    def _render_synth_callback_alias(self, alias: _SynthCallbackAlias) -> str:
-        expr = self._render_function_signature(alias.fn_type, alias.path)
-        return f"comptime {alias.name} = {expr}\n\n"
+        for support in support_decls:
+            if support.kind == SupportDeclKind.DL_HANDLE_HELPERS:
+                chunks.append(
+                    "# Resolve symbols from libraries already linked into this process.\n"
+                    "def _bindgen_dl() raises -> OwnedDLHandle:\n"
+                    "    return OwnedDLHandle(DEFAULT_RTLD)"
+                )
+            elif support.kind == SupportDeclKind.GLOBAL_SYMBOL_HELPERS:
+                chunks.append(
+                    "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
+                    "    @staticmethod\n"
+                    "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
+                    "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
+                    "        if not opt:\n"
+                    '            raise Error(String("bindgen: missing C global symbol"))\n'
+                    "        return opt.value()\n"
+                    "\n"
+                    "    @staticmethod\n"
+                    "    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:\n"
+                    "        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
+                    "\n"
+                    "    @staticmethod\n"
+                    "    def load() raises -> Self.T:\n"
+                    "        return Self._raw()[].copy()\n"
+                    "\n"
+                    "    @staticmethod\n"
+                    "    def store(value: Self.T) raises -> None:\n"
+                    "        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
+                    "        p[] = value.copy()\n"
+                    "\n"
+                    "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
+                    "    @staticmethod\n"
+                    "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
+                    "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
+                    "        if not opt:\n"
+                    '            raise Error(String("bindgen: missing C global symbol"))\n'
+                    "        return opt.value()\n"
+                    "\n"
+                    "    @staticmethod\n"
+                    "    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:\n"
+                    "        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())\n"
+                    "\n"
+                    "    @staticmethod\n"
+                    "    def load() raises -> Self.T:\n"
+                    "        return Self._raw()[].copy()"
+                )
+            else:
+                raise MojoIRPrintError(f"unsupported SupportDecl kind: {support.kind!r}")
+        return "\n\n".join(chunks)
 
     def _render_decl(self, decl: MojoDecl) -> str:
         if isinstance(decl, StructDecl):
             return self._render_struct_decl(decl)
+        if isinstance(decl, EnumDecl):
+            return self._render_enum_decl(decl)
         if isinstance(decl, AliasDecl):
             return self._render_alias_decl(decl)
         if isinstance(decl, FunctionDecl):
@@ -441,11 +192,8 @@ class MojoIRPrinter:
     def _render_struct_decl(self, decl: StructDecl) -> str:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
-        if decl.align is not None:
-            if _mojo_align_decorator_ok(decl.align):
-                b.add(f"@align({decl.align})")
-            else:
-                b.add(f"# @align omitted: {decl.align} is not a valid Mojo @align value")
+        if decl.align_decorator is not None:
+            b.add(f"@align({decl.align_decorator})")
         if decl.fieldwise_init:
             b.add("@fieldwise_init")
 
@@ -457,17 +205,23 @@ class MojoIRPrinter:
         b.indent()
         if decl.kind == StructKind.OPAQUE:
             b.add("pass")
-        elif decl.kind == StructKind.ENUM:
-            if decl.underlying_type is None:
-                raise MojoIRPrintError(f"enum struct {decl.name!r} is missing underlying_type")
-            base_text = self._render_type(decl.underlying_type, (decl.name, "underlying"))
-            b.add(f"var value: {base_text}")
-            for member in decl.enum_members:
-                b.add(f"comptime {member.name} = Self({base_text}({member.value}))")
         else:
             self._render_plain_struct_body(b, decl)
         b.dedent()
-        b.add("")
+        return b.render()
+
+    def _render_enum_decl(self, decl: EnumDecl) -> str:
+        b = CodeBuilder()
+        b.extend(self._diagnostic_lines(decl.diagnostics))
+        if decl.align_decorator is not None:
+            b.add(f"@align({decl.align_decorator})")
+        b.add("struct " + decl.name + "(Copyable, Movable, RegisterPassable):")
+        b.indent()
+        base_text = self._render_type(decl.underlying_type)
+        b.add(f"var value: {base_text}")
+        for member in decl.enumerants:
+            b.add(f"comptime {member.name} = Self({base_text}({member.value}))")
+        b.dedent()
         return b.render()
 
     def _render_plain_struct_body(self, b: CodeBuilder, decl: StructDecl) -> None:
@@ -482,59 +236,47 @@ class MojoIRPrinter:
             for field in member.fields
         }
         bitfield_storage_types = {
-            member.storage_name: self._render_type(
-                member.storage_type,
-                (decl.name, member.storage_name),
-            )
+            member.storage_name: self._render_type(member.storage_type)
             for member in decl.members
             if isinstance(member, BitfieldGroupMember)
         }
 
         for member in decl.members:
             if isinstance(member, StoredMember):
-                b.add(
-                    f"var {member.name}: {self._render_type(member.type, (decl.name, member.name or 'field'))}"
-                )
-            elif isinstance(member, PaddingMember):
-                b.add(f"var {member.name}: InlineArray[UInt8, {member.size_bytes}]")
+                b.add(f"var {member.name}: {self._render_type(member.type)}")
             elif isinstance(member, OpaqueStorageMember):
                 b.add(f"var {member.name}: InlineArray[UInt8, {member.size_bytes}]")
             elif isinstance(member, BitfieldGroupMember):
-                b.add(
-                    f"var {member.storage_name}: {self._render_type(member.storage_type, (decl.name, member.storage_name))}"
-                )
+                b.add(f"var {member.storage_name}: {self._render_type(member.storage_type)}")
             else:
-                raise MojoIRPrintError(f"unsupported StructMember node: {type(member).__name__!r}")
+                b.add(f"var {member.name}: InlineArray[UInt8, {member.size_bytes}]")
 
         for initializer in decl.initializers:
             self._render_initializer(
                 b,
-                decl.name,
                 initializer,
                 bitfield_names,
                 bitfield_storage_types,
             )
         for member in decl.members:
             if isinstance(member, BitfieldGroupMember):
-                self._render_bitfield_group_accessors(b, member, (decl.name, member.storage_name))
+                self._render_bitfield_group_accessors(b, member)
 
     def _render_initializer(
         self,
         b: CodeBuilder,
-        struct_name: str,
         initializer: Initializer,
         bitfield_names: set[str],
         bitfield_storage_types: dict[str, str],
     ) -> None:
         params = ", ".join(
-            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type, (struct_name, self._render_param_name(param.name, i)))}"
+            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type)}"
             for i, param in enumerate(initializer.params)
         )
         b.add(f"def __init__(out self{', ' if params else ''}{params}):")
         b.indent()
-        if bitfield_storage_types:
-            for storage_name, storage_type in bitfield_storage_types.items():
-                b.add(f"self.{storage_name} = {storage_type}(0)")
+        for storage_name, storage_type in bitfield_storage_types.items():
+            b.add(f"self.{storage_name} = {storage_type}(0)")
         for i, param in enumerate(initializer.params):
             param_name = self._render_param_name(param.name, i)
             if param_name in bitfield_names:
@@ -547,14 +289,10 @@ class MojoIRPrinter:
         self,
         b: CodeBuilder,
         group: BitfieldGroupMember,
-        context: tuple[str, ...],
     ) -> None:
-        storage_type = self._render_type(group.storage_type, context)
+        storage_type = self._render_type(group.storage_type)
         for bitfield in group.fields:
-            logical_type = self._render_type(
-                bitfield.logical_type,
-                (*context, bitfield.name or "bitfield"),
-            )
+            logical_type = self._render_type(bitfield.logical_type)
             mask_text = self._storage_mask_text(bitfield.bit_width)
             shift = max(0, bitfield.bit_offset - group.byte_offset * 8)
             b.add(f"def {bitfield.name}(self) -> {logical_type}:")
@@ -589,47 +327,33 @@ class MojoIRPrinter:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
         if decl.kind == AliasKind.CALLBACK_SIGNATURE:
-            fn_type = self._callback_signature_type_for_decl(decl)
-            if fn_type is None:
-                b.add(f"# callback alias {decl.name}: missing callback signature payload")
-            else:
-                b.add(
-                    f"comptime {decl.name} = {self._render_function_signature(fn_type, (decl.name,))}"
+            if not isinstance(decl.type_value, CallbackType):
+                raise MojoIRPrintError(
+                    f"callback alias {decl.name!r} is missing normalized CallbackType payload"
                 )
-            b.add("")
+            b.add(f"comptime {decl.name} = {self._render_callback_signature(decl.type_value)}")
             return b.render()
 
         if decl.type_value is not None:
-            rhs = self._render_type(decl.type_value, (decl.name,))
-            b.add(f"comptime {decl.name} = {rhs}")
+            b.add(f"comptime {decl.name} = {self._render_type(decl.type_value)}")
         elif decl.const_value is not None:
-            rendered = self._render_const_expr(decl.const_value)
-            if rendered is None:
-                label = "macro" if decl.kind == AliasKind.MACRO_VALUE else "constant"
-                b.add(f"# {label} {decl.name}: unsupported constant expression form")
-            else:
-                b.add(f"comptime {decl.name} = {rendered}")
+            b.add(f"comptime {decl.name} = {self._render_const_expr(decl.const_value)}")
         else:
             b.add(f"# alias {decl.name}: missing payload")
-        b.add("")
         return b.render()
 
     def _render_function_decl(self, decl: FunctionDecl) -> str:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
         params = [
-            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type, (decl.name, param.name or f'param{i}'))}"
+            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type)}"
             for i, param in enumerate(decl.params)
         ]
         params_text = ", ".join(params)
-        return_type = self._render_type(decl.return_type, (decl.name, "return"))
+        return_type = self._render_type(decl.return_type)
         symbol = self._link_symbol(decl.call_target, decl.link_name)
         bracket_inner = ", ".join(
-            [f'"{symbol}"', return_type]
-            + [
-                self._render_type(param.type, (decl.name, param.name or f"param{i}"))
-                for i, param in enumerate(decl.params)
-            ]
+            [f'"{symbol}"', return_type] + [self._render_type(param.type) for param in decl.params]
         )
         call_args = ", ".join(
             self._render_param_name(param.name, i) for i, param in enumerate(decl.params)
@@ -638,18 +362,15 @@ class MojoIRPrinter:
         if decl.kind == FunctionKind.VARIADIC_STUB:
             b.add("# variadic C function - not callable from thin FFI:")
             b.add(f"# {return_type} {symbol}({params_text}, ...)")
-            b.add("")
             return b.render()
         if decl.kind == FunctionKind.NON_REGISTER_RETURN_STUB:
             b.add(
                 "# C return type is not RegisterPassable - external_call cannot model this return; bind manually."
             )
             b.add(f"# {return_type} {symbol}({params_text})")
-            b.add("")
             return b.render()
 
-        link_mode = self._function_link_mode(decl)
-        if link_mode == LinkMode.EXTERNAL_CALL:
+        if decl.call_target.link_mode == LinkMode.EXTERNAL_CALL:
             if return_type == "NoneType":
                 b.add(f'def {decl.name}({params_text}) abi("C") -> None:')
                 b.indent()
@@ -668,149 +389,130 @@ class MojoIRPrinter:
                 b.indent()
                 b.add(f"return _bindgen_dl().call[{bracket_inner}]({call_args})")
         b.dedent()
-        b.add("")
-        return b.render() + "\n"
+        return b.render()
 
     def _render_global_decl(self, decl: GlobalDecl) -> str:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
-        value_type = self._render_type(decl.value_type, (decl.name, "value"))
+        value_type = self._render_type(decl.value_type)
         if decl.kind == GlobalKind.STUB:
             const_kw = "const " if decl.is_const else ""
             b.add(
                 f"# global variable {decl.link_name}: {const_kw}{value_type} (manual binding required)"
             )
-            b.add("")
             return b.render()
 
         wrapper = "GlobalConst" if decl.is_const else "GlobalVar"
         link_lit = decl.link_name.replace("\\", "\\\\").replace('"', '\\"')
         b.add(f"# global `{decl.link_name}` -> {value_type}")
         b.add(f'comptime {decl.name} = {wrapper}[T={value_type}, link="{link_lit}"]')
-        b.add("")
         return b.render()
 
-    def _render_function_signature(self, fn_type: FunctionType, context: tuple[str, ...]) -> str:
-        params = ", ".join(
-            f"arg{i}: {self._render_type(param, (*context, f'arg{i}'))}"
-            for i, param in enumerate(fn_type.params)
-        )
-        ret = self._render_type(fn_type.ret, (*context, "return"))
-        return f'def ({params}) thin abi("C") -> {ret}'
-
-    def _render_type(self, t: MojoType, context: tuple[str, ...]) -> str:
+    def _render_type(self, t: MojoType) -> str:
         if isinstance(t, BuiltinType):
             if t.name == MojoBuiltin.UNSUPPORTED:
                 raise MojoIRPrintError("cannot render MojoBuiltin.UNSUPPORTED as valid Mojo")
-            if t.name.value.startswith("c_"):
-                self._imports.ffi_names.add(t.name.value)
             return t.name.value
         if isinstance(t, NamedType):
             return t.name
         if isinstance(t, PointerType):
-            return self._render_pointer_type(t, context)
+            return self._render_pointer_type(t)
         if isinstance(t, ArrayType):
-            return f"InlineArray[{self._render_type(t.element, (*context, 'element'))}, {t.count}]"
+            return f"InlineArray[{self._render_type(t.element)}, {t.count}]"
         if isinstance(t, ParametricType):
-            if t.base == "SIMD":
-                self._imports.needs_simd_import = True
-            elif t.base == "ComplexSIMD":
-                self._imports.needs_complex_import = True
-            elif t.base == "Atomic":
-                self._imports.needs_atomic_import = True
-            elif t.base == "UnsafeUnion":
-                self._imports.ffi_names.add("UnsafeUnion")
-            for arg in t.args:
-                if arg.startswith("c_"):
-                    self._imports.ffi_names.add(arg)
-            return f"{t.base}[{', '.join(t.args)}]"
-        if isinstance(t, FunctionType):
-            return self._render_function_signature(t, context)
+            args = ", ".join(self._render_parametric_arg(arg) for arg in t.args)
+            return f"{t.base.value}[{args}]"
+        if isinstance(t, CallbackType):
+            return self._render_callback_signature(t)
         raise MojoIRPrintError(f"unsupported MojoType node: {type(t).__name__!r}")
 
-    def _render_pointer_type(self, t: PointerType, context: tuple[str, ...]) -> str:
+    def _render_pointer_type(self, t: PointerType) -> str:
         if t.pointee is None:
-            self._imports.needs_opaque_imports = True
-            origin = (
-                self._origin.immut if t.mutability == PointerMutability.IMMUT else self._origin.mut
-            )
             ptr_name = (
                 "ImmutOpaquePointer"
                 if t.mutability == PointerMutability.IMMUT
                 else "MutOpaquePointer"
             )
-            return f"{ptr_name}[{origin}]"
-        if isinstance(t.pointee, FunctionType):
-            alias = self._synth_aliases_by_path.get((*context, "callback"))
-            if alias is None:
-                alias = self._ensure_callback_alias((*context, "callback"), t.pointee)
-            origin = (
-                self._origin.immut if t.mutability == PointerMutability.IMMUT else self._origin.mut
-            )
-            return f"UnsafePointer[{alias.name}, {origin}]"
-        origin = self._origin.immut if t.mutability == PointerMutability.IMMUT else self._origin.mut
-        return f"UnsafePointer[{self._render_type(t.pointee, (*context, 'pointee'))}, {origin}]"
+            return f"{ptr_name}[{self._origin_name(t.origin, t.mutability)}]"
+        return f"UnsafePointer[{self._render_type(t.pointee)}, {self._origin_name(t.origin, t.mutability)}]"
 
-    def _render_const_expr(self, expr: ConstExpr) -> str | None:
-        if isinstance(expr, IntLiteral):
+    def _render_parametric_arg(self, arg: object) -> str:
+        from mojo_bindgen.mojo_ir import ConstArg, DTypeArg, NameArg, TypeArg
+
+        if isinstance(arg, DTypeArg):
+            return arg.value
+        if isinstance(arg, ConstArg):
+            return str(arg.value)
+        if isinstance(arg, NameArg):
+            return arg.value
+        if isinstance(arg, TypeArg):
+            return self._render_type(arg.type)
+        raise MojoIRPrintError(f"unsupported parametric argument node: {type(arg).__name__!r}")
+
+    def _render_callback_signature(self, callback: CallbackType) -> str:
+        params = ", ".join(
+            f"{self._render_callback_param_name(param, i)}: {self._render_type(param.type)}"
+            for i, param in enumerate(callback.params)
+        )
+        ret = self._render_type(callback.ret)
+        parts = ["def", f"({params})"]
+        if callback.thin:
+            parts.append("thin")
+        if callback.abi:
+            parts.append(f'abi("{callback.abi}")')
+        if callback.raises:
+            parts.append("raises")
+        parts.extend(["->", ret])
+        return " ".join(parts)
+
+    def _render_const_expr(self, expr: MojoConstExpr) -> str:
+        if isinstance(expr, MojoIntLiteral):
             return str(expr.value)
-        if isinstance(expr, FloatLiteral):
-            return mojo_float_literal_text(expr.value)
-        if isinstance(expr, StringLiteral):
+        if isinstance(expr, MojoFloatLiteral):
+            return mojo_float_literal_text(str(expr.value))
+        if isinstance(expr, MojoStringLiteral):
             return '"' + expr.value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-        if isinstance(expr, CharLiteral):
+        if isinstance(expr, MojoCharLiteral):
             return "'" + expr.value.replace("\\", "\\\\").replace("'", "\\'") + "'"
-        if isinstance(expr, RefExpr):
-            return mojo_ident(expr.name)
-        if isinstance(expr, UnaryExpr):
-            operand = self._render_const_expr(expr.operand)
-            return None if operand is None else f"{expr.op}({operand})"
-        if isinstance(expr, BinaryExpr):
+        if isinstance(expr, MojoRefExpr):
+            return expr.name
+        if isinstance(expr, MojoUnaryExpr):
+            return f"{expr.op}({self._render_const_expr(expr.operand)})"
+        if isinstance(expr, MojoBinaryExpr):
             lhs = self._render_const_expr(expr.lhs)
             rhs = self._render_const_expr(expr.rhs)
-            return None if lhs is None or rhs is None else f"({lhs} {expr.op} {rhs})"
-        if isinstance(expr, CastExpr):
-            target_text = self._render_cir_scalar(expr.target)
-            if target_text is None:
-                return None
-            inner = self._render_const_expr(expr.expr)
-            return None if inner is None else f"{target_text}({inner})"
-        if isinstance(expr, SizeOfExpr):
-            target = self._render_cir_scalar(expr.target)
-            return None if target is None else f"__builtin_sizeof[{target}]()"
-        if isinstance(expr, NullPtrLiteral):
-            return None
-        return None
-
-    def _render_cir_scalar(self, t: object) -> str | None:
-        if isinstance(t, VoidType):
-            key: object = "void"
-        elif isinstance(t, IntType):
-            key = t.int_kind
-        elif isinstance(t, FloatType):
-            key = t.float_kind
-        else:
-            return None
-        builtin = PRIMITIVE_BUILTINS.get(key)
-        if builtin is None or builtin == MojoBuiltin.UNSUPPORTED:
-            return None
-        if builtin.value.startswith("c_"):
-            self._imports.ffi_names.add(builtin.value)
-        return builtin.value
+            return f"({lhs} {expr.op} {rhs})"
+        if isinstance(expr, MojoCastExpr):
+            return f"{self._render_type(expr.target)}({self._render_const_expr(expr.expr)})"
+        if isinstance(expr, MojoSizeOfExpr):
+            return f"__builtin_sizeof[{self._render_type(expr.target)}]()"
+        raise MojoIRPrintError(f"unsupported MojoConstExpr node: {type(expr).__name__!r}")
 
     @staticmethod
     def _diagnostic_lines(notes: Iterable[LoweringNote]) -> list[str]:
-        lines: list[str] = []
-        for note in notes:
-            severity = note.severity.value.upper()
-            lines.append(f"# {severity}[{note.category}]: {note.message}")
-        return lines
+        return [
+            f"# {note.severity.value.upper()}[{note.category}]: {note.message}" for note in notes
+        ]
 
     @staticmethod
     def _render_param_name(name: str, index: int) -> str:
         if name.strip():
             return mojo_ident(name)
         return f"a{index}"
+
+    @staticmethod
+    def _render_callback_param_name(param: CallbackParam, index: int) -> str:
+        if param.name.strip():
+            return mojo_ident(param.name, fallback=f"arg{index}")
+        return f"arg{index}"
+
+    @staticmethod
+    def _origin_name(origin: PointerOrigin, mutability: PointerMutability) -> str:
+        if origin == PointerOrigin.ANY:
+            return "ImmutAnyOrigin" if mutability == PointerMutability.IMMUT else "MutAnyOrigin"
+        return (
+            "ImmutExternalOrigin" if mutability == PointerMutability.IMMUT else "MutExternalOrigin"
+        )
 
     @staticmethod
     def _storage_mask_text(width: int) -> str:
@@ -822,33 +524,15 @@ class MojoIRPrinter:
     def _link_symbol(call_target: CallTarget, fallback: str) -> str:
         return call_target.symbol or fallback
 
-    def _function_link_mode(self, decl: FunctionDecl) -> LinkMode:
-        if (
-            decl.call_target.link_mode == LinkMode.EXTERNAL_CALL
-            and not decl.call_target.symbol
-            and self._module.link_mode != LinkMode.EXTERNAL_CALL
-        ):
-            return self._module.link_mode
-        return decl.call_target.link_mode
-
-    @staticmethod
-    def _callback_signature_type_for_decl(decl: AliasDecl) -> FunctionType | None:
-        if isinstance(decl.type_value, FunctionType):
-            return decl.type_value
-        if isinstance(decl.type_value, PointerType) and isinstance(
-            decl.type_value.pointee, FunctionType
-        ):
-            return decl.type_value.pointee
-        return None
-
 
 def render_mojo_module(
     module: MojoModule,
     options: MojoIRPrintOptions | None = None,
 ) -> str:
-    """Render a standalone :class:`MojoModule` to Mojo source."""
+    """Normalize and render a standalone :class:`MojoModule` to Mojo source."""
 
-    return MojoIRPrinter(options).render(module)
+    normalized = normalize_mojo_module(module)
+    return MojoIRPrinter(options).render(normalized)
 
 
 __all__ = [

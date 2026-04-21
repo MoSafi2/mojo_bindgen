@@ -32,12 +32,17 @@ from mojo_bindgen.mojo_ir import (
     PRIMITIVE_BUILTINS,
     ArrayType,
     BuiltinType,
-    FunctionType,
+    CallbackParam,
+    CallbackType,
+    ConstArg,
+    DTypeArg,
     MojoBuiltin,
     MojoType,
     NamedType,
+    ParametricBase,
     ParametricType,
     PointerMutability,
+    PointerOrigin,
     PointerType,
 )
 
@@ -139,7 +144,11 @@ class LowerTypePass:
         if isinstance(t, (TypeRef, EnumRef, StructRef)):
             return self._named(t.name)
         if isinstance(t, OpaqueRecordRef):
-            return PointerType(pointee=None, mutability=PointerMutability.MUT)
+            return PointerType(
+                pointee=None,
+                mutability=PointerMutability.MUT,
+                origin=PointerOrigin.EXTERNAL,
+            )
         if isinstance(t, Pointer):
             return self._lower_pointer(t)
         if isinstance(t, Array):
@@ -184,10 +193,15 @@ class LowerTypePass:
     def _lower_pointer(self, t: Pointer) -> PointerType:
         pointee, mutability = _unwrap_pointer_pointee(t.pointee)
         if pointee is None or isinstance(pointee, VoidType):
-            return PointerType(pointee=None, mutability=mutability)
+            return PointerType(
+                pointee=None,
+                mutability=mutability,
+                origin=PointerOrigin.EXTERNAL,
+            )
         return PointerType(
             pointee=self.run(pointee),
             mutability=mutability,
+            origin=PointerOrigin.EXTERNAL,
         )
 
     # ------------------------
@@ -200,18 +214,29 @@ class LowerTypePass:
         return PointerType(
             pointee=self.run(t.element),
             mutability=PointerMutability.MUT,
+            origin=PointerOrigin.EXTERNAL,
         )
 
     # ------------------------
     # Function pointers
     # ------------------------
-    def _lower_function_ptr(self, t: FunctionPtr) -> PointerType:
-        return PointerType(
-            pointee=FunctionType(
-                params=[self.run(p) for p in t.params],
-                ret=self.run(t.ret),
-            ),
+    def _lower_function_ptr(self, t: FunctionPtr) -> CallbackType:
+        param_names = t.param_names or []
+        params = [
+            CallbackParam(
+                name=param_names[i] if i < len(param_names) else "",
+                type=self.run(param),
+            )
+            for i, param in enumerate(t.params)
+        ]
+        return CallbackType(
+            params=params,
+            ret=self.run(t.ret),
+            abi="C" if t.calling_convention in (None, "", "c") else t.calling_convention,
+            thin=True,
+            raises=False,
             mutability=PointerMutability.MUT,
+            origin=PointerOrigin.EXTERNAL,
         )
 
     # ------------------------
@@ -223,13 +248,19 @@ class LowerTypePass:
             return self._unsupported()
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
-            return ParametricType(base="SIMD", args=[dtype, str(t.count)])
+            return ParametricType(
+                base=ParametricBase.SIMD,
+                args=[DTypeArg(dtype), ConstArg(t.count)],
+            )
         return ArrayType(element=self.run(t.element), count=t.count)
 
     def _lower_complex(self, t: ComplexType) -> MojoType:
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
-            return ParametricType(base="ComplexSIMD", args=[dtype, "1"])
+            return ParametricType(
+                base=ParametricBase.COMPLEX_SIMD,
+                args=[DTypeArg(dtype), ConstArg(1)],
+            )
 
         return ArrayType(element=self.run(t.element), count=2)
 

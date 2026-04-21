@@ -11,6 +11,10 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
     MojoIRPrintOptions,
     render_mojo_module,
 )
+from mojo_bindgen.codegen.normalize_mojo_module import (
+    NormalizeMojoModulePass,
+    normalize_mojo_module,
+)
 
 __all__ = [
     "FFIScalarStyle",
@@ -18,6 +22,8 @@ __all__ = [
     "MojoIRPrintOptions",
     "MojoGenerator",
     "MojoEmitOptions",
+    "NormalizeMojoModulePass",
     "generate_mojo",
+    "normalize_mojo_module",
     "render_mojo_module",
 ]

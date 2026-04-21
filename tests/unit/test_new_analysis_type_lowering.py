@@ -24,9 +24,13 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.mojo_ir import (
     ArrayType,
     BuiltinType,
-    FunctionType,
+    CallbackParam,
+    CallbackType,
+    ConstArg,
+    DTypeArg,
     MojoBuiltin,
     NamedType,
+    ParametricBase,
     ParametricType,
     PointerMutability,
     PointerType,
@@ -117,15 +121,15 @@ def test_lower_type_keeps_raw_function_pointer_signature_shape() -> None:
         calling_convention="c",
     )
 
-    assert lower_type(fn_ptr) == PointerType(
-        pointee=FunctionType(
-            params=[
-                PointerType(pointee=None, mutability=PointerMutability.MUT),
-                NamedType(name="my_uint"),
-            ],
-            ret=BuiltinType(name=MojoBuiltin.C_INT),
-        ),
-        mutability=PointerMutability.MUT,
+    assert lower_type(fn_ptr) == CallbackType(
+        params=[
+            CallbackParam(
+                name="",
+                type=PointerType(pointee=None, mutability=PointerMutability.MUT),
+            ),
+            CallbackParam(name="", type=NamedType(name="my_uint")),
+        ],
+        ret=BuiltinType(name=MojoBuiltin.C_INT),
     )
 
 
@@ -140,16 +144,16 @@ def test_lower_type_maps_complex_and_vector_surface_forms_and_fallbacks() -> Non
     long_double = FloatType(float_kind=FloatKind.LONG_DOUBLE, size_bytes=16, align_bytes=16)
 
     assert lower_type(ComplexType(element=f32, size_bytes=8)) == ParametricType(
-        base="ComplexSIMD",
-        args=["DType.float32", "1"],
+        base=ParametricBase.COMPLEX_SIMD,
+        args=[DTypeArg("DType.float32"), ConstArg(1)],
     )
     assert lower_type(ComplexType(element=long_double, size_bytes=32)) == ArrayType(
         element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
         count=2,
     )
     assert lower_type(VectorType(element=f32, count=4, size_bytes=16)) == ParametricType(
-        base="SIMD",
-        args=["DType.float32", "4"],
+        base=ParametricBase.SIMD,
+        args=[DTypeArg("DType.float32"), ConstArg(4)],
     )
     assert lower_type(VectorType(element=long_double, count=2, size_bytes=32)) == ArrayType(
         element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
