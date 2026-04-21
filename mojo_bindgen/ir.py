@@ -66,6 +66,27 @@ class FloatKind(StrEnum):
     FLOAT128 = "FLOAT128"
 
 
+_SIGNED_INT_KINDS = {
+    IntKind.CHAR_S,
+    IntKind.SCHAR,
+    IntKind.SHORT,
+    IntKind.INT,
+    IntKind.LONG,
+    IntKind.LONGLONG,
+    IntKind.INT128,
+}
+
+_UNSIGNED_INT_KINDS = {
+    IntKind.CHAR_U,
+    IntKind.UCHAR,
+    IntKind.USHORT,
+    IntKind.UINT,
+    IntKind.ULONG,
+    IntKind.ULONGLONG,
+    IntKind.UINT128,
+}
+
+
 UnsupportedTypeCategory = Literal[
     "unexposed",
     "vector",

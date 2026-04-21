@@ -11,7 +11,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Union
+from typing import ClassVar, Union
 
 from mojo_bindgen.ir import ConstExpr, FloatKind, IntKind, const_expr_from_json
 from mojo_bindgen.serde import SerdeFieldSpec, SerDeMixin, SerdeSpec
@@ -61,6 +61,35 @@ PRIMITIVE_BUILTINS: dict[IntKind | FloatKind | str, MojoBuiltin] = {
 }
 
 
+_INT_DTYPE_TABLE: dict[tuple[bool, int], str] = {
+    (True, 1): "DType.int8",
+    (False, 1): "DType.uint8",
+    (True, 2): "DType.int16",
+    (False, 2): "DType.uint16",
+    (True, 4): "DType.int32",
+    (False, 4): "DType.uint32",
+    (True, 8): "DType.int64",
+    (False, 8): "DType.uint64",
+    (True, 16): "DType.int128",
+    (False, 16): "DType.uint128",
+}
+
+
+_FLOAT_DTYPE_TABLE: dict[FloatKind, str] = {
+    FloatKind.FLOAT16: "DType.float16",
+    FloatKind.FLOAT: "DType.float32",
+    FloatKind.DOUBLE: "DType.float64",
+}
+
+
+@dataclass(frozen=True)
+class PrimitiveDType(SerDeMixin):
+    kind: IntKind | FloatKind
+    signed: bool
+    dtype: str
+    width_bytes: int
+
+
 class GlobalKind(StrEnum):
     WRAPPER = "wrapper"
     STUB = "stub"
@@ -104,7 +133,6 @@ class ModuleCapabilities(SerDeMixin):
     needs_unsafe_union: bool = False
     needs_dl_handle_helpers: bool = False
     needs_global_helpers: bool = False
-    ffi_scalar_imports: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -242,13 +270,19 @@ class AliasKind(StrEnum):
 
 @dataclass
 class StructDecl(SerDeMixin):
-    SERDE = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="struct_kind")})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="struct_kind"),
+            "underlying_type": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
 
     name: str
     traits: list[StructTraits] = field(default_factory=list)
     align: int | None = None
     fieldwise_init: bool = False
     kind: StructKind = StructKind.PLAIN
+    underlying_type: MojoType | None = None
     members: list[StructMember] = field(default_factory=list)
     enum_members: list[EnumMember] = field(default_factory=list)
     initializers: list[Initializer] = field(default_factory=list)
