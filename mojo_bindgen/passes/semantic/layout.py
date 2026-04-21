@@ -180,6 +180,41 @@ def bitfield_storage_width_bits(field: Field) -> int | None:
     return core.size_bytes * 8 if core.size_bytes > 0 else None
 
 
+def bitfield_unsigned_storage_type(field: Field) -> IntType | None:
+    core = peel_wrappers(field.type)
+    if not isinstance(core, IntType):
+        return None
+    unsigned_kind = {
+        IntKind.BOOL: IntKind.BOOL,
+        IntKind.CHAR_S: IntKind.CHAR_U,
+        IntKind.CHAR_U: IntKind.CHAR_U,
+        IntKind.SCHAR: IntKind.UCHAR,
+        IntKind.UCHAR: IntKind.UCHAR,
+        IntKind.SHORT: IntKind.USHORT,
+        IntKind.USHORT: IntKind.USHORT,
+        IntKind.INT: IntKind.UINT,
+        IntKind.UINT: IntKind.UINT,
+        IntKind.LONG: IntKind.ULONG,
+        IntKind.ULONG: IntKind.ULONG,
+        IntKind.LONGLONG: IntKind.ULONGLONG,
+        IntKind.ULONGLONG: IntKind.ULONGLONG,
+        IntKind.INT128: IntKind.UINT128,
+        IntKind.UINT128: IntKind.UINT128,
+        IntKind.WCHAR: IntKind.WCHAR,
+        IntKind.CHAR16: IntKind.CHAR16,
+        IntKind.CHAR32: IntKind.CHAR32,
+        IntKind.EXT_INT: IntKind.EXT_INT,
+    }.get(core.int_kind)
+    if unsigned_kind is None:
+        return None
+    return IntType(
+        int_kind=unsigned_kind,
+        size_bytes=core.size_bytes,
+        align_bytes=core.align_bytes,
+        ext_bits=core.ext_bits,
+    )
+
+
 def bitfield_field_is_signed(field: Field) -> bool:
     core = peel_wrappers(field.type)
     if not isinstance(core, IntType):

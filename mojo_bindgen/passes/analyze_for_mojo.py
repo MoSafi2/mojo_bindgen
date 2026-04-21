@@ -47,6 +47,7 @@ from mojo_bindgen.passes.semantic.layout import (
     ComputeLayoutFactsPass,
     bitfield_field_is_bool,
     bitfield_field_is_signed,
+    bitfield_unsigned_storage_type,
     bitfield_storage_width_bits,
     build_register_passable_map,
     struct_by_decl_id,
@@ -295,7 +296,10 @@ def _analyze_bitfield_layout(
             continue
         saw_bitfield = True
         width_bits = bitfield_storage_width_bits(field)
+        storage_type = bitfield_unsigned_storage_type(field)
         if width_bits is None:
+            return None
+        if storage_type is None:
             return None
 
         if field.bit_width == 0:
@@ -315,7 +319,7 @@ def _analyze_bitfield_layout(
             storage_start_bit = (field.bit_offset // width_bits) * width_bits
             current = AnalyzedBitfieldStorage(
                 name=f"__bf{len(storages)}",
-                type=field.type,
+                type=storage_type,
                 field_index=af.index,
                 byte_offset=storage_start_bit // 8,
                 start_bit=storage_start_bit,
@@ -325,7 +329,7 @@ def _analyze_bitfield_layout(
         elif width_bits > current.width_bits:
             current = AnalyzedBitfieldStorage(
                 name=current.name,
-                type=field.type,
+                type=storage_type,
                 field_index=current.field_index,
                 byte_offset=current.byte_offset,
                 start_bit=current.start_bit,

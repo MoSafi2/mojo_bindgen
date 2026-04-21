@@ -328,6 +328,7 @@ def test_analyze_pure_bitfield_struct_separates_storage_from_members() -> None:
     assert [member.mojo_name for member in analyzed.bitfield_layout.members] == ["ready", "error", "enabled"]
     assert analyzed.bitfield_layout.members[0].storage_name == "__bf0"
     assert analyzed.bitfield_layout.members[2].storage_name == "__bf1"
+    assert analyzed.bitfield_layout.storages[1].type.int_kind == IntKind.UCHAR
     assert analyzed.bitfield_layout.members[2].is_bool is True
 
 
