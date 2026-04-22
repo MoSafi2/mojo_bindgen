@@ -87,3 +87,15 @@ def collect_type_nodes(
 ) -> tuple[Type, ...]:
     """Collect traversed nodes that satisfy ``predicate``."""
     return tuple(node for node in iter_type_nodes(t, options=options) if predicate(node))
+
+
+def _walk_typeref_nodes(t: Type, out: list[TypeRef]) -> None:
+    out.extend(
+        node
+        for node in collect_type_nodes(
+            t,
+            lambda node: isinstance(node, TypeRef),
+            options=TypeWalkOptions(descend_vector_element=True),
+        )
+        if isinstance(node, TypeRef)
+    )

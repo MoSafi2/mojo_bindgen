@@ -82,6 +82,22 @@ _FLOAT_DTYPE_TABLE: dict[FloatKind, str] = {
 }
 
 
+_MOJO_INT_TYPES = (
+    MojoBuiltin.C_CHAR,
+    MojoBuiltin.C_UCHAR,
+    MojoBuiltin.C_SHORT,
+    MojoBuiltin.C_USHORT,
+    MojoBuiltin.C_INT,
+    MojoBuiltin.C_UINT,
+    MojoBuiltin.C_LONG,
+    MojoBuiltin.C_ULONG,
+    MojoBuiltin.C_LONG_LONG,
+    MojoBuiltin.C_ULONG_LONG,
+    MojoBuiltin.INT128,
+    MojoBuiltin.UINT128,
+)
+
+
 @dataclass(frozen=True)
 class PrimitiveDType(SerDeMixin):
     kind: IntKind | FloatKind
