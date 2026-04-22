@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.layout import build_register_passable_map, struct_by_decl_id
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
@@ -298,7 +297,6 @@ class LowerUnitPass:
     def run(self, unit: Unit) -> MojoModule:
         type_lowerer = LowerTypePass()
         record_map = record_by_decl_id(unit)
-        struct_map = struct_by_decl_id(unit)
         session = LoweringSession(
             unit=unit,
             options=self._options,
@@ -306,7 +304,6 @@ class LowerUnitPass:
             const_lowerer=LowerConstExprPass(type_lowering=type_lowerer),
             struct_context=StructLoweringContext(
                 record_map=record_map,
-                register_passable_by_decl_id=build_register_passable_map(struct_map),
                 target_abi=unit.target_abi,
                 type_lowerer=type_lowerer,
             ),

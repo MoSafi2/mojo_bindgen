@@ -6,7 +6,29 @@ from dataclasses import dataclass
 from typing import Literal
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, field_mojo_name
-from mojo_bindgen.ir import AtomicType, Struct, TargetABI
+from mojo_bindgen.codegen.mojo_mapper import (
+    map_atomic_type,
+    map_complex_simd,
+    map_vector_simd,
+)
+from mojo_bindgen.ir import (
+    Array,
+    AtomicType,
+    ComplexType,
+    EnumRef,
+    FloatType,
+    FunctionPtr,
+    IntType,
+    OpaqueRecordRef,
+    Pointer,
+    Struct,
+    StructRef,
+    TargetABI,
+    Type,
+    TypeRef,
+    UnsupportedType,
+    VectorType,
+)
 from mojo_bindgen.mojo_ir import (
     BitfieldField,
     BitfieldGroupMember,
@@ -46,7 +68,6 @@ class StructLoweringError(ValueError):
 @dataclass(frozen=True, init=False)
 class StructLoweringContext:
     record_map: dict[str, Struct]
-    register_passable_by_decl_id: dict[str, bool]
     target_abi: TargetABI
     type_lowerer: LowerTypePass
 
@@ -54,7 +75,6 @@ class StructLoweringContext:
         self,
         *,
         record_map: dict[str, Struct] | None = None,
-        register_passable_by_decl_id: dict[str, bool],
         target_abi: TargetABI,
         type_lowerer: LowerTypePass,
         struct_map: dict[str, Struct] | None = None,
@@ -63,11 +83,6 @@ class StructLoweringContext:
         if resolved_record_map is None:
             raise TypeError("StructLoweringContext requires `record_map`")
         object.__setattr__(self, "record_map", resolved_record_map)
-        object.__setattr__(
-            self,
-            "register_passable_by_decl_id",
-            register_passable_by_decl_id,
-        )
         object.__setattr__(self, "target_abi", target_abi)
         object.__setattr__(self, "type_lowerer", type_lowerer)
 
@@ -472,11 +487,70 @@ class FinalizeStructDeclPass:
         traits = [StructTraits.COPYABLE, StructTraits.MOVABLE]
         if (
             facts.is_complete
-            and context.register_passable_by_decl_id.get(facts.decl.decl_id, False)
+            and self._is_register_passable(facts.decl.decl_id, context=context)
             and plan.representation_mode == "fieldwise_exact"
         ):
             traits.append(StructTraits.REGISTER_PASSABLE)
         return traits
+
+    def _is_register_passable(
+        self,
+        decl_id: str,
+        *,
+        context: StructLoweringContext,
+    ) -> bool:
+        cache: dict[str, bool] = {}
+        computing: set[str] = set()
+
+        def passable_for_struct(struct_decl_id: str) -> bool:
+            if struct_decl_id in cache:
+                return cache[struct_decl_id]
+            if struct_decl_id in computing:
+                return False
+
+            struct_decl = context.record_map.get(struct_decl_id)
+            if struct_decl is None or struct_decl.is_union or not struct_decl.is_complete:
+                cache[struct_decl_id] = False
+                return False
+
+            computing.add(struct_decl_id)
+            try:
+                is_passable = all(field_ok(field.type) for field in struct_decl.fields)
+            finally:
+                computing.remove(struct_decl_id)
+
+            cache[struct_decl_id] = is_passable
+            return is_passable
+
+        def field_ok(lowered_type: Type) -> bool:
+            if isinstance(lowered_type, TypeRef):
+                return field_ok(lowered_type.canonical)
+            if isinstance(lowered_type, AtomicType):
+                if map_atomic_type(lowered_type) is not None:
+                    return False
+                return field_ok(lowered_type.value_type)
+            if isinstance(
+                lowered_type,
+                (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr),
+            ):
+                return True
+            if isinstance(lowered_type, UnsupportedType):
+                return False
+            if isinstance(lowered_type, VectorType):
+                return map_vector_simd(lowered_type) is not None
+            if isinstance(lowered_type, ComplexType):
+                return map_complex_simd(lowered_type) is not None
+            if isinstance(lowered_type, StructRef):
+                return passable_for_struct(lowered_type.decl_id)
+            if isinstance(lowered_type, Pointer):
+                if lowered_type.pointee is None:
+                    return True
+                return field_ok(lowered_type.pointee)
+            if isinstance(lowered_type, Array):
+                return lowered_type.array_kind != "fixed" and field_ok(lowered_type.element)
+            return False
+
+        return passable_for_struct(decl_id)
 
 
 class LowerStructPass:

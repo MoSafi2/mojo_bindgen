@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.layout import build_register_passable_map
 from mojo_bindgen.ir import (
     AtomicType,
     Field,
@@ -11,7 +10,6 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     TargetABI,
-    Unit,
     UnsupportedType,
 )
 from mojo_bindgen.mojo_ir import (
@@ -55,9 +53,6 @@ def _context_for(*decls: Struct) -> StructLoweringContext:
     record_map = {decl.decl_id: decl for decl in decls}
     return StructLoweringContext(
         record_map=record_map,
-        register_passable_by_decl_id=build_register_passable_map(
-            {decl.decl_id: decl for decl in decls if not decl.is_union}
-        ),
         target_abi=_abi(),
         type_lowerer=LowerTypePass(),
     )
@@ -486,21 +481,97 @@ def test_lower_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() 
     assert lowered.initializers[0] == Initializer(params=[])
 
 
-def test_context_building_matches_unit_register_passable_expectations() -> None:
-    decl = Struct(
-        decl_id="struct:Widget",
-        name="Widget",
-        c_name="Widget",
-        fields=[Field(name="count", source_name="count", type=_i32(), byte_offset=0)],
-        size_bytes=4,
-        align_bytes=4,
+def test_lower_struct_omits_register_passable_when_field_references_incomplete_struct() -> None:
+    child = Struct(
+        decl_id="struct:Child",
+        name="Child",
+        c_name="Child",
+        fields=[],
+        size_bytes=0,
+        align_bytes=1,
+        is_complete=False,
+    )
+    holder = Struct(
+        decl_id="struct:Holder",
+        name="Holder",
+        c_name="Holder",
+        fields=[
+            Field(
+                name="child",
+                source_name="child",
+                type=StructRef(
+                    decl_id=child.decl_id,
+                    name=child.name,
+                    c_name=child.c_name,
+                    is_union=False,
+                    size_bytes=child.size_bytes,
+                ),
+                byte_offset=0,
+            )
+        ],
+        size_bytes=8,
+        align_bytes=8,
         is_complete=True,
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[decl])
 
-    context = _context_for(*[d for d in unit.decls if isinstance(d, Struct)])
+    lowered = lower_struct(holder, context=_context_for(holder, child))
 
-    assert context.register_passable_by_decl_id[decl.decl_id] is True
+    assert lowered.fieldwise_init is True
+    assert lowered.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+
+
+def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> None:
+    left = Struct(
+        decl_id="struct:Left",
+        name="Left",
+        c_name="Left",
+        fields=[],
+        size_bytes=8,
+        align_bytes=8,
+        is_complete=True,
+    )
+    right = Struct(
+        decl_id="struct:Right",
+        name="Right",
+        c_name="Right",
+        fields=[],
+        size_bytes=8,
+        align_bytes=8,
+        is_complete=True,
+    )
+    left.fields = [
+        Field(
+            name="right",
+            source_name="right",
+            type=StructRef(
+                decl_id=right.decl_id,
+                name=right.name,
+                c_name=right.c_name,
+                is_union=False,
+                size_bytes=right.size_bytes,
+            ),
+            byte_offset=0,
+        )
+    ]
+    right.fields = [
+        Field(
+            name="left",
+            source_name="left",
+            type=StructRef(
+                decl_id=left.decl_id,
+                name=left.name,
+                c_name=left.c_name,
+                is_union=False,
+                size_bytes=left.size_bytes,
+            ),
+            byte_offset=0,
+        )
+    ]
+
+    lowered = lower_struct(left, context=_context_for(left, right))
+
+    assert lowered.fieldwise_init is True
+    assert lowered.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
 
 
 def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None:
