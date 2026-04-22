@@ -45,6 +45,7 @@ from mojo_bindgen.new_analysis.const_lowering import (
     LowerConstExprPass,
 )
 from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
+from mojo_bindgen.new_analysis.union_lowering import LowerUnionPass
 
 
 class UnitLoweringError(ValueError):
@@ -101,24 +102,13 @@ class _StubStructLowerer:
         )
 
 
-class _StubUnionLowerer:
-    """Temporary union lowering until dedicated union layout lowering exists."""
-
-    def lower(self, decl: Struct) -> AliasDecl:
-        return AliasDecl(
-            name=_record_name(decl),
-            kind=AliasKind.UNION_LAYOUT,
-            diagnostics=[_stub_note("union lowering not implemented yet")],
-        )
-
-
 class UnitDeclLowerer:
     """Lower one top-level CIR declaration into one or more MojoIR declarations."""
 
     def __init__(self, session: LoweringSession) -> None:
         self.session = session
         self._struct_lowerer = _StubStructLowerer()
-        self._union_lowerer = _StubUnionLowerer()
+        self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
 
     def lower_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
         if isinstance(decl, Typedef):
@@ -219,7 +209,7 @@ class UnitDeclLowerer:
 
     def _lower_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:
-            return self._union_lowerer.lower(decl)
+            return self._union_lowerer.run(decl)
         return self._struct_lowerer.lower(decl)
 
 

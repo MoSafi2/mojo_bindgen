@@ -19,6 +19,7 @@ from mojo_bindgen.serde import SerdeFieldSpec, SerDeMixin, SerdeSpec
 class MojoBuiltin(StrEnum):
     NONE = "NoneType"
     BOOL = "Bool"
+    UINT8 = "UInt8"
     INT128 = "Int128"
     UINT128 = "UInt128"
     FLOAT16 = "Float16"

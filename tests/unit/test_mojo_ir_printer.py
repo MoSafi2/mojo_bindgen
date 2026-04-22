@@ -296,6 +296,34 @@ def test_normalize_mojo_module_sets_align_decorator_before_printing() -> None:
     assert widget.align_decorator == 8
 
 
+def test_normalize_and_printer_keep_union_byte_fallback_without_unsafe_union_import() -> None:
+    normalized = normalize_mojo_module(
+        MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+            decls=[
+                AliasDecl(
+                    name="Dup",
+                    kind=AliasKind.UNION_LAYOUT,
+                    type_value=ArrayType(
+                        element=BuiltinType(MojoBuiltin.UINT8),
+                        count=4,
+                    ),
+                )
+            ],
+        )
+    )
+
+    assert normalized.imports == []
+
+    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(normalized)
+
+    assert "UnsafeUnion" not in rendered
+    assert "comptime Dup = InlineArray[UInt8, 4]" in rendered
+
+
 def test_printer_uses_explicit_align_decorator_only() -> None:
     rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(
         MojoModule(
