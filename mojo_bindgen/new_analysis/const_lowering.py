@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.common import mojo_float_literal_text
 from mojo_bindgen.codegen.mojo_mapper import mojo_ident
 from mojo_bindgen.ir import (
     BinaryExpr,
@@ -43,11 +44,19 @@ class LowerConstExprPass:
 
     type_lowering: LowerTypePass
 
+    @staticmethod
+    def _parse_float_literal(value: str) -> float:
+        text = mojo_float_literal_text(value)
+        lowered = text.lower()
+        if lowered.startswith(("0x", "+0x", "-0x")):
+            return float.fromhex(text)
+        return float(text)
+
     def run(self, expr: ConstExpr) -> MojoConstExpr:
         if isinstance(expr, IntLiteral):
             return MojoIntLiteral(expr.value)
         if isinstance(expr, FloatLiteral):
-            return MojoFloatLiteral(float(expr.value))
+            return MojoFloatLiteral(self._parse_float_literal(expr.value))
         if isinstance(expr, StringLiteral):
             return MojoStringLiteral(expr.value)
         if isinstance(expr, CharLiteral):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     Const,
     Enum,
@@ -20,6 +21,7 @@ from mojo_bindgen.ir import (
     StructRef,
     TargetABI,
     Typedef,
+    TypeRef,
     Unit,
     VoidType,
 )
@@ -44,6 +46,7 @@ from mojo_bindgen.mojo_ir import (
     ParametricType,
     PointerMutability,
     PointerType,
+    StoredMember,
     StructDecl,
     StructKind,
     TypeArg,
@@ -102,7 +105,42 @@ def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     assert lowered.library == "demo"
     assert lowered.link_name == "demo"
     assert lowered.link_mode == LinkMode.EXTERNAL_CALL
+    assert lowered.library_path_hint is None
     assert [type(decl) for decl in lowered.decls] == [AliasDecl, EnumDecl, FunctionDecl, GlobalDecl]
+
+
+def test_lower_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Function(
+                decl_id="fn:install",
+                name="install",
+                link_name="c_install",
+                ret=VoidType(),
+                params=[CIRParam(name="", type=Pointer(pointee=None))],
+            ),
+        ],
+    )
+
+    lowered = lower_unit(
+        unit,
+        options=MojoEmitOptions(
+            linking="owned_dl_handle",
+            library_path_hint="/tmp/libdemo.so",
+            strict_abi=True,
+        ),
+    )
+
+    fn_decl = lowered.decls[0]
+
+    assert lowered.link_mode == LinkMode.OWNED_DL_HANDLE
+    assert lowered.library_path_hint == "/tmp/libdemo.so"
+    assert isinstance(fn_decl, FunctionDecl)
+    assert fn_decl.call_target.link_mode == LinkMode.OWNED_DL_HANDLE
 
 
 def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
@@ -239,9 +277,10 @@ def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
     assert decl.kind == AliasKind.MACRO_VALUE
     assert decl.const_value is None
     assert decl.type_value is None
-    assert len(decl.diagnostics) == 1
-    assert decl.diagnostics[0].category == "stub_lowering"
-    assert decl.diagnostics[0].message == "macro lowering is incomplete; placeholder alias emitted"
+    assert len(decl.diagnostics) == 2
+    assert [note.category for note in decl.diagnostics] == ["macro_comment", "macro_comment"]
+    assert decl.diagnostics[0].message == "macro BROKEN: unsupported macro body"
+    assert decl.diagnostics[1].message == "define BROKEN foo ( )"
 
 
 def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None:
@@ -391,6 +430,68 @@ def test_lower_unit_keeps_incomplete_union_as_placeholder_alias() -> None:
     )
 
 
+def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Struct(
+                decl_id="union:payload",
+                name="Payload",
+                c_name="Payload",
+                fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+                size_bytes=8,
+                align_bytes=8,
+                is_union=True,
+                is_complete=True,
+            ),
+            Struct(
+                decl_id="struct:holder",
+                name="Holder",
+                c_name="Holder",
+                fields=[
+                    Field(name="tag", source_name="tag", type=_i32(), byte_offset=0),
+                    Field(
+                        name="payload",
+                        source_name="payload",
+                        type=StructRef(
+                            decl_id="union:payload",
+                            name="Payload",
+                            c_name="Payload",
+                            is_union=True,
+                            size_bytes=8,
+                        ),
+                        byte_offset=8,
+                    ),
+                ],
+                size_bytes=16,
+                align_bytes=8,
+                is_complete=True,
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    union_decl = lowered.decls[0]
+    holder_decl = lowered.decls[1]
+
+    assert isinstance(union_decl, AliasDecl)
+    assert union_decl.kind == AliasKind.UNION_LAYOUT
+    assert union_decl.type_value == ParametricType(
+        base=ParametricBase.UNSAFE_UNION,
+        args=[TypeArg(type=BuiltinType(MojoBuiltin.C_INT))],
+    )
+    assert isinstance(holder_decl, StructDecl)
+    assert holder_decl.kind == StructKind.PLAIN
+    assert holder_decl.members == [
+        StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
+        StoredMember(name="payload", type=NamedType("Payload"), byte_offset=8),
+    ]
+    assert holder_decl.diagnostics == []
+
+
 def test_lower_unit_keeps_raw_callback_types_inline() -> None:
     callback = FunctionPtr(
         ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
@@ -431,6 +532,45 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
         pointee=None,
         mutability=PointerMutability.MUT,
     )
+
+
+def test_lower_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
+    int32_ref = TypeRef(
+        decl_id="typedef:int32_t",
+        name="int32_t",
+        canonical=_i32(),
+    )
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Function(
+                decl_id="fn:sf_add",
+                name="sf_add",
+                link_name="sf_add",
+                ret=int32_ref,
+                params=[
+                    CIRParam(name="a", type=int32_ref),
+                    CIRParam(name="b", type=int32_ref),
+                ],
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    typedef_decl = lowered.decls[0]
+    fn_decl = lowered.decls[1]
+
+    assert typedef_decl == AliasDecl(
+        name="int32_t",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=BuiltinType(MojoBuiltin.C_INT),
+    )
+    assert isinstance(fn_decl, FunctionDecl)
+    assert [param.type for param in fn_decl.params] == [NamedType("int32_t"), NamedType("int32_t")]
+    assert fn_decl.return_type == NamedType("int32_t")
 
 
 def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> None:

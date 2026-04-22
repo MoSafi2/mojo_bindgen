@@ -2,9 +2,10 @@
 # source: tests/surface/fixtures/globals_and_consts/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD, c_int, c_uint
 
-# Resolve symbols from libraries already linked into this process (e.g. mojo link step).
+from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle, c_int, c_uint
+
+# Resolve symbols from libraries already linked into this process.
 def _bindgen_dl() raises -> OwnedDLHandle:
     return OwnedDLHandle(DEFAULT_RTLD)
 
@@ -29,7 +30,6 @@ struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
         var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
         p[] = value.copy()
 
-
 struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
@@ -46,15 +46,13 @@ struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]
     def load() raises -> Self.T:
         return Self._raw()[].copy()
 
-
 comptime DEFAULT_LIMIT = c_uint(42)
 
-# struct point - size=8 align=4 (verify packed/aligned ABI)
 @align(4)
 @fieldwise_init
 struct point(Copyable, Movable, RegisterPassable):
     var x: c_int
     var y: c_int
+
 # global `global_counter` -> c_int
 comptime global_counter = GlobalVar[T=c_int, link="global_counter"]
-

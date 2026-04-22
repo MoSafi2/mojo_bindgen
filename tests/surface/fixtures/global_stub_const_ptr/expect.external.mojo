@@ -2,9 +2,10 @@
 # source: tests/surface/fixtures/global_stub_const_ptr/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call, OwnedDLHandle, DEFAULT_RTLD
 
-# Resolve symbols from libraries already linked into this process (e.g. mojo link step).
+from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle
+
+# Resolve symbols from libraries already linked into this process.
 def _bindgen_dl() raises -> OwnedDLHandle:
     return OwnedDLHandle(DEFAULT_RTLD)
 
@@ -29,7 +30,6 @@ struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
         var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
         p[] = value.copy()
 
-
 struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
@@ -46,11 +46,8 @@ struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]
     def load() raises -> Self.T:
         return Self._raw()[].copy()
 
-
-# incomplete C struct `gscp_cfg` — opaque; use only as pointer target
-@fieldwise_init
 struct gscp_cfg(Copyable, Movable):
     pass
+
 # global `gscp_default_cfg` -> UnsafePointer[gscp_cfg, ImmutExternalOrigin]
 comptime gscp_default_cfg = GlobalVar[T=UnsafePointer[gscp_cfg, ImmutExternalOrigin], link="gscp_default_cfg"]
-

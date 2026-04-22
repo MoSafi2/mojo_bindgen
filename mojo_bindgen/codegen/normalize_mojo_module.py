@@ -41,6 +41,7 @@ from mojo_bindgen.mojo_ir import (
     NamedType,
     Param,
     ParametricType,
+    PointerMutability,
     PointerType,
     StoredMember,
     StructDecl,
@@ -62,6 +63,11 @@ class NormalizeMojoModulePass:
     def run(self, module: MojoModule) -> MojoModule:
         self._module = module
         self._reserved_names = {decl.name for decl in module.decls}
+        self._callback_signature_names = {
+            decl.name
+            for decl in module.decls
+            if isinstance(decl, AliasDecl) and decl.kind == AliasKind.CALLBACK_SIGNATURE
+        }
         self._synth_aliases: list[AliasDecl] = []
         self._synth_aliases_by_path: dict[tuple[str, ...], str] = {}
         self._needs_opaque_imports = False
@@ -70,7 +76,7 @@ class NormalizeMojoModulePass:
         self._needs_atomic_import = False
 
         normalized_decls = [self._normalize_decl(decl) for decl in module.decls]
-        all_decls = [*self._synth_aliases, *normalized_decls]
+        all_decls = [*self._synth_aliases, *self._ordered_decls(normalized_decls)]
         support_decls = self._collect_support_decls(all_decls)
         imports = self._collect_imports(all_decls, support_decls)
 
@@ -201,7 +207,14 @@ class NormalizeMojoModulePass:
         *,
         allow_inline_callback: bool = False,
     ) -> MojoType:
-        if isinstance(t, (BuiltinType, NamedType)):
+        if isinstance(t, BuiltinType):
+            return t
+        if isinstance(t, NamedType):
+            if t.name in self._callback_signature_names:
+                return PointerType(
+                    pointee=t,
+                    mutability=PointerMutability.MUT,
+                )
             return t
         if isinstance(t, PointerType):
             return replace(
@@ -322,6 +335,7 @@ class NormalizeMojoModulePass:
             name = f"{base}_{suffix}"
             suffix += 1
         self._reserved_names.add(name)
+        self._callback_signature_names.add(name)
 
         self._synth_aliases_by_path[path] = name
         self._synth_aliases.append(
@@ -390,6 +404,10 @@ class NormalizeMojoModulePass:
 
         imports: list[ModuleImport] = []
         ordered_ffi = []
+        if self._module.link_mode == LinkMode.EXTERNAL_CALL and any(
+            not isinstance(decl, AliasDecl) for decl in decls
+        ):
+            ffi_names.add("external_call")
         if "external_call" in ffi_names:
             ordered_ffi.append("external_call")
         if "DEFAULT_RTLD" in ffi_names:
@@ -729,6 +747,21 @@ class NormalizeMojoModulePass:
                 ret=t.ret,
             )
         return None
+
+    @staticmethod
+    def _ordered_decls(decls: list[MojoDecl]) -> list[MojoDecl]:
+        def sort_key(decl: MojoDecl) -> tuple[int, int]:
+            if isinstance(decl, AliasDecl):
+                rank = 0
+            elif isinstance(decl, (EnumDecl, StructDecl)):
+                rank = 1
+            elif isinstance(decl, GlobalDecl):
+                rank = 2
+            else:
+                rank = 3
+            return rank, 0
+
+        return sorted(decls, key=sort_key)
 
 
 def normalize_mojo_module(module: MojoModule) -> MojoModule:

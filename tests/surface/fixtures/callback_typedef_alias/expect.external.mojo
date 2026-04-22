@@ -2,11 +2,12 @@
 # source: tests/surface/fixtures/callback_typedef_alias/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
-from std.ffi import external_call, c_int
-from std.memory import ImmutOpaquePointer, MutOpaquePointer
 
-comptime cta_cb_t = def (value: c_int) thin abi("C") -> c_int
+from std.ffi import external_call, c_int
+
+comptime int32_t = c_int
+
+comptime cta_cb_t = def (value: int32_t) thin abi("C") -> int32_t
 
 def cta_install(cb: UnsafePointer[cta_cb_t, MutExternalOrigin]) abi("C") -> None:
     external_call["cta_install", NoneType, UnsafePointer[cta_cb_t, MutExternalOrigin]](cb)
-

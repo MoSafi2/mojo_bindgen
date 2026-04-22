@@ -2,13 +2,15 @@
 # source: tests/surface/fixtures/non_register_return_stub/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
+
 from std.ffi import external_call, c_int
 
-# struct nrr_payload - size=8 align=4 (verify packed/aligned ABI)
+comptime int32_t = c_int
+
 @align(4)
 @fieldwise_init
 struct nrr_payload(Copyable, Movable):
-    var values: InlineArray[c_int, 2]
-# C return type is not RegisterPassable - external_call cannot model this return; bind manually.
-# nrr_payload nrr_build()
+    var values: InlineArray[int32_t, 2]
 
+def nrr_build() abi("C") -> nrr_payload:
+    return external_call["nrr_build", nrr_payload]()

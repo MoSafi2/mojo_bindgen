@@ -5,15 +5,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
-from mojo_bindgen.ir import Field, Struct
+from mojo_bindgen.ir import Struct
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
     BuiltinType,
-    LoweringNote,
-    LoweringSeverity,
     MojoBuiltin,
     MojoType,
     NamedType,
@@ -21,40 +18,18 @@ from mojo_bindgen.mojo_ir import (
     ParametricType,
     TypeArg,
 )
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass, TypeLoweringError
+from mojo_bindgen.new_analysis.lowering_support import (
+    field_display_name,
+    record_name,
+    stub_note,
+    try_lower_type,
+    union_note,
+)
+from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 
 class UnionLoweringError(ValueError):
     """Raised when a CIR union declaration cannot be lowered to MojoIR."""
-
-
-def _union_name(decl: Struct) -> str:
-    raw_name = decl.name.strip() or decl.c_name.strip()
-    return mojo_ident(raw_name, fallback="anonymous_union")
-
-
-def _field_display_name(field: Field, index: int) -> str:
-    if field.source_name:
-        return field.source_name
-    if field.name:
-        return field.name
-    return f"field_{index}"
-
-
-def _union_note(message: str) -> LoweringNote:
-    return LoweringNote(
-        severity=LoweringSeverity.NOTE,
-        message=message,
-        category="union_lowering",
-    )
-
-
-def _stub_note(message: str) -> LoweringNote:
-    return LoweringNote(
-        severity=LoweringSeverity.NOTE,
-        message=message,
-        category="stub_lowering",
-    )
 
 
 @dataclass
@@ -71,15 +46,13 @@ class LowerUnionPass:
 
         if not decl.is_complete:
             return AliasDecl(
-                name=_union_name(decl),
+                name=record_name(decl),
                 kind=AliasKind.UNION_LAYOUT,
-                diagnostics=[
-                    _stub_note("incomplete union placeholder emitted; layout not lowered")
-                ],
+                diagnostics=[stub_note("incomplete union placeholder emitted; layout not lowered")],
             )
 
-        alias_name = _union_name(decl)
-        diagnostics: list[LoweringNote] = []
+        alias_name = record_name(decl)
+        diagnostics = []
         arms: list[MojoType] = []
         seen_keys: dict[str, str] = {}
         eligible = True
@@ -87,37 +60,29 @@ class LowerUnionPass:
         if decl.size_bytes <= 0:
             eligible = False
             diagnostics.append(
-                _union_note(
+                union_note(
                     f"union `{decl.c_name}` has non-representable byte size {decl.size_bytes}; using byte-storage fallback"
                 )
             )
 
         for index, field in enumerate(decl.fields):
-            field_name = _field_display_name(field, index)
-            try:
-                lowered = self.type_lowerer.run(field.type)
-            except TypeLoweringError as exc:
+            field_name = field_display_name(field, index)
+            lowered, reason = try_lower_type(
+                self.type_lowerer,
+                field.type,
+                subject=f"union member `{field_name}`",
+                failure_suffix="using byte-storage fallback",
+            )
+            if reason is not None or lowered is None:
                 eligible = False
-                diagnostics.append(
-                    _union_note(
-                        f"union member `{field_name}` could not be lowered ({exc}); using byte-storage fallback"
-                    )
-                )
-                continue
-
-            if lowered == BuiltinType(MojoBuiltin.UNSUPPORTED):
-                eligible = False
-                diagnostics.append(
-                    _union_note(
-                        f"union member `{field_name}` lowered to unsupported type; using byte-storage fallback"
-                    )
-                )
+                if reason is not None:
+                    diagnostics.append(union_note(reason))
                 continue
 
             if isinstance(lowered, NamedType) and lowered.name == alias_name:
                 eligible = False
                 diagnostics.append(
-                    _union_note(
+                    union_note(
                         f"union member `{field_name}` lowered to self-referential type `{alias_name}`; using byte-storage fallback"
                     )
                 )
@@ -128,7 +93,7 @@ class LowerUnionPass:
             if prior_name is not None:
                 eligible = False
                 diagnostics.append(
-                    _union_note(
+                    union_note(
                         f"union member `{field_name}` duplicates lowered type of earlier member `{prior_name}`; using byte-storage fallback"
                     )
                 )
@@ -154,7 +119,12 @@ class LowerUnionPass:
                 element=BuiltinType(MojoBuiltin.UINT8),
                 count=decl.size_bytes,
             ),
-            diagnostics=diagnostics,
+            diagnostics=[
+                *diagnostics,
+                union_note(
+                    f"union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout"
+                ),
+            ],
         )
 
     @staticmethod

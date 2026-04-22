@@ -2,11 +2,13 @@
 # source: tests/surface/fixtures/struct_plain_fields/input.h
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
+
 from std.ffi import external_call, c_int
 
-# struct spf_pair - size=8 align=4 (verify packed/aligned ABI)
+comptime int32_t = c_int
+
 @align(4)
 @fieldwise_init
 struct spf_pair(Copyable, Movable, RegisterPassable):
-    var lhs: c_int
-    var rhs: c_int
+    var lhs: int32_t
+    var rhs: int32_t

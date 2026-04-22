@@ -521,6 +521,7 @@ MojoDecl = Union[
 class MojoModule(SerDeMixin):
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
         fields={
+            "library_path_hint": SerdeFieldSpec(omit_if_default=True),
             "imports": SerdeFieldSpec(omit_if_default=True),
             "support_decls": SerdeFieldSpec(omit_if_default=True),
         }
@@ -530,6 +531,7 @@ class MojoModule(SerDeMixin):
     library: str
     link_name: str
     link_mode: LinkMode
+    library_path_hint: str | None = None
     capabilities: ModuleCapabilities = field(default_factory=ModuleCapabilities)
     imports: list[ModuleImport] = field(default_factory=list)
     support_decls: list[SupportDecl] = field(default_factory=list)

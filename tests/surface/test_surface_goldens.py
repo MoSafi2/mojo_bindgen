@@ -14,8 +14,8 @@ from mojo_bindgen.parsing.parser import ClangParser
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SURFACE_ROOT = _REPO_ROOT / "tests" / "surface" / "fixtures"
 _SOURCE_LINE = re.compile(r"^# source: .+$", re.MULTILINE)
-_GOLDEN_EMIT_OPTIONS = MojoEmitOptions(strict_abi=True)
-"""Keep surface goldens pinned to the historical ABI-strict emitted shape."""
+_GOLDEN_EMIT_OPTIONS = MojoEmitOptions()
+"""Surface goldens track the default generator pipeline output."""
 
 
 def _has_libclang() -> bool:

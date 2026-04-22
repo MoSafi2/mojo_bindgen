@@ -6,27 +6,30 @@ from dataclasses import dataclass
 from typing import Literal
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, field_mojo_name
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
-from mojo_bindgen.ir import Struct, TargetABI
+from mojo_bindgen.ir import AtomicType, Struct, TargetABI
 from mojo_bindgen.mojo_ir import (
     BitfieldField,
     BitfieldGroupMember,
-    BuiltinType,
     Initializer,
     InitializerParam,
-    LoweringNote,
-    LoweringSeverity,
-    MojoBuiltin,
     MojoType,
     OpaqueStorageMember,
     PaddingMember,
+    ParametricBase,
+    ParametricType,
     StoredMember,
     StructDecl,
     StructKind,
     StructTraits,
 )
+from mojo_bindgen.new_analysis.lowering_support import (
+    field_display_name,
+    record_name,
+    struct_note,
+    try_lower_type,
+)
 from mojo_bindgen.new_analysis.record_layout import AnalyzeRecordLayoutPass, RecordLayoutFacts
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass, TypeLoweringError
+from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 RepresentationMode = Literal[
     "fieldwise_exact",
@@ -40,12 +43,37 @@ class StructLoweringError(ValueError):
     """Raised when a CIR struct declaration cannot be lowered to MojoIR."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class StructLoweringContext:
-    struct_map: dict[str, Struct]
+    record_map: dict[str, Struct]
     register_passable_by_decl_id: dict[str, bool]
     target_abi: TargetABI
     type_lowerer: LowerTypePass
+
+    def __init__(
+        self,
+        *,
+        record_map: dict[str, Struct] | None = None,
+        register_passable_by_decl_id: dict[str, bool],
+        target_abi: TargetABI,
+        type_lowerer: LowerTypePass,
+        struct_map: dict[str, Struct] | None = None,
+    ) -> None:
+        resolved_record_map = record_map if record_map is not None else struct_map
+        if resolved_record_map is None:
+            raise TypeError("StructLoweringContext requires `record_map`")
+        object.__setattr__(self, "record_map", resolved_record_map)
+        object.__setattr__(
+            self,
+            "register_passable_by_decl_id",
+            register_passable_by_decl_id,
+        )
+        object.__setattr__(self, "target_abi", target_abi)
+        object.__setattr__(self, "type_lowerer", type_lowerer)
+
+    @property
+    def struct_map(self) -> dict[str, Struct]:
+        return self.record_map
 
 
 @dataclass(frozen=True)
@@ -91,29 +119,13 @@ class StructRepresentationPlan:
     representation_mode: RepresentationMode
     plain_fields: tuple[LoweredPlainField, ...]
     bitfield_runs: tuple[LoweredBitfieldRun, ...]
+    diagnostic_notes: tuple[str, ...]
     fallback_reasons: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class StructBodyPlan:
     members: list[StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember]
-
-
-def _record_name(decl: Struct) -> str:
-    raw_name = decl.name.strip() or decl.c_name.strip()
-    return mojo_ident(raw_name, fallback="anonymous_struct")
-
-
-def _field_display_name(field_name: str, fallback: str) -> str:
-    return field_name or fallback
-
-
-def _struct_note(message: str, *, category: str = "struct_lowering") -> LoweringNote:
-    return LoweringNote(
-        severity=LoweringSeverity.NOTE,
-        message=message,
-        category=category,
-    )
 
 
 class PlanStructRepresentationPass:
@@ -130,6 +142,7 @@ class PlanStructRepresentationPass:
                 representation_mode="fieldwise_exact",
                 plain_fields=(),
                 bitfield_runs=(),
+                diagnostic_notes=(),
                 fallback_reasons=(),
             )
 
@@ -138,18 +151,21 @@ class PlanStructRepresentationPass:
                 representation_mode="opaque_storage_exact",
                 plain_fields=(),
                 bitfield_runs=(),
+                diagnostic_notes=(),
                 fallback_reasons=(),
             )
 
-        plain_fields, plain_reasons = self._lower_plain_fields(facts, context=context)
+        plain_fields, plain_notes, plain_reasons = self._lower_plain_fields(facts, context=context)
         bitfield_runs, bitfield_reasons = self._lower_bitfield_runs(facts, context=context)
         fallback_reasons = tuple([*plain_reasons, *bitfield_reasons])
+        diagnostic_notes = tuple(plain_notes)
 
         if fallback_reasons:
             return StructRepresentationPlan(
                 representation_mode="opaque_storage_exact",
                 plain_fields=(),
                 bitfield_runs=(),
+                diagnostic_notes=diagnostic_notes,
                 fallback_reasons=fallback_reasons,
             )
         if bitfield_runs:
@@ -157,6 +173,7 @@ class PlanStructRepresentationPass:
                 representation_mode="bitfield_exact",
                 plain_fields=tuple(plain_fields),
                 bitfield_runs=tuple(bitfield_runs),
+                diagnostic_notes=diagnostic_notes,
                 fallback_reasons=(),
             )
         if facts.padding_spans:
@@ -164,12 +181,14 @@ class PlanStructRepresentationPass:
                 representation_mode="fieldwise_padded_exact",
                 plain_fields=tuple(plain_fields),
                 bitfield_runs=(),
+                diagnostic_notes=diagnostic_notes,
                 fallback_reasons=(),
             )
         return StructRepresentationPlan(
             representation_mode="fieldwise_exact",
             plain_fields=tuple(plain_fields),
             bitfield_runs=(),
+            diagnostic_notes=diagnostic_notes,
             fallback_reasons=(),
         )
 
@@ -178,27 +197,33 @@ class PlanStructRepresentationPass:
         facts: RecordLayoutFacts,
         *,
         context: StructLoweringContext,
-    ) -> tuple[list[LoweredPlainField], list[str]]:
+    ) -> tuple[list[LoweredPlainField], list[str], list[str]]:
         lowered: list[LoweredPlainField] = []
+        notes: list[str] = []
         reasons: list[str] = []
         for field_fact in facts.plain_fields:
             field = field_fact.field
-            display_name = _field_display_name(
-                field.source_name.strip(),
-                field.name.strip() or f"field_{field_fact.index}",
+            display_name = field_display_name(field, field_fact.index)
+            lowered_type, reason = try_lower_type(
+                context.type_lowerer,
+                field.type,
+                subject=f"field `{display_name}`",
+                failure_suffix="opaque storage emitted",
             )
-            try:
-                lowered_type = context.type_lowerer.run(field.type)
-            except TypeLoweringError as exc:
-                reasons.append(
-                    f"field `{display_name}` could not be lowered ({exc}); opaque storage emitted"
-                )
+            if reason is not None or lowered_type is None:
+                if reason is not None:
+                    reasons.append(reason)
                 continue
-            if lowered_type == BuiltinType(MojoBuiltin.UNSUPPORTED):
-                reasons.append(
-                    f"field `{display_name}` lowered to an unsupported Mojo type; opaque storage emitted"
+            if isinstance(field.type, AtomicType) and not (
+                isinstance(lowered_type, ParametricType)
+                and lowered_type.base == ParametricBase.ATOMIC
+            ):
+                note = (
+                    "some atomic types were mapped to their underlying non-atomic Mojo type "
+                    "because Atomic[dtype] was not representable"
                 )
-                continue
+                if note not in notes:
+                    notes.append(note)
             lowered.append(
                 LoweredPlainField(
                     index=field_fact.index,
@@ -207,7 +232,7 @@ class PlanStructRepresentationPass:
                     byte_offset=field_fact.byte_offset,
                 )
             )
-        return lowered, reasons
+        return lowered, notes, reasons
 
     def _lower_bitfield_runs(
         self,
@@ -219,37 +244,30 @@ class PlanStructRepresentationPass:
         reasons: list[str] = []
 
         for run in facts.bitfield_runs:
-            try:
-                lowered_storage_type = context.type_lowerer.run(run.unsigned_storage_type)
-            except TypeLoweringError as exc:
-                reasons.append(
-                    f"bitfield storage `{run.name}` could not be lowered ({exc}); opaque storage emitted"
-                )
-                continue
-            if lowered_storage_type == BuiltinType(MojoBuiltin.UNSUPPORTED):
-                reasons.append(
-                    f"bitfield storage `{run.name}` lowered to an unsupported Mojo type; opaque storage emitted"
-                )
+            lowered_storage_type, reason = try_lower_type(
+                context.type_lowerer,
+                run.unsigned_storage_type,
+                subject=f"bitfield storage `{run.name}`",
+                failure_suffix="opaque storage emitted",
+            )
+            if reason is not None or lowered_storage_type is None:
+                if reason is not None:
+                    reasons.append(reason)
                 continue
 
             lowered_members: list[LoweredBitfieldMember] = []
             for member in run.members:
                 field = member.field
-                display_name = _field_display_name(
-                    field.source_name.strip(),
-                    field.name.strip() or f"field_{member.index}",
+                display_name = field_display_name(field, member.index)
+                logical_type, reason = try_lower_type(
+                    context.type_lowerer,
+                    field.type,
+                    subject=f"bitfield `{display_name}`",
+                    failure_suffix="opaque storage emitted",
                 )
-                try:
-                    logical_type = context.type_lowerer.run(field.type)
-                except TypeLoweringError as exc:
-                    reasons.append(
-                        f"bitfield `{display_name}` could not be lowered ({exc}); opaque storage emitted"
-                    )
-                    continue
-                if logical_type == BuiltinType(MojoBuiltin.UNSUPPORTED):
-                    reasons.append(
-                        f"bitfield `{display_name}` lowered to an unsupported Mojo type; opaque storage emitted"
-                    )
+                if reason is not None or logical_type is None:
+                    if reason is not None:
+                        reasons.append(reason)
                     continue
                 lowered_members.append(
                     LoweredBitfieldMember(
@@ -352,10 +370,11 @@ class FinalizeStructDeclPass:
     ) -> StructDecl:
         diagnostics = [
             *(
-                _struct_note(f"{problem}; opaque storage emitted")
+                struct_note(f"{problem}; opaque storage emitted")
                 for problem in facts.layout_problems
             ),
-            *(_struct_note(reason) for reason in plan.fallback_reasons),
+            *(struct_note(note) for note in plan.diagnostic_notes),
+            *(struct_note(reason) for reason in plan.fallback_reasons),
         ]
         align, align_decorator = self._align_policy(facts, plan=plan)
         fieldwise_init = self._fieldwise_init_policy(facts, plan=plan)
@@ -363,7 +382,7 @@ class FinalizeStructDeclPass:
         traits = self._traits(facts, plan=plan, context=context)
 
         return StructDecl(
-            name=_record_name(facts.decl),
+            name=record_name(facts.decl),
             kind=StructKind.OPAQUE if not facts.is_complete else StructKind.PLAIN,
             traits=traits,
             align=align,
@@ -477,7 +496,7 @@ class LowerStructPass:
 
         facts = self._analyze.run(
             decl,
-            struct_map=context.struct_map,
+            record_map=context.record_map,
             target_abi=context.target_abi,
         )
         plan = self._plan_representation.run(facts, context=context)

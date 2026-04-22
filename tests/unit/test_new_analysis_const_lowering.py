@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import BinaryExpr, CastExpr, IntKind, IntLiteral, IntType, RefExpr, SizeOfExpr
+from mojo_bindgen.ir import (
+    BinaryExpr,
+    CastExpr,
+    FloatLiteral,
+    IntKind,
+    IntLiteral,
+    IntType,
+    RefExpr,
+    SizeOfExpr,
+)
 from mojo_bindgen.mojo_ir import (
     BuiltinType,
     MojoBinaryExpr,
     MojoBuiltin,
     MojoCastExpr,
+    MojoFloatLiteral,
     MojoIntLiteral,
     MojoRefExpr,
     MojoSizeOfExpr,
@@ -29,3 +39,8 @@ def test_lower_const_expr_maps_binary_ref_cast_and_sizeof_nodes() -> None:
     assert lower_const_expr(SizeOfExpr(target=c_int)) == MojoSizeOfExpr(
         target=BuiltinType(MojoBuiltin.C_INT)
     )
+
+
+def test_lower_const_expr_parses_decimal_and_hex_float_literals() -> None:
+    assert lower_const_expr(FloatLiteral("1.25f")) == MojoFloatLiteral(1.25)
+    assert lower_const_expr(FloatLiteral("0x1.0p4")) == MojoFloatLiteral(16.0)

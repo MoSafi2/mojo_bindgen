@@ -2,11 +2,14 @@
 # source: tests/surface/alignment/fixtures/packed_struct_comment/input.h
 # library: packed_struct_comment  link_name: packed_struct_comment
 # FFI mode: external_call
+
 from std.ffi import external_call, c_uchar, c_uint
 
-# struct psc_header - size=5 align=1 (verify packed/aligned ABI)
+comptime uint8_t = c_uchar
+
+comptime uint32_t = c_uint
+
+# NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
+# NOTE[struct_lowering]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
 struct psc_header(Copyable, Movable):
-    # exact C field layout for `psc_header` is not representable as a typed Mojo struct;
-    # using opaque byte storage instead.
-    # reason: field `size` is at C offset 1, before the typed Mojo offset 4
     var storage: InlineArray[UInt8, 5]

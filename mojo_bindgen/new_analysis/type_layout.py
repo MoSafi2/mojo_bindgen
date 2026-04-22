@@ -40,13 +40,17 @@ def peel_layout_wrappers(t: Type) -> Type:
 
 
 def type_layout(
-    t: Type, *, struct_map: dict[str, Struct], target_abi: TargetABI
+    t: Type,
+    *,
+    target_abi: TargetABI,
+    record_map: dict[str, Struct] | None = None,
+    struct_map: dict[str, Struct] | None = None,
 ) -> tuple[int, int] | None:
     """Return CIR size/alignment facts for ``t`` or ``None`` when unavailable."""
 
     return _type_layout_worker(
         peel_layout_wrappers(t),
-        struct_map=struct_map,
+        record_map=_resolve_record_map(record_map=record_map, struct_map=struct_map),
         target_abi=target_abi,
         visiting=set(),
     )
@@ -55,7 +59,7 @@ def type_layout(
 def _type_layout_worker(
     t: Type,
     *,
-    struct_map: dict[str, Struct],
+    record_map: dict[str, Struct],
     target_abi: TargetABI,
     visiting: set[str],
 ) -> tuple[int, int] | None:
@@ -66,7 +70,7 @@ def _type_layout_worker(
     if isinstance(t, EnumRef):
         return _type_layout_worker(
             peel_layout_wrappers(t.underlying),
-            struct_map=struct_map,
+            record_map=record_map,
             target_abi=target_abi,
             visiting=visiting,
         )
@@ -81,7 +85,7 @@ def _type_layout_worker(
     if isinstance(t, VectorType):
         element_layout = _type_layout_worker(
             peel_layout_wrappers(t.element),
-            struct_map=struct_map,
+            record_map=record_map,
             target_abi=target_abi,
             visiting=visiting,
         )
@@ -95,7 +99,7 @@ def _type_layout_worker(
     if isinstance(t, StructRef):
         if t.decl_id in visiting:
             return None
-        target = struct_map.get(t.decl_id)
+        target = record_map.get(t.decl_id)
         if target is None:
             return None
         visiting.add(t.decl_id)
@@ -108,7 +112,7 @@ def _type_layout_worker(
             return target_abi.pointer_size_bytes, target_abi.pointer_align_bytes
         element_layout = _type_layout_worker(
             peel_layout_wrappers(t.element),
-            struct_map=struct_map,
+            record_map=record_map,
             target_abi=target_abi,
             visiting=visiting,
         )
@@ -117,3 +121,15 @@ def _type_layout_worker(
         element_size, element_align = element_layout
         return element_size * t.size, element_align
     return None
+
+
+def _resolve_record_map(
+    *,
+    record_map: dict[str, Struct] | None,
+    struct_map: dict[str, Struct] | None,
+) -> dict[str, Struct]:
+    if record_map is not None:
+        return record_map
+    if struct_map is not None:
+        return struct_map
+    raise TypeError("type_layout() requires `record_map`")

@@ -45,7 +45,7 @@ def test_type_layout_uses_real_union_alignment_from_cir() -> None:
 
     assert type_layout(
         union_ref,
-        struct_map={union_decl.decl_id: union_decl},
+        record_map={union_decl.decl_id: union_decl},
         target_abi=_abi(),
     ) == (8, 8)
 
@@ -53,12 +53,12 @@ def test_type_layout_uses_real_union_alignment_from_cir() -> None:
 def test_type_layout_uses_explicit_target_abi_for_pointers() -> None:
     assert type_layout(
         Pointer(pointee=None),
-        struct_map={},
+        record_map={},
         target_abi=TargetABI(pointer_size_bytes=4, pointer_align_bytes=4),
     ) == (4, 4)
 
 
-def test_record_layout_rejects_union_value_fields_structurally() -> None:
+def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None:
     union_decl = Struct(
         decl_id="union:Payload",
         name="Payload",
@@ -94,14 +94,49 @@ def test_record_layout_rejects_union_value_fields_structurally() -> None:
 
     facts = AnalyzeRecordLayoutPass().run(
         holder,
-        struct_map={holder.decl_id: holder, union_decl.decl_id: union_decl},
+        record_map={holder.decl_id: holder, union_decl.decl_id: union_decl},
+        target_abi=_abi(),
+    )
+
+    assert len(facts.plain_fields) == 1
+    assert facts.plain_fields[0].field.name == "payload"
+    assert facts.plain_fields[0].size_bytes == 8
+    assert facts.plain_fields[0].align_bytes == 8
+    assert facts.layout_problems == ()
+
+
+def test_record_layout_reports_unknown_union_member_layout_as_unsupported_metadata() -> None:
+    holder = Struct(
+        decl_id="struct:Holder",
+        name="Holder",
+        c_name="Holder",
+        fields=[
+            Field(
+                name="payload",
+                source_name="payload",
+                type=StructRef(
+                    decl_id="union:Missing",
+                    name="Missing",
+                    c_name="Missing",
+                    is_union=True,
+                    size_bytes=8,
+                ),
+                byte_offset=0,
+            )
+        ],
+        size_bytes=8,
+        align_bytes=8,
+        is_complete=True,
+    )
+
+    facts = AnalyzeRecordLayoutPass().run(
+        holder,
+        record_map={holder.decl_id: holder},
         target_abi=_abi(),
     )
 
     assert facts.plain_fields == ()
-    assert facts.layout_problems == (
-        "field `payload` is a union value and cannot be represented as a typed struct member",
-    )
+    assert facts.layout_problems == ("field `payload` has unsupported layout metadata",)
 
 
 def test_record_layout_keeps_structurally_representable_unsupported_fields() -> None:
@@ -130,7 +165,7 @@ def test_record_layout_keeps_structurally_representable_unsupported_fields() -> 
 
     facts = AnalyzeRecordLayoutPass().run(
         holder,
-        struct_map={holder.decl_id: holder},
+        record_map={holder.decl_id: holder},
         target_abi=_abi(),
     )
 

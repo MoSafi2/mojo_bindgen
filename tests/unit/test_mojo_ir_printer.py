@@ -283,6 +283,31 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
     )
 
 
+def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.OWNED_DL_HANDLE,
+        library_path_hint="/tmp/libdemo.so",
+        decls=[
+            FunctionDecl(
+                name="install",
+                link_name="install",
+                params=[],
+                return_type=BuiltinType(MojoBuiltin.NONE),
+                kind=FunctionKind.WRAPPER,
+                call_target=CallTarget(link_mode=LinkMode.OWNED_DL_HANDLE, symbol="install"),
+            )
+        ],
+    )
+
+    rendered = render_mojo_module(module, MojoIRPrintOptions(module_comment=False))
+
+    assert 'comptime _BINDGEN_LIB_PATH: String = "/tmp/libdemo.so"' in rendered
+    assert "return OwnedDLHandle(_BINDGEN_LIB_PATH)" in rendered
+
+
 def test_normalize_mojo_module_sets_align_decorator_before_printing() -> None:
     normalized = normalize_mojo_module(
         MojoModule(
@@ -522,10 +547,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                 params=[
                     Param(
                         name="cb",
-                        type=PointerType(
-                            pointee=NamedType("binary_cb_t"),
-                            mutability=PointerMutability.MUT,
-                        ),
+                        type=NamedType("binary_cb_t"),
                     ),
                 ],
                 return_type=BuiltinType(MojoBuiltin.NONE),

@@ -9,6 +9,7 @@ from mojo_bindgen.ir import (
     IntKind,
     IntType,
     Struct,
+    StructRef,
     TargetABI,
     Unit,
     UnsupportedType,
@@ -22,6 +23,7 @@ from mojo_bindgen.mojo_ir import (
     Initializer,
     InitializerParam,
     MojoBuiltin,
+    NamedType,
     PaddingMember,
     ParametricBase,
     ParametricType,
@@ -50,10 +52,12 @@ def _abi() -> TargetABI:
 
 
 def _context_for(*decls: Struct) -> StructLoweringContext:
-    struct_map = {decl.decl_id: decl for decl in decls}
+    record_map = {decl.decl_id: decl for decl in decls}
     return StructLoweringContext(
-        struct_map=struct_map,
-        register_passable_by_decl_id=build_register_passable_map(struct_map),
+        record_map=record_map,
+        register_passable_by_decl_id=build_register_passable_map(
+            {decl.decl_id: decl for decl in decls if not decl.is_union}
+        ),
         target_abi=_abi(),
         type_lowerer=LowerTypePass(),
     )
@@ -140,6 +144,58 @@ def test_lower_struct_synthesizes_padding_members_for_exact_layout_gaps() -> Non
         StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         PaddingMember(name="__pad0", size_bytes=4, byte_offset=4),
         StoredMember(name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=8),
+    ]
+
+
+def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
+    union_decl = Struct(
+        decl_id="union:Payload",
+        name="Payload",
+        c_name="Payload",
+        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        size_bytes=8,
+        align_bytes=8,
+        is_union=True,
+        is_complete=True,
+    )
+    decl = Struct(
+        decl_id="struct:Holder",
+        name="Holder",
+        c_name="Holder",
+        fields=[
+            Field(
+                name="tag",
+                source_name="tag",
+                type=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
+                byte_offset=0,
+            ),
+            Field(
+                name="payload",
+                source_name="payload",
+                type=StructRef(
+                    decl_id=union_decl.decl_id,
+                    name=union_decl.name,
+                    c_name=union_decl.c_name,
+                    is_union=True,
+                    size_bytes=union_decl.size_bytes,
+                ),
+                byte_offset=8,
+            ),
+            Field(name="tail", source_name="tail", type=_u32(), byte_offset=16),
+        ],
+        size_bytes=24,
+        align_bytes=8,
+        is_complete=True,
+    )
+
+    lowered = lower_struct(decl, context=_context_for(decl, union_decl))
+
+    assert lowered.fieldwise_init is True
+    assert lowered.members == [
+        StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
+        StoredMember(name="payload", type=NamedType("Payload"), byte_offset=8),
+        StoredMember(name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
+        PaddingMember(name="__pad0", size_bytes=4, byte_offset=20),
     ]
 
 

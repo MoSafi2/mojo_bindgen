@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.ir import Field, IntKind, IntType, Struct
+from mojo_bindgen.new_analysis.lowering_support import field_display_name
 from mojo_bindgen.new_analysis.type_layout import peel_layout_wrappers
 
 
@@ -62,7 +63,7 @@ def analyze_bitfield_layout(
             current = None
             continue
 
-        field_name = _field_display_name(field, index)
+        field_name = field_display_name(field, index)
         width_bits = bitfield_storage_width_bits(field)
         unsigned_storage_type = bitfield_unsigned_storage_type(field)
         if width_bits is None or unsigned_storage_type is None:
@@ -75,9 +76,8 @@ def analyze_bitfield_layout(
             continue
 
         field_end_bit = field.bit_offset + field.bit_width
-        if current is None:
-            needs_new_storage = True
-        else:
+        needs_new_storage = True
+        if current is not None:
             widened_width_bits = max(current.storage_width_bits, width_bits)
             needs_new_storage = (
                 field.bit_offset < current.start_bit
@@ -98,14 +98,13 @@ def analyze_bitfield_layout(
             )
             builders.append(active_run)
             current = active_run
-        else:
-            if current is None:
-                # Defensive guard for static analyzers; flow guarantees a run exists here.
-                continue
+        elif current is not None:
             active_run = current
             if width_bits > active_run.storage_width_bits:
                 active_run.storage_width_bits = width_bits
                 active_run.unsigned_storage_type = unsigned_storage_type
+        else:
+            continue
 
         if field.is_anonymous:
             continue
@@ -201,13 +200,3 @@ def bitfield_unsigned_storage_type(field: Field) -> IntType | None:
         align_bytes=core.align_bytes,
         ext_bits=core.ext_bits,
     )
-
-
-def _field_display_name(field: Field, index: int) -> str:
-    source_name = field.source_name.strip()
-    if source_name:
-        return source_name
-    name = field.name.strip()
-    if name:
-        return name
-    return f"field_{index}"

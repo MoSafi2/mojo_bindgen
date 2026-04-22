@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 from mojo_bindgen.analysis.layout import field_contains_representable_atomic_storage
-from mojo_bindgen.ir import Field, Struct, StructRef, TargetABI
+from mojo_bindgen.ir import Field, Struct, TargetABI
 from mojo_bindgen.new_analysis.bitfield_layout import (
     BitfieldRunLayout,
     analyze_bitfield_layout,
 )
-from mojo_bindgen.new_analysis.type_layout import peel_layout_wrappers, type_layout
+from mojo_bindgen.new_analysis.lowering_support import field_display_name
+from mojo_bindgen.new_analysis.type_layout import type_layout
 
 
 @dataclass(frozen=True)
@@ -67,8 +68,14 @@ class AnalyzeRecordLayoutPass:
     """Analyze one CIR struct into pure layout and representability facts."""
 
     def run(
-        self, decl: Struct, *, struct_map: dict[str, Struct], target_abi: TargetABI
+        self,
+        decl: Struct,
+        *,
+        target_abi: TargetABI,
+        record_map: dict[str, Struct] | None = None,
+        struct_map: dict[str, Struct] | None = None,
     ) -> RecordLayoutFacts:
+        resolved_record_map = _resolve_record_map(record_map=record_map, struct_map=struct_map)
         has_atomic_storage = any(
             field_contains_representable_atomic_storage(field) for field in decl.fields
         )
@@ -86,7 +93,7 @@ class AnalyzeRecordLayoutPass:
         # Analyze plain fields
         plain_fields, plain_items, plain_problems = self._analyze_plain_fields(
             decl=decl,
-            struct_map=struct_map,
+            record_map=resolved_record_map,
             target_abi=target_abi,
         )
 
@@ -121,7 +128,7 @@ class AnalyzeRecordLayoutPass:
         self,
         *,
         decl: Struct,
-        struct_map: dict[str, Struct],
+        record_map: dict[str, Struct],
         target_abi: TargetABI,
     ) -> tuple[list[PlainFieldFact], list[_LayoutItem], list[str]]:
         facts: list[PlainFieldFact] = []
@@ -132,15 +139,8 @@ class AnalyzeRecordLayoutPass:
             if field.is_bitfield:
                 continue
 
-            field_name = _field_display_name(field, index)
-            core = peel_layout_wrappers(field.type)
-            if isinstance(core, StructRef) and core.is_union:
-                problems.append(
-                    f"field `{field_name}` is a union value and cannot be represented as a typed struct member"
-                )
-                continue
-
-            layout = type_layout(field.type, struct_map=struct_map, target_abi=target_abi)
+            field_name = field_display_name(field, index)
+            layout = type_layout(field.type, record_map=record_map, target_abi=target_abi)
             if layout is None:
                 problems.append(f"field `{field_name}` has unsupported layout metadata")
                 continue
@@ -249,11 +249,13 @@ class AnalyzeRecordLayoutPass:
         return offset + (align - rem)
 
 
-def _field_display_name(field: Field, index: int) -> str:
-    source_name = field.source_name.strip()
-    if source_name:
-        return source_name
-    name = field.name.strip()
-    if name:
-        return name
-    return f"field_{index}"
+def _resolve_record_map(
+    *,
+    record_map: dict[str, Struct] | None,
+    struct_map: dict[str, Struct] | None,
+) -> dict[str, Struct]:
+    if record_map is not None:
+        return record_map
+    if struct_map is not None:
+        return struct_map
+    raise TypeError("AnalyzeRecordLayoutPass.run() requires `record_map`")
