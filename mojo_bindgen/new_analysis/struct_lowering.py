@@ -50,7 +50,10 @@ from mojo_bindgen.new_analysis.lowering_support import (
     struct_note,
     try_lower_type,
 )
-from mojo_bindgen.new_analysis.record_layout import AnalyzeRecordLayoutPass, RecordLayoutFacts
+from mojo_bindgen.new_analysis.record_layout import (
+    AnalyzeRecordLayoutPass,
+    RecordLayoutFacts,
+)
 from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 RepresentationMode = Literal[
@@ -322,7 +325,9 @@ class LowerStructBodyPass:
 
         members_with_offsets: list[
             tuple[
-                int, int, StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember
+                int,
+                int,
+                StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember,
             ]
         ] = []
         for field in plan.plain_fields:
