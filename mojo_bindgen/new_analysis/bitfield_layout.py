@@ -48,7 +48,9 @@ class _BitfieldRunBuilder:
     members: list[BitfieldMemberLayout]
 
 
-def analyze_bitfield_layout(decl: Struct) -> tuple[tuple[BitfieldRunLayout, ...], tuple[str, ...]]:
+def analyze_bitfield_layout(
+    decl: Struct,
+) -> tuple[tuple[BitfieldRunLayout, ...], tuple[str, ...]]:
     """Compute bitfield storage runs and structural problems for one struct."""
 
     builders: list[_BitfieldRunBuilder] = []

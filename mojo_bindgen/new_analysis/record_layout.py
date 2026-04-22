@@ -7,7 +7,10 @@ from typing import Literal
 
 from mojo_bindgen.analysis.layout import field_contains_representable_atomic_storage
 from mojo_bindgen.ir import Field, Struct, StructRef, TargetABI
-from mojo_bindgen.new_analysis.bitfield_layout import BitfieldRunLayout, analyze_bitfield_layout
+from mojo_bindgen.new_analysis.bitfield_layout import (
+    BitfieldRunLayout,
+    analyze_bitfield_layout,
+)
 from mojo_bindgen.new_analysis.type_layout import peel_layout_wrappers, type_layout
 
 
@@ -30,17 +33,17 @@ class PaddingSpan:
 @dataclass(frozen=True)
 class RecordLayoutFacts:
     decl: Struct
-    is_complete: bool
-    size_bytes: int
-    align_bytes: int | None
-    is_packed: bool
-    requested_align_bytes: int | None
-    natural_typed_align_bytes: int | None
-    plain_fields: tuple[PlainFieldFact, ...]
-    bitfield_runs: tuple[BitfieldRunLayout, ...]
-    padding_spans: tuple[PaddingSpan, ...]
-    layout_problems: tuple[str, ...]
-    has_representable_atomic_storage: bool
+    is_complete: bool = False
+    size_bytes: int = 0
+    align_bytes: int | None = None
+    is_packed: bool = False
+    requested_align_bytes: int | None = None
+    natural_typed_align_bytes: int | None = None
+    plain_fields: tuple[PlainFieldFact, ...] = ()
+    bitfield_runs: tuple[BitfieldRunLayout, ...] = ()
+    padding_spans: tuple[PaddingSpan, ...] = ()
+    layout_problems: tuple[str, ...] = ()
+    has_representable_atomic_storage: bool = False
 
     @property
     def has_bitfields(self) -> bool:
@@ -70,42 +73,28 @@ class AnalyzeRecordLayoutPass:
             field_contains_representable_atomic_storage(field) for field in decl.fields
         )
 
+        # Bail out early if the struct is not complete
         if not decl.is_complete:
             return RecordLayoutFacts(
                 decl=decl,
-                is_complete=False,
                 size_bytes=decl.size_bytes,
-                align_bytes=None,
                 is_packed=decl.is_packed,
                 requested_align_bytes=decl.requested_align_bytes,
-                natural_typed_align_bytes=None,
-                plain_fields=(),
-                bitfield_runs=(),
-                padding_spans=(),
-                layout_problems=(),
                 has_representable_atomic_storage=has_atomic_storage,
             )
 
+        # Analyze plain fields
         plain_fields, plain_items, plain_problems = self._analyze_plain_fields(
             decl=decl,
             struct_map=struct_map,
             target_abi=target_abi,
         )
+
+        # Analyze bitfields
         bitfield_runs, bitfield_problems = analyze_bitfield_layout(decl)
-        bitfield_items = [
-            _LayoutItem(
-                kind="bitfield_run",
-                index=run.first_index,
-                byte_offset=run.byte_offset,
-                size_bytes=run.size_bytes,
-                align_bytes=run.align_bytes,
-            )
-            for run in bitfield_runs
-        ]
-        items = sorted(
-            [*plain_items, *bitfield_items],
-            key=lambda item: (item.byte_offset, item.index),
-        )
+        items = self._sort_layout_items(plain_items, bitfield_runs)
+
+        # Synthesize padding and validate layout
         natural_typed_align = max((item.align_bytes for item in items), default=1)
         padding_spans, layout_problems = self._synthesize_padding_and_validate_layout(
             decl=decl,
@@ -177,6 +166,27 @@ class AnalyzeRecordLayoutPass:
             )
 
         return facts, items, problems
+
+    def _sort_layout_items(
+        self,
+        plain_items: list[_LayoutItem],
+        bitfield_runs: tuple[BitfieldRunLayout, ...],
+    ) -> list[_LayoutItem]:
+        bitfield_items = [
+            _LayoutItem(
+                kind="bitfield_run",
+                index=run.first_index,
+                byte_offset=run.byte_offset,
+                size_bytes=run.size_bytes,
+                align_bytes=run.align_bytes,
+            )
+            for run in bitfield_runs
+        ]
+
+        return sorted(
+            [*plain_items, *bitfield_items],
+            key=lambda item: (item.byte_offset, item.index),
+        )
 
     def _synthesize_padding_and_validate_layout(
         self,
