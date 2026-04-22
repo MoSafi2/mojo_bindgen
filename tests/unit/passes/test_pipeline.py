@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from mojo_bindgen.analysis import lower_unit
+from mojo_bindgen.analysis import lower_unit, run_ir_passes
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.pipeline import run_ir_passes
 from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 from mojo_bindgen.ir import (
     Field,

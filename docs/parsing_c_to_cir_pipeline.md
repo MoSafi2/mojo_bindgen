@@ -1,7 +1,8 @@
 # Parsing Pipeline: C Source to CIR
 
 This document shows the current parser path from a C header on disk to the
-raw CIR `Unit` returned by `ClangParser.run()`.
+raw CIR `Unit` returned by `ClangParser.run()`. Analysis-owned passes start
+only after this hand-off.
 
 ## Overview
 
@@ -97,7 +98,14 @@ This produces a source-faithful but not yet normalized `Unit`.
 ### 5. Hand-off boundary
 
 `ClangParser.run()` stops at raw CIR. Any later CIR normalization or lowering
-belongs to the analysis layer, not the parser.
+belongs to the analysis layer, not the parser. In the current code shape that
+means `AnalysisOrchestrator` owns:
+
+- CIR validation
+- reachability materialization
+- CIR -> MojoIR lowering
+- late record policy assignment
+- MojoIR normalization
 
 ## Output Shapes
 

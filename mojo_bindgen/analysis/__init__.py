@@ -17,8 +17,8 @@ from mojo_bindgen.analysis.orchestrator import (
     MojoGenerator,
     analyze_to_mojo_module,
     generate_mojo,
+    run_ir_passes,
 )
-from mojo_bindgen.analysis.pipeline import run_ir_passes
 from mojo_bindgen.analysis.reachability import (
     ReachabilityMaterializePass,
     ReachabilityMaterializeResult,

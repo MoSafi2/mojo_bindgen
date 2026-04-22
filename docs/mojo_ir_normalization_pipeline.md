@@ -1,7 +1,8 @@
 # MojoIR Normalization Workflow
 
 This document shows how `normalize_mojo_module()` turns lowered MojoIR into the
-printer-ready form consumed by the final rendering step.
+printer-ready form consumed by the final rendering step inside the
+analysis-owned orchestration boundary.
 
 ## Overview
 
@@ -111,9 +112,11 @@ That rewrite is part of the normalization contract, not the printer.
 
 The current public printer path is:
 
-1. `LowerUnitPass.run(unit)` produces a `MojoModule`
-2. analysis orchestration normalizes that `MojoModule`
-3. `MojoIRPrinter.render(module)` emits Mojo source
+1. `AnalysisOrchestrator.run_ir_passes(unit)` repairs raw CIR
+2. `LowerUnitPass.run(unit)` produces a policy-free `MojoModule`
+3. `assign_record_policies(module)` derives late record traits and fieldwise-init policy
+4. `normalize_mojo_module(module)` makes printer-facing facts explicit
+5. `MojoIRPrinter.render(module)` emits Mojo source
 
 Source:
 - [mojo_ir_printer.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/codegen/mojo_ir_printer.py:528)

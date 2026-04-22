@@ -7,30 +7,31 @@ between parsing and later Mojo-facing lowering.
 
 ```mermaid
 flowchart TD
-    A[raw parser Unit] --> B[analysis.pipeline.run_ir_passes]
-    B --> C[ValidateIRPass]
-    C --> D{IR invariants hold?}
-    D -->|no| E[IRValidationError]
-    D -->|yes| F[ReachabilityMaterializePass]
-    F --> G[prepend synthesized incomplete Structs for orphan StructRefs]
-    G --> H[normalized CIR Unit]
-
-    H --> I[analysis.LowerUnitPass]
-    H --> J[legacy analyze_unit_semantics]
-
-    I --> K[MojoIR]
-    J --> L[AnalyzedUnit for legacy renderer]
+    A[raw parser Unit] --> B[analysis.AnalysisOrchestrator]
+    B --> C[run_ir_passes]
+    C --> D[ValidateIRPass]
+    D --> E{IR invariants hold?}
+    E -->|no| F[IRValidationError]
+    E -->|yes| G[ReachabilityMaterializePass]
+    G --> H[prepend synthesized incomplete Structs for orphan StructRefs]
+    H --> I[analysis.lower_unit]
+    I --> J[MojoModule]
+    J --> K[assign_record_policies]
+    K --> L[normalize_mojo_module]
+    L --> M[printer-ready MojoModule]
 ```
 
 ## Active Passes
 
-The current `run_ir_passes()` implementation is short and explicit:
+The current `run_ir_passes()` implementation is short and explicit, but it now
+belongs to the analysis orchestrator boundary rather than a standalone
+integration module:
 
 1. `ValidateIRPass`
 2. `ReachabilityMaterializePass`
 
 Source:
-- [pipeline.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/pipeline.py:9)
+- [orchestrator.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/orchestrator.py:15)
 
 ## Pass Details
 
@@ -71,13 +72,15 @@ for global downstream consistency.
 `ValidateIRPass` comes first so the reachability walk only runs over structurally
 sound CIR.
 
-## What Is Not a CIR Pass
+## What Comes Next
 
-These happen after the CIR pass pipeline and should be thought of separately:
+After the CIR pass sequence, analysis continues with Mojo-facing lowering and
+finalization:
 
-- `analysis.LowerUnitPass`: CIR -> MojoIR
-- `analysis.analyze_unit_semantics`: CIR -> legacy analyzed render model
+- `analysis.lower_unit`: CIR -> MojoIR
+- `assign_record_policies`: derive struct traits and fieldwise-init eligibility
 - `normalize_mojo_module`: MojoIR -> printer-ready MojoIR
 
-So the current CIR pass layer is intentionally narrow: validate first, then
-materialize reachable opaque records.
+So the CIR pass layer is intentionally narrow inside a broader orchestrated
+analysis flow: validate first, then materialize reachable opaque records, then
+hand off to MojoIR lowering.

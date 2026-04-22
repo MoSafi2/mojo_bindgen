@@ -1,41 +1,44 @@
 # Analysis Type Lowering Pipeline
 
 This document shows how types move from CIR into MojoIR in the `analysis`
-pipeline.
+layer.
 
 ## Overview
 
 ```mermaid
 flowchart TD
-    A[CIR Unit / CIR Type] --> B[LowerUnitPass]
+    A[raw CIR Unit / CIR Type] --> B[AnalysisOrchestrator]
+    B --> C[run_ir_passes]
+    C --> D[LowerUnitPass]
 
-    B --> C{Decl kind}
-    C -->|Typedef| D[AliasDecl type_value]
-    C -->|Enum| E[EnumDecl underlying_type]
-    C -->|Function| F[FunctionDecl params + return_type]
-    C -->|GlobalVar| G[GlobalDecl value_type]
-    C -->|Union| H[LowerUnionPass]
-    C -->|Struct| I[LowerStructPass]
+    D --> E{Decl kind}
+    E -->|Typedef| F[AliasDecl type_value]
+    E -->|Enum| G[EnumDecl underlying_type]
+    E -->|Function| H[FunctionDecl params + return_type]
+    E -->|GlobalVar| I[GlobalDecl value_type]
+    E -->|Union| J[LowerUnionPass]
+    E -->|Struct| K[LowerStructPass]
 
-    D --> LT[LowerTypePass]
-    E --> LT
-    F --> LT
+    F --> LT[LowerTypePass]
     G --> LT
     H --> LT
+    I --> LT
+    J --> LT
 
-    I --> RL[AnalyzeRecordLayoutPass]
+    K --> RL[AnalyzeRecordLayoutPass]
     RL --> RP[PlanStructRepresentationPass]
     RP --> LT
     RP --> LB[LowerStructBodyPass]
     LB --> FD[FinalizeStructDeclPass]
 
     LT --> MT[MojoType]
-    H --> UO[Union AliasDecl]
+    J --> UO[Union AliasDecl]
     FD --> SO[StructDecl]
 
-    MT --> NM[normalize_mojo_module]
-    UO --> NM
-    SO --> NM
+    MT --> AP[AssignRecordPoliciesPass]
+    UO --> AP
+    SO --> AP
+    AP --> NM[NormalizeMojoModulePass]
     NM --> PR[MojoIRPrinter]
 ```
 
@@ -88,14 +91,24 @@ Builds the ordered `StructDecl.members` list from the chosen representation:
 
 ### `FinalizeStructDeclPass`
 
-Applies emitted-struct policy:
+Builds the initial lowered `StructDecl` from the chosen representation:
 - `StructKind`
-- traits
-- `fieldwise_init`
 - synthesized initializers
 - `align`
 - `align_decorator`
 - diagnostics
+
+It does not decide trait sets or whether the struct is fieldwise-init eligible.
+
+### `AssignRecordPoliciesPass`
+
+Derives record-level emitted policy after all MojoIR declarations exist:
+- record traits
+- passability-derived traits
+- `fieldwise_init` eligibility
+
+This keeps `LowerStructPass` focused on constructing the lowered struct shape,
+while policy decisions happen later with full-module context.
 
 ## Type-Level Fallback Rules
 

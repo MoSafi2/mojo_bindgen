@@ -82,7 +82,7 @@ def test_analysis_orchestrator_runs_full_analysis_sequence(monkeypatch) -> None:
     )
     calls: list[tuple[str, object]] = []
 
-    def fake_run_ir_passes(arg):
+    def fake_run_ir_passes(self, arg):
         calls.append(("run_ir_passes", arg))
         return normalized
 
@@ -98,7 +98,7 @@ def test_analysis_orchestrator_runs_full_analysis_sequence(monkeypatch) -> None:
         calls.append(("normalize", arg))
         return normalized_module
 
-    monkeypatch.setattr(generator_mod, "run_ir_passes", fake_run_ir_passes)
+    monkeypatch.setattr(generator_mod.AnalysisOrchestrator, "run_ir_passes", fake_run_ir_passes)
     monkeypatch.setattr(generator_mod, "lower_unit", fake_lower_unit)
     monkeypatch.setattr(generator_mod, "assign_record_policies", fake_assign_record_policies)
     monkeypatch.setattr(generator_mod, "normalize_mojo_module", fake_normalize_mojo_module)

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.normalize_mojo_module import (
-    normalize_mojo_module,
-)
-from mojo_bindgen.analysis.pipeline import run_ir_passes
+from mojo_bindgen.analysis.normalize_mojo_module import normalize_mojo_module
+from mojo_bindgen.analysis.reachability import ReachabilityMaterializePass
 from mojo_bindgen.analysis.record_policies import assign_record_policies
 from mojo_bindgen.analysis.unit_lowering import lower_unit
+from mojo_bindgen.analysis.validate_ir import ValidateIRPass
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
 from mojo_bindgen.ir import Unit
 from mojo_bindgen.mojo_ir import MojoModule
@@ -24,11 +23,29 @@ class AnalysisOrchestrator:
     def options(self) -> MojoEmitOptions:
         return self._options
 
-    def analyze(self, unit: Unit) -> MojoModule:
-        current = run_ir_passes(unit)
-        current = lower_unit(current, options=self._options)
-        current = assign_record_policies(current)
+    def run_ir_passes(self, unit: Unit) -> Unit:
+        """Run the CIR repair sequence before MojoIR lowering."""
+        current = ValidateIRPass().run(unit)
+        current = ReachabilityMaterializePass().run(current).unit
+        return current
+
+    def lower(self, unit: Unit) -> MojoModule:
+        """Lower validated CIR into policy-free MojoIR."""
+        current = self.run_ir_passes(unit)
+        return lower_unit(current, options=self._options)
+
+    def finalize(self, module: MojoModule) -> MojoModule:
+        """Apply late record policy decisions and final normalization."""
+        current = assign_record_policies(module)
         return normalize_mojo_module(current)
+
+    def analyze(self, unit: Unit) -> MojoModule:
+        return self.finalize(self.lower(unit))
+
+
+def run_ir_passes(unit: Unit) -> Unit:
+    """Run the analysis-owned CIR pass sequence before MojoIR lowering."""
+    return AnalysisOrchestrator().run_ir_passes(unit)
 
 
 def analyze_to_mojo_module(unit: Unit, *, options: MojoEmitOptions | None = None) -> MojoModule:
@@ -76,4 +93,5 @@ __all__ = [
     "analyze_to_mojo_module",
     "generate_mojo",
     "normalize_mojo_module",
+    "run_ir_passes",
 ]
