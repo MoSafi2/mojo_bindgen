@@ -347,7 +347,7 @@ def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None
     assert plain_decl.kind == StructKind.PLAIN
     assert plain_decl.align == 8
     assert plain_decl.align_decorator == 8
-    assert plain_decl.fieldwise_init is True
+    assert plain_decl.fieldwise_init is False
     assert plain_decl.members == [PaddingMember(name="__pad0", size_bytes=16, byte_offset=0)]
     assert plain_decl.diagnostics == []
 

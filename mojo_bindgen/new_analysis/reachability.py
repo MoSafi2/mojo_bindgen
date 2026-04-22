@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,
@@ -30,6 +29,7 @@ from mojo_bindgen.ir import (
     UnaryExpr,
     Unit,
 )
+from mojo_bindgen.new_analysis.type_walk import TypeWalkOptions, collect_type_nodes
 
 
 @dataclass(frozen=True)

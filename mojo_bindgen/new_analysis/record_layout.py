@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, any_type_node
 from mojo_bindgen.codegen.mojo_mapper import map_atomic_type
 from mojo_bindgen.ir import AtomicType, Field, Struct, TargetABI, Unit
 from mojo_bindgen.new_analysis.bitfield_layout import (
@@ -14,6 +13,7 @@ from mojo_bindgen.new_analysis.bitfield_layout import (
 )
 from mojo_bindgen.new_analysis.lowering_support import field_display_name
 from mojo_bindgen.new_analysis.type_layout import type_layout
+from mojo_bindgen.new_analysis.type_walk import TypeWalkOptions, any_type_node
 
 
 def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:

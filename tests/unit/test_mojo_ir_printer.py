@@ -471,7 +471,9 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
 
     assert aligned.align_decorator == 16
 
-    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(lowered)
+    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(
+        normalize_mojo_module(lowered)
+    )
 
     assert "@align(16)\n@fieldwise_init\nstruct Aligned" in rendered
     assert "var __pad0: InlineArray[UInt8, 4]" in rendered

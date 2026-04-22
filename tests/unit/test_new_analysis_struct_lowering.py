@@ -27,7 +27,6 @@ from mojo_bindgen.mojo_ir import (
     ParametricType,
     StoredMember,
     StructKind,
-    StructTraits,
 )
 from mojo_bindgen.new_analysis.struct_lowering import StructLoweringContext, lower_struct
 from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
@@ -76,13 +75,13 @@ def test_lower_struct_keeps_incomplete_records_opaque_with_explicit_align_none()
     assert lowered.align is None
     assert lowered.align_decorator is None
     assert lowered.fieldwise_init is False
-    assert lowered.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert lowered.traits == []
     assert lowered.members == []
     assert lowered.initializers == []
     assert lowered.diagnostics == []
 
 
-def test_lower_struct_lowers_fieldwise_exact_structs_with_traits() -> None:
+def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
     decl = Struct(
         decl_id="struct:Widget",
         name="Widget",
@@ -101,12 +100,8 @@ def test_lower_struct_lowers_fieldwise_exact_structs_with_traits() -> None:
     assert lowered.kind == StructKind.PLAIN
     assert lowered.align == 4
     assert lowered.align_decorator is None
-    assert lowered.fieldwise_init is True
-    assert lowered.traits == [
-        StructTraits.COPYABLE,
-        StructTraits.MOVABLE,
-        StructTraits.REGISTER_PASSABLE,
-    ]
+    assert lowered.fieldwise_init is False
+    assert lowered.traits == []
     assert lowered.members == [
         StoredMember(name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
         StoredMember(name="flags", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=4),
@@ -134,7 +129,7 @@ def test_lower_struct_synthesizes_padding_members_for_exact_layout_gaps() -> Non
 
     lowered = lower_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is True
+    assert lowered.fieldwise_init is False
     assert lowered.members == [
         StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         PaddingMember(name="__pad0", size_bytes=4, byte_offset=4),
@@ -185,7 +180,7 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
 
     lowered = lower_struct(decl, context=_context_for(decl, union_decl))
 
-    assert lowered.fieldwise_init is True
+    assert lowered.fieldwise_init is False
     assert lowered.members == [
         StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         StoredMember(name="payload", type=NamedType("Payload"), byte_offset=8),
@@ -390,7 +385,7 @@ def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> No
 
     lowered = lower_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is True
+    assert lowered.fieldwise_init is False
     assert lowered.initializers == []
     assert lowered.members[0] == StoredMember(
         name="tag",
@@ -516,8 +511,8 @@ def test_lower_struct_omits_register_passable_when_field_references_incomplete_s
 
     lowered = lower_struct(holder, context=_context_for(holder, child))
 
-    assert lowered.fieldwise_init is True
-    assert lowered.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert lowered.fieldwise_init is False
+    assert lowered.traits == []
 
 
 def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> None:
@@ -570,8 +565,8 @@ def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> No
 
     lowered = lower_struct(left, context=_context_for(left, right))
 
-    assert lowered.fieldwise_init is True
-    assert lowered.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert lowered.fieldwise_init is False
+    assert lowered.traits == []
 
 
 def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None:
@@ -600,7 +595,7 @@ def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None
 
     lowered = lower_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is True
+    assert lowered.fieldwise_init is False
     assert lowered.diagnostics == []
     assert lowered.members == [
         StoredMember(

@@ -6,28 +6,10 @@ from dataclasses import dataclass
 from typing import Literal
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, field_mojo_name
-from mojo_bindgen.codegen.mojo_mapper import (
-    map_atomic_type,
-    map_complex_simd,
-    map_vector_simd,
-)
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
-    ComplexType,
-    EnumRef,
-    FloatType,
-    FunctionPtr,
-    IntType,
-    OpaqueRecordRef,
-    Pointer,
     Struct,
-    StructRef,
     TargetABI,
-    Type,
-    TypeRef,
-    UnsupportedType,
-    VectorType,
 )
 from mojo_bindgen.mojo_ir import (
     BitfieldField,
@@ -42,7 +24,6 @@ from mojo_bindgen.mojo_ir import (
     StoredMember,
     StructDecl,
     StructKind,
-    StructTraits,
 )
 from mojo_bindgen.new_analysis.lowering_support import (
     field_display_name,
@@ -386,7 +367,6 @@ class FinalizeStructDeclPass:
         *,
         plan: StructRepresentationPlan,
         body_plan: StructBodyPlan,
-        context: StructLoweringContext,
     ) -> StructDecl:
         diagnostics = [
             *(
@@ -397,17 +377,15 @@ class FinalizeStructDeclPass:
             *(struct_note(reason) for reason in plan.fallback_reasons),
         ]
         align, align_decorator = self._align_policy(facts, plan=plan)
-        fieldwise_init = self._fieldwise_init_policy(facts, plan=plan)
         initializers = self._initializers(facts, plan=plan)
-        traits = self._traits(facts, plan=plan, context=context)
 
         return StructDecl(
             name=record_name(facts.decl),
             kind=StructKind.OPAQUE if not facts.is_complete else StructKind.PLAIN,
-            traits=traits,
+            traits=[],
             align=align,
             align_decorator=align_decorator,
-            fieldwise_init=fieldwise_init,
+            fieldwise_init=False,
             members=body_plan.members,
             initializers=initializers,
             diagnostics=diagnostics,
@@ -432,22 +410,6 @@ class FinalizeStructDeclPass:
         if not _mojo_align_decorator_ok(align):
             return align, None
         return align, align
-
-    def _fieldwise_init_policy(
-        self,
-        facts: RecordLayoutFacts,
-        *,
-        plan: StructRepresentationPlan,
-    ) -> bool:
-        if not facts.is_complete:
-            return False
-        if plan.representation_mode == "opaque_storage_exact":
-            return False
-        if facts.has_representable_atomic_storage:
-            return False
-        if facts.is_pure_bitfield:
-            return False
-        return True
 
     def _initializers(
         self,
@@ -479,84 +441,6 @@ class FinalizeStructDeclPass:
             )
         return initializers
 
-    def _traits(
-        self,
-        facts: RecordLayoutFacts,
-        *,
-        plan: StructRepresentationPlan,
-        context: StructLoweringContext,
-    ) -> list[StructTraits]:
-        if facts.has_representable_atomic_storage:
-            return []
-
-        traits = [StructTraits.COPYABLE, StructTraits.MOVABLE]
-        if (
-            facts.is_complete
-            and self._is_register_passable(facts.decl.decl_id, context=context)
-            and plan.representation_mode == "fieldwise_exact"
-        ):
-            traits.append(StructTraits.REGISTER_PASSABLE)
-        return traits
-
-    def _is_register_passable(
-        self,
-        decl_id: str,
-        *,
-        context: StructLoweringContext,
-    ) -> bool:
-        cache: dict[str, bool] = {}
-        computing: set[str] = set()
-
-        def passable_for_struct(struct_decl_id: str) -> bool:
-            if struct_decl_id in cache:
-                return cache[struct_decl_id]
-            if struct_decl_id in computing:
-                return False
-
-            struct_decl = context.record_map.get(struct_decl_id)
-            if struct_decl is None or struct_decl.is_union or not struct_decl.is_complete:
-                cache[struct_decl_id] = False
-                return False
-
-            computing.add(struct_decl_id)
-            try:
-                is_passable = all(field_ok(field.type) for field in struct_decl.fields)
-            finally:
-                computing.remove(struct_decl_id)
-
-            cache[struct_decl_id] = is_passable
-            return is_passable
-
-        def field_ok(lowered_type: Type) -> bool:
-            if isinstance(lowered_type, TypeRef):
-                return field_ok(lowered_type.canonical)
-            if isinstance(lowered_type, AtomicType):
-                if map_atomic_type(lowered_type) is not None:
-                    return False
-                return field_ok(lowered_type.value_type)
-            if isinstance(
-                lowered_type,
-                (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr),
-            ):
-                return True
-            if isinstance(lowered_type, UnsupportedType):
-                return False
-            if isinstance(lowered_type, VectorType):
-                return map_vector_simd(lowered_type) is not None
-            if isinstance(lowered_type, ComplexType):
-                return map_complex_simd(lowered_type) is not None
-            if isinstance(lowered_type, StructRef):
-                return passable_for_struct(lowered_type.decl_id)
-            if isinstance(lowered_type, Pointer):
-                if lowered_type.pointee is None:
-                    return True
-                return field_ok(lowered_type.pointee)
-            if isinstance(lowered_type, Array):
-                return lowered_type.array_kind != "fixed" and field_ok(lowered_type.element)
-            return False
-
-        return passable_for_struct(decl_id)
-
 
 class LowerStructPass:
     """Lower one top-level CIR struct declaration into a MojoIR ``StructDecl``."""
@@ -580,7 +464,7 @@ class LowerStructPass:
         )
         plan = self._plan_representation.run(facts, context=context)
         body_plan = self._lower_body.run(facts, plan=plan)
-        return self._finalize.run(facts, plan=plan, body_plan=body_plan, context=context)
+        return self._finalize.run(facts, plan=plan, body_plan=body_plan)
 
 
 def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:

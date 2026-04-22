@@ -49,6 +49,7 @@ from mojo_bindgen.mojo_ir import (
     SupportDeclKind,
     TypeArg,
 )
+from mojo_bindgen.new_analysis.record_policies import assign_record_policies
 
 
 class NormalizeMojoModuleError(ValueError):
@@ -766,7 +767,7 @@ class NormalizeMojoModulePass:
 def normalize_mojo_module(module: MojoModule) -> MojoModule:
     """Normalize MojoIR into a form the printer can emit directly."""
 
-    return NormalizeMojoModulePass().run(module)
+    return NormalizeMojoModulePass().run(assign_record_policies(module))
 
 
 __all__ = [
