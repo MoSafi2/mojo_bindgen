@@ -7,6 +7,6 @@
     "mojo_build_external": "pass",
     "mojo_build_dl": "pass",
     "runtime_external": "pass",
-    "runtime_owned_dl_handle": "known_fail_abi"
+    "runtime_owned_dl_handle": "pass"
   }
 }
