@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis import lower_unit
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     Const,
     Enum,

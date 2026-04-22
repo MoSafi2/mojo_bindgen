@@ -1,7 +1,7 @@
 # MojoIR Normalization Workflow
 
 This document shows how `normalize_mojo_module()` turns lowered MojoIR into the
-printer-ready form consumed by `render_mojo_module()`.
+printer-ready form consumed by the final rendering step.
 
 ## Overview
 
@@ -50,7 +50,7 @@ Examples:
 - normalize constant-expression cast and `sizeof` targets
 
 Primary implementation:
-- [normalize_mojo_module.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/codegen/normalize_mojo_module.py:49)
+- [normalize_mojo_module.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/normalize_mojo_module.py:49)
 
 ### 2. Lift callback types into named aliases when needed
 
@@ -112,10 +112,11 @@ That rewrite is part of the normalization contract, not the printer.
 The current public printer path is:
 
 1. `LowerUnitPass.run(unit)` produces a `MojoModule`
-2. `render_mojo_module(module)` calls `normalize_mojo_module(module)`
-3. `MojoIRPrinter.render(normalized)` emits Mojo source
+2. analysis orchestration normalizes that `MojoModule`
+3. `MojoIRPrinter.render(module)` emits Mojo source
 
 Source:
 - [mojo_ir_printer.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/codegen/mojo_ir_printer.py:528)
 
-So normalization is the last structural rewrite stage before text emission.
+So normalization is the last analysis rewrite stage before codegen text
+emission.

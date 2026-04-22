@@ -1,4 +1,4 @@
-"""Public parser facade and pipeline orchestration for C header parsing.
+"""Public parser facade for C header parsing.
 
 This module owns the parser package entrypoint. It validates user-facing input,
 runs the staged parser pipeline, and returns the final Unit. Parsing policy
@@ -12,7 +12,6 @@ from pathlib import Path
 
 from clang import cindex as cx
 
-from mojo_bindgen.analysis.pipeline import run_ir_passes
 from mojo_bindgen.ir import Decl, TargetABI, Unit
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
@@ -73,10 +72,14 @@ class ClangParser:
         self.diagnostics: ParserDiagnosticSink = ParserDiagnosticSink()
 
     def run(self) -> Unit:
-        """Parse the configured header into IR."""
-        return run_ir_passes(self.run_raw())
+        """Parse the configured header into raw source-faithful CIR."""
+        return self._parse_unit()
 
     def run_raw(self) -> Unit:
+        """Compatibility alias for :meth:`run`."""
+        return self._parse_unit()
+
+    def _parse_unit(self) -> Unit:
         """Parse the configured header into raw source-faithful IR."""
         session = self._build_parser_session()
         self.session = session

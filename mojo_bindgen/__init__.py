@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-from mojo_bindgen.codegen import FFIScalarStyle, MojoEmitOptions, MojoGenerator, generate_mojo
+from mojo_bindgen.analysis import FFIScalarStyle, MojoEmitOptions, MojoGenerator, generate_mojo
 
 try:
     __version__ = version("mojo-bindgen")

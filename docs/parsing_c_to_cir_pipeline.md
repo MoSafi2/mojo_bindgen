@@ -1,7 +1,7 @@
 # Parsing Pipeline: C Source to CIR
 
 This document shows the current parser path from a C header on disk to the
-normalized CIR `Unit` returned by `ClangParser.run()`.
+raw CIR `Unit` returned by `ClangParser.run()`.
 
 ## Overview
 
@@ -38,8 +38,7 @@ flowchart TD
     S --> T
     H --> T
 
-    T --> U[run_ir_passes]
-    U --> V[normalized CIR Unit]
+    T --> U[raw CIR Unit]
 ```
 
 ## Stage Boundaries
@@ -95,13 +94,10 @@ The output here is still raw CIR `Struct` data, not a Mojo-facing layout plan.
 
 This produces a source-faithful but not yet normalized `Unit`.
 
-### 5. CIR pass pipeline
+### 5. Hand-off boundary
 
-`ClangParser.run()` immediately feeds the raw `Unit` through `run_ir_passes()`:
-- `ValidateIRPass`
-- `ReachabilityMaterializePass`
-
-That final result is the normalized CIR consumed by later analysis and lowering.
+`ClangParser.run()` stops at raw CIR. Any later CIR normalization or lowering
+belongs to the analysis layer, not the parser.
 
 ## Output Shapes
 
@@ -110,8 +106,7 @@ There are two useful checkpoints:
 | Entry point | Output |
 | --- | --- |
 | `ClangParser.run_raw()` | raw source-faithful CIR `Unit` |
-| `ClangParser.run()` | normalized CIR `Unit` after IR passes |
+| `ClangParser.run()` | raw source-faithful CIR `Unit` |
 
-If you want the exact parser boundary before CIR repair, inspect `run_raw()`.
-If you want the public parser result used by the rest of the pipeline, inspect
-`run()`.
+Both entry points now expose the parser boundary before analysis-owned CIR
+repair.

@@ -19,12 +19,12 @@ from mojo_bindgen.analysis.decl_lowerer import (
 from mojo_bindgen.analysis.lowering_support import (
     record_by_decl_id,
 )
+from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.struct_lowering import (
     StructLoweringContext,
 )
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.type_walk import _walk_typeref_nodes
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.codegen.generator import MojoGenerator
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis import MojoGenerator
+from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.parsing.parser import ClangParser
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]

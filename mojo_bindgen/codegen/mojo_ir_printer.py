@@ -1,4 +1,4 @@
-"""Pretty-print normalized MojoIR to Mojo source."""
+"""Pretty-print finalized MojoIR to Mojo source."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
-from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -87,7 +86,7 @@ class CodeBuilder:
 
 
 class MojoIRPrinter:
-    """Render normalized :class:`~mojo_bindgen.mojo_ir.MojoModule` to source text."""
+    """Render finalized printer-ready :class:`~mojo_bindgen.mojo_ir.MojoModule` to source text."""
 
     def __init__(self, options: MojoIRPrintOptions | None = None) -> None:
         self._options = options or MojoIRPrintOptions()
@@ -557,10 +556,9 @@ def render_mojo_module(
     module: MojoModule,
     options: MojoIRPrintOptions | None = None,
 ) -> str:
-    """Normalize and render a standalone :class:`MojoModule` to Mojo source."""
+    """Render a finalized :class:`MojoModule` to Mojo source."""
 
-    normalized = normalize_mojo_module(module)
-    return MojoIRPrinter(options).render(normalized)
+    return MojoIRPrinter(options).render(module)
 
 
 __all__ = [

@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import importlib
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.analysis import lower_unit
+from mojo_bindgen.analysis import analyze_to_mojo_module
+from mojo_bindgen.analysis.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.codegen.mojo_ir_printer import (
     MojoIRPrinter,
     MojoIRPrintOptions,
     render_mojo_module,
 )
-from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.ir import Field, IntKind, IntType, Struct, TargetABI, Unit
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
@@ -212,7 +213,10 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         ],
     )
 
-    out = render_mojo_module(module, MojoIRPrintOptions(module_comment=False))
+    out = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
 
     assert "from std.ffi import external_call, UnsafeUnion, c_int, c_uint" in out
     assert "@align(4)" in out
@@ -304,10 +308,35 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
         ],
     )
 
-    rendered = render_mojo_module(module, MojoIRPrintOptions(module_comment=False))
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
 
     assert 'comptime _BINDGEN_LIB_PATH: String = "/tmp/libdemo.so"' in rendered
     assert "return OwnedDLHandle(_BINDGEN_LIB_PATH)" in rendered
+
+
+def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:
+    normalize_mod = importlib.import_module("mojo_bindgen.analysis.normalize_mojo_module")
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("render_mojo_module should not normalize")
+
+    monkeypatch.setattr(normalize_mod, "normalize_mojo_module", fail)
+
+    rendered = render_mojo_module(
+        MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+            decls=[],
+        ),
+        MojoIRPrintOptions(module_comment=False),
+    )
+
+    assert rendered == ""
 
 
 def test_normalize_mojo_module_sets_align_decorator_before_printing() -> None:
@@ -464,16 +493,14 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
         ],
     )
 
-    lowered = lower_unit(unit)
+    lowered = analyze_to_mojo_module(unit)
     aligned = next(
         decl for decl in lowered.decls if isinstance(decl, StructDecl) and decl.name == "Aligned"
     )
 
     assert aligned.align_decorator == 16
 
-    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(
-        normalize_mojo_module(lowered)
-    )
+    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(lowered)
 
     assert "@align(16)\n@fieldwise_init\nstruct Aligned" in rendered
     assert "var __pad0: InlineArray[UInt8, 4]" in rendered
@@ -572,7 +599,10 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
         ],
     )
 
-    rendered = render_mojo_module(module, MojoIRPrintOptions(module_comment=False))
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
     module_path = tmp_path / "demo_bindings.mojo"
     runner_path = tmp_path / "runner.mojo"
     output_path = tmp_path / "runner_bin"

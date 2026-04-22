@@ -9,8 +9,7 @@ from typing import Annotated, Literal
 import typer
 from rich.console import Console
 
-from mojo_bindgen.codegen.generator import MojoGenerator
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis import MojoEmitOptions, MojoGenerator
 from mojo_bindgen.parsing.parser import ClangParser, ParseError
 
 stderr_console = Console(stderr=True)

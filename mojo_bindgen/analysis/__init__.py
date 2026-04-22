@@ -6,6 +6,18 @@ from mojo_bindgen.analysis.const_lowering import (
     lower_const_expr,
 )
 from mojo_bindgen.analysis.decl_lowerer import UnitLoweringError
+from mojo_bindgen.analysis.mojo_emit_options import FFIScalarStyle, MojoEmitOptions
+from mojo_bindgen.analysis.normalize_mojo_module import (
+    NormalizeMojoModuleError,
+    NormalizeMojoModulePass,
+    normalize_mojo_module,
+)
+from mojo_bindgen.analysis.orchestrator import (
+    AnalysisOrchestrator,
+    MojoGenerator,
+    analyze_to_mojo_module,
+    generate_mojo,
+)
 from mojo_bindgen.analysis.pipeline import run_ir_passes
 from mojo_bindgen.analysis.reachability import (
     ReachabilityMaterializePass,
@@ -44,13 +56,19 @@ from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 __all__ = [
     "AssignRecordPoliciesError",
     "AssignRecordPoliciesPass",
+    "AnalysisOrchestrator",
     "ConstExprLoweringError",
+    "FFIScalarStyle",
     "IRValidationError",
     "LowerConstExprPass",
     "LowerStructPass",
     "LowerTypePass",
     "LowerUnionPass",
     "LowerUnitPass",
+    "MojoEmitOptions",
+    "MojoGenerator",
+    "NormalizeMojoModuleError",
+    "NormalizeMojoModulePass",
     "ReachabilityMaterializePass",
     "ReachabilityMaterializeResult",
     "ReachabilityOptions",
@@ -61,7 +79,9 @@ __all__ = [
     "UnionLoweringError",
     "UnitLoweringError",
     "TypeWalkOptions",
+    "analyze_to_mojo_module",
     "assign_record_policies",
+    "generate_mojo",
     "iter_type_nodes",
     "lower_const_expr",
     "lower_struct",
@@ -69,5 +89,6 @@ __all__ = [
     "lower_union",
     "lower_unit",
     "materialize_reachable_struct_refs",
+    "normalize_mojo_module",
     "run_ir_passes",
 ]

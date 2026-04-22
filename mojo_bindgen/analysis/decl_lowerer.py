@@ -11,13 +11,13 @@ from mojo_bindgen.analysis.lowering_support import (
     lowering_note,
     stub_note,
 )
+from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.struct_lowering import (
     LowerStructPass,
     StructLoweringContext,
 )
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.union_lowering import LowerUnionPass
-from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     Const,
     Decl,

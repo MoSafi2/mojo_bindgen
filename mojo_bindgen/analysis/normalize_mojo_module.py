@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_ident
-from mojo_bindgen.analysis.record_policies import assign_record_policies
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -767,7 +766,7 @@ class NormalizeMojoModulePass:
 def normalize_mojo_module(module: MojoModule) -> MojoModule:
     """Normalize MojoIR into a form the printer can emit directly."""
 
-    return NormalizeMojoModulePass().run(assign_record_policies(module))
+    return NormalizeMojoModulePass().run(module)
 
 
 __all__ = [
