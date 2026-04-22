@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.const_lowering import lower_const_expr
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,
@@ -22,7 +23,6 @@ from mojo_bindgen.mojo_ir import (
     MojoRefExpr,
     MojoSizeOfExpr,
 )
-from mojo_bindgen.new_analysis.const_lowering import lower_const_expr
 
 
 def test_lower_const_expr_maps_binary_ref_cast_and_sizeof_nodes() -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.struct_lowering import StructLoweringContext, lower_struct
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     AtomicType,
     Field,
@@ -28,8 +30,6 @@ from mojo_bindgen.mojo_ir import (
     StoredMember,
     StructKind,
 )
-from mojo_bindgen.new_analysis.struct_lowering import StructLoweringContext, lower_struct
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 
 def _i32() -> IntType:

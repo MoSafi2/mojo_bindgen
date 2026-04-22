@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.union_lowering import lower_union
 from mojo_bindgen.ir import (
     Field,
     IntKind,
@@ -21,7 +22,6 @@ from mojo_bindgen.mojo_ir import (
     ParametricType,
     TypeArg,
 )
-from mojo_bindgen.new_analysis.union_lowering import lower_union
 
 
 def _i32() -> IntType:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.type_lowering import LowerTypePass, TypeLoweringError
 from mojo_bindgen.ir import Field, Struct, Type, Unit
 from mojo_bindgen.mojo_ir import (
     BuiltinType,
@@ -11,7 +12,6 @@ from mojo_bindgen.mojo_ir import (
     MojoBuiltin,
     MojoType,
 )
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass, TypeLoweringError
 
 
 def record_by_decl_id(unit: Unit) -> dict[str, Struct]:
@@ -34,6 +34,14 @@ def field_display_name(field: Field, index: int) -> str:
     if name:
         return name
     return f"field_{index}"
+
+
+def field_mojo_name(field: Field, index: int) -> str:
+    if field.source_name:
+        return mojo_ident(field.source_name)
+    if field.name:
+        return mojo_ident(field.name)
+    return f"_anon_{index}"
 
 
 def record_name(decl: Struct) -> str:
@@ -84,6 +92,7 @@ def try_lower_type(
 
 __all__ = [
     "field_display_name",
+    "field_mojo_name",
     "lowering_note",
     "record_by_decl_id",
     "record_name",

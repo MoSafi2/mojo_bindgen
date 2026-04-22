@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_ident
+from mojo_bindgen.analysis.record_policies import assign_record_policies
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -49,7 +50,6 @@ from mojo_bindgen.mojo_ir import (
     SupportDeclKind,
     TypeArg,
 )
-from mojo_bindgen.new_analysis.record_policies import assign_record_policies
 
 
 class NormalizeMojoModuleError(ValueError):

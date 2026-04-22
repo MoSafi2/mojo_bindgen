@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.lowering_support import field_display_name
+from mojo_bindgen.analysis.type_layout import peel_layout_wrappers
 from mojo_bindgen.ir import Field, IntKind, IntType, Struct
-from mojo_bindgen.new_analysis.lowering_support import field_display_name
-from mojo_bindgen.new_analysis.type_layout import peel_layout_wrappers
 
 
 @dataclass(frozen=True)

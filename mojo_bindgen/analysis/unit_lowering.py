@@ -8,6 +8,22 @@ declaration-family lowering to narrower helpers.
 from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.const_lowering import (
+    LowerConstExprPass,
+)
+from mojo_bindgen.analysis.decl_lowerer import (
+    LoweringSession,
+    UnitDeclLowerer,
+    _link_mode_for_options,
+)
+from mojo_bindgen.analysis.lowering_support import (
+    record_by_decl_id,
+)
+from mojo_bindgen.analysis.struct_lowering import (
+    StructLoweringContext,
+)
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.type_walk import _walk_typeref_nodes
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     BinaryExpr,
@@ -31,22 +47,6 @@ from mojo_bindgen.mojo_ir import (
     MojoDecl,
     MojoModule,
 )
-from mojo_bindgen.new_analysis.const_lowering import (
-    LowerConstExprPass,
-)
-from mojo_bindgen.new_analysis.decl_lowerer import (
-    LoweringSession,
-    UnitDeclLowerer,
-    _link_mode_for_options,
-)
-from mojo_bindgen.new_analysis.lowering_support import (
-    record_by_decl_id,
-)
-from mojo_bindgen.new_analysis.struct_lowering import (
-    StructLoweringContext,
-)
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
-from mojo_bindgen.new_analysis.type_walk import _walk_typeref_nodes
 
 
 class LowerUnitPass:

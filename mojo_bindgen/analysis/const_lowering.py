@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,
@@ -30,7 +31,6 @@ from mojo_bindgen.mojo_ir import (
     MojoStringLiteral,
     MojoUnaryExpr,
 )
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 
 class ConstExprLoweringError(ValueError):

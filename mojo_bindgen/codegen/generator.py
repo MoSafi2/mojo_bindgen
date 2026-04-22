@@ -6,12 +6,11 @@ lowering, normalization, and rendering together manually.
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis import run_ir_passes
+from mojo_bindgen.analysis import lower_unit, run_ir_passes
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
 from mojo_bindgen.ir import Unit
 from mojo_bindgen.mojo_ir import MojoModule
-from mojo_bindgen.new_analysis import lower_unit
 
 
 class MojoGenerator:

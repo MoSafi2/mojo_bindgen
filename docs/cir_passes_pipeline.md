@@ -15,7 +15,7 @@ flowchart TD
     F --> G[prepend synthesized incomplete Structs for orphan StructRefs]
     G --> H[normalized CIR Unit]
 
-    H --> I[new_analysis.LowerUnitPass]
+    H --> I[analysis.LowerUnitPass]
     H --> J[legacy analyze_unit_semantics]
 
     I --> K[MojoIR]
@@ -75,7 +75,7 @@ sound CIR.
 
 These happen after the CIR pass pipeline and should be thought of separately:
 
-- `new_analysis.LowerUnitPass`: CIR -> MojoIR
+- `analysis.LowerUnitPass`: CIR -> MojoIR
 - `analysis.analyze_unit_semantics`: CIR -> legacy analyzed render model
 - `normalize_mojo_module`: MojoIR -> printer-ready MojoIR
 

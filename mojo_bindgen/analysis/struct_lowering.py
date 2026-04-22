@@ -5,7 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, field_mojo_name
+from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
+from mojo_bindgen.analysis.lowering_support import (
+    field_display_name,
+    field_mojo_name,
+    record_name,
+    struct_note,
+    try_lower_type,
+)
+from mojo_bindgen.analysis.record_layout import (
+    AnalyzeRecordLayoutPass,
+    RecordLayoutFacts,
+)
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     AtomicType,
     Struct,
@@ -25,17 +37,6 @@ from mojo_bindgen.mojo_ir import (
     StructDecl,
     StructKind,
 )
-from mojo_bindgen.new_analysis.lowering_support import (
-    field_display_name,
-    record_name,
-    struct_note,
-    try_lower_type,
-)
-from mojo_bindgen.new_analysis.record_layout import (
-    AnalyzeRecordLayoutPass,
-    RecordLayoutFacts,
-)
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 RepresentationMode = Literal[
     "fieldwise_exact",

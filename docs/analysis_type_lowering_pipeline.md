@@ -1,6 +1,6 @@
-# New Analysis Type Lowering Pipeline
+# Analysis Type Lowering Pipeline
 
-This document shows how types move from CIR into MojoIR in the `new_analysis`
+This document shows how types move from CIR into MojoIR in the `analysis`
 pipeline.
 
 ## Overview

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from mojo_bindgen.analysis import lower_unit
 from mojo_bindgen.codegen.mojo_ir_printer import (
     MojoIRPrinter,
     MojoIRPrintOptions,
@@ -54,7 +55,6 @@ from mojo_bindgen.mojo_ir import (
     SupportDeclKind,
     TypeArg,
 )
-from mojo_bindgen.new_analysis import lower_unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

@@ -5,6 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.lowering_support import (
+    field_display_name,
+    record_name,
+    stub_note,
+    try_lower_type,
+    union_note,
+)
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import Struct
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
@@ -18,14 +26,6 @@ from mojo_bindgen.mojo_ir import (
     ParametricType,
     TypeArg,
 )
-from mojo_bindgen.new_analysis.lowering_support import (
-    field_display_name,
-    record_name,
-    stub_note,
-    try_lower_type,
-    union_note,
-)
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 
 
 class UnionLoweringError(ValueError):

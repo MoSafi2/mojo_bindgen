@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.record_layout import AnalyzeRecordLayoutPass
+from mojo_bindgen.analysis.type_layout import type_layout
 from mojo_bindgen.ir import (
     Field,
     IntKind,
@@ -12,8 +14,6 @@ from mojo_bindgen.ir import (
     TargetABI,
     UnsupportedType,
 )
-from mojo_bindgen.new_analysis.record_layout import AnalyzeRecordLayoutPass
-from mojo_bindgen.new_analysis.type_layout import type_layout
 
 
 def _i32() -> IntType:

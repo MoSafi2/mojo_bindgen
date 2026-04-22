@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.type_lowering import LowerTypePass, lower_type
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
@@ -35,7 +36,6 @@ from mojo_bindgen.mojo_ir import (
     PointerMutability,
     PointerType,
 )
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass, lower_type
 
 
 def test_lower_type_maps_primitives_to_builtins() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis import lower_unit
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
@@ -36,7 +37,6 @@ from mojo_bindgen.ir import (
     VoidType,
 )
 from mojo_bindgen.mojo_ir import StructDecl, StructKind
-from mojo_bindgen.new_analysis import lower_unit
 
 
 def _i32() -> IntType:

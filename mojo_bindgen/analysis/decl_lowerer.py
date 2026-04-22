@@ -3,6 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.const_lowering import (
+    ConstExprLoweringError,
+    LowerConstExprPass,
+)
+from mojo_bindgen.analysis.lowering_support import (
+    lowering_note,
+    stub_note,
+)
+from mojo_bindgen.analysis.struct_lowering import (
+    LowerStructPass,
+    StructLoweringContext,
+)
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.union_lowering import LowerUnionPass
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     Const,
@@ -41,20 +55,6 @@ from mojo_bindgen.mojo_ir import (
     ParametricBase,
     ParametricType,
 )
-from mojo_bindgen.new_analysis.const_lowering import (
-    ConstExprLoweringError,
-    LowerConstExprPass,
-)
-from mojo_bindgen.new_analysis.lowering_support import (
-    lowering_note,
-    stub_note,
-)
-from mojo_bindgen.new_analysis.struct_lowering import (
-    LowerStructPass,
-    StructLoweringContext,
-)
-from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
-from mojo_bindgen.new_analysis.union_lowering import LowerUnionPass
 
 
 class UnitLoweringError(ValueError):
