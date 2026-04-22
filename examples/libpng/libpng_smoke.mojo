@@ -2,6 +2,7 @@
 # Requires libpng_bindings.mojo from generate.sh.
 import libpng_bindings as png
 from std.memory import alloc
+from std.ffi import c_uint
 
 comptime IMAGE_W = 2
 comptime IMAGE_H = 2
@@ -26,7 +27,10 @@ def _cstr_mut(s: StaticString) -> UnsafePointer[Int8, MutExternalOrigin]:
 def run_version_checks() raises:
     var access_version = png.png_access_version_number()
     _assert("libpng.version_positive", access_version > 0)
-    _assert("libpng.version_matches_header", Int32(access_version) == png.PNG_LIBPNG_VER)
+    _assert(
+        "libpng.version_matches_header",
+        Int32(access_version) == png.PNG_LIBPNG_VER,
+    )
     print("libpng.version_number|", access_version)
 
 
@@ -56,14 +60,15 @@ def run_write_roundtrip_checks() raises:
     var image_write = alloc[png.png_image](1)
     image_write[0] = png.png_image(
         opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
-        version=UInt32(png.PNG_IMAGE_VERSION),
-        width=UInt32(IMAGE_W),
-        height=UInt32(IMAGE_H),
-        format=UInt32(png.PNG_FORMAT_BGRA),
+        version=c_uint(png.PNG_IMAGE_VERSION),
+        width=c_uint(IMAGE_W),
+        height=c_uint(IMAGE_H),
+        format=c_uint(png.PNG_FORMAT_BGRA),
         flags=0,
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
+        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
     var png_path = _cstr("/tmp/mojo_bindgen_libpng_smoke.png")
     var write_ok = png.png_image_write_to_file(
@@ -79,7 +84,7 @@ def run_write_roundtrip_checks() raises:
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
         opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
-        version=UInt32(png.PNG_IMAGE_VERSION),
+        version=c_uint(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
         format=0,
@@ -87,6 +92,7 @@ def run_write_roundtrip_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
+        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
     var begin_ok = png.png_image_begin_read_from_file(image_read, png_path)
     _assert("libpng.begin_read_from_file", begin_ok != 0)
@@ -137,19 +143,20 @@ def run_memory_roundtrip_checks() raises:
     var image_write = alloc[png.png_image](1)
     image_write[0] = png.png_image(
         opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
-        version=UInt32(png.PNG_IMAGE_VERSION),
-        width=UInt32(IMAGE_W),
-        height=UInt32(IMAGE_H),
-        format=UInt32(png.PNG_FORMAT_BGRA),
+        version=c_uint(png.PNG_IMAGE_VERSION),
+        width=c_uint(IMAGE_W),
+        height=c_uint(IMAGE_H),
+        format=c_uint(png.PNG_FORMAT_BGRA),
         flags=0,
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
+        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
 
     # Exercise png_image_write_to_memory with both a NULL memory pointer
     # (size query) and a real memory buffer (actual write).
-    var memory_bytes_out = alloc[UInt64](1)
+    var memory_bytes_out = alloc[png.png_alloc_size_t](1)
     var write_size_ok = png.png_image_write_to_memory(
         image_write,
         MutOpaquePointer[MutExternalOrigin](),
@@ -185,6 +192,7 @@ def run_memory_roundtrip_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
+        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
 
     var begin_ok = png.png_image_begin_read_from_memory(
@@ -228,6 +236,7 @@ def run_alpha_removal_compositing_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
+        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
 
     var png_path = _cstr("/tmp/mojo_bindgen_libpng_smoke.png")
@@ -279,7 +288,9 @@ def run_transform_and_options_checks() raises:
     _assert("libpng.create_info_struct", info_ptr != png.png_infop())
 
     # Configure representative writer-side options.
-    png.png_set_crc_action(png_ptr, png.PNG_CRC_WARN_USE, png.PNG_CRC_WARN_DISCARD)
+    png.png_set_crc_action(
+        png_ptr, png.PNG_CRC_WARN_USE, png.PNG_CRC_WARN_DISCARD
+    )
     png.png_set_filter(png_ptr, png.PNG_FILTER_TYPE_BASE, png.PNG_ALL_FILTERS)
     png.png_set_compression_level(png_ptr, 6)
     png.png_set_compression_strategy(png_ptr, 0)
@@ -350,7 +361,9 @@ def run_transform_and_options_checks() raises:
     var res_x = alloc[UInt32](1)
     var res_y = alloc[UInt32](1)
     var unit_type = alloc[Int32](1)
-    var phys_valid = png.png_get_pHYs(png_ptr, info_ptr, res_x, res_y, unit_type)
+    var phys_valid = png.png_get_pHYs(
+        png_ptr, info_ptr, res_x, res_y, unit_type
+    )
     _assert("libpng.get_phys_valid", phys_valid != 0)
     _assert("libpng.get_phys_x", res_x[0] == 3780)
     _assert("libpng.get_phys_y", res_y[0] == 3780)
