@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.analyze_for_mojo import analyze_unit
 from mojo_bindgen.codegen.generator import MojoGenerator
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.codegen.mojo_mapper import map_type
 from mojo_bindgen.ir import (
     AtomicType,
     BinaryExpr,
@@ -24,7 +22,6 @@ from mojo_bindgen.ir import (
     IntType,
     MacroDecl,
     NullPtrLiteral,
-    OpaqueRecordRef,
     Param,
     Pointer,
     RefExpr,
@@ -35,10 +32,11 @@ from mojo_bindgen.ir import (
     Typedef,
     TypeRef,
     Unit,
-    UnsupportedType,
     VectorType,
     VoidType,
 )
+from mojo_bindgen.mojo_ir import StructDecl, StructKind
+from mojo_bindgen.new_analysis import lower_unit
 
 
 def _i32() -> IntType:
@@ -83,21 +81,6 @@ def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
     assert "comptime CURL_ZERO_TERMINATED = c_ulong(-1)" in out
 
 
-def test_map_opaque_record_ref_as_opaque_pointer() -> None:
-    t = OpaqueRecordRef(decl_id="struct:FILE", name="FILE", c_name="FILE")
-    assert map_type(t, ffi_origin="external") == "MutOpaquePointer[MutExternalOrigin]"
-
-
-def test_map_unsupported_type_with_size_becomes_inline_bytes() -> None:
-    t = UnsupportedType(
-        category="unsupported_extension",
-        spelling="mystery_t",
-        reason="not modeled",
-        size_bytes=16,
-    )
-    assert map_type(t, ffi_origin="external") == "InlineArray[UInt8, 16]"
-
-
 def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None:
     st = Struct(
         decl_id="struct:foo",
@@ -108,13 +91,21 @@ def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None
         align_bytes=0,
         is_complete=False,
     )
-    au = analyze_unit(
-        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st]),
-        MojoEmitOptions(),
+    lowered = lower_unit(
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[st],
+        ),
+        options=MojoEmitOptions(),
     )
-    assert au.ordered_structs == ()
-    assert len(au.ordered_incomplete_structs) == 1
-    assert au.ordered_incomplete_structs[0].decl.decl_id == st.decl_id
+    structs = [decl for decl in lowered.decls if isinstance(decl, StructDecl)]
+    assert len(structs) == 1
+    assert structs[0].name == "foo"
+    assert structs[0].kind == StructKind.OPAQUE
+    assert structs[0].members == []
 
 
 def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> None:
@@ -168,7 +159,13 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[st],
+        )
     )
     assert "@fieldwise_init\nstruct Bits" not in out
     assert "var __bf0: c_uint" in out
@@ -211,7 +208,13 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[st],
+        )
     )
     assert "@fieldwise_init\nstruct MixedBits" in out
     assert "var tag: c_uint" in out
@@ -264,7 +267,13 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[st],
+        )
     )
     assert "var __bf0: c_uint" in out
     assert "var __bf1: c_uint" in out
@@ -295,7 +304,13 @@ def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct(
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[st],
+        )
     )
     assert "@fieldwise_init\nstruct OnlyAnonBits" not in out
     assert "def __init__(out self):" in out
@@ -1146,7 +1161,13 @@ def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[fn],
+        )
     )
     assert "from std.ffi import external_call, c_int" in out
     assert 'def sf_add(a: c_int, b: c_int) abi("C") -> c_int:' in out

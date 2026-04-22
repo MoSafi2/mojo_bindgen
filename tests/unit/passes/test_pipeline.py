@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from mojo_bindgen.analysis import AnalyzeForMojoPass, IRValidationError
 from mojo_bindgen.analysis.pipeline import run_ir_passes
-from mojo_bindgen.analysis.validate_ir import ValidateIRPass
+from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     Field,
@@ -19,6 +18,15 @@ from mojo_bindgen.ir import (
     Unit,
     VoidType,
 )
+from mojo_bindgen.mojo_ir import (
+    AliasDecl,
+    AliasKind,
+    BuiltinType,
+    FunctionDecl,
+    MojoBuiltin,
+    NamedType,
+)
+from mojo_bindgen.new_analysis import lower_unit
 
 
 def _i32() -> IntType:
@@ -77,7 +85,7 @@ def test_validate_ir_pass_rejects_duplicate_decl_ids() -> None:
     assert "duplicate decl_id" in str(exc_info.value)
 
 
-def test_run_ir_passes_and_analyze_for_mojo_produce_analyzed_unit() -> None:
+def test_run_ir_passes_and_lower_unit_preserve_typedef_surface_name() -> None:
     i32 = _i32()
     td = Typedef(decl_id="typedef:my_int", name="my_int", aliased=i32, canonical=i32)
     tr = TypeRef(decl_id=td.decl_id, name=td.name, canonical=i32)
@@ -91,6 +99,15 @@ def test_run_ir_passes_and_analyze_for_mojo_produce_analyzed_unit() -> None:
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[td, fn])
 
     normalized = run_ir_passes(unit)
-    analyzed = AnalyzeForMojoPass(MojoEmitOptions()).run(normalized)
-    assert analyzed.unit is normalized
-    assert "my_int" in analyzed.emitted_typedef_mojo_names
+    lowered = lower_unit(normalized, options=MojoEmitOptions())
+    typedef_decl = lowered.decls[0]
+    fn_decl = lowered.decls[1]
+
+    assert typedef_decl == AliasDecl(
+        name="my_int",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=BuiltinType(MojoBuiltin.C_INT),
+    )
+    assert isinstance(fn_decl, FunctionDecl)
+    assert [param.type for param in fn_decl.params] == [NamedType("my_int")]
+    assert fn_decl.return_type == BuiltinType(MojoBuiltin.NONE)

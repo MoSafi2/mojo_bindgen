@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.common import mojo_float_literal_text
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,

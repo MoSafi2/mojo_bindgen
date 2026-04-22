@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.common import mojo_float_literal_text
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
 from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.mojo_ir import (
     AliasDecl,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.ir import (
     _SIGNED_INT_KINDS,
     _UNSIGNED_INT_KINDS,

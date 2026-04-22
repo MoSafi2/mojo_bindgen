@@ -5,10 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from mojo_bindgen.codegen.mojo_mapper import FFIOriginStyle, FFIScalarStyle
-
 LinkingMode = Literal["external_call", "owned_dl_handle"]
 """Supported linking strategies for generated wrappers."""
+
+
+FFIOriginStyle = Literal["external", "any"]
+"""Pointer provenance styles supported by the generated Mojo bindings."""
+
+FFIScalarStyle = Literal["fixed_width", "std_ffi_aliases"]
+"""Scalar lowering: fixed-width ints vs ``std.ffi`` ``c_int`` / ``c_long`` / …."""
 
 
 @dataclass

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.layout import build_register_passable_map, struct_by_decl_id
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,
@@ -62,8 +62,15 @@ from mojo_bindgen.new_analysis.const_lowering import (
     ConstExprLoweringError,
     LowerConstExprPass,
 )
-from mojo_bindgen.new_analysis.lowering_support import lowering_note, record_by_decl_id, stub_note
-from mojo_bindgen.new_analysis.struct_lowering import LowerStructPass, StructLoweringContext
+from mojo_bindgen.new_analysis.lowering_support import (
+    lowering_note,
+    record_by_decl_id,
+    stub_note,
+)
+from mojo_bindgen.new_analysis.struct_lowering import (
+    LowerStructPass,
+    StructLoweringContext,
+)
 from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 from mojo_bindgen.new_analysis.union_lowering import LowerUnionPass
 

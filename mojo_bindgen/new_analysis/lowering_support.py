@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.ir import Field, Struct, Type, Unit
 from mojo_bindgen.mojo_ir import (
     BuiltinType,

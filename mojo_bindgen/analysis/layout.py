@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from mojo_bindgen.analysis.type_walk import (
     TypeWalkOptions,
     any_type_node,
     iter_type_nodes,
 )
-from mojo_bindgen.codegen._struct_order import toposort_structs
 from mojo_bindgen.codegen.mojo_mapper import (
     map_atomic_type,
     map_complex_simd,
@@ -43,84 +40,6 @@ def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
         if isinstance(decl, Struct) and not decl.is_union:
             out[decl.decl_id] = decl
     return out
-
-
-# TODO: Remove, not really needed in mojo.
-def ordered_struct_decls(unit: Unit) -> tuple[Struct, ...]:
-    """Complete non-union structs in dependency order."""
-    struct_decls = [
-        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and d.is_complete
-    ]
-    return tuple(toposort_structs(struct_decls))
-
-
-def incomplete_struct_decls(unit: Unit) -> tuple[Struct, ...]:
-    """Forward-declared incomplete non-union structs in declaration order."""
-    return tuple(
-        d for d in unit.decls if isinstance(d, Struct) and not d.is_union and not d.is_complete
-    )
-
-
-# TODO: Something feels superflous here
-def _type_ok_for_register_passable_field(
-    t: Type,
-    struct_by_id: dict[str, Struct],
-    visiting: set[str] | None = None,  # pyright: ignore[reportRedeclaration]
-) -> bool:
-    if visiting is None:
-        visiting: set[str] = set()
-    if isinstance(t, TypeRef):
-        return _type_ok_for_register_passable_field(t.canonical, struct_by_id, visiting)
-    if isinstance(t, AtomicType):
-        if map_atomic_type(t) is not None:
-            return False
-        return _type_ok_for_register_passable_field(t.value_type, struct_by_id, visiting)
-    if isinstance(t, (IntType, FloatType, EnumRef, OpaqueRecordRef, FunctionPtr)):
-        return True
-    if isinstance(t, UnsupportedType):
-        return False
-    if isinstance(t, VectorType):
-        return map_vector_simd(t) is not None
-    if isinstance(t, ComplexType):
-        return map_complex_simd(t) is not None
-    if isinstance(t, StructRef):
-        if t.decl_id in visiting:
-            return False
-        struct_decl = struct_by_id.get(t.decl_id)
-        if struct_decl is None or struct_decl.is_union or not struct_decl.is_complete:
-            return False
-        visiting.add(t.decl_id)
-        try:
-            return all(
-                _type_ok_for_register_passable_field(field.type, struct_by_id, visiting)
-                for field in struct_decl.fields
-            )
-        finally:
-            visiting.remove(t.decl_id)
-    if isinstance(t, Pointer):
-        if t.pointee is None:
-            return True
-        return _type_ok_for_register_passable_field(t.pointee, struct_by_id, visiting)
-    if isinstance(t, Array):
-        return t.array_kind != "fixed" and _type_ok_for_register_passable_field(
-            t.element, struct_by_id, visiting
-        )
-    walk = iter_type_nodes(
-        t,
-        options=TypeWalkOptions(
-            peel_typeref=False,
-            peel_qualified=True,
-            peel_atomic=False,
-            descend_pointer=False,
-            descend_array=False,
-            descend_function_ptr=False,
-            descend_vector_element=False,
-        ),
-    )
-    for node in walk:
-        if node is not t:
-            return _type_ok_for_register_passable_field(node, struct_by_id, visiting)
-    return False
 
 
 def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bool]:
@@ -190,15 +109,6 @@ def build_register_passable_map(struct_by_id: dict[str, Struct]) -> dict[str, bo
     return cache
 
 
-def struct_decl_register_passable(decl: Struct, struct_by_id: dict[str, Struct]) -> bool:
-    if decl.is_union or not decl.is_complete:
-        return False
-    return all(
-        _type_ok_for_register_passable_field(field.type, struct_by_id, None)
-        for field in decl.fields
-    )
-
-
 _EMBEDDED_ATOMIC_WALK = TypeWalkOptions(
     peel_typeref=True,
     peel_qualified=True,
@@ -220,24 +130,3 @@ def field_contains_representable_atomic_storage(field: Field) -> bool:
         lambda node: isinstance(node, AtomicType) and map_atomic_type(node) is not None,
         options=_EMBEDDED_ATOMIC_WALK,
     )
-
-
-@dataclass(frozen=True)
-class LayoutFacts:
-    struct_map: dict[str, Struct]
-    ordered_structs: tuple[Struct, ...]
-    incomplete_structs: tuple[Struct, ...]
-    register_passable_by_decl_id: dict[str, bool]
-
-
-class ComputeLayoutFactsPass:
-    """Compute reusable layout/index facts over normalized IR."""
-
-    def run(self, unit: Unit) -> LayoutFacts:
-        struct_map = struct_by_decl_id(unit)
-        return LayoutFacts(
-            struct_map=struct_map,
-            ordered_structs=ordered_struct_decls(unit),
-            incomplete_structs=incomplete_struct_decls(unit),
-            register_passable_by_decl_id=build_register_passable_map(struct_map),
-        )

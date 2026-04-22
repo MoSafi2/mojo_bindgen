@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
-from mojo_bindgen.codegen.mojo_mapper import mojo_ident
+from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_ident
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
