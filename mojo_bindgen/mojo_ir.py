@@ -440,11 +440,13 @@ class EnumDecl(SerDeMixin):
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
         fields={
             "align_decorator": SerdeFieldSpec(omit_if_default=True),
+            "fieldwise_init": SerdeFieldSpec(omit_if_default=True),
         }
     )
     name: str
     underlying_type: MojoType
     align_decorator: int | None = None
+    fieldwise_init: bool = True
     enumerants: list[EnumMember] = field(default_factory=list)
     diagnostics: list[LoweringNote] = field(default_factory=list)
 

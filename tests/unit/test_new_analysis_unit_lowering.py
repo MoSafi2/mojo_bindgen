@@ -178,6 +178,7 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
     )
     assert isinstance(enum_decl, EnumDecl)
     assert enum_decl.name == "Flags"
+    assert enum_decl.fieldwise_init is True
     assert enum_decl.enumerants[0].name == "needs_work"
 
 

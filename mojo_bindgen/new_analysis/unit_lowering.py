@@ -130,6 +130,7 @@ class UnitDeclLowerer:
             name=mojo_ident(decl.name),
             underlying_type=self.session.type_lowerer.run(decl.underlying),
             align_decorator=None,
+            fieldwise_init=True,
             enumerants=[
                 EnumMember(name=mojo_ident(member.name), value=member.value)
                 for member in decl.enumerants

@@ -226,6 +226,10 @@ class MojoIRPrinter:
     def _render_enum_decl(self, decl: EnumDecl) -> str:
         b = CodeBuilder()
         b.extend(self._diagnostic_lines(decl.diagnostics))
+        if decl.align_decorator is not None:
+            b.add(f"@align({decl.align_decorator})")
+        if decl.fieldwise_init:
+            b.add("@fieldwise_init")
         b.add("struct " + decl.name + "(Copyable, Movable, RegisterPassable):")
         b.indent()
         base_text = self._render_type(decl.underlying_type)

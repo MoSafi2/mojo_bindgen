@@ -5,6 +5,7 @@
 
 from std.ffi import external_call, c_uint
 
+@fieldwise_init
 struct enb_mode(Copyable, Movable, RegisterPassable):
     var value: c_uint
     comptime ENB_ADD = Self(c_uint(1))

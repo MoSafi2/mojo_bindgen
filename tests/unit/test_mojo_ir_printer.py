@@ -79,6 +79,7 @@ def test_enum_decl_roundtrip_keeps_underlying_type() -> None:
 
     assert raw["underlying_type"] == {"kind": "BuiltinType", "name": "c_int"}
     assert restored.underlying_type == BuiltinType(MojoBuiltin.C_INT)
+    assert restored.fieldwise_init is True
 
 
 def test_struct_decl_roundtrip_keeps_explicit_align_decorator() -> None:
@@ -215,6 +216,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
 
     assert "from std.ffi import external_call, UnsafeUnion, c_int, c_uint" in out
     assert "@align(4)" in out
+    assert "@fieldwise_init\nstruct Flags(Copyable, Movable, RegisterPassable):" in out
     assert "struct Flags(Copyable, Movable, RegisterPassable):" in out
     assert "var value: c_int" in out
     assert "comptime READY = Self(c_int(1))" in out
