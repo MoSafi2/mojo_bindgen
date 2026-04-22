@@ -16,6 +16,7 @@ from mojo_bindgen.ir import (
     Pointer,
     Struct,
     StructRef,
+    TargetABI,
     Unit,
     VoidType,
 )
@@ -23,6 +24,10 @@ from mojo_bindgen.ir import (
 
 def _i32() -> IntType:
     return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+
+
+def _abi() -> TargetABI:
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
 
 def test_materializes_orphan_struct_ref_from_parameter() -> None:
@@ -39,7 +44,7 @@ def test_materializes_orphan_struct_ref_from_parameter() -> None:
         params=[Param(name="p", type=Pointer(pointee=orphan))],
         decl_id="c:@F@use_external",
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
 
     result = ReachabilityMaterializePass().run(unit)
     assert len(result.unit.decls) == 2
@@ -75,7 +80,13 @@ def test_skips_when_struct_already_declared() -> None:
         params=[Param(name="p", type=Pointer(pointee=orphan))],
         decl_id="c:@F@f",
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[existing, fn])
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        target_abi=_abi(),
+        decls=[existing, fn],
+    )
     result = ReachabilityMaterializePass().run(unit)
     assert result.unit.decls == unit.decls
     assert result.synthesized_structs == ()
@@ -99,7 +110,7 @@ def test_function_ptr_traversal_finds_nested_orphan() -> None:
         params=[Param(name="cb", type=fp)],
         decl_id="c:@F@register_cb",
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
 
     result = ReachabilityMaterializePass().run(
         unit, ReachabilityOptions(traverse_function_ptrs=True)
@@ -127,7 +138,7 @@ def test_union_ref_skipped_by_default() -> None:
         params=[Param(name="p", type=Pointer(pointee=uref))],
         decl_id="c:@F@f",
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
     result = ReachabilityMaterializePass().run(unit)
     assert result.synthesized_structs == ()
 
@@ -151,7 +162,7 @@ def test_materialize_reachable_struct_refs_wrapper_returns_unit_only() -> None:
         params=[Param(name="x", type=Pointer(pointee=orphan))],
         decl_id="c:@F@g",
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
     out = materialize_reachable_struct_refs(unit)
     assert isinstance(out.decls[0], Struct)
     assert out.decls[0].decl_id == orphan.decl_id
@@ -172,7 +183,7 @@ def test_run_ir_passes_includes_reachability() -> None:
         params=[Param(name="p", type=Pointer(pointee=orphan))],
         decl_id="c:@F@h",
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
     out = run_ir_passes(unit)
     assert isinstance(out.decls[0], Struct)
     assert out.decls[0].decl_id == orphan.decl_id

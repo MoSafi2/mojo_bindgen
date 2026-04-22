@@ -14,6 +14,7 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
     render_mojo_module,
 )
 from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
+from mojo_bindgen.ir import Field, IntKind, IntType, Struct, TargetABI, Unit
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -53,8 +54,17 @@ from mojo_bindgen.mojo_ir import (
     SupportDeclKind,
     TypeArg,
 )
+from mojo_bindgen.new_analysis import lower_unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _i32_type() -> IntType:
+    return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
+
+
+def _abi() -> TargetABI:
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
 
 def test_enum_decl_roundtrip_keeps_underlying_type() -> None:
@@ -350,6 +360,98 @@ def test_printer_uses_explicit_align_decorator_only() -> None:
     assert "@align(16)" in rendered
     assert "@align(8)" not in rendered
     assert "@align(64)" not in rendered
+
+
+def test_printer_renders_lowered_struct_layout_members_without_normalize_inference() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Struct(
+                decl_id="struct:Aligned",
+                name="Aligned",
+                c_name="Aligned",
+                fields=[Field(name="value", source_name="value", type=_i32_type(), byte_offset=0)],
+                size_bytes=16,
+                align_bytes=16,
+                requested_align_bytes=16,
+            ),
+            Struct(
+                decl_id="struct:Padded",
+                name="Padded",
+                c_name="Padded",
+                fields=[
+                    Field(
+                        name="tag",
+                        source_name="tag",
+                        type=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
+                        byte_offset=0,
+                    ),
+                    Field(
+                        name="value",
+                        source_name="value",
+                        type=_i32_type(),
+                        byte_offset=8,
+                    ),
+                ],
+                size_bytes=12,
+                align_bytes=4,
+            ),
+            Struct(
+                decl_id="struct:Packed",
+                name="Packed",
+                c_name="Packed",
+                fields=[
+                    Field(
+                        name="tag",
+                        source_name="tag",
+                        type=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
+                        byte_offset=0,
+                    ),
+                    Field(name="value", source_name="value", type=_i32_type(), byte_offset=1),
+                ],
+                size_bytes=5,
+                align_bytes=1,
+                is_packed=True,
+            ),
+            Struct(
+                decl_id="struct:Flags",
+                name="Flags",
+                c_name="Flags",
+                fields=[
+                    Field(
+                        name="enabled",
+                        source_name="enabled",
+                        type=IntType(int_kind=IntKind.BOOL, size_bytes=1, align_bytes=1),
+                        byte_offset=0,
+                        is_bitfield=True,
+                        bit_offset=0,
+                        bit_width=1,
+                    )
+                ],
+                size_bytes=1,
+                align_bytes=1,
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    aligned = next(
+        decl for decl in lowered.decls if isinstance(decl, StructDecl) and decl.name == "Aligned"
+    )
+
+    assert aligned.align_decorator == 16
+
+    rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(lowered)
+
+    assert "@align(16)\n@fieldwise_init\nstruct Aligned" in rendered
+    assert "var __pad0: InlineArray[UInt8, 4]" in rendered
+    assert "var storage: InlineArray[UInt8, 5]" in rendered
+    assert "var __bf0: c_uchar" in rendered
+    assert "def enabled(self) -> Bool:" in rendered
+    assert "def set_enabled(mut self, value: Bool):" in rendered
 
 
 @pytest.mark.skipif(shutil.which("pixi") is None, reason="requires pixi with mojo toolchain")

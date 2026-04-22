@@ -18,6 +18,7 @@ from mojo_bindgen.ir import (
     Pointer,
     Struct,
     StructRef,
+    TargetABI,
     Typedef,
     Unit,
     VoidType,
@@ -38,6 +39,7 @@ from mojo_bindgen.mojo_ir import (
     LinkMode,
     MojoBuiltin,
     NamedType,
+    PaddingMember,
     ParametricBase,
     ParametricType,
     PointerMutability,
@@ -53,11 +55,16 @@ def _i32() -> IntType:
     return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
+def _abi() -> TargetABI:
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+
+
 def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Typedef(
                 decl_id="typedef:widget_t",
@@ -103,6 +110,7 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Typedef(
                 decl_id="typedef:size_t",
@@ -140,6 +148,7 @@ def test_lower_unit_lowers_function_and_global() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Function(
                 decl_id="fn:install",
@@ -177,6 +186,7 @@ def test_lower_unit_lowers_const_and_supported_macro_to_aliases() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Const(
                 name="LIMIT",
@@ -211,6 +221,7 @@ def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             MacroDecl(
                 name="BROKEN",
@@ -233,11 +244,12 @@ def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
     assert decl.diagnostics[0].message == "macro lowering is incomplete; placeholder alias emitted"
 
 
-def test_lower_unit_emits_struct_placeholders_and_real_union_aliases() -> None:
+def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Struct(
                 decl_id="struct:opaque",
@@ -286,16 +298,18 @@ def test_lower_unit_emits_struct_placeholders_and_real_union_aliases() -> None:
 
     assert isinstance(opaque_decl, StructDecl)
     assert opaque_decl.kind == StructKind.OPAQUE
+    assert opaque_decl.align is None
+    assert opaque_decl.align_decorator is None
     assert opaque_decl.members == []
-    assert opaque_decl.diagnostics[0].message == (
-        "opaque struct placeholder emitted; member lowering not implemented yet"
-    )
+    assert opaque_decl.diagnostics == []
 
     assert isinstance(plain_decl, StructDecl)
     assert plain_decl.kind == StructKind.PLAIN
     assert plain_decl.align == 8
-    assert plain_decl.members == []
-    assert plain_decl.diagnostics[0].message == "struct member lowering not implemented yet"
+    assert plain_decl.align_decorator == 8
+    assert plain_decl.fieldwise_init is True
+    assert plain_decl.members == [PaddingMember(name="__pad0", size_bytes=16, byte_offset=0)]
+    assert plain_decl.diagnostics == []
 
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
@@ -314,6 +328,7 @@ def test_lower_unit_uses_byte_storage_fallback_for_ineligible_union() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Struct(
                 decl_id="union:dup",
@@ -348,6 +363,7 @@ def test_lower_unit_keeps_incomplete_union_as_placeholder_alias() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Struct(
                 decl_id="union:opaque",
@@ -384,6 +400,7 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Typedef(
                 decl_id="typedef:callback_t",
@@ -421,6 +438,7 @@ def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> 
         source_header="demo.h",
         library="demo",
         link_name="demo",
+        target_abi=_abi(),
         decls=[
             Const(
                 name="NULL_CB",

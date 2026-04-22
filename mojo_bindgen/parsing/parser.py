@@ -13,7 +13,7 @@ from pathlib import Path
 from clang import cindex as cx
 
 from mojo_bindgen.analysis.pipeline import run_ir_passes
-from mojo_bindgen.ir import Decl, Unit
+from mojo_bindgen.ir import Decl, TargetABI, Unit
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
     ClangCompat,
@@ -32,6 +32,7 @@ from mojo_bindgen.parsing.lowering import (
     TypeLowerer,
 )
 from mojo_bindgen.parsing.registry import RecordRegistry
+from mojo_bindgen.parsing.target_abi import probe_target_abi
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class ParseSession:
     header: str
     library: str
     link_name: str
+    target_abi: TargetABI
 
 
 class ParseError(RuntimeError):
@@ -84,6 +86,7 @@ class ClangParser:
             source_header=session.header,
             library=session.library,
             link_name=session.link_name,
+            target_abi=session.target_abi,
             decls=decls,
             diagnostics=self.diagnostics.to_ir_diagnostics(),
         )
@@ -109,6 +112,7 @@ class ClangParser:
             header=str(self.header),
             library=self.library,
             link_name=self.link_name,
+            target_abi=probe_target_abi(self.compile_args),
         )
 
     def _build_decl_lowerer(self, session: ParseSession) -> DeclLowerer:

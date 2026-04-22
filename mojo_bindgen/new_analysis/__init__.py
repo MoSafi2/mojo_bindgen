@@ -9,6 +9,11 @@ from mojo_bindgen.new_analysis.const_lowering import (
     LowerConstExprPass,
     lower_const_expr,
 )
+from mojo_bindgen.new_analysis.struct_lowering import (
+    LowerStructPass,
+    StructLoweringError,
+    lower_struct,
+)
 from mojo_bindgen.new_analysis.type_lowering import (
     LowerTypePass,
     TypeLoweringError,
@@ -28,13 +33,16 @@ from mojo_bindgen.new_analysis.unit_lowering import (
 __all__ = [
     "ConstExprLoweringError",
     "LowerConstExprPass",
+    "LowerStructPass",
     "LowerTypePass",
     "LowerUnionPass",
     "LowerUnitPass",
+    "StructLoweringError",
     "TypeLoweringError",
     "UnionLoweringError",
     "UnitLoweringError",
     "lower_const_expr",
+    "lower_struct",
     "lower_type",
     "lower_union",
     "lower_unit",

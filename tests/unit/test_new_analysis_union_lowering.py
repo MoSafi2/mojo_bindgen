@@ -119,12 +119,18 @@ def test_lower_union_falls_back_for_unsupported_member_type() -> None:
 
     lowered = lower_union(decl)
 
-    assert lowered.type_value == ArrayType(
-        element=BuiltinType(MojoBuiltin.UINT8),
-        count=4,
+    assert lowered.type_value == ParametricType(
+        base=ParametricBase.UNSAFE_UNION,
+        args=[
+            TypeArg(
+                type=ArrayType(
+                    element=BuiltinType(MojoBuiltin.UINT8),
+                    count=4,
+                )
+            )
+        ],
     )
-    assert lowered.diagnostics[0].category == "union_lowering"
-    assert "lowered to unsupported type" in lowered.diagnostics[0].message
+    assert lowered.diagnostics == []
 
 
 def test_lower_union_falls_back_for_self_referential_member_type() -> None:

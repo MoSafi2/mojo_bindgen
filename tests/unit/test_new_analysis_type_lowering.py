@@ -133,10 +133,13 @@ def test_lower_type_keeps_raw_function_pointer_signature_shape() -> None:
     )
 
 
-def test_lower_type_maps_atomic_to_underlying_surface_type() -> None:
+def test_lower_type_maps_representable_atomic_to_atomic_surface_type() -> None:
     atomic = AtomicType(value_type=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4))
 
-    assert lower_type(atomic) == BuiltinType(name=MojoBuiltin.C_UINT)
+    assert lower_type(atomic) == ParametricType(
+        base=ParametricBase.ATOMIC,
+        args=[DTypeArg("DType.uint32")],
+    )
 
 
 def test_lower_type_maps_complex_and_vector_surface_forms_and_fallbacks() -> None:
@@ -159,12 +162,13 @@ def test_lower_type_maps_complex_and_vector_surface_forms_and_fallbacks() -> Non
         element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
         count=2,
     )
-    assert lower_type(VectorType(element=f32, count=None, size_bytes=16)) == BuiltinType(
-        name=MojoBuiltin.UNSUPPORTED
+    assert lower_type(VectorType(element=f32, count=None, size_bytes=16)) == ArrayType(
+        element=BuiltinType(name=MojoBuiltin.UINT8),
+        count=16,
     )
 
 
-def test_lower_type_uses_explicit_unsupported_placeholder() -> None:
+def test_lower_type_maps_unsupported_type_to_inline_bytes_when_sized() -> None:
     unsupported = UnsupportedType(
         category="unknown",
         spelling="mystery_t",
@@ -173,7 +177,53 @@ def test_lower_type_uses_explicit_unsupported_placeholder() -> None:
         align_bytes=8,
     )
 
-    assert lower_type(unsupported) == BuiltinType(name=MojoBuiltin.UNSUPPORTED)
+    assert lower_type(unsupported) == ArrayType(
+        element=BuiltinType(name=MojoBuiltin.UINT8),
+        count=16,
+    )
+
+
+def test_lower_type_maps_unsized_unsupported_type_to_opaque_pointer() -> None:
+    unsupported = UnsupportedType(
+        category="unknown",
+        spelling="mystery_t",
+        reason="not modeled",
+    )
+
+    assert lower_type(unsupported) == PointerType(
+        pointee=None,
+        mutability=PointerMutability.MUT,
+    )
+
+
+def test_lower_type_maps_missing_primitive_kinds_to_valid_surface_types() -> None:
+    assert lower_type(IntType(int_kind=IntKind.WCHAR, size_bytes=4, align_bytes=4)) == NamedType(
+        name="Int32"
+    )
+    assert lower_type(IntType(int_kind=IntKind.CHAR16, size_bytes=2, align_bytes=2)) == NamedType(
+        name="UInt16"
+    )
+    assert lower_type(IntType(int_kind=IntKind.CHAR32, size_bytes=4, align_bytes=4)) == NamedType(
+        name="UInt32"
+    )
+    assert lower_type(
+        IntType(int_kind=IntKind.EXT_INT, size_bytes=8, align_bytes=8, ext_bits=33)
+    ) == NamedType(name="Int64")
+    assert lower_type(
+        IntType(int_kind=IntKind.INT128, size_bytes=16, align_bytes=16)
+    ) == BuiltinType(name=MojoBuiltin.INT128)
+    assert lower_type(
+        IntType(int_kind=IntKind.UINT128, size_bytes=16, align_bytes=16)
+    ) == BuiltinType(name=MojoBuiltin.UINT128)
+
+
+def test_lower_type_maps_float128_to_inline_bytes() -> None:
+    assert lower_type(
+        FloatType(float_kind=FloatKind.FLOAT128, size_bytes=16, align_bytes=16)
+    ) == ArrayType(
+        element=BuiltinType(name=MojoBuiltin.UINT8),
+        count=16,
+    )
 
 
 def test_lower_type_caches_recursively_without_looping_for_nested_typeref_shapes() -> None:

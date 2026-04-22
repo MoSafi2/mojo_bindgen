@@ -2,16 +2,30 @@
 
 from __future__ import annotations
 
-import ctypes
+from functools import cache
 
 from mojo_bindgen.codegen.mojo_mapper import mojo_ident
 from mojo_bindgen.ir import Field, FloatType, IntType, VoidType
 
 _MOJO_MAX_ALIGN_BYTES = 1 << 29
-# TODO: FIX: Probably wrong to use ctypes here, should be derived from clang to allow cross-compilation if needed.
-# TODO:In general Target Information should be obtained from clang.index from the frontend and saved for later
-_POINTER_SIZE_BYTES = ctypes.sizeof(ctypes.c_void_p)
-_POINTER_ALIGN_BYTES = ctypes.alignment(ctypes.c_void_p)
+
+
+@cache
+def _legacy_default_target_abi():
+    # Legacy analysis still imports these names directly. Keep that path working
+    # without relying on the Python host ABI.
+    from mojo_bindgen.parsing.frontend import _default_system_compile_args
+    from mojo_bindgen.parsing.target_abi import probe_target_abi
+
+    return probe_target_abi(_default_system_compile_args())
+
+
+def __getattr__(name: str) -> int:
+    if name == "_POINTER_SIZE_BYTES":
+        return _legacy_default_target_abi().pointer_size_bytes
+    if name == "_POINTER_ALIGN_BYTES":
+        return _legacy_default_target_abi().pointer_align_bytes
+    raise AttributeError(name)
 
 
 def _is_power_of_two(n: int) -> bool:
@@ -50,8 +64,6 @@ def field_mojo_name(field: Field, index: int) -> str:
 
 
 __all__ = [
-    "_POINTER_ALIGN_BYTES",
-    "_POINTER_SIZE_BYTES",
     "field_mojo_name",
     "_mojo_align_decorator_ok",
     "mojo_float_literal_text",

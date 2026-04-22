@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.layout import build_register_passable_map, struct_by_decl_id
 from mojo_bindgen.codegen.mojo_mapper import mojo_ident
 from mojo_bindgen.ir import (
     Const,
@@ -37,13 +38,12 @@ from mojo_bindgen.mojo_ir import (
     MojoDecl,
     MojoModule,
     Param,
-    StructDecl,
-    StructKind,
 )
 from mojo_bindgen.new_analysis.const_lowering import (
     ConstExprLoweringError,
     LowerConstExprPass,
 )
+from mojo_bindgen.new_analysis.struct_lowering import LowerStructPass, StructLoweringContext
 from mojo_bindgen.new_analysis.type_lowering import LowerTypePass
 from mojo_bindgen.new_analysis.union_lowering import LowerUnionPass
 
@@ -59,6 +59,7 @@ class LoweringSession:
     unit: Unit
     type_lowerer: LowerTypePass
     const_lowerer: LowerConstExprPass
+    struct_context: StructLoweringContext
 
 
 def _stub_note(message: str) -> LoweringNote:
@@ -69,45 +70,12 @@ def _stub_note(message: str) -> LoweringNote:
     )
 
 
-def _record_name(decl: Struct) -> str:
-    raw_name = decl.name.strip() or decl.c_name.strip()
-    fallback = "anonymous_union" if decl.is_union else "anonymous_struct"
-    return mojo_ident(raw_name, fallback=fallback)
-
-
-class _StubStructLowerer:
-    """Temporary struct lowering until record-layout lowering is implemented."""
-
-    def lower(self, decl: Struct) -> StructDecl:
-        if decl.is_complete:
-            kind = StructKind.PLAIN
-            align = decl.align_bytes
-            note = _stub_note("struct member lowering not implemented yet")
-        else:
-            kind = StructKind.OPAQUE
-            align = None
-            note = _stub_note(
-                "opaque struct placeholder emitted; member lowering not implemented yet"
-            )
-        return StructDecl(
-            name=_record_name(decl),
-            kind=kind,
-            traits=[],
-            align=align,
-            align_decorator=None,
-            fieldwise_init=False,
-            members=[],
-            initializers=[],
-            diagnostics=[note],
-        )
-
-
 class UnitDeclLowerer:
     """Lower one top-level CIR declaration into one or more MojoIR declarations."""
 
     def __init__(self, session: LoweringSession) -> None:
         self.session = session
-        self._struct_lowerer = _StubStructLowerer()
+        self._struct_lowerer = LowerStructPass()
         self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
 
     def lower_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
@@ -210,7 +178,7 @@ class UnitDeclLowerer:
     def _lower_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:
             return self._union_lowerer.run(decl)
-        return self._struct_lowerer.lower(decl)
+        return self._struct_lowerer.run(decl, context=self.session.struct_context)
 
 
 class LowerUnitPass:
@@ -218,10 +186,17 @@ class LowerUnitPass:
 
     def run(self, unit: Unit) -> MojoModule:
         type_lowerer = LowerTypePass()
+        struct_map = struct_by_decl_id(unit)
         session = LoweringSession(
             unit=unit,
             type_lowerer=type_lowerer,
             const_lowerer=LowerConstExprPass(type_lowering=type_lowerer),
+            struct_context=StructLoweringContext(
+                struct_map=struct_map,
+                register_passable_by_decl_id=build_register_passable_map(struct_map),
+                target_abi=unit.target_abi,
+                type_lowerer=type_lowerer,
+            ),
         )
         decl_lowerer = UnitDeclLowerer(session)
         lowered_decls: list[MojoDecl] = []

@@ -31,6 +31,7 @@ from mojo_bindgen.ir import (
     StringLiteral,
     Struct,
     StructRef,
+    TargetABI,
     Typedef,
     TypeRef,
     Unit,
@@ -56,6 +57,10 @@ def _bool() -> IntType:
     return IntType(int_kind=IntKind.BOOL, size_bytes=1, align_bytes=1)
 
 
+def _abi() -> TargetABI:
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+
+
 def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
     """``(size_t)-1`` style macros emit as one scalar constructor, not binary minus."""
     size_t_like = IntType(int_kind=IntKind.ULONG, size_bytes=8, align_bytes=8)
@@ -63,6 +68,7 @@ def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             MacroDecl(
                 name="CURL_ZERO_TERMINATED",
@@ -103,7 +109,7 @@ def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None
         is_complete=False,
     )
     au = analyze_unit(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st]),
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st]),
         MojoEmitOptions(),
     )
     assert au.ordered_structs == ()
@@ -162,7 +168,7 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
     )
     assert "@fieldwise_init\nstruct Bits" not in out
     assert "var __bf0: c_uint" in out
@@ -205,7 +211,7 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
     )
     assert "@fieldwise_init\nstruct MixedBits" in out
     assert "var tag: c_uint" in out
@@ -258,7 +264,7 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
     )
     assert "var __bf0: c_uint" in out
     assert "var __bf1: c_uint" in out
@@ -289,7 +295,7 @@ def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct(
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
     )
     assert "@fieldwise_init\nstruct OnlyAnonBits" not in out
     assert "def __init__(out self):" in out
@@ -319,7 +325,13 @@ def test_generator_omits_self_alias_typedef_for_complete_union_name() -> None:
     )
     td = Typedef(decl_id="typedef:U", name="U", aliased=union_ref, canonical=union_ref)
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[union_decl, td])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[union_decl, td],
+        )
     )
     assert "comptime U = UnsafeUnion[c_int, c_uint]" in out
     assert out.count("comptime U =") == 1
@@ -331,6 +343,7 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             GlobalVar(
                 decl_id="var:global_counter",
@@ -438,6 +451,7 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             GlobalVar(
                 decl_id="var:global_counter",
@@ -473,6 +487,7 @@ def test_generator_strips_c_float_suffix_in_macro_and_const() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             MacroDecl(
                 name="PRIO_LOW",
@@ -522,7 +537,7 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> Non
         align_bytes=16,
         is_union=False,
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[st])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.builtin.simd import SIMD" in out
     assert "from std.complex import ComplexSIMD" in out
@@ -539,6 +554,7 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             GlobalVar(
                 decl_id="var:counter",
@@ -588,7 +604,13 @@ def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[atomic_holder])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[atomic_holder],
+        )
     )
     assert "@fieldwise_init\nstruct AtomicHolder" not in out
     assert "struct AtomicHolder(Copyable" not in out
@@ -604,6 +626,7 @@ def test_generator_emits_global_const_wrapper_for_const_qualified_scalar() -> No
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             GlobalVar(
                 decl_id="var:limit",
@@ -649,6 +672,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             my_uint,
             my_uint_ptr,
@@ -715,6 +739,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         source_header="t.h",
         library="pfr",
         link_name="pfr",
+        target_abi=_abi(),
         decls=[fp_typedef, choose, choose_direct, call],
     )
 
@@ -840,6 +865,7 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
             source_header="t.h",
             library="sqlite",
             link_name="sqlite",
+            target_abi=_abi(),
             decls=[sqlite3, vtab, module],
         )
     )
@@ -910,7 +936,13 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[parts, payload, holder])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[parts, payload, holder],
+        )
     )
     assert "comptime Payload = UnsafeUnion[c_int, Parts]" in out
     assert "var payload: Payload" in out
@@ -953,7 +985,13 @@ def test_generator_emits_documented_inline_array_fallback_for_ineligible_union()
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[union_decl, holder])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[union_decl, holder],
+        )
     )
     assert "comptime Dup = InlineArray[UInt8, 4]" in out
     assert "lowered as InlineArray[UInt8, 4] to preserve layout" in out
@@ -1003,6 +1041,7 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
             source_header="t.h",
             library="sqlite",
             link_name="sqlite",
+            target_abi=_abi(),
             decls=[
                 Struct(
                     decl_id="struct:sqlite3",
@@ -1074,7 +1113,13 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[cb_typedef, fn])
+        Unit(
+            source_header="t.h",
+            library="t",
+            link_name="t",
+            target_abi=_abi(),
+            decls=[cb_typedef, fn],
+        )
     )
     assert "comptime nested_cb_t = def (" in out
     assert (
@@ -1101,7 +1146,7 @@ def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(source_header="t.h", library="t", link_name="t", decls=[fn])
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
     )
     assert "from std.ffi import external_call, c_int" in out
     assert 'def sf_add(a: c_int, b: c_int) abi("C") -> c_int:' in out
@@ -1143,6 +1188,7 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
             source_header="t.h",
             library="t",
             link_name="t",
+            target_abi=_abi(),
             decls=[fp_typedef, getter],
         )
     )

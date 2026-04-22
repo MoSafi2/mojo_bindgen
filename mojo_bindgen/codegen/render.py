@@ -24,7 +24,7 @@ from mojo_bindgen.analysis.analyze_for_mojo import (
 )
 from mojo_bindgen.codegen.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_mapper import pointer_origin_names
-from mojo_bindgen.ir import Unit
+from mojo_bindgen.ir import TargetABI, Unit
 
 type StructBodyItem = AnalyzedField | AnalyzedPaddingField | AnalyzedBitfieldStorage
 
@@ -477,7 +477,13 @@ class MojoRenderer:
 
 def render_struct(analyzed: AnalyzedStruct, options: MojoEmitOptions) -> str:
     dummy = AnalyzedUnit(
-        unit=Unit(source_header="", library="", link_name="", decls=[]),
+        unit=Unit(
+            source_header="",
+            library="",
+            link_name="",
+            target_abi=TargetABI(pointer_size_bytes=8, pointer_align_bytes=8),
+            decls=[],
+        ),
         opts=options,
         needs_opaque_imports=False,
         needs_simd_import=False,

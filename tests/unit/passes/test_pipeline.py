@@ -13,6 +13,7 @@ from mojo_bindgen.ir import (
     IntType,
     Param,
     Struct,
+    TargetABI,
     Typedef,
     TypeRef,
     Unit,
@@ -24,6 +25,10 @@ def _i32() -> IntType:
     return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
+def _abi() -> TargetABI:
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+
+
 def test_run_ir_passes_validates_already_normalized_ir() -> None:
     i32 = _i32()
     td = Typedef(decl_id="typedef:my_int", name="my_int", aliased=i32, canonical=i32)
@@ -32,6 +37,7 @@ def test_run_ir_passes_validates_already_normalized_ir() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             td,
             Struct(
@@ -59,6 +65,7 @@ def test_validate_ir_pass_rejects_duplicate_decl_ids() -> None:
         source_header="t.h",
         library="t",
         link_name="t",
+        target_abi=_abi(),
         decls=[
             Typedef(decl_id="typedef:dup", name="a", aliased=i32, canonical=i32),
             Typedef(decl_id="typedef:dup", name="b", aliased=i32, canonical=i32),
@@ -81,7 +88,7 @@ def test_run_ir_passes_and_analyze_for_mojo_produce_analyzed_unit() -> None:
         ret=VoidType(),
         params=[Param(name="x", type=tr)],
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", decls=[td, fn])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[td, fn])
 
     normalized = run_ir_passes(unit)
     analyzed = AnalyzeForMojoPass(MojoEmitOptions()).run(normalized)

@@ -12,6 +12,7 @@ from mojo_bindgen.ir import (
     AtomicType,
     ComplexType,
     EnumRef,
+    FloatKind,
     FloatType,
     FunctionPtr,
     IntKind,
@@ -65,9 +66,6 @@ def _strip_transparent_wrappers(t: Type) -> Type:
         if isinstance(t, QualifiedType):
             t = t.unqualified
             continue
-        if isinstance(t, AtomicType):
-            t = t.value_type
-            continue
         break
     return t
 
@@ -108,6 +106,26 @@ def _int_dtype_arg(t: IntType) -> str | None:
     return None
 
 
+def _fixed_width_int_name(t: IntType) -> str | None:
+    if t.int_kind in {IntKind.INT128, IntKind.WCHAR, IntKind.EXT_INT}:
+        return {
+            1: "Int8",
+            2: "Int16",
+            4: "Int32",
+            8: "Int64",
+            16: "Int128",
+        }.get(t.size_bytes)
+    if t.int_kind in {IntKind.UINT128, IntKind.CHAR16, IntKind.CHAR32}:
+        return {
+            1: "UInt8",
+            2: "UInt16",
+            4: "UInt32",
+            8: "UInt64",
+            16: "UInt128",
+        }.get(t.size_bytes)
+    return None
+
+
 @dataclass
 class LowerTypePass:
     """Lower CIR types into surface-oriented MojoIR type nodes."""
@@ -141,6 +159,8 @@ class LowerTypePass:
     def _lower(self, t: Type) -> MojoType:
         if isinstance(t, (VoidType, IntType, FloatType)):
             return self._lower_primitive(t)
+        if isinstance(t, AtomicType):
+            return self._lower_atomic(t)
         if isinstance(t, (TypeRef, EnumRef, StructRef)):
             return self._named(t.name)
         if isinstance(t, OpaqueRecordRef):
@@ -160,18 +180,27 @@ class LowerTypePass:
         if isinstance(t, VectorType):
             return self._lower_vector(t)
         if isinstance(t, UnsupportedType):
-            return self._unsupported()
+            return self._unsupported_type(t)
         raise TypeLoweringError(f"unsupported CIR type node: {type(t).__name__!r}")
 
     # ------------------------
     # Named types
     # ------------------------
-    def _lower_primitive(self, t: PrimitiveCIRType) -> BuiltinType:
+    def _lower_primitive(self, t: PrimitiveCIRType) -> MojoType:
         if isinstance(t, VoidType):
             key = "void"
         elif isinstance(t, IntType):
+            fixed_width_name = _fixed_width_int_name(t)
+            if fixed_width_name == "Int128":
+                return BuiltinType(name=MojoBuiltin.INT128)
+            if fixed_width_name == "UInt128":
+                return BuiltinType(name=MojoBuiltin.UINT128)
+            if fixed_width_name is not None:
+                return NamedType(name=fixed_width_name)
             key = t.int_kind
         elif isinstance(t, FloatType):
+            if t.float_kind == FloatKind.FLOAT128:
+                return self._opaque_bytes(t.size_bytes)
             key = t.float_kind
         else:
             raise TypeLoweringError(f"expected CIR primitive type, got {type(t).__name__!r}")
@@ -183,6 +212,15 @@ class LowerTypePass:
                 f"no Mojo primitive builtin registered for {type(t).__name__} key {key!r}"
             ) from exc
         return BuiltinType(name=builtin)
+
+    def _lower_atomic(self, t: AtomicType) -> MojoType:
+        dtype = self._dtype_arg(t.value_type)
+        if dtype is not None:
+            return ParametricType(
+                base=ParametricBase.ATOMIC,
+                args=[DTypeArg(dtype)],
+            )
+        return self.run(t.value_type)
 
     def _named(self, name: str) -> NamedType:
         return NamedType(name=mojo_ident(name.strip()))
@@ -245,7 +283,7 @@ class LowerTypePass:
 
     def _lower_vector(self, t: VectorType) -> MojoType:
         if t.count is None:
-            return self._unsupported()
+            return self._opaque_bytes(t.size_bytes)
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
             return ParametricType(
@@ -264,8 +302,17 @@ class LowerTypePass:
 
         return ArrayType(element=self.run(t.element), count=2)
 
-    def _unsupported(self) -> BuiltinType:
-        return BuiltinType(name=MojoBuiltin.UNSUPPORTED)
+    def _unsupported_type(self, t: UnsupportedType) -> MojoType:
+        if t.size_bytes is not None and t.size_bytes > 0:
+            return self._opaque_bytes(t.size_bytes)
+        return PointerType(
+            pointee=None,
+            mutability=PointerMutability.MUT,
+            origin=PointerOrigin.EXTERNAL,
+        )
+
+    def _opaque_bytes(self, size_bytes: int) -> ArrayType:
+        return ArrayType(element=BuiltinType(name=MojoBuiltin.UINT8), count=size_bytes)
 
     # ------------------------
     # DType resolution

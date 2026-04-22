@@ -12,7 +12,7 @@ IR node types (as Python classes / unions in this module):
   `SizeOfExpr` (union alias: `ConstExpr`)
 - Declaration nodes: `Struct`, `Enum`, `Typedef`, `Function`, `Const`, `MacroDecl`,
   `GlobalVar` (union alias: `Decl`)
-- Other: `IRDiagnostic`, `Unit`
+- Other: `TargetABI`, `IRDiagnostic`, `Unit`
 """
 
 from __future__ import annotations
@@ -667,6 +667,14 @@ class IRDiagnostic(SerDeMixin):
     KIND: ClassVar[str | None] = None
 
 
+@dataclass(frozen=True)
+class TargetABI(SerDeMixin):
+    """Target ABI facts derived from the Clang parse configuration."""
+
+    pointer_size_bytes: int
+    pointer_align_bytes: int
+
+
 Decl = Union[
     Function,
     Struct,
@@ -685,6 +693,7 @@ class Unit(SerDeMixin):
     source_header: str
     library: str  # e.g. "zlib"
     link_name: str  # e.g. "z"  (used in DLHandle)
+    target_abi: TargetABI
     decls: list[Decl] = field(default_factory=list)
     diagnostics: list[IRDiagnostic] = field(default_factory=list)
 
