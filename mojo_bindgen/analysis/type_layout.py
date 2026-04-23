@@ -22,80 +22,64 @@ from mojo_bindgen.ir import (
 
 
 def peel_layout_wrappers(t: Type) -> Type:
-    """Remove wrappers that do not affect CIR layout facts."""
-
-    while True:
+    """Strip layout-transparent wrappers from a CIR type."""
+    while isinstance(t, (TypeRef, QualifiedType, AtomicType)):
         if isinstance(t, TypeRef):
             t = t.canonical
-            continue
-        if isinstance(t, QualifiedType):
+        elif isinstance(t, QualifiedType):
             t = t.unqualified
-            continue
-        if isinstance(t, AtomicType):
+        else:  # AtomicType
             t = t.value_type
-            continue
-        return t
+    return t
 
 
-def type_layout(
-    t: Type,
-) -> tuple[int, int] | None:
-    """Return CIR size/alignment facts for ``t`` or ``None`` when unavailable."""
-
-    return _type_layout_worker(peel_layout_wrappers(t))
+def type_layout(t: Type) -> tuple[int, int] | None:
+    """Return ``(size_bytes, align_bytes)`` for ``t``, or ``None`` if unknown."""
+    return _layout_of(peel_layout_wrappers(t))
 
 
-def type_align(
-    t: Type,
-) -> int | None:
-    """Return CIR alignment facts for ``t`` or ``None`` when unavailable."""
-
+def type_align(t: Type) -> int | None:
+    """Return alignment in bytes for ``t``, or ``None`` if unknown."""
     layout = type_layout(t)
-    if layout is None:
-        return None
-    _, align_bytes = layout
-    return align_bytes
+    return None if layout is None else layout[1]
 
 
-def _type_layout_worker(t: Type) -> tuple[int, int] | None:
-    if isinstance(t, IntType):
-        return t.size_bytes, t.align_bytes or t.size_bytes
-    if isinstance(t, FloatType):
-        return t.size_bytes, t.align_bytes or t.size_bytes
+def _layout_of(t: Type) -> tuple[int, int] | None:
+    t = peel_layout_wrappers(t)
+
+    if isinstance(
+        t,
+        (
+            IntType,
+            FloatType,
+            VectorType,
+            StructRef,
+            Pointer,
+            FunctionPtr,
+            OpaqueRecordRef,
+            UnsupportedType,
+            Array,
+        ),
+    ):
+        return _explicit_layout(t.size_bytes, t.align_bytes)
+
     if isinstance(t, EnumRef):
-        return _type_layout_worker(peel_layout_wrappers(t.underlying))
-    if isinstance(t, (Pointer, FunctionPtr, OpaqueRecordRef)):
-        if t.align_bytes is None:
-            return None
-        return t.size_bytes, t.align_bytes
-    if isinstance(t, UnsupportedType):
-        if t.size_bytes is None or t.align_bytes is None:
-            return None
-        return t.size_bytes, t.align_bytes
+        return type_layout(t.underlying)
+
     if isinstance(t, ComplexType):
         if t.align_bytes is not None:
             return t.size_bytes, t.align_bytes
-        return t.size_bytes, t.element.align_bytes or t.element.size_bytes
-    if isinstance(t, VectorType):
-        if t.align_bytes is not None:
-            return t.size_bytes, t.align_bytes
-        element_layout = _type_layout_worker(peel_layout_wrappers(t.element))
-        if element_layout is None:
+        elem = type_layout(t.element)
+        if elem is None:
             return None
-        _, element_align = element_layout
-        return t.size_bytes, element_align
-    if isinstance(t, StructRef):
-        if t.align_bytes is None:
-            return None
-        return t.size_bytes, t.align_bytes
-    if isinstance(t, Array):
-        if t.align_bytes is not None:
-            return t.size_bytes, t.align_bytes
-        if t.array_kind != "fixed" or t.size is None:
-            return None
-        element_layout = _type_layout_worker(peel_layout_wrappers(t.element))
-        if element_layout is None:
-            return None
-        element_size, element_align = element_layout
-        return element_size * t.size, element_align
-    return None
+        _, elem_align = elem
+        return t.size_bytes, elem_align
+
+
+def _explicit_layout(
+    size_bytes: int | None,
+    align_bytes: int | None,
+) -> tuple[int, int] | None:
+    if size_bytes is None or align_bytes is None:
+        return None
+    return size_bytes, align_bytes
