@@ -14,8 +14,8 @@ def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutExternalOrigin]:
     return rebind[UnsafePointer[Int8, ImmutExternalOrigin]](s.unsafe_ptr())
 
 
-def _null_exec_cb() -> UnsafePointer[sql.sqlite3_exec_callback_cb, MutExternalOrigin]:
-    return UnsafePointer[sql.sqlite3_exec_callback_cb, MutExternalOrigin]()
+def _null_exec_cb() -> UnsafePointer[sql.sqlite3_exec_cb, MutExternalOrigin]:
+    return UnsafePointer[sql.sqlite3_exec_cb, MutExternalOrigin]()
 
 
 def _open_memory() raises -> UnsafePointer[sql.sqlite3, MutExternalOrigin]:
@@ -25,7 +25,10 @@ def _open_memory() raises -> UnsafePointer[sql.sqlite3, MutExternalOrigin]:
     var zvfs = UnsafePointer[Int8, ImmutExternalOrigin]()
     var rc = sql.sqlite3_open_v2(path, ppDb, flags, zvfs)
     _assert("sqlite.open_v2_rc", rc == sql.SQLITE_OK)
-    _assert("sqlite.open_v2_nonnull", ppDb[0] != UnsafePointer[sql.sqlite3, MutExternalOrigin]())
+    _assert(
+        "sqlite.open_v2_nonnull",
+        ppDb[0] != UnsafePointer[sql.sqlite3, MutExternalOrigin](),
+    )
     return ppDb[0]
 
 
@@ -41,14 +44,17 @@ def run_version_and_init_checks() raises:
 
 def run_exec_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
     var sql_create = _cstr(
-        "CREATE TABLE IF NOT EXISTS smoke_exec (id INTEGER PRIMARY KEY, v INT);\0"
+        "CREATE TABLE IF NOT EXISTS smoke_exec (id INTEGER PRIMARY KEY, v"
+        " INT);\0"
     )
     var rc = sql.sqlite3_exec(
         db,
         sql_create,
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.exec_create", rc == sql.SQLITE_OK)
 
@@ -58,31 +64,43 @@ def run_exec_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
         sql_ins,
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.exec_insert", rc == sql.SQLITE_OK)
     print("sqlite.exec|PASS")
 
 
-def run_prepare_statement_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
+def run_prepare_statement_checks(
+    db: UnsafePointer[sql.sqlite3, MutExternalOrigin]
+) raises:
     var sql_create = _cstr(
-        "CREATE TABLE IF NOT EXISTS smoke_prep (id INTEGER PRIMARY KEY, i INT, d REAL, n INT);\0"
+        "CREATE TABLE IF NOT EXISTS smoke_prep (id INTEGER PRIMARY KEY, i INT,"
+        " d REAL, n INT);\0"
     )
     var rc = sql.sqlite3_exec(
         db,
         sql_create,
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.prep_exec_schema", rc == sql.SQLITE_OK)
 
     var ins = _cstr("INSERT INTO smoke_prep (i, d, n) VALUES (?, ?, ?);\0")
     var ppStmt = alloc[UnsafePointer[sql.sqlite3_stmt, MutExternalOrigin]](1)
-    var pzTail = UnsafePointer[UnsafePointer[Int8, ImmutExternalOrigin], MutExternalOrigin]()
+    var pzTail = UnsafePointer[
+        UnsafePointer[Int8, ImmutExternalOrigin], MutExternalOrigin
+    ]()
     rc = sql.sqlite3_prepare_v2(db, ins, -1, ppStmt, pzTail)
     _assert("sqlite.prepare_insert", rc == sql.SQLITE_OK)
-    _assert("sqlite.prepare_param_count", sql.sqlite3_bind_parameter_count(ppStmt[0]) == 3)
+    _assert(
+        "sqlite.prepare_param_count",
+        sql.sqlite3_bind_parameter_count(ppStmt[0]) == 3,
+    )
 
     rc = sql.sqlite3_bind_int(ppStmt[0], 1, 7)
     _assert("sqlite.bind_int", rc == sql.SQLITE_OK)
@@ -104,8 +122,13 @@ def run_prepare_statement_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigi
     _assert("sqlite.step_select_row", step == sql.SQLITE_ROW)
     _assert("sqlite.column_count", sql.sqlite3_column_count(ppStmt[0]) == 3)
     _assert("sqlite.column_int", sql.sqlite3_column_int(ppStmt[0], 0) == 7)
-    _assert("sqlite.column_double", sql.sqlite3_column_double(ppStmt[0], 1) == 2.5)
-    _assert("sqlite.column_type_null", sql.sqlite3_column_type(ppStmt[0], 2) == sql.SQLITE_NULL)
+    _assert(
+        "sqlite.column_double", sql.sqlite3_column_double(ppStmt[0], 1) == 2.5
+    )
+    _assert(
+        "sqlite.column_type_null",
+        sql.sqlite3_column_type(ppStmt[0], 2) == sql.SQLITE_NULL,
+    )
     step = sql.sqlite3_step(ppStmt[0])
     _assert("sqlite.step_select_done", step == sql.SQLITE_DONE)
     rc = sql.sqlite3_finalize(ppStmt[0])
@@ -113,23 +136,32 @@ def run_prepare_statement_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigi
     print("sqlite.prepare|PASS")
 
 
-def run_transaction_metadata_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
+def run_transaction_metadata_checks(
+    db: UnsafePointer[sql.sqlite3, MutExternalOrigin]
+) raises:
     var rc = sql.sqlite3_exec(
         db,
         _cstr("BEGIN;\0"),
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.tx_begin", rc == sql.SQLITE_OK)
     _assert("sqlite.autocommit_off", sql.sqlite3_get_autocommit(db) == 0)
 
     rc = sql.sqlite3_exec(
         db,
-        _cstr("CREATE TABLE IF NOT EXISTS smoke_tx (id INTEGER PRIMARY KEY, x INT);\0"),
+        _cstr(
+            "CREATE TABLE IF NOT EXISTS smoke_tx (id INTEGER PRIMARY KEY, x"
+            " INT);\0"
+        ),
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.tx_create", rc == sql.SQLITE_OK)
 
@@ -138,7 +170,9 @@ def run_transaction_metadata_checks(db: UnsafePointer[sql.sqlite3, MutExternalOr
         _cstr("INSERT INTO smoke_tx (x) VALUES (1001);\0"),
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.tx_insert", rc == sql.SQLITE_OK)
     _assert("sqlite.last_insert_rowid", sql.sqlite3_last_insert_rowid(db) >= 1)
@@ -149,7 +183,9 @@ def run_transaction_metadata_checks(db: UnsafePointer[sql.sqlite3, MutExternalOr
         _cstr("COMMIT;\0"),
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.tx_commit", rc == sql.SQLITE_OK)
     _assert("sqlite.autocommit_on", sql.sqlite3_get_autocommit(db) != 0)
@@ -160,11 +196,14 @@ def run_blob_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
     var rc = sql.sqlite3_exec(
         db,
         _cstr(
-            "CREATE TABLE IF NOT EXISTS smoke_blob (id INTEGER PRIMARY KEY, b BLOB);\0"
+            "CREATE TABLE IF NOT EXISTS smoke_blob (id INTEGER PRIMARY KEY, b"
+            " BLOB);\0"
         ),
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.blob_create_table", rc == sql.SQLITE_OK)
     rc = sql.sqlite3_exec(
@@ -172,7 +211,9 @@ def run_blob_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
         _cstr("INSERT INTO smoke_blob (b) VALUES (zeroblob(8));\0"),
         _null_exec_cb(),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin](),
+        UnsafePointer[
+            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
+        ](),
     )
     _assert("sqlite.blob_insert_zeroblob", rc == sql.SQLITE_OK)
 
@@ -212,7 +253,10 @@ def run_blob_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
 
 def run_mutex_checks() raises:
     var mx = sql.sqlite3_mutex_alloc(sql.SQLITE_MUTEX_FAST)
-    _assert("sqlite.mutex_alloc_nonnull", mx != UnsafePointer[sql.sqlite3_mutex, MutExternalOrigin]())
+    _assert(
+        "sqlite.mutex_alloc_nonnull",
+        mx != UnsafePointer[sql.sqlite3_mutex, MutExternalOrigin](),
+    )
     sql.sqlite3_mutex_enter(mx)
     sql.sqlite3_mutex_leave(mx)
     sql.sqlite3_mutex_free(mx)
@@ -222,17 +266,19 @@ def run_mutex_checks() raises:
 def run_status_memory_checks() raises:
     var cur = alloc[Int32](1)
     var hi = alloc[Int32](1)
-    var st = sql.sqlite3_status(
-        sql.SQLITE_STATUS_MEMORY_USED, cur, hi, 0
-    )
+    var st = sql.sqlite3_status(sql.SQLITE_STATUS_MEMORY_USED, cur, hi, 0)
     _assert("sqlite.status_memory_rc", st == sql.SQLITE_OK)
     var mu = sql.sqlite3_memory_used()
     _assert("sqlite.memory_used_nonneg", mu >= 0)
     print("sqlite.status_memory|PASS")
 
 
-def run_get_table_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
-    var paz = alloc[UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin]](1)
+def run_get_table_checks(
+    db: UnsafePointer[sql.sqlite3, MutExternalOrigin]
+) raises:
+    var paz = alloc[
+        UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin]
+    ](1)
     var pnRow = alloc[Int32](1)
     var pnCol = alloc[Int32](1)
     var pzErr = alloc[UnsafePointer[Int8, MutExternalOrigin]](1)
@@ -251,9 +297,14 @@ def run_get_table_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) rais
     print("sqlite.get_table|PASS")
 
 
-def run_vfs_misc_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
+def run_vfs_misc_checks(
+    db: UnsafePointer[sql.sqlite3, MutExternalOrigin]
+) raises:
     var vfs = sql.sqlite3_vfs_find(UnsafePointer[Int8, ImmutExternalOrigin]())
-    _assert("sqlite.vfs_find_default", vfs != UnsafePointer[sql.sqlite3_vfs, MutExternalOrigin]())
+    _assert(
+        "sqlite.vfs_find_default",
+        vfs != UnsafePointer[sql.sqlite3_vfs, MutExternalOrigin](),
+    )
 
     var c = sql.sqlite3_complete(_cstr("SELECT 1;\0"))
     _assert("sqlite.complete_select", c != 0)
@@ -262,8 +313,12 @@ def run_vfs_misc_checks(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raise
     _assert("sqlite.busy_timeout", rc == sql.SQLITE_OK)
 
     var ppProbe = alloc[UnsafePointer[sql.sqlite3_stmt, MutExternalOrigin]](1)
-    var pzTailProbe = UnsafePointer[UnsafePointer[Int8, ImmutExternalOrigin], MutExternalOrigin]()
-    rc = sql.sqlite3_prepare_v2(db, _cstr("SELECT 1;\0"), -1, ppProbe, pzTailProbe)
+    var pzTailProbe = UnsafePointer[
+        UnsafePointer[Int8, ImmutExternalOrigin], MutExternalOrigin
+    ]()
+    rc = sql.sqlite3_prepare_v2(
+        db, _cstr("SELECT 1;\0"), -1, ppProbe, pzTailProbe
+    )
     _assert("sqlite.db_handle_prepare", rc == sql.SQLITE_OK)
     var db2 = sql.sqlite3_db_handle(ppProbe[0])
     _assert("sqlite.db_handle_roundtrip", db2 == db)

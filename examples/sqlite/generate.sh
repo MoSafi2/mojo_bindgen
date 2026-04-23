@@ -88,12 +88,6 @@ SQLITE_H="$(find_sqlite3_h)" || {
 
 "${BG[@]}" "$SQLITE_H" --library sqlite3 --link-name sqlite3 -o sqlite3_bindings.mojo
 
-# mojo_bindgen emits comptime SQLITE_TRANSIENT = (sqlite3_destructor_type - Int32(1)), which
-# current Mojo rejects (fn-pointer comptime arithmetic). Strip it; callers pass destructors explicitly.
-if grep -q '^comptime SQLITE_TRANSIENT = (sqlite3_destructor_type - Int32(1))$' sqlite3_bindings.mojo; then
-  sed -i '/^comptime SQLITE_TRANSIENT = (sqlite3_destructor_type - Int32(1))$/d' sqlite3_bindings.mojo
-fi
-
 LINK_EXTRA="$(sqlite_link_extra || true)"
 OBJ="$(mktemp "${TMPDIR:-/tmp}/sqlite-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT
