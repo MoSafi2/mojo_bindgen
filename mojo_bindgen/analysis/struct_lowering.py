@@ -49,30 +49,11 @@ class StructLoweringError(ValueError):
     """Raised when a CIR struct declaration cannot be lowered to MojoIR."""
 
 
-@dataclass(init=False)
+@dataclass
 class StructLoweringContext:
     record_map: dict[str, Struct]
     target_abi: TargetABI
     type_lowerer: LowerTypePass
-
-    def __init__(
-        self,
-        *,
-        record_map: dict[str, Struct] | None = None,
-        target_abi: TargetABI,
-        type_lowerer: LowerTypePass,
-        struct_map: dict[str, Struct] | None = None,
-    ) -> None:
-        resolved_record_map = record_map if record_map is not None else struct_map
-        if resolved_record_map is None:
-            raise TypeError("StructLoweringContext requires `record_map`")
-        self.record_map = resolved_record_map
-        self.target_abi = target_abi
-        self.type_lowerer = type_lowerer
-
-    @property
-    def struct_map(self) -> dict[str, Struct]:
-        return self.record_map
 
 
 @dataclass(frozen=True)

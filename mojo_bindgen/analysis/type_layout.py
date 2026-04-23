@@ -43,14 +43,13 @@ def type_layout(
     t: Type,
     *,
     target_abi: TargetABI,
-    record_map: dict[str, Struct] | None = None,
-    struct_map: dict[str, Struct] | None = None,
+    record_map: dict[str, Struct],
 ) -> tuple[int, int] | None:
     """Return CIR size/alignment facts for ``t`` or ``None`` when unavailable."""
 
     return _type_layout_worker(
         peel_layout_wrappers(t),
-        record_map=_resolve_record_map(record_map=record_map, struct_map=struct_map),
+        record_map=record_map,
         target_abi=target_abi,
         visiting=set(),
     )
@@ -121,15 +120,3 @@ def _type_layout_worker(
         element_size, element_align = element_layout
         return element_size * t.size, element_align
     return None
-
-
-def _resolve_record_map(
-    *,
-    record_map: dict[str, Struct] | None,
-    struct_map: dict[str, Struct] | None,
-) -> dict[str, Struct]:
-    if record_map is not None:
-        return record_map
-    if struct_map is not None:
-        return struct_map
-    raise TypeError("type_layout() requires `record_map`")

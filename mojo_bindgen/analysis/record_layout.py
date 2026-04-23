@@ -11,9 +11,7 @@ from mojo_bindgen.analysis.bitfield_layout import (
 )
 from mojo_bindgen.analysis.lowering_support import field_display_name
 from mojo_bindgen.analysis.type_layout import type_layout
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, any_type_node
-from mojo_bindgen.codegen.mojo_mapper import map_atomic_type
-from mojo_bindgen.ir import AtomicType, Field, Struct, TargetABI, Unit
+from mojo_bindgen.ir import Field, Struct, TargetABI, Unit
 
 
 def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
@@ -23,25 +21,6 @@ def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
         if isinstance(decl, Struct) and not decl.is_union:
             out[decl.decl_id] = decl
     return out
-
-
-_EMBEDDED_ATOMIC_WALK = TypeWalkOptions(
-    peel_typeref=True,
-    peel_qualified=True,
-    peel_atomic=False,
-    descend_pointer=False,
-    descend_array=True,
-    descend_function_ptr=False,
-    descend_vector_element=False,
-)
-
-
-def field_contains_representable_atomic_storage(field: Field) -> bool:
-    return any_type_node(
-        field.type,
-        lambda node: isinstance(node, AtomicType) and map_atomic_type(node) is not None,
-        options=_EMBEDDED_ATOMIC_WALK,
-    )
 
 
 @dataclass(frozen=True)
@@ -74,7 +53,6 @@ class RecordLayoutFacts:
     bitfield_runs: tuple[BitfieldRunLayout, ...] = ()
     padding_spans: tuple[PaddingSpan, ...] = ()
     layout_problems: tuple[str, ...] = ()
-    has_representable_atomic_storage: bool = False
 
     @property
     def has_bitfields(self) -> bool:
@@ -102,14 +80,8 @@ class AnalyzeRecordLayoutPass:
         decl: Struct,
         *,
         target_abi: TargetABI,
-        record_map: dict[str, Struct] | None = None,
-        struct_map: dict[str, Struct] | None = None,
+        record_map: dict[str, Struct],
     ) -> RecordLayoutFacts:
-        resolved_record_map = _resolve_record_map(record_map=record_map, struct_map=struct_map)
-        has_atomic_storage = any(
-            field_contains_representable_atomic_storage(field) for field in decl.fields
-        )
-
         # Bail out early if the struct is not complete
         if not decl.is_complete:
             return RecordLayoutFacts(
@@ -117,13 +89,12 @@ class AnalyzeRecordLayoutPass:
                 size_bytes=decl.size_bytes,
                 is_packed=decl.is_packed,
                 requested_align_bytes=decl.requested_align_bytes,
-                has_representable_atomic_storage=has_atomic_storage,
             )
 
         # Analyze plain fields
         plain_fields, plain_items, plain_problems = self._analyze_plain_fields(
             decl=decl,
-            record_map=resolved_record_map,
+            record_map=record_map,
             target_abi=target_abi,
         )
 
@@ -151,7 +122,6 @@ class AnalyzeRecordLayoutPass:
             bitfield_runs=bitfield_runs,
             padding_spans=tuple(padding_spans),
             layout_problems=tuple([*plain_problems, *bitfield_problems, *layout_problems]),
-            has_representable_atomic_storage=has_atomic_storage,
         )
 
     def _analyze_plain_fields(
@@ -277,15 +247,3 @@ def _align_up(offset: int, align: int) -> int:
     if rem == 0:
         return offset
     return offset + (align - rem)
-
-
-def _resolve_record_map(
-    *,
-    record_map: dict[str, Struct] | None,
-    struct_map: dict[str, Struct] | None,
-) -> dict[str, Struct]:
-    if record_map is not None:
-        return record_map
-    if struct_map is not None:
-        return struct_map
-    raise TypeError("AnalyzeRecordLayoutPass.run() requires `record_map`")
