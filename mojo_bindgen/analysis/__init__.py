@@ -28,6 +28,7 @@ from mojo_bindgen.analysis.reachability import (
 from mojo_bindgen.analysis.record_policies import (
     AssignRecordPoliciesError,
     AssignRecordPoliciesPass,
+    PolicyInferencePass,
     assign_record_policies,
 )
 from mojo_bindgen.analysis.struct_lowering import (
@@ -69,6 +70,7 @@ __all__ = [
     "MojoGenerator",
     "NormalizeMojoModuleError",
     "NormalizeMojoModulePass",
+    "PolicyInferencePass",
     "ReachabilityMaterializePass",
     "ReachabilityMaterializeResult",
     "ReachabilityOptions",

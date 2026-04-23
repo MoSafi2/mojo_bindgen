@@ -50,7 +50,7 @@ comptime DEFAULT_LIMIT = c_uint(42)
 
 @align(4)
 @fieldwise_init
-struct point(Copyable, Movable, RegisterPassable):
+struct point(TrivialRegisterPassable):
     var x: c_int
     var y: c_int
 

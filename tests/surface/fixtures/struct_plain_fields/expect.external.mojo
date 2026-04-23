@@ -9,6 +9,6 @@ comptime int32_t = c_int
 
 @align(4)
 @fieldwise_init
-struct spf_pair(Copyable, Movable, RegisterPassable):
+struct spf_pair(TrivialRegisterPassable):
     var lhs: int32_t
     var rhs: int32_t

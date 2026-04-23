@@ -11,13 +11,13 @@ comptime uint32_t = c_uint
 
 @align(4)
 @fieldwise_init
-struct ag_plain(Copyable, Movable, RegisterPassable):
+struct ag_plain(TrivialRegisterPassable):
     var tag: c_char
     var value: c_int
 
 @align(4)
 @fieldwise_init
-struct ag_alignas_record(Copyable, Movable, RegisterPassable):
+struct ag_alignas_record(TrivialRegisterPassable):
     var tag: c_char
     var value: c_int
 

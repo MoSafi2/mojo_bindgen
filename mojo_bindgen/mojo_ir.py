@@ -413,12 +413,19 @@ class StructTraits(StrEnum):
     IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
     MOVABLE = "Movable"
     REGISTER_PASSABLE = "RegisterPassable"
+    TRIVIAL_REGISTER_PASSABLE = "TrivialRegisterPassable"
 
 
 class StructKind(StrEnum):
     PLAIN = "plain"
     ENUM = "enum"
     OPAQUE = "opaque"
+
+
+class MojoPassability(StrEnum):
+    MEMORY_ONLY = "memory_only"
+    REGISTER_PASSABLE = "register_passable"
+    TRIVIAL_REGISTER_PASSABLE = "trivial_register_passable"
 
 
 class AliasKind(StrEnum):
@@ -437,11 +444,13 @@ class StructDecl(SerDeMixin):
             "kind": SerdeFieldSpec(json_key="struct_kind"),
             "align_decorator": SerdeFieldSpec(omit_if_default=True),
             "underlying_type": SerdeFieldSpec(omit_if_default=True),
+            "passability": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
     name: str
     traits: list[StructTraits] = field(default_factory=list)
+    passability: MojoPassability = MojoPassability.MEMORY_ONLY
     align: int | None = None
     align_decorator: int | None = None
     fieldwise_init: bool = False
@@ -697,6 +706,7 @@ __all__ = [
     "MojoFloatLiteral",
     "MojoIntLiteral",
     "MojoModule",
+    "MojoPassability",
     "MojoRefExpr",
     "MojoSizeOfExpr",
     "MojoStringLiteral",
