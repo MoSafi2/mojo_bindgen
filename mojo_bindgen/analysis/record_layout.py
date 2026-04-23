@@ -229,7 +229,7 @@ class AnalyzeRecordLayoutPass:
         current_offset = 0
 
         for item in items:
-            natural_offset = self._align_up(current_offset, item.align_bytes)
+            natural_offset = _align_up(current_offset, item.align_bytes)
             if item.byte_offset < natural_offset:
                 problems.append(
                     f"member at byte offset {item.byte_offset} is before the natural typed offset {natural_offset}"
@@ -268,14 +268,14 @@ class AnalyzeRecordLayoutPass:
             )
         return padding, problems
 
-    @staticmethod
-    def _align_up(offset: int, align: int) -> int:
-        if align <= 1:
-            return offset
-        rem = offset % align
-        if rem == 0:
-            return offset
-        return offset + (align - rem)
+
+def _align_up(offset: int, align: int) -> int:
+    if align <= 1:
+        return offset
+    rem = offset % align
+    if rem == 0:
+        return offset
+    return offset + (align - rem)
 
 
 def _resolve_record_map(
