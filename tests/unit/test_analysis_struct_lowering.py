@@ -307,8 +307,10 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
             storage_name="__bf0",
             storage_type=BuiltinType(MojoBuiltin.C_UINT),
             byte_offset=0,
+            first_index=0,
             fields=[
                 BitfieldField(
+                    index=0,
                     name="ready",
                     logical_type=BuiltinType(MojoBuiltin.C_UINT),
                     bit_offset=0,
@@ -316,6 +318,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
                     signed=False,
                 ),
                 BitfieldField(
+                    index=1,
                     name="state",
                     logical_type=BuiltinType(MojoBuiltin.C_UINT),
                     bit_offset=1,
@@ -328,8 +331,10 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
             storage_name="__bf1",
             storage_type=BuiltinType(MojoBuiltin.C_UCHAR),
             byte_offset=4,
+            first_index=3,
             fields=[
                 BitfieldField(
+                    index=3,
                     name="enabled",
                     logical_type=BuiltinType(MojoBuiltin.BOOL),
                     bit_offset=32,

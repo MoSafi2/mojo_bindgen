@@ -50,7 +50,7 @@ class StructLoweringError(ValueError):
     """Raised when a CIR struct declaration cannot be lowered to MojoIR."""
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(init=False)
 class StructLoweringContext:
     record_map: dict[str, Struct]
     target_abi: TargetABI
@@ -67,9 +67,9 @@ class StructLoweringContext:
         resolved_record_map = record_map if record_map is not None else struct_map
         if resolved_record_map is None:
             raise TypeError("StructLoweringContext requires `record_map`")
-        object.__setattr__(self, "record_map", resolved_record_map)
-        object.__setattr__(self, "target_abi", target_abi)
-        object.__setattr__(self, "type_lowerer", type_lowerer)
+        self.record_map = resolved_record_map
+        self.target_abi = target_abi
+        self.type_lowerer = type_lowerer
 
     @property
     def struct_map(self) -> dict[str, Struct]:
@@ -85,40 +85,10 @@ class LoweredPlainField:
 
 
 @dataclass(frozen=True)
-class LoweredBitfieldMember:
-    index: int
-    mojo_name: str
-    logical_type: MojoType
-    bit_offset: int
-    bit_width: int
-    signed: bool
-    bool_semantics: bool
-
-    def as_mojo_field(self) -> BitfieldField:
-        return BitfieldField(
-            name=self.mojo_name,
-            logical_type=self.logical_type,
-            bit_offset=self.bit_offset,
-            bit_width=self.bit_width,
-            signed=self.signed,
-            bool_semantics=self.bool_semantics,
-        )
-
-
-@dataclass(frozen=True)
-class LoweredBitfieldRun:
-    name: str
-    first_index: int
-    byte_offset: int
-    lowered_storage_type: MojoType
-    members: tuple[LoweredBitfieldMember, ...]
-
-
-@dataclass(frozen=True)
 class StructRepresentationPlan:
     representation_mode: RepresentationMode
     plain_fields: tuple[LoweredPlainField, ...]
-    bitfield_runs: tuple[LoweredBitfieldRun, ...]
+    bitfield_runs: tuple[BitfieldGroupMember, ...]
     diagnostic_notes: tuple[str, ...]
     fallback_reasons: tuple[str, ...]
 
@@ -239,8 +209,8 @@ class PlanStructRepresentationPass:
         facts: RecordLayoutFacts,
         *,
         context: StructLoweringContext,
-    ) -> tuple[list[LoweredBitfieldRun], list[str]]:
-        lowered: list[LoweredBitfieldRun] = []
+    ) -> tuple[list[BitfieldGroupMember], list[str]]:
+        lowered: list[BitfieldGroupMember] = []
         reasons: list[str] = []
 
         for run in facts.bitfield_runs:
@@ -255,7 +225,7 @@ class PlanStructRepresentationPass:
                     reasons.append(reason)
                 continue
 
-            lowered_members: list[LoweredBitfieldMember] = []
+            lowered_fields: list[BitfieldField] = []
             for member in run.members:
                 field = member.field
                 display_name = field_display_name(field, member.index)
@@ -269,10 +239,10 @@ class PlanStructRepresentationPass:
                     if reason is not None:
                         reasons.append(reason)
                     continue
-                lowered_members.append(
-                    LoweredBitfieldMember(
+                lowered_fields.append(
+                    BitfieldField(
                         index=member.index,
-                        mojo_name=field_mojo_name(field, member.index),
+                        name=field_mojo_name(field, member.index),
                         logical_type=logical_type,
                         bit_offset=member.bit_offset,
                         bit_width=member.bit_width,
@@ -282,12 +252,12 @@ class PlanStructRepresentationPass:
                 )
 
             lowered.append(
-                LoweredBitfieldRun(
-                    name=run.name,
-                    first_index=run.first_index,
+                BitfieldGroupMember(
+                    storage_name=run.name,
+                    storage_type=lowered_storage_type,
                     byte_offset=run.byte_offset,
-                    lowered_storage_type=lowered_storage_type,
-                    members=tuple(lowered_members),
+                    first_index=run.first_index,
+                    fields=lowered_fields,
                 )
             )
 
@@ -346,12 +316,7 @@ class LowerStructBodyPass:
                 (
                     run.byte_offset,
                     run.first_index,
-                    BitfieldGroupMember(
-                        storage_name=run.name,
-                        storage_type=run.lowered_storage_type,
-                        byte_offset=run.byte_offset,
-                        fields=[member.as_mojo_field() for member in run.members],
-                    ),
+                    run,
                 )
             )
 
@@ -428,14 +393,14 @@ class FinalizeStructDeclPass:
         named_members = [
             member
             for run in plan.bitfield_runs
-            for member in sorted(run.members, key=lambda item: item.index)
+            for member in sorted(run.fields, key=lambda item: item.index)
         ]
         initializers = [Initializer(params=[])]
         if named_members:
             initializers.append(
                 Initializer(
                     params=[
-                        InitializerParam(name=member.mojo_name, type=member.logical_type)
+                        InitializerParam(name=member.name, type=member.logical_type)
                         for member in named_members
                     ]
                 )

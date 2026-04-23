@@ -117,9 +117,11 @@ def test_struct_member_json_roundtrip() -> None:
             "storage_name": "__bits0",
             "storage_type": {"kind": "BuiltinType", "name": "c_uint"},
             "byte_offset": 0,
+            "first_index": 0,
             "fields": [
                 {
                     "kind": "BitfieldField",
+                    "index": 0,
                     "name": "ready",
                     "logical_type": {"kind": "BuiltinType", "name": "Bool"},
                     "bit_offset": 0,
@@ -129,6 +131,7 @@ def test_struct_member_json_roundtrip() -> None:
                 },
                 {
                     "kind": "BitfieldField",
+                    "index": 1,
                     "name": "mode",
                     "logical_type": {"kind": "BuiltinType", "name": "c_uint"},
                     "bit_offset": 1,

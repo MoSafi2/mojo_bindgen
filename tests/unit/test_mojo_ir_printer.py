@@ -133,8 +133,10 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                         storage_name="__bf0",
                         storage_type=BuiltinType(MojoBuiltin.C_UINT),
                         byte_offset=16,
+                        first_index=2,
                         fields=[
                             BitfieldField(
+                                index=2,
                                 name="enabled",
                                 logical_type=BuiltinType(MojoBuiltin.BOOL),
                                 bit_offset=128,
@@ -143,6 +145,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                                 bool_semantics=True,
                             ),
                             BitfieldField(
+                                index=3,
                                 name="mode",
                                 logical_type=BuiltinType(MojoBuiltin.C_UINT),
                                 bit_offset=129,

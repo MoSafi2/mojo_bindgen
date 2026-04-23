@@ -367,6 +367,7 @@ class OpaqueStorageMember(SerDeMixin):
 
 @dataclass(frozen=True)
 class BitfieldField(SerDeMixin):
+    index: int
     name: str
     logical_type: MojoType
     bit_offset: int
@@ -380,6 +381,7 @@ class BitfieldGroupMember(SerDeMixin):
     storage_name: str
     storage_type: MojoType
     byte_offset: int
+    first_index: int
     fields: list[BitfieldField] = field(default_factory=list)
 
 
