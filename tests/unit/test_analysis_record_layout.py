@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.record_layout import AnalyzeRecordLayoutPass
 from mojo_bindgen.analysis.type_layout import type_layout
-from mojo_bindgen.ir import Field, IntKind, IntType, Pointer, Struct, StructRef, TargetABI, UnsupportedType
+from mojo_bindgen.ir import (
+    Field,
+    IntKind,
+    IntType,
+    Pointer,
+    Struct,
+    StructRef,
+    TargetABI,
+    UnsupportedType,
+)
 
 
 def _i32() -> IntType:
@@ -47,18 +56,15 @@ def test_type_layout_returns_none_for_pointer_without_explicit_layout() -> None:
 
 
 def test_type_layout_uses_explicit_structref_layout_without_record_lookup() -> None:
-    assert (
-        type_layout(
-            StructRef(
-                decl_id="struct:Payload",
-                name="Payload",
-                c_name="Payload",
-                size_bytes=24,
-                align_bytes=8,
-            )
+    assert type_layout(
+        StructRef(
+            decl_id="struct:Payload",
+            name="Payload",
+            c_name="Payload",
+            size_bytes=24,
+            align_bytes=8,
         )
-        == (24, 8)
-    )
+    ) == (24, 8)
 
 
 def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None:
