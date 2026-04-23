@@ -99,7 +99,8 @@ def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None
     )
 
     assert len(facts.plain_fields) == 1
-    assert facts.plain_fields[0].field.name == "payload"
+    assert facts.plain_fields[0].index == 0
+    assert facts.plain_fields[0].byte_offset == 0
     assert facts.plain_fields[0].size_bytes == 8
     assert facts.plain_fields[0].align_bytes == 8
     assert facts.layout_problems == ()

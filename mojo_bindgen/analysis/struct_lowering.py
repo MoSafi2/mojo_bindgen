@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
 from mojo_bindgen.analysis.lowering_support import (
@@ -37,13 +36,6 @@ from mojo_bindgen.mojo_ir import (
     StructKind,
 )
 
-RepresentationMode = Literal[
-    "fieldwise_exact",
-    "fieldwise_padded_exact",
-    "opaque_storage_exact",
-    "bitfield_exact",
-]
-
 
 class StructLoweringError(ValueError):
     """Raised when a CIR struct declaration cannot be lowered to MojoIR."""
@@ -56,95 +48,77 @@ class StructLoweringContext:
     type_lowerer: LowerTypePass
 
 
-@dataclass(frozen=True)
-class StructRepresentationPlan:
-    representation_mode: RepresentationMode
-    plain_fields: tuple[StoredMember, ...]
-    bitfield_runs: tuple[BitfieldGroupMember, ...]
-    diagnostic_notes: tuple[str, ...]
-    fallback_reasons: tuple[str, ...]
+class LowerStructPass:
+    """Lower one top-level CIR struct declaration into a MojoIR ``StructDecl``."""
 
+    def __init__(self) -> None:
+        self._analyze = AnalyzeRecordLayoutPass()
 
-@dataclass(frozen=True)
-class StructBodyPlan:
-    members: list[StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember]
+    def run(self, decl: Struct, *, context: StructLoweringContext) -> StructDecl:
+        if decl.is_union:
+            raise StructLoweringError(
+                f"expected non-union Struct declaration, got union {decl.decl_id!r}"
+            )
 
+        facts = self._analyze.run(
+            decl,
+            record_map=context.record_map,
+            target_abi=context.target_abi,
+        )
 
-class PlanStructRepresentationPass:
-    """Lower pure layout facts into a Mojo-facing representation plan."""
-
-    def run(
-        self,
-        facts: RecordLayoutFacts,
-        *,
-        context: StructLoweringContext,
-    ) -> StructRepresentationPlan:
         if not facts.is_complete:
-            return StructRepresentationPlan(
-                representation_mode="fieldwise_exact",
-                plain_fields=(),
-                bitfield_runs=(),
-                diagnostic_notes=(),
-                fallback_reasons=(),
-            )
-
+            return self._incomplete_struct_decl(decl)
         if facts.layout_problems:
-            return StructRepresentationPlan(
-                representation_mode="opaque_storage_exact",
-                plain_fields=(),
-                bitfield_runs=(),
-                diagnostic_notes=(),
-                fallback_reasons=(),
-            )
+            return self._opaque_storage_struct_decl(decl, facts)
 
-        plain_fields, plain_notes, plain_reasons = self._lower_plain_fields(facts, context=context)
-        bitfield_runs, bitfield_reasons = self._lower_bitfield_runs(facts, context=context)
-        fallback_reasons = tuple([*plain_reasons, *bitfield_reasons])
-        diagnostic_notes = tuple(plain_notes)
-
+        plain_fields, bitfield_runs, diagnostic_notes, fallback_reasons = self._lower_typed_members(
+            decl,
+            facts,
+            context=context,
+        )
         if fallback_reasons:
-            return StructRepresentationPlan(
-                representation_mode="opaque_storage_exact",
-                plain_fields=(),
-                bitfield_runs=(),
+            return self._opaque_storage_struct_decl(
+                decl,
+                facts,
                 diagnostic_notes=diagnostic_notes,
                 fallback_reasons=fallback_reasons,
             )
-        if bitfield_runs:
-            return StructRepresentationPlan(
-                representation_mode="bitfield_exact",
-                plain_fields=tuple(plain_fields),
-                bitfield_runs=tuple(bitfield_runs),
+
+        align, align_decorator = self._compute_align_policy(facts, uses_opaque_storage=False)
+        return StructDecl(
+            name=record_name(decl),
+            kind=StructKind.PLAIN,
+            traits=[],
+            align=align,
+            align_decorator=align_decorator,
+            fieldwise_init=False,
+            members=self._build_members(decl, facts, plain_fields, bitfield_runs),
+            initializers=self._build_initializers(
+                facts,
+                bitfield_runs,
+                uses_opaque_storage=False,
+            ),
+            diagnostics=self._build_diagnostics(
+                facts,
                 diagnostic_notes=diagnostic_notes,
                 fallback_reasons=(),
-            )
-        if facts.padding_spans:
-            return StructRepresentationPlan(
-                representation_mode="fieldwise_padded_exact",
-                plain_fields=tuple(plain_fields),
-                bitfield_runs=(),
-                diagnostic_notes=diagnostic_notes,
-                fallback_reasons=(),
-            )
-        return StructRepresentationPlan(
-            representation_mode="fieldwise_exact",
-            plain_fields=tuple(plain_fields),
-            bitfield_runs=(),
-            diagnostic_notes=diagnostic_notes,
-            fallback_reasons=(),
+            ),
         )
 
-    def _lower_plain_fields(
+    def _lower_typed_members(
         self,
+        decl: Struct,
         facts: RecordLayoutFacts,
         *,
         context: StructLoweringContext,
-    ) -> tuple[list[StoredMember], list[str], list[str]]:
-        lowered: list[StoredMember] = []
-        notes: list[str] = []
-        reasons: list[str] = []
+    ) -> tuple[list[StoredMember], list[BitfieldGroupMember], tuple[str, ...], tuple[str, ...]]:
+        plain_fields: list[StoredMember] = []
+        bitfield_runs: list[BitfieldGroupMember] = []
+        diagnostic_notes: list[str] = []
+        fallback_reasons: list[str] = []
+
         for field_fact in facts.plain_fields:
-            field = field_fact.field
+            field = decl.fields[field_fact.index]
             display_name = field_display_name(field, field_fact.index)
             lowered_type, reason = try_lower_type(
                 context.type_lowerer,
@@ -154,7 +128,7 @@ class PlanStructRepresentationPass:
             )
             if reason is not None or lowered_type is None:
                 if reason is not None:
-                    reasons.append(reason)
+                    fallback_reasons.append(reason)
                 continue
             if isinstance(field.type, AtomicType) and not (
                 isinstance(lowered_type, ParametricType)
@@ -164,9 +138,9 @@ class PlanStructRepresentationPass:
                     "some atomic types were mapped to their underlying non-atomic Mojo type "
                     "because Atomic[dtype] was not representable"
                 )
-                if note not in notes:
-                    notes.append(note)
-            lowered.append(
+                if note not in diagnostic_notes:
+                    diagnostic_notes.append(note)
+            plain_fields.append(
                 StoredMember(
                     index=field_fact.index,
                     name=field_mojo_name(field, field_fact.index),
@@ -174,16 +148,6 @@ class PlanStructRepresentationPass:
                     byte_offset=field_fact.byte_offset,
                 )
             )
-        return lowered, notes, reasons
-
-    def _lower_bitfield_runs(
-        self,
-        facts: RecordLayoutFacts,
-        *,
-        context: StructLoweringContext,
-    ) -> tuple[list[BitfieldGroupMember], list[str]]:
-        lowered: list[BitfieldGroupMember] = []
-        reasons: list[str] = []
 
         for run in facts.bitfield_runs:
             lowered_storage_type, reason = try_lower_type(
@@ -194,12 +158,12 @@ class PlanStructRepresentationPass:
             )
             if reason is not None or lowered_storage_type is None:
                 if reason is not None:
-                    reasons.append(reason)
+                    fallback_reasons.append(reason)
                 continue
 
             lowered_fields: list[BitfieldField] = []
             for member in run.members:
-                field = member.field
+                field = decl.fields[member.index]
                 display_name = field_display_name(field, member.index)
                 logical_type, reason = try_lower_type(
                     context.type_lowerer,
@@ -209,7 +173,7 @@ class PlanStructRepresentationPass:
                 )
                 if reason is not None or logical_type is None:
                     if reason is not None:
-                        reasons.append(reason)
+                        fallback_reasons.append(reason)
                     continue
                 lowered_fields.append(
                     BitfieldField(
@@ -223,7 +187,7 @@ class PlanStructRepresentationPass:
                     )
                 )
 
-            lowered.append(
+            bitfield_runs.append(
                 BitfieldGroupMember(
                     storage_name=run.name,
                     storage_type=lowered_storage_type,
@@ -233,39 +197,30 @@ class PlanStructRepresentationPass:
                 )
             )
 
-        return lowered, reasons
+        return (
+            plain_fields,
+            bitfield_runs,
+            tuple(diagnostic_notes),
+            tuple(fallback_reasons),
+        )
 
-
-class LowerStructBodyPass:
-    """Materialize MojoIR members from a representation plan plus pure layout facts."""
-
-    def run(self, facts: RecordLayoutFacts, *, plan: StructRepresentationPlan) -> StructBodyPlan:
-        if not facts.is_complete:
-            return StructBodyPlan(members=[])
-        if plan.representation_mode == "opaque_storage_exact":
-            return StructBodyPlan(
-                members=[OpaqueStorageMember(name="storage", size_bytes=facts.size_bytes)]
-            )
-
+    def _build_members(
+        self,
+        decl: Struct,
+        facts: RecordLayoutFacts,
+        plain_fields: list[StoredMember],
+        bitfield_runs: list[BitfieldGroupMember],
+    ) -> list[StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember]:
         members_with_offsets: list[
             tuple[
                 int,
                 int,
                 StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember,
             ]
-        ] = []
-        for field in plan.plain_fields:
-            members_with_offsets.append(
-                (
-                    field.byte_offset,
-                    field.index,
-                    field,
-                )
-            )
+        ] = [(field.byte_offset, field.index, field) for field in plain_fields]
 
-        emit_padding = not facts.is_pure_bitfield
-        if emit_padding:
-            pad_order_base = len(facts.decl.fields) + len(plan.bitfield_runs)
+        if not facts.is_pure_bitfield:
+            pad_order_base = len(decl.fields) + len(bitfield_runs)
             for i, padding in enumerate(facts.padding_spans):
                 members_with_offsets.append(
                     (
@@ -279,88 +234,58 @@ class LowerStructBodyPass:
                     )
                 )
 
-        for run in plan.bitfield_runs:
-            members_with_offsets.append(
-                (
-                    run.byte_offset,
-                    run.first_index,
-                    run,
-                )
-            )
+        for run in bitfield_runs:
+            members_with_offsets.append((run.byte_offset, run.first_index, run))
 
         members_with_offsets.sort(key=lambda item: (item[0], item[1]))
-        return StructBodyPlan(members=[member for _, _, member in members_with_offsets])
+        return [member for _, _, member in members_with_offsets]
 
-
-class FinalizeStructDeclPass:
-    """Assemble the final MojoIR ``StructDecl`` from facts and a lowering plan."""
-
-    def run(
+    def _build_diagnostics(
         self,
         facts: RecordLayoutFacts,
         *,
-        plan: StructRepresentationPlan,
-        body_plan: StructBodyPlan,
-    ) -> StructDecl:
-        diagnostics = [
+        diagnostic_notes: tuple[str, ...],
+        fallback_reasons: tuple[str, ...],
+    ) -> list:
+        return [
             *(
                 struct_note(f"{problem}; opaque storage emitted")
                 for problem in facts.layout_problems
             ),
-            *(struct_note(note) for note in plan.diagnostic_notes),
-            *(struct_note(reason) for reason in plan.fallback_reasons),
+            *(struct_note(note) for note in diagnostic_notes),
+            *(struct_note(reason) for reason in fallback_reasons),
         ]
-        align, align_decorator = self._align_policy(facts, plan=plan)
-        initializers = self._initializers(facts, plan=plan)
 
-        return StructDecl(
-            name=record_name(facts.decl),
-            kind=StructKind.OPAQUE if not facts.is_complete else StructKind.PLAIN,
-            traits=[],
-            align=align,
-            align_decorator=align_decorator,
-            fieldwise_init=False,
-            members=body_plan.members,
-            initializers=initializers,
-            diagnostics=diagnostics,
-        )
-
-    def _align_policy(
+    def _compute_align_policy(
         self,
         facts: RecordLayoutFacts,
         *,
-        plan: StructRepresentationPlan,
+        uses_opaque_storage: bool,
     ) -> tuple[int | None, int | None]:
-        if not facts.is_complete:
+        align = facts.align_bytes
+        if align is None:
             return None, None
 
-        align = facts.decl.align_bytes
-        natural_align = facts.natural_typed_align_bytes or 1
-        if plan.representation_mode == "opaque_storage_exact":
-            natural_align = 1
-
+        natural_align = 1 if uses_opaque_storage else (facts.natural_typed_align_bytes or 1)
         if align <= natural_align:
             return align, None
         if not _mojo_align_decorator_ok(align):
             return align, None
         return align, align
 
-    def _initializers(
+    def _build_initializers(
         self,
         facts: RecordLayoutFacts,
+        bitfield_runs: list[BitfieldGroupMember],
         *,
-        plan: StructRepresentationPlan,
+        uses_opaque_storage: bool,
     ) -> list[Initializer]:
-        if (
-            not facts.is_complete
-            or plan.representation_mode == "opaque_storage_exact"
-            or not facts.is_pure_bitfield
-        ):
+        if uses_opaque_storage or not facts.is_pure_bitfield:
             return []
 
         named_members = [
             member
-            for run in plan.bitfield_runs
+            for run in bitfield_runs
             for member in sorted(run.fields, key=lambda item: item.index)
         ]
         initializers = [Initializer(params=[])]
@@ -375,30 +300,43 @@ class FinalizeStructDeclPass:
             )
         return initializers
 
-
-class LowerStructPass:
-    """Lower one top-level CIR struct declaration into a MojoIR ``StructDecl``."""
-
-    def __init__(self) -> None:
-        self._analyze = AnalyzeRecordLayoutPass()
-        self._plan_representation = PlanStructRepresentationPass()
-        self._lower_body = LowerStructBodyPass()
-        self._finalize = FinalizeStructDeclPass()
-
-    def run(self, decl: Struct, *, context: StructLoweringContext) -> StructDecl:
-        if decl.is_union:
-            raise StructLoweringError(
-                f"expected non-union Struct declaration, got union {decl.decl_id!r}"
-            )
-
-        facts = self._analyze.run(
-            decl,
-            record_map=context.record_map,
-            target_abi=context.target_abi,
+    def _incomplete_struct_decl(self, decl: Struct) -> StructDecl:
+        return StructDecl(
+            name=record_name(decl),
+            kind=StructKind.OPAQUE,
+            traits=[],
+            align=None,
+            align_decorator=None,
+            fieldwise_init=False,
+            members=[],
+            initializers=[],
+            diagnostics=[],
         )
-        plan = self._plan_representation.run(facts, context=context)
-        body_plan = self._lower_body.run(facts, plan=plan)
-        return self._finalize.run(facts, plan=plan, body_plan=body_plan)
+
+    def _opaque_storage_struct_decl(
+        self,
+        decl: Struct,
+        facts: RecordLayoutFacts,
+        *,
+        diagnostic_notes: tuple[str, ...] = (),
+        fallback_reasons: tuple[str, ...] = (),
+    ) -> StructDecl:
+        align, align_decorator = self._compute_align_policy(facts, uses_opaque_storage=True)
+        return StructDecl(
+            name=record_name(decl),
+            kind=StructKind.PLAIN,
+            traits=[],
+            align=align,
+            align_decorator=align_decorator,
+            fieldwise_init=False,
+            members=[OpaqueStorageMember(name="storage", size_bytes=facts.size_bytes)],
+            initializers=[],
+            diagnostics=self._build_diagnostics(
+                facts,
+                diagnostic_notes=diagnostic_notes,
+                fallback_reasons=fallback_reasons,
+            ),
+        )
 
 
 def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:

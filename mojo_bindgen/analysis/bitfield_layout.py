@@ -12,7 +12,6 @@ from mojo_bindgen.ir import Field, IntKind, IntType, Struct
 @dataclass(frozen=True)
 class BitfieldMemberLayout:
     index: int
-    field: Field
     bit_offset: int
     bit_width: int
     signed: bool
@@ -112,7 +111,6 @@ def analyze_bitfield_layout(
         active_run.members.append(
             BitfieldMemberLayout(
                 index=index,
-                field=field,
                 bit_offset=field.bit_offset,
                 bit_width=field.bit_width,
                 signed=bitfield_field_is_signed(field),
