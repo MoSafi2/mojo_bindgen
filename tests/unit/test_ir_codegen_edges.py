@@ -58,6 +58,71 @@ def _abi() -> TargetABI:
     return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
 
+def _field(
+    *,
+    name: str,
+    source_name: str,
+    type,
+    byte_offset: int,
+    size_bytes: int | None = None,
+    **kwargs,
+) -> Field:
+    if size_bytes is None:
+        size_bytes = getattr(type, "size_bytes", 0) or 0
+    return Field(
+        name=name,
+        source_name=source_name,
+        type=type,
+        byte_offset=byte_offset,
+        size_bytes=size_bytes,
+        **kwargs,
+    )
+
+
+def _ptr(pointee, *, size_bytes: int = 8, align_bytes: int = 8) -> Pointer:
+    return Pointer(pointee=pointee, size_bytes=size_bytes, align_bytes=align_bytes)
+
+
+def _fnptr(
+    *,
+    ret,
+    params,
+    param_names=None,
+    is_variadic=False,
+    calling_convention=None,
+    size_bytes: int = 8,
+    align_bytes: int = 8,
+) -> FunctionPtr:
+    return FunctionPtr(
+        ret=ret,
+        params=params,
+        param_names=param_names,
+        is_variadic=is_variadic,
+        calling_convention=calling_convention,
+        size_bytes=size_bytes,
+        align_bytes=align_bytes,
+    )
+
+
+def _struct_ref(
+    *,
+    decl_id: str,
+    name: str,
+    c_name: str,
+    size_bytes: int = 0,
+    align_bytes: int | None = None,
+    is_union: bool = False,
+) -> StructRef:
+    return StructRef(
+        decl_id=decl_id,
+        name=name,
+        c_name=c_name,
+        size_bytes=size_bytes,
+        align_bytes=align_bytes,
+        is_union=is_union,
+    )
+
+
 def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
     """``(size_t)-1`` style macros emit as one scalar constructor, not binary minus."""
     size_t_like = IntType(int_kind=IntKind.ULONG, size_bytes=8, align_bytes=8)
@@ -191,8 +256,8 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
         name="MixedBits",
         c_name="MixedBits",
         fields=[
-            Field(name="tag", source_name="tag", type=u32, byte_offset=0),
-            Field(
+            _field(name="tag", source_name="tag", type=u32, byte_offset=0),
+            _field(
                 name="ready",
                 source_name="ready",
                 type=u32,
@@ -231,8 +296,8 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
         name="ZeroWidthMixed",
         c_name="ZeroWidthMixed",
         fields=[
-            Field(name="tag", source_name="tag", type=u32, byte_offset=0),
-            Field(
+            _field(name="tag", source_name="tag", type=u32, byte_offset=0),
+            _field(
                 name="left",
                 source_name="left",
                 type=u32,
@@ -241,7 +306,7 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
                 bit_offset=32,
                 bit_width=1,
             ),
-            Field(
+            _field(
                 name="",
                 source_name="",
                 type=u32,
@@ -251,7 +316,7 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
                 bit_offset=63,
                 bit_width=0,
             ),
-            Field(
+            _field(
                 name="right",
                 source_name="right",
                 type=u32,
@@ -528,23 +593,24 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> Non
         name="simd_holder",
         c_name="simd_holder",
         fields=[
-            Field(
+            _field(
                 name="lanes",
                 source_name="lanes",
-                type=VectorType(element=f32, count=4, size_bytes=16),
+                type=VectorType(element=f32, count=4, size_bytes=16, align_bytes=16),
                 byte_offset=0,
             ),
-            Field(
+            _field(
                 name="complex_value",
                 source_name="complex_value",
-                type=ComplexType(element=f32, size_bytes=8),
+                type=ComplexType(element=f32, size_bytes=8, align_bytes=4),
                 byte_offset=16,
             ),
-            Field(
+            _field(
                 name="fallback_atomic",
                 source_name="fallback_atomic",
                 type=AtomicType(value_type=wchar),
                 byte_offset=24,
+                size_bytes=4,
             ),
         ],
         size_bytes=32,
@@ -594,22 +660,24 @@ def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields
         name="AtomicHolder",
         c_name="AtomicHolder",
         fields=[
-            Field(
+            _field(
                 name="counter",
                 source_name="counter",
                 type=AtomicType(value_type=i32),
                 byte_offset=0,
+                size_bytes=4,
             ),
-            Field(
+            _field(
                 name="flags",
                 source_name="flags",
                 type=AtomicType(value_type=u32),
                 byte_offset=4,
+                size_bytes=4,
             ),
-            Field(
+            _field(
                 name="user",
                 source_name="user",
-                type=Pointer(pointee=None),
+                type=_ptr(None),
                 byte_offset=8,
             ),
         ],
@@ -662,21 +730,21 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
     my_uint_ptr = Typedef(
         decl_id="typedef:my_uint_ptr",
         name="my_uint_ptr",
-        aliased=Pointer(pointee=my_uint_ref),
-        canonical=Pointer(pointee=i32),
+        aliased=_ptr(my_uint_ref),
+        canonical=_ptr(i32),
     )
     my_uint_ptr_ref = TypeRef(
         decl_id=my_uint_ptr.decl_id,
         name="my_uint_ptr",
-        canonical=Pointer(pointee=i32),
+        canonical=_ptr(i32),
     )
     holder = Struct(
         decl_id="struct:holder",
         name="holder",
         c_name="holder",
         fields=[
-            Field(name="value", source_name="value", type=my_uint_ref, byte_offset=0),
-            Field(name="ptr", source_name="ptr", type=my_uint_ptr_ref, byte_offset=8),
+            _field(name="value", source_name="value", type=my_uint_ref, byte_offset=0, size_bytes=4),
+            _field(name="ptr", source_name="ptr", type=my_uint_ptr_ref, byte_offset=8, size_bytes=8),
         ],
         size_bytes=16,
         align_bytes=8,
@@ -709,7 +777,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
 
 def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() -> None:
     i32 = _i32()
-    fp = FunctionPtr(ret=i32, params=[i32, i32], param_names=["a", "b"], is_variadic=False)
+    fp = _fnptr(ret=i32, params=[i32, i32], param_names=["a", "b"], is_variadic=False)
     fp_typedef = Typedef(
         decl_id="typedef:pfr_binary_op_t",
         name="pfr_binary_op_t",
@@ -835,29 +903,31 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
         align_bytes=8,
         is_complete=False,
     )
-    sqlite3_ref = Pointer(
-        pointee=StructRef(
+    sqlite3_ref = _ptr(
+        _struct_ref(
             decl_id="struct:sqlite3",
             name="sqlite3",
             c_name="sqlite3",
             size_bytes=0,
+            align_bytes=8,
         )
     )
-    vtab_out = Pointer(
-        pointee=Pointer(
-            pointee=StructRef(
+    vtab_out = _ptr(
+        _ptr(
+            _struct_ref(
                 decl_id="struct:sqlite3_vtab",
                 name="sqlite3_vtab",
                 c_name="sqlite3_vtab",
                 size_bytes=0,
+                align_bytes=8,
             )
         )
     )
-    argv = Pointer(pointee=Pointer(pointee=_char()))
-    err = Pointer(pointee=Pointer(pointee=_char()))
-    cb = FunctionPtr(
+    argv = _ptr(_ptr(_char()))
+    err = _ptr(_ptr(_char()))
+    cb = _fnptr(
         ret=i32,
-        params=[sqlite3_ref, Pointer(pointee=None), i32, argv, vtab_out, err],
+        params=[sqlite3_ref, _ptr(None), i32, argv, vtab_out, err],
         param_names=["db", "pAux", "argc", "argv", "ppVTab", "errmsg_out"],
         is_variadic=False,
     )
@@ -866,9 +936,9 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
         name="sqlite3_module",
         c_name="sqlite3_module",
         fields=[
-            Field(name="iVersion", source_name="iVersion", type=i32, byte_offset=0),
-            Field(name="xCreate", source_name="xCreate", type=cb, byte_offset=8),
-            Field(name="xConnect", source_name="xConnect", type=cb, byte_offset=16),
+            _field(name="iVersion", source_name="iVersion", type=i32, byte_offset=0),
+            _field(name="xCreate", source_name="xCreate", type=cb, byte_offset=8),
+            _field(name="xConnect", source_name="xConnect", type=cb, byte_offset=16),
         ],
         size_bytes=24,
         align_bytes=8,
@@ -897,8 +967,8 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         name="Parts",
         c_name="Parts",
         fields=[
-            Field(name="lo", source_name="lo", type=i32, byte_offset=0),
-            Field(name="hi", source_name="hi", type=i32, byte_offset=4),
+            _field(name="lo", source_name="lo", type=i32, byte_offset=0),
+            _field(name="hi", source_name="hi", type=i32, byte_offset=4),
         ],
         size_bytes=8,
         align_bytes=4,
@@ -909,15 +979,16 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         name="Payload",
         c_name="Payload",
         fields=[
-            Field(name="raw", source_name="raw", type=i32, byte_offset=0),
-            Field(
+            _field(name="raw", source_name="raw", type=i32, byte_offset=0),
+            _field(
                 name="parts",
                 source_name="parts",
-                type=StructRef(
+                type=_struct_ref(
                     decl_id=parts.decl_id,
                     name=parts.name,
                     c_name=parts.c_name,
                     size_bytes=parts.size_bytes,
+                    align_bytes=parts.align_bytes,
                     is_union=False,
                 ),
                 byte_offset=0,
@@ -932,14 +1003,15 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         name="Holder",
         c_name="Holder",
         fields=[
-            Field(
+            _field(
                 name="payload",
                 source_name="payload",
-                type=StructRef(
+                type=_struct_ref(
                     decl_id=payload.decl_id,
                     name=payload.name,
                     c_name=payload.c_name,
                     size_bytes=payload.size_bytes,
+                    align_bytes=payload.align_bytes,
                     is_union=True,
                 ),
                 byte_offset=0,
@@ -969,8 +1041,8 @@ def test_generator_emits_documented_inline_array_fallback_for_ineligible_union()
         name="Dup",
         c_name="Dup",
         fields=[
-            Field(name="a", source_name="a", type=i32, byte_offset=0),
-            Field(name="b", source_name="b", type=i32, byte_offset=0),
+            _field(name="a", source_name="a", type=i32, byte_offset=0),
+            _field(name="b", source_name="b", type=i32, byte_offset=0),
         ],
         size_bytes=4,
         align_bytes=4,
@@ -981,14 +1053,15 @@ def test_generator_emits_documented_inline_array_fallback_for_ineligible_union()
         name="HolderDup",
         c_name="HolderDup",
         fields=[
-            Field(
+            _field(
                 name="payload",
                 source_name="payload",
-                type=StructRef(
+                type=_struct_ref(
                     decl_id=union_decl.decl_id,
                     name=union_decl.name,
                     c_name=union_decl.c_name,
                     size_bytes=union_decl.size_bytes,
+                    align_bytes=union_decl.align_bytes,
                     is_union=True,
                 ),
                 byte_offset=0,

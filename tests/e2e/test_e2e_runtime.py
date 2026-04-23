@@ -137,7 +137,9 @@ def _persist_generated_bindings(src: Path, dst: Path) -> None:
 
 
 def _case_dirs() -> list[Path]:
-    return sorted([p for p in _GOLDEN_ROOT.iterdir() if p.is_dir()])
+    return sorted(
+        [p for p in _GOLDEN_ROOT.iterdir() if p.is_dir() and (p / "status.json").exists()]
+    )
 
 
 @pytest.mark.skipif(not shutil.which("cc"), reason="requires cc")
