@@ -68,7 +68,6 @@ def run_write_roundtrip_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
-        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
     var png_path = _cstr("/tmp/mojo_bindgen_libpng_smoke.png")
     var write_ok = png.png_image_write_to_file(
@@ -92,7 +91,6 @@ def run_write_roundtrip_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
-        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
     var begin_ok = png.png_image_begin_read_from_file(image_read, png_path)
     _assert("libpng.begin_read_from_file", begin_ok != 0)
@@ -151,7 +149,6 @@ def run_memory_roundtrip_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
-        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
 
     # Exercise png_image_write_to_memory with both a NULL memory pointer
@@ -192,7 +189,6 @@ def run_memory_roundtrip_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
-        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
 
     var begin_ok = png.png_image_begin_read_from_memory(
@@ -236,7 +232,6 @@ def run_alpha_removal_compositing_checks() raises:
         colormap_entries=0,
         warning_or_error=0,
         message=InlineArray[Int8, 64](uninitialized=True),
-        __pad0=InlineArray[UInt8, 4](uninitialized=True),
     )
 
     var png_path = _cstr("/tmp/mojo_bindgen_libpng_smoke.png")
