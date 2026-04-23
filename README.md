@@ -66,25 +66,31 @@ Stable exports from the package root include `MojoGenerator`, `MojoEmitOptions`,
 
 ## Features at a glance
 
-- **Parsing:** Primary header + repeatable `--compile-arg` for includes, sysroot, target, and `-std=...`.
-- **IR:** Structured IR with validation and reachability passes; **`--json`** dumps IR for debugging.
-- **Mojo output:** Structs (with `@align` when expressible), unions (including `@unsafe_union` when eligible), enums, typedefs, and thin wrappers for non-variadic functions.
+- **Parsing:** Primary C header + repeatable `--compile-arg` for include paths, sysroots, targets, and `-std=...`; defaults to `-std=gnu11`.
+- **IR pipeline:** Structured C-facing IR with validation, reachability repair for referenced records, and **`--json`** dumps for debugging.
+- **Type lowering:** C scalars, fixed-width typedef chains, pointers with const-aware mutability, fixed arrays, function pointers, complex values, vector extension types, and representable atomics.
+- **Records:** Structs with exact field layouts, synthetic padding, `@align` when Mojo can express it, bitfield storage/accessors, opaque byte-storage fallback, and late Mojo policy inference for `TrivialRegisterPassable` vs memory-only records.
+- **Unions:** Eligible unions lower to `UnsafeUnion[...]` aliases; unsupported or ambiguous layouts fall back to byte `InlineArray` aliases with diagnostics.
+- **Declarations:** Enums, typedefs, callback typedef aliases, object-like macros, constants, globals, and thin wrappers for non-variadic functions.
 - **Linking:** `external_call` (default) or `owned_dl_handle` with optional `--library-path-hint`.
-- **Globals:** `GlobalVar` / `GlobalConst` helpers where types are thin-FFI-compatible; unsupported cases become commented stubs.
-- **Macros / constants:** Object-like macros and `const` initializers within a supported token grammar, with conservative folding; unsupported forms are often left as comments.
-- **Tuning:** `MojoEmitOptions` exposes extra knobs beyond what the CLI exposes today.
+- **Globals:** `GlobalVar` / `GlobalConst` helpers for supported symbols; unsupported or unsafe cases become stubs or comments instead of silently emitting broken wrappers.
+- **Runtime coverage:** E2E fixtures exercise records by value, callbacks, globals/constants, vectors, complex values, atomics, opaque handles, pointer-to-array cases, and both link modes.
+- **Tuning:** `MojoEmitOptions` exposes additional knobs beyond what the CLI exposes today.
 
 ## Not yet supported
 
 Known gaps you may hit in generated code—verify critical layouts and symbols against your C toolchain.
 
-- Function-like macros and many constant expressions (`sizeof`, most casts, etc.) are not fully modeled; unsupported macros may appear as comments only.
-- **Variadic** functions: no thin FFI wrapper; output notes that varargs are not modeled.
-- **Function pointers:** Carried as opaque pointer ABI; no generated wrappers to *call* through a fnptr value (signature comments may still appear).
-- **Bitfields:** Emitted with layout metadata and warnings—cross-check ABI for exotic packing.
-- **Globals:** No wrappers for atomics or types that cannot be lowered to a concrete Mojo surface type.
-- **Struct-by-value returns:** Non–register-passable struct returns may become comment stubs instead of call wrappers.
-- Difficult declarators, anonymous/extension-heavy records, and subtle C **linkage / `inline`** rules may need manual fixes or can cause symbol mismatches at runtime.
+- Function-like macros and complex preprocessor behavior are not expanded into callable Mojo APIs; unsupported macros may appear as comments only.
+- Constant-expression support is conservative. Literal arithmetic, common casts, enum/constants, `sizeof`, and some macro expressions are handled, but complex expressions can still become stubs.
+- **Variadic** functions do not get thin FFI wrappers; output notes that varargs are not modeled.
+- **Function pointers** can be represented and passed with callback aliases, but mojo-bindgen does not generate wrappers to call through an arbitrary function-pointer value.
+- **InlineArray-backed storage is memory-only.** Fixed arrays, padding bytes, opaque record fallbacks, and union byte fallbacks are not treated as `RegisterPassable`.
+- **Struct-by-value calls** depend on Mojo register-passability. Non-register-passable record returns become comment stubs, and non-register-passable parameters may require manual binding.
+- **Atomics** are conservative: representable atomic fields suppress copy/register traits, and atomic globals are emitted as stubs.
+- **Unions** are layout aliases, not tagged variants; byte-storage fallbacks preserve layout but do not provide typed member accessors.
+- **Bitfields** use generated storage/accessors for supported integer layouts, but exotic packing, target-specific ABI quirks, and anonymous/zero-width edge cases still deserve cross-checking.
+- C++ headers, difficult compiler extensions, anonymous/extension-heavy records, and subtle C **linkage / `inline`** rules may need manual fixes or can cause symbol mismatches at runtime.
 
 ## License
 
