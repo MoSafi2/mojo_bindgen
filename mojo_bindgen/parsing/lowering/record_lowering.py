@@ -28,6 +28,7 @@ class FieldSite:
     field_type: cx.Type
     field_cursor: cx.Cursor | None
     byte_offset: int
+    size_bytes: int
     is_anonymous: bool
     is_bitfield: bool = False
     bit_offset: int = -1
@@ -71,6 +72,7 @@ class _FieldDiscovery:
                 field_type=field_cursor.type,
                 field_cursor=field_cursor,
                 byte_offset=byte_offset,
+                size_bytes=self._field_size(field_cursor.type),
                 is_anonymous=not bool(name),
                 is_bitfield=True,
                 bit_offset=max(bit_offset, 0),
@@ -83,6 +85,7 @@ class _FieldDiscovery:
             field_type=field_cursor.type,
             field_cursor=field_cursor,
             byte_offset=byte_offset,
+            size_bytes=self._field_size(field_cursor.type),
             is_anonymous=not bool(name),
             attached_record=attached,
             uses_attached_record_ref=(
@@ -106,6 +109,7 @@ class _FieldDiscovery:
             field_type=field_type,
             field_cursor=implicit_field,
             byte_offset=byte_offset,
+            size_bytes=self._field_size(field_type),
             is_anonymous=True,
             attached_record=record_cursor,
             uses_attached_record_ref=True,
@@ -198,6 +202,11 @@ class _FieldDiscovery:
             except Exception:
                 return -1
         return -1
+
+    @staticmethod
+    def _field_size(field_type: cx.Type) -> int:
+        """Physical size of the field as reported by Clang, or ``0`` when unsized."""
+        return max(0, field_type.get_size())
 
 
 class RecordLowerer:
@@ -292,6 +301,7 @@ class RecordLowerer:
                 source_name=site.source_name,
                 type=backing,
                 byte_offset=site.byte_offset,
+                size_bytes=site.size_bytes,
                 is_anonymous=site.is_anonymous,
                 is_bitfield=True,
                 bit_offset=site.bit_offset,
@@ -304,6 +314,7 @@ class RecordLowerer:
             source_name=site.source_name,
             type=field_type,
             byte_offset=site.byte_offset,
+            size_bytes=site.size_bytes,
             is_anonymous=site.is_anonymous,
         )
 

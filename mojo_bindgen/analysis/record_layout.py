@@ -9,7 +9,7 @@ from mojo_bindgen.analysis.bitfield_layout import (
     analyze_bitfield_layout,
 )
 from mojo_bindgen.analysis.lowering_support import field_display_name
-from mojo_bindgen.analysis.type_layout import type_layout
+from mojo_bindgen.analysis.type_layout import type_align, type_layout
 from mojo_bindgen.ir import Struct, TargetABI, Unit
 
 
@@ -126,12 +126,18 @@ class AnalyzeRecordLayoutPass:
                 continue
 
             field_name = field_display_name(field, index)
-            layout = type_layout(field.type, record_map=record_map, target_abi=target_abi)
-            if layout is None:
+            align_bytes = type_align(field.type, record_map=record_map, target_abi=target_abi)
+            if align_bytes is None:
                 problems.append(f"field `{field_name}` has unsupported layout metadata")
                 continue
+            size_bytes = field.size_bytes
+            if size_bytes <= 0:
+                layout = type_layout(field.type, record_map=record_map, target_abi=target_abi)
+                if layout is None:
+                    problems.append(f"field `{field_name}` has unsupported layout metadata")
+                    continue
+                size_bytes, _ = layout
 
-            size_bytes, align_bytes = layout
             facts.append(
                 PlainFieldFact(
                     index=index,

@@ -351,6 +351,7 @@ class Field(SerDeMixin):
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
         fields={
             "source_name": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "size_bytes": SerdeFieldSpec(omit_if_default=True),
             "is_bitfield": SerdeFieldSpec(omit_if_default=True),
             "bit_offset": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
             "bit_width": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
@@ -361,6 +362,7 @@ class Field(SerDeMixin):
     source_name: str
     type: Type
     byte_offset: int  # from clang Type.get_offset(field_name) // 8
+    size_bytes: int = 0
     is_anonymous: bool = False
     is_bitfield: bool = False
     """If True, ``type`` is the backing integer :class:`Primitive` only."""

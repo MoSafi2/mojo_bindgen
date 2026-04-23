@@ -135,3 +135,37 @@ def test_unknown_type_kind_raises() -> None:
     with pytest.raises(ValueError) as exc_info:
         type_from_json({"kind": "NoSuchType"})
     assert "NoSuchType" in str(exc_info.value)
+
+
+def test_field_json_roundtrip_keeps_size_bytes_and_defaults_old_payloads() -> None:
+    from mojo_bindgen.ir import Field, IntKind, IntType
+
+    field = Field.from_json_dict(
+        {
+            "kind": "Field",
+            "name": "value",
+            "source_name": "value",
+            "type": {"kind": "IntType", "int_kind": "INT", "size_bytes": 4},
+            "byte_offset": 8,
+            "size_bytes": 4,
+        }
+    )
+    assert field.size_bytes == 4
+    assert field.to_json_dict()["size_bytes"] == 4
+
+    legacy = Field.from_json_dict(
+        {
+            "kind": "Field",
+            "name": "legacy",
+            "source_name": "legacy",
+            "type": {"kind": "IntType", "int_kind": "INT", "size_bytes": 4},
+            "byte_offset": 0,
+        }
+    )
+    assert legacy == Field(
+        name="legacy",
+        source_name="legacy",
+        type=IntType(int_kind=IntKind.INT, size_bytes=4),
+        byte_offset=0,
+        size_bytes=0,
+    )

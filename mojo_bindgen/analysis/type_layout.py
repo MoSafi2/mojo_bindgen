@@ -55,6 +55,25 @@ def type_layout(
     )
 
 
+def type_align(
+    t: Type,
+    *,
+    target_abi: TargetABI,
+    record_map: dict[str, Struct],
+) -> int | None:
+    """Return CIR alignment facts for ``t`` or ``None`` when unavailable."""
+
+    layout = type_layout(
+        t,
+        target_abi=target_abi,
+        record_map=record_map,
+    )
+    if layout is None:
+        return None
+    _, align_bytes = layout
+    return align_bytes
+
+
 def _type_layout_worker(
     t: Type,
     *,

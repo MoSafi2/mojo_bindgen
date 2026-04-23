@@ -216,20 +216,24 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
     nested_struct_field = next(f for f in outer.fields if f.name == "nested_struct")
     assert isinstance(nested_struct_field.type, StructRef)
     assert nested_struct_field.type.is_union is False
+    assert nested_struct_field.size_bytes == nested_struct_field.type.size_bytes
 
     nested_union_field = next(f for f in outer.fields if f.name == "nested_union")
     assert isinstance(nested_union_field.type, StructRef)
     assert nested_union_field.type.is_union is True
     assert nested_union_field.type.size_bytes > 0
+    assert nested_union_field.size_bytes == nested_union_field.type.size_bytes
 
     flags = next(f for f in outer.fields if f.name == "flags")
     assert flags.is_bitfield
     assert flags.bit_width == 3
     assert isinstance(flags.type, IntType)
+    assert flags.size_bytes == flags.type.size_bytes
 
     zero_width = next(f for f in outer.fields if f.name == "")
     assert zero_width.is_bitfield
     assert zero_width.bit_width == 0
+    assert zero_width.size_bytes == zero_width.type.size_bytes
 
 
 def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Path) -> None:
@@ -256,6 +260,7 @@ def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Pat
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
     anon_union = next(f for f in outer.fields if f.is_anonymous and isinstance(f.type, StructRef))
     assert anon_union.byte_offset == 4
+    assert anon_union.size_bytes == anon_union.type.size_bytes
     assert anon_union.type.is_union is True
     assert anon_union.type.is_anonymous is True
 
@@ -266,6 +271,7 @@ def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Pat
         f for f in inner_union.fields if f.is_anonymous and isinstance(f.type, StructRef)
     )
     assert anon_struct.byte_offset == 0
+    assert anon_struct.size_bytes == anon_struct.type.size_bytes
     assert anon_struct.type.is_union is False
     assert anon_struct.type.is_anonymous is True
 
@@ -312,6 +318,7 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
     node = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "node")
     next_field = next(f for f in node.fields if f.name == "next")
     assert isinstance(next_field.type, Pointer)
+    assert next_field.size_bytes == 8
     assert isinstance(next_field.type.pointee, StructRef)
     assert next_field.type.pointee.name == "node"
 
