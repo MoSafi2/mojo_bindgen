@@ -207,7 +207,24 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
         StoredMember(index=2, name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
-        PaddingMember(name="__pad0", size_bytes=4, byte_offset=20),
+    ]
+
+
+def test_lower_struct_omits_trailing_padding_explained_by_struct_alignment() -> None:
+    decl = Struct(
+        decl_id="struct:Aligned",
+        name="Aligned",
+        c_name="Aligned",
+        fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        size_bytes=16,
+        align_bytes=16,
+        is_complete=True,
+    )
+
+    lowered = lower_struct(decl, context=_context_for(decl))
+
+    assert lowered.members == [
+        StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
     ]
 
 

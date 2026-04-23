@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.record_layout import AnalyzeRecordLayoutPass
+from mojo_bindgen.analysis.record_layout import analyze_record_layout
 from mojo_bindgen.analysis.type_layout import type_layout
 from mojo_bindgen.ir import (
     Field,
@@ -103,7 +103,7 @@ def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None
         is_complete=True,
     )
 
-    facts = AnalyzeRecordLayoutPass().run(
+    facts = analyze_record_layout(
         holder,
         record_map={holder.decl_id: holder, union_decl.decl_id: union_decl},
         target_abi=_abi(),
@@ -142,7 +142,7 @@ def test_record_layout_reports_unknown_union_member_layout_as_unsupported_metada
         is_complete=True,
     )
 
-    facts = AnalyzeRecordLayoutPass().run(
+    facts = analyze_record_layout(
         holder,
         record_map={holder.decl_id: holder},
         target_abi=_abi(),
@@ -177,7 +177,7 @@ def test_record_layout_keeps_structurally_representable_unsupported_fields() -> 
         is_complete=True,
     )
 
-    facts = AnalyzeRecordLayoutPass().run(
+    facts = analyze_record_layout(
         holder,
         record_map={holder.decl_id: holder},
         target_abi=_abi(),

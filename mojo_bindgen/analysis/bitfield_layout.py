@@ -6,7 +6,18 @@ from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.lowering_support import field_display_name
 from mojo_bindgen.analysis.type_layout import peel_layout_wrappers
-from mojo_bindgen.ir import Field, IntKind, IntType, Struct
+from mojo_bindgen.ir import Field, IntKind, IntType, Struct, Type
+
+
+@dataclass(frozen=True)
+class BitfieldFieldLayout:
+    index: int
+    field: Field
+    logical_type: Type
+    bit_offset: int
+    bit_width: int
+    signed: bool
+    bool_semantics: bool
 
 
 @dataclass
@@ -17,7 +28,7 @@ class BitfieldRunLayout:
     start_bit: int
     storage_width_bits: int
     unsigned_storage_type: IntType
-    member_indexes: list[int] = field(default_factory=list)
+    fields: list[BitfieldFieldLayout] = field(default_factory=list)
 
     @property
     def size_bytes(self) -> int:
@@ -82,7 +93,17 @@ def analyze_bitfield_layout(
             continue
 
         if not _field.is_anonymous:
-            current.member_indexes.append(index)
+            current.fields.append(
+                BitfieldFieldLayout(
+                    index=index,
+                    field=_field,
+                    logical_type=_field.type,
+                    bit_offset=_field.bit_offset,
+                    bit_width=_field.bit_width,
+                    signed=bitfield_field_is_signed(_field),
+                    bool_semantics=bitfield_field_is_bool(_field),
+                )
+            )
 
     return tuple(runs), tuple(problems)
 
@@ -155,3 +176,14 @@ _UNSIGNED_STORAGE_KIND_BY_INT_KIND: dict[IntKind, IntKind] = {
     IntKind.CHAR32: IntKind.CHAR32,
     IntKind.EXT_INT: IntKind.EXT_INT,
 }
+
+
+__all__ = [
+    "BitfieldFieldLayout",
+    "BitfieldRunLayout",
+    "analyze_bitfield_layout",
+    "bitfield_field_is_bool",
+    "bitfield_field_is_signed",
+    "bitfield_storage_width_bits",
+    "bitfield_unsigned_storage_type",
+]

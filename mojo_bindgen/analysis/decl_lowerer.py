@@ -13,8 +13,8 @@ from mojo_bindgen.analysis.lowering_support import (
 )
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.struct_lowering import (
-    LowerStructPass,
     StructLoweringContext,
+    lower_struct,
 )
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.union_lowering import LowerUnionPass
@@ -83,7 +83,6 @@ class UnitDeclLowerer:
 
     def __init__(self, session: LoweringSession) -> None:
         self.session = session
-        self._struct_lowerer = LowerStructPass()
         self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
 
     def lower_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
@@ -219,7 +218,7 @@ class UnitDeclLowerer:
     def _lower_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:
             return self._union_lowerer.run(decl)
-        return self._struct_lowerer.run(decl, context=self.session.struct_context)
+        return lower_struct(decl, context=self.session.struct_context)
 
     def _typed_const_value(self, value: MojoConstExpr, decl_type) -> MojoConstExpr:
         lowered_type = self.session.type_lowerer.run(decl_type)

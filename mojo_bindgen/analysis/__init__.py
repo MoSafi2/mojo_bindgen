@@ -32,7 +32,6 @@ from mojo_bindgen.analysis.record_policies import (
     assign_record_policies,
 )
 from mojo_bindgen.analysis.struct_lowering import (
-    LowerStructPass,
     StructLoweringContext,
     StructLoweringError,
     lower_struct,
@@ -62,7 +61,6 @@ __all__ = [
     "FFIScalarStyle",
     "IRValidationError",
     "LowerConstExprPass",
-    "LowerStructPass",
     "LowerTypePass",
     "LowerUnionPass",
     "LowerUnitPass",
