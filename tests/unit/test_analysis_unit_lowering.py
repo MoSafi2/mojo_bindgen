@@ -487,8 +487,8 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
     assert isinstance(holder_decl, StructDecl)
     assert holder_decl.kind == StructKind.PLAIN
     assert holder_decl.members == [
-        StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
-        StoredMember(name="payload", type=NamedType("Payload"), byte_offset=8),
+        StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
+        StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
     ]
     assert holder_decl.diagnostics == []
 

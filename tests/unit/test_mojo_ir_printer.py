@@ -120,8 +120,14 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 align=4,
                 traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
                 members=[
-                    StoredMember(name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
                     StoredMember(
+                        index=0,
+                        name="count",
+                        type=BuiltinType(MojoBuiltin.C_INT),
+                        byte_offset=0,
+                    ),
+                    StoredMember(
+                        index=1,
                         name="handler",
                         type=CallbackType(
                             params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
@@ -251,6 +257,7 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
                 traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
                 members=[
                     StoredMember(
+                        index=0,
                         name="handler",
                         type=CallbackType(
                             params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
@@ -544,8 +551,14 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                 name="Widget",
                 traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
                 members=[
-                    StoredMember(name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
                     StoredMember(
+                        index=0,
+                        name="count",
+                        type=BuiltinType(MojoBuiltin.C_INT),
+                        byte_offset=0,
+                    ),
+                    StoredMember(
+                        index=1,
                         name="callback",
                         type=CallbackType(
                             params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
@@ -554,6 +567,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                         byte_offset=8,
                     ),
                     StoredMember(
+                        index=2,
                         name="buffer",
                         type=ArrayType(element=BuiltinType(MojoBuiltin.C_UCHAR), count=16),
                         byte_offset=16,

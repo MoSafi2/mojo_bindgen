@@ -85,6 +85,7 @@ def test_struct_member_json_roundtrip() -> None:
     stored = struct_member_from_json(
         {
             "kind": "StoredMember",
+            "index": 0,
             "name": "x",
             "type": {"kind": "BuiltinType", "name": "c_int"},
             "byte_offset": 0,
@@ -169,12 +170,14 @@ def test_mojo_decl_json_roundtrip() -> None:
             "members": [
                 {
                     "kind": "StoredMember",
+                    "index": 0,
                     "name": "x",
                     "type": {"kind": "BuiltinType", "name": "c_int"},
                     "byte_offset": 0,
                 },
                 {
                     "kind": "StoredMember",
+                    "index": 1,
                     "name": "y",
                     "type": {"kind": "BuiltinType", "name": "c_int"},
                     "byte_offset": 4,
@@ -285,6 +288,7 @@ def test_mojo_module_roundtrip() -> None:
                 kind="enum",
                 members=[
                     StoredMember(
+                        index=0,
                         name="value",
                         type=BuiltinType(MojoBuiltin.C_UINT),
                         byte_offset=0,

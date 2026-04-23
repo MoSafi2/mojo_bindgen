@@ -347,6 +347,7 @@ MojoConstExpr = Union[
 # TODO: check if size is needed here
 @dataclass(frozen=True)
 class StoredMember(SerDeMixin):
+    index: int
     name: str
     type: MojoType
     byte_offset: int

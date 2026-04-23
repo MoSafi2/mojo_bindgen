@@ -60,6 +60,7 @@ class PaddingSpan:
     size_bytes: int
 
 
+# TODO: Several fields are just `Struct` fields which creates two sources of truth. Prune.
 @dataclass(frozen=True)
 class RecordLayoutFacts:
     decl: Struct

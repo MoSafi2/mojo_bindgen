@@ -28,7 +28,6 @@ from mojo_bindgen.mojo_ir import (
     BitfieldGroupMember,
     Initializer,
     InitializerParam,
-    MojoType,
     OpaqueStorageMember,
     PaddingMember,
     ParametricBase,
@@ -77,17 +76,9 @@ class StructLoweringContext:
 
 
 @dataclass(frozen=True)
-class LoweredPlainField:
-    index: int
-    mojo_name: str
-    lowered_type: MojoType
-    byte_offset: int
-
-
-@dataclass(frozen=True)
 class StructRepresentationPlan:
     representation_mode: RepresentationMode
-    plain_fields: tuple[LoweredPlainField, ...]
+    plain_fields: tuple[StoredMember, ...]
     bitfield_runs: tuple[BitfieldGroupMember, ...]
     diagnostic_notes: tuple[str, ...]
     fallback_reasons: tuple[str, ...]
@@ -167,8 +158,8 @@ class PlanStructRepresentationPass:
         facts: RecordLayoutFacts,
         *,
         context: StructLoweringContext,
-    ) -> tuple[list[LoweredPlainField], list[str], list[str]]:
-        lowered: list[LoweredPlainField] = []
+    ) -> tuple[list[StoredMember], list[str], list[str]]:
+        lowered: list[StoredMember] = []
         notes: list[str] = []
         reasons: list[str] = []
         for field_fact in facts.plain_fields:
@@ -195,10 +186,10 @@ class PlanStructRepresentationPass:
                 if note not in notes:
                     notes.append(note)
             lowered.append(
-                LoweredPlainField(
+                StoredMember(
                     index=field_fact.index,
-                    mojo_name=field_mojo_name(field, field_fact.index),
-                    lowered_type=lowered_type,
+                    name=field_mojo_name(field, field_fact.index),
+                    type=lowered_type,
                     byte_offset=field_fact.byte_offset,
                 )
             )
@@ -287,11 +278,7 @@ class LowerStructBodyPass:
                 (
                     field.byte_offset,
                     field.index,
-                    StoredMember(
-                        name=field.mojo_name,
-                        type=field.lowered_type,
-                        byte_offset=field.byte_offset,
-                    ),
+                    field,
                 )
             )
 

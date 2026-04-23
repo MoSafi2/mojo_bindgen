@@ -201,6 +201,7 @@ def test_assign_record_policies_treats_pointer_value_as_trivial() -> None:
                     name="BlobRef",
                     members=[
                         StoredMember(
+                            index=0,
                             name="ptr",
                             type=PointerType(
                                 pointee=NamedType("Blob"),
@@ -234,6 +235,7 @@ def test_assign_record_policies_keeps_inline_array_backed_types_memory_only() ->
                         name="ArrayHolder",
                         members=[
                             StoredMember(
+                                index=0,
                                 name="bytes",
                                 type=ArrayType(
                                     element=BuiltinType(MojoBuiltin.UINT8),

@@ -103,8 +103,8 @@ def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
     assert lowered.fieldwise_init is False
     assert lowered.traits == []
     assert lowered.members == [
-        StoredMember(name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
-        StoredMember(name="flags", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=4),
+        StoredMember(index=0, name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
+        StoredMember(index=1, name="flags", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=4),
     ]
 
 
@@ -131,9 +131,9 @@ def test_lower_struct_synthesizes_padding_members_for_exact_layout_gaps() -> Non
 
     assert lowered.fieldwise_init is False
     assert lowered.members == [
-        StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
+        StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         PaddingMember(name="__pad0", size_bytes=4, byte_offset=4),
-        StoredMember(name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=8),
+        StoredMember(index=1, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=8),
     ]
 
 
@@ -182,9 +182,9 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
 
     assert lowered.fieldwise_init is False
     assert lowered.members == [
-        StoredMember(name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
-        StoredMember(name="payload", type=NamedType("Payload"), byte_offset=8),
-        StoredMember(name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
+        StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
+        StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
+        StoredMember(index=2, name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
         PaddingMember(name="__pad0", size_bytes=4, byte_offset=20),
     ]
 
@@ -244,6 +244,7 @@ def test_lower_struct_keeps_atomic_field_types_and_drops_traits() -> None:
     assert lowered.traits == []
     assert lowered.fieldwise_init is False
     assert lowered.members[0] == StoredMember(
+        index=0,
         name="counter",
         type=ParametricType(base=ParametricBase.ATOMIC, args=[DTypeArg("DType.int32")]),
         byte_offset=0,
@@ -393,6 +394,7 @@ def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> No
     assert lowered.fieldwise_init is False
     assert lowered.initializers == []
     assert lowered.members[0] == StoredMember(
+        index=0,
         name="tag",
         type=BuiltinType(MojoBuiltin.C_UINT),
         byte_offset=0,
@@ -604,6 +606,7 @@ def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None
     assert lowered.diagnostics == []
     assert lowered.members == [
         StoredMember(
+            index=0,
             name="mystery",
             type=ArrayType(element=BuiltinType(MojoBuiltin.UINT8), count=4),
             byte_offset=0,
