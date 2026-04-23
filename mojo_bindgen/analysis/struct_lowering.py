@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.bitfield_layout import bitfield_field_is_bool, bitfield_field_is_signed
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
 from mojo_bindgen.analysis.lowering_support import (
     field_display_name,
@@ -162,9 +163,9 @@ class LowerStructPass:
                 continue
 
             lowered_fields: list[BitfieldField] = []
-            for member in run.members:
-                field = decl.fields[member.index]
-                display_name = field_display_name(field, member.index)
+            for index in run.member_indexes:
+                field = decl.fields[index]
+                display_name = field_display_name(field, index)
                 logical_type, reason = try_lower_type(
                     context.type_lowerer,
                     field.type,
@@ -177,13 +178,13 @@ class LowerStructPass:
                     continue
                 lowered_fields.append(
                     BitfieldField(
-                        index=member.index,
-                        name=field_mojo_name(field, member.index),
+                        index=index,
+                        name=field_mojo_name(field, index),
                         logical_type=logical_type,
-                        bit_offset=member.bit_offset,
-                        bit_width=member.bit_width,
-                        signed=member.signed,
-                        bool_semantics=member.bool_semantics,
+                        bit_offset=field.bit_offset,
+                        bit_width=field.bit_width,
+                        signed=bitfield_field_is_signed(field),
+                        bool_semantics=bitfield_field_is_bool(field),
                     )
                 )
 

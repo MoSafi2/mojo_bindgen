@@ -29,6 +29,7 @@ mojo-bindgen = { path = ".", editable = true }
 [feature.dev.dependencies]
 ipykernel = ">=7.1.0,<8"
 jupyter = ">=1.1.1,<2"
+nodejs = ">=20,<23"
 
 [feature.dev.pypi-dependencies]
 pytest = ">=9.0.3, <10"
