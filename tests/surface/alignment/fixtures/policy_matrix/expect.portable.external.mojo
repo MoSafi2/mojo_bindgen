@@ -23,10 +23,9 @@ struct ag_alignas_record(TrivialRegisterPassable):
 
 @align(16)
 @fieldwise_init
-struct ag_explicit_align(Copyable, Movable):
+struct ag_explicit_align(TrivialRegisterPassable):
     var tag: c_char
     var value: c_int
-    var __pad0: InlineArray[UInt8, 8]
 
 @align(32)
 @fieldwise_init
@@ -34,7 +33,6 @@ struct ag_alignas_field(Copyable, Movable):
     var tag: c_char
     var __pad0: InlineArray[UInt8, 28]
     var value: c_int
-    var __pad1: InlineArray[UInt8, 28]
 
 @align(16)
 @fieldwise_init
@@ -42,7 +40,6 @@ struct ag_field_align(Copyable, Movable):
     var tag: c_char
     var __pad0: InlineArray[UInt8, 12]
     var value: c_int
-    var __pad1: InlineArray[UInt8, 12]
 
 # NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
 # NOTE[struct_lowering]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
