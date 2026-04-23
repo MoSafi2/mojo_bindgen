@@ -319,6 +319,8 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
     next_field = next(f for f in node.fields if f.name == "next")
     assert isinstance(next_field.type, Pointer)
     assert next_field.size_bytes == 8
+    assert next_field.type.size_bytes == 8
+    assert next_field.type.align_bytes == 8
     assert isinstance(next_field.type.pointee, StructRef)
     assert next_field.type.pointee.name == "node"
 
@@ -421,6 +423,8 @@ def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_pat
     value_field = next(f for f in outer.fields if f.name == "value")
     assert isinstance(value_field.type, StructRef)
     assert value_field.type.decl_id == inner.decl_id
+    assert value_field.type.size_bytes == inner.size_bytes
+    assert value_field.type.align_bytes == inner.align_bytes
 
 
 def test_record_lowering_reuses_named_nested_record_nominally_after_definition(

@@ -4,16 +4,7 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.record_layout import AnalyzeRecordLayoutPass
 from mojo_bindgen.analysis.type_layout import type_layout
-from mojo_bindgen.ir import (
-    Field,
-    IntKind,
-    IntType,
-    Pointer,
-    Struct,
-    StructRef,
-    TargetABI,
-    UnsupportedType,
-)
+from mojo_bindgen.ir import Field, IntKind, IntType, Pointer, Struct, StructRef, TargetABI, UnsupportedType
 
 
 def _i32() -> IntType:
@@ -29,7 +20,7 @@ def test_type_layout_uses_real_union_alignment_from_cir() -> None:
         decl_id="union:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0, size_bytes=4)],
         size_bytes=8,
         align_bytes=8,
         is_union=True,
@@ -41,21 +32,33 @@ def test_type_layout_uses_real_union_alignment_from_cir() -> None:
         c_name=union_decl.c_name,
         is_union=True,
         size_bytes=union_decl.size_bytes,
+        align_bytes=union_decl.align_bytes,
     )
 
-    assert type_layout(
-        union_ref,
-        record_map={union_decl.decl_id: union_decl},
-        target_abi=_abi(),
-    ) == (8, 8)
+    assert type_layout(union_ref) == (8, 8)
 
 
-def test_type_layout_uses_explicit_target_abi_for_pointers() -> None:
-    assert type_layout(
-        Pointer(pointee=None),
-        record_map={},
-        target_abi=TargetABI(pointer_size_bytes=4, pointer_align_bytes=4),
-    ) == (4, 4)
+def test_type_layout_uses_explicit_pointer_layout_from_cir() -> None:
+    assert type_layout(Pointer(pointee=None, size_bytes=4, align_bytes=4)) == (4, 4)
+
+
+def test_type_layout_returns_none_for_pointer_without_explicit_layout() -> None:
+    assert type_layout(Pointer(pointee=None)) is None
+
+
+def test_type_layout_uses_explicit_structref_layout_without_record_lookup() -> None:
+    assert (
+        type_layout(
+            StructRef(
+                decl_id="struct:Payload",
+                name="Payload",
+                c_name="Payload",
+                size_bytes=24,
+                align_bytes=8,
+            )
+        )
+        == (24, 8)
+    )
 
 
 def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None:
@@ -63,7 +66,7 @@ def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None
         decl_id="union:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0, size_bytes=4)],
         size_bytes=8,
         align_bytes=8,
         is_union=True,
@@ -83,8 +86,10 @@ def test_record_layout_accepts_union_value_fields_when_layout_is_known() -> None
                     c_name=union_decl.c_name,
                     is_union=True,
                     size_bytes=union_decl.size_bytes,
+                    align_bytes=union_decl.align_bytes,
                 ),
                 byte_offset=0,
+                size_bytes=union_decl.size_bytes,
             )
         ],
         size_bytes=8,
@@ -123,6 +128,7 @@ def test_record_layout_reports_unknown_union_member_layout_as_unsupported_metada
                     size_bytes=8,
                 ),
                 byte_offset=0,
+                size_bytes=8,
             )
         ],
         size_bytes=8,
@@ -157,6 +163,7 @@ def test_record_layout_keeps_structurally_representable_unsupported_fields() -> 
                     align_bytes=4,
                 ),
                 byte_offset=0,
+                size_bytes=4,
             )
         ],
         size_bytes=4,

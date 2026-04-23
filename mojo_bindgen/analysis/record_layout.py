@@ -9,7 +9,7 @@ from mojo_bindgen.analysis.bitfield_layout import (
     analyze_bitfield_layout,
 )
 from mojo_bindgen.analysis.lowering_support import field_display_name
-from mojo_bindgen.analysis.type_layout import type_align, type_layout
+from mojo_bindgen.analysis.type_layout import type_align
 from mojo_bindgen.ir import Struct, TargetABI, Unit
 
 
@@ -76,8 +76,6 @@ class AnalyzeRecordLayoutPass:
         # Analyze plain fields
         plain_fields, plain_problems = self._analyze_plain_fields(
             decl=decl,
-            record_map=record_map,
-            target_abi=target_abi,
         )
 
         # Analyze bitfields
@@ -115,8 +113,6 @@ class AnalyzeRecordLayoutPass:
         self,
         *,
         decl: Struct,
-        record_map: dict[str, Struct],
-        target_abi: TargetABI,
     ) -> tuple[list[PlainFieldFact], list[str]]:
         facts: list[PlainFieldFact] = []
         problems: list[str] = []
@@ -126,23 +122,16 @@ class AnalyzeRecordLayoutPass:
                 continue
 
             field_name = field_display_name(field, index)
-            align_bytes = type_align(field.type, record_map=record_map, target_abi=target_abi)
-            if align_bytes is None:
+            align_bytes = type_align(field.type)
+            if align_bytes is None or field.size_bytes <= 0:
                 problems.append(f"field `{field_name}` has unsupported layout metadata")
                 continue
-            size_bytes = field.size_bytes
-            if size_bytes <= 0:
-                layout = type_layout(field.type, record_map=record_map, target_abi=target_abi)
-                if layout is None:
-                    problems.append(f"field `{field_name}` has unsupported layout metadata")
-                    continue
-                size_bytes, _ = layout
 
             facts.append(
                 PlainFieldFact(
                     index=index,
                     byte_offset=field.byte_offset,
-                    size_bytes=size_bytes,
+                    size_bytes=field.size_bytes,
                     align_bytes=align_bytes,
                 )
             )

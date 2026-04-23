@@ -48,6 +48,27 @@ def _abi() -> TargetABI:
     return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
 
+def _field(
+    *,
+    name: str,
+    source_name: str,
+    type,
+    byte_offset: int,
+    size_bytes: int | None = None,
+    **kwargs,
+) -> Field:
+    if size_bytes is None:
+        size_bytes = getattr(type, "size_bytes", 0) or 0
+    return Field(
+        name=name,
+        source_name=source_name,
+        type=type,
+        byte_offset=byte_offset,
+        size_bytes=size_bytes,
+        **kwargs,
+    )
+
+
 def _context_for(*decls: Struct) -> StructLoweringContext:
     record_map = {decl.decl_id: decl for decl in decls}
     return StructLoweringContext(
@@ -87,8 +108,8 @@ def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
         name="Widget",
         c_name="Widget",
         fields=[
-            Field(name="count", source_name="count", type=_i32(), byte_offset=0),
-            Field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
+            _field(name="count", source_name="count", type=_i32(), byte_offset=0),
+            _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
         ],
         size_bytes=8,
         align_bytes=4,
@@ -114,13 +135,13 @@ def test_lower_struct_synthesizes_padding_members_for_exact_layout_gaps() -> Non
         name="Padded",
         c_name="Padded",
         fields=[
-            Field(
+            _field(
                 name="tag",
                 source_name="tag",
                 type=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
                 byte_offset=0,
             ),
-            Field(name="value", source_name="value", type=_i32(), byte_offset=8),
+            _field(name="value", source_name="value", type=_i32(), byte_offset=8),
         ],
         size_bytes=12,
         align_bytes=4,
@@ -142,7 +163,7 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         decl_id="union:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
         size_bytes=8,
         align_bytes=8,
         is_union=True,
@@ -153,13 +174,13 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         name="Holder",
         c_name="Holder",
         fields=[
-            Field(
+            _field(
                 name="tag",
                 source_name="tag",
                 type=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
                 byte_offset=0,
             ),
-            Field(
+            _field(
                 name="payload",
                 source_name="payload",
                 type=StructRef(
@@ -168,10 +189,11 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
                     c_name=union_decl.c_name,
                     is_union=True,
                     size_bytes=union_decl.size_bytes,
+                    align_bytes=union_decl.align_bytes,
                 ),
                 byte_offset=8,
             ),
-            Field(name="tail", source_name="tail", type=_u32(), byte_offset=16),
+            _field(name="tail", source_name="tail", type=_u32(), byte_offset=16),
         ],
         size_bytes=24,
         align_bytes=8,
@@ -195,13 +217,13 @@ def test_lower_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() 
         name="Packed",
         c_name="Packed",
         fields=[
-            Field(
+            _field(
                 name="tag",
                 source_name="tag",
                 type=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
                 byte_offset=0,
             ),
-            Field(name="value", source_name="value", type=_i32(), byte_offset=1),
+            _field(name="value", source_name="value", type=_i32(), byte_offset=1),
         ],
         size_bytes=5,
         align_bytes=1,
@@ -226,13 +248,14 @@ def test_lower_struct_keeps_atomic_field_types_and_drops_traits() -> None:
         name="AtomicHolder",
         c_name="AtomicHolder",
         fields=[
-            Field(
+            _field(
                 name="counter",
                 source_name="counter",
                 type=AtomicType(value_type=_i32()),
                 byte_offset=0,
+                size_bytes=4,
             ),
-            Field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
+            _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
         ],
         size_bytes=8,
         align_bytes=4,
@@ -257,7 +280,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
         name="Bits",
         c_name="Bits",
         fields=[
-            Field(
+            _field(
                 name="ready",
                 source_name="ready",
                 type=_u32(),
@@ -266,7 +289,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
                 bit_offset=0,
                 bit_width=1,
             ),
-            Field(
+            _field(
                 name="state",
                 source_name="state",
                 type=_u32(),
@@ -275,7 +298,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
                 bit_offset=1,
                 bit_width=3,
             ),
-            Field(
+            _field(
                 name="",
                 source_name="",
                 type=_u32(),
@@ -285,7 +308,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
                 bit_offset=32,
                 bit_width=0,
             ),
-            Field(
+            _field(
                 name="enabled",
                 source_name="enabled",
                 type=_bool(),
@@ -364,8 +387,8 @@ def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> No
         name="MixedBits",
         c_name="MixedBits",
         fields=[
-            Field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
-            Field(
+            _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
+            _field(
                 name="signed_bits",
                 source_name="signed_bits",
                 type=_i32(),
@@ -374,7 +397,7 @@ def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> No
                 bit_offset=32,
                 bit_width=5,
             ),
-            Field(
+            _field(
                 name="enabled",
                 source_name="enabled",
                 type=_bool(),
@@ -414,7 +437,7 @@ def test_lower_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
         name="SplitBits",
         c_name="SplitBits",
         fields=[
-            Field(
+            _field(
                 name="left",
                 source_name="left",
                 type=_u32(),
@@ -423,7 +446,7 @@ def test_lower_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
                 bit_offset=0,
                 bit_width=1,
             ),
-            Field(
+            _field(
                 name="",
                 source_name="",
                 type=_u32(),
@@ -433,7 +456,7 @@ def test_lower_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
                 bit_offset=31,
                 bit_width=0,
             ),
-            Field(
+            _field(
                 name="right",
                 source_name="right",
                 type=_u32(),
@@ -460,7 +483,7 @@ def test_lower_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() 
         name="AnonBits",
         c_name="AnonBits",
         fields=[
-            Field(
+            _field(
                 name="",
                 source_name="",
                 type=_u32(),
@@ -498,7 +521,7 @@ def test_lower_struct_omits_register_passable_when_field_references_incomplete_s
         name="Holder",
         c_name="Holder",
         fields=[
-            Field(
+            _field(
                 name="child",
                 source_name="child",
                 type=StructRef(
@@ -507,6 +530,7 @@ def test_lower_struct_omits_register_passable_when_field_references_incomplete_s
                     c_name=child.c_name,
                     is_union=False,
                     size_bytes=child.size_bytes,
+                    align_bytes=child.align_bytes,
                 ),
                 byte_offset=0,
             )
@@ -542,7 +566,7 @@ def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> No
         is_complete=True,
     )
     left.fields = [
-        Field(
+        _field(
             name="right",
             source_name="right",
             type=StructRef(
@@ -551,12 +575,13 @@ def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> No
                 c_name=right.c_name,
                 is_union=False,
                 size_bytes=right.size_bytes,
+                align_bytes=right.align_bytes,
             ),
             byte_offset=0,
         )
     ]
     right.fields = [
-        Field(
+        _field(
             name="left",
             source_name="left",
             type=StructRef(
@@ -565,6 +590,7 @@ def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> No
                 c_name=left.c_name,
                 is_union=False,
                 size_bytes=left.size_bytes,
+                align_bytes=left.align_bytes,
             ),
             byte_offset=0,
         )
@@ -582,7 +608,7 @@ def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None
         name="LoweringFallback",
         c_name="LoweringFallback",
         fields=[
-            Field(
+            _field(
                 name="mystery",
                 source_name="mystery",
                 type=UnsupportedType(

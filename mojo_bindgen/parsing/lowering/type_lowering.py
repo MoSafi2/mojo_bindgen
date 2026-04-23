@@ -72,10 +72,23 @@ def _array_kind(t: cx.Type, ctx: TypeContext) -> str:
     return "incomplete"
 
 
-def _lower_void_pointer(qualifiers: Qualifiers) -> Type:
+def _lower_void_pointer(
+    qualifiers: Qualifiers,
+    *,
+    size_bytes: int | None,
+    align_bytes: int | None,
+) -> Type:
     if qualifiers == Qualifiers():
-        return Pointer(pointee=None)
-    return Pointer(pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers))
+        return Pointer(
+            pointee=None,
+            size_bytes=size_bytes or 0,
+            align_bytes=align_bytes,
+        )
+    return Pointer(
+        pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers),
+        size_bytes=size_bytes or 0,
+        align_bytes=align_bytes,
+    )
 
 
 @dataclass
@@ -177,8 +190,14 @@ class TypeLowerer:
         raw_pointee = t.get_pointee()
         qualifiers = _qualifiers(raw_pointee)
         pointee = _normalize(raw_pointee)
+        pointer_size = _safe_size(t)
+        pointer_align = _safe_align(t)
         if pointee.kind == cx.TypeKind.VOID:
-            return _lower_void_pointer(qualifiers)
+            return _lower_void_pointer(
+                qualifiers,
+                size_bytes=pointer_size,
+                align_bytes=pointer_align,
+            )
         canonical_pointee = _normalize(pointee.get_canonical())
         if canonical_pointee.kind in (
             cx.TypeKind.FUNCTIONPROTO,
@@ -192,8 +211,20 @@ class TypeLowerer:
                 if pointee.kind in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO)
                 else canonical_pointee
             )
-            return self._lower_fnptr(fn_shape, ctx, source_cursor=source_cursor)
-        return self._lower_pointer_to_value(pointee, qualifiers, ctx)
+            return self._lower_fnptr(
+                fn_shape,
+                ctx,
+                source_cursor=source_cursor,
+                size_bytes=pointer_size,
+                align_bytes=pointer_align,
+            )
+        return self._lower_pointer_to_value(
+            pointee,
+            qualifiers,
+            ctx,
+            size_bytes=pointer_size,
+            align_bytes=pointer_align,
+        )
 
     def _lower_function_pointer_with_cursor(
         self,
@@ -236,6 +267,9 @@ class TypeLowerer:
         t: cx.Type,
         ctx: TypeContext,
         source_cursor: cx.Cursor | None = None,
+        *,
+        size_bytes: int | None = None,
+        align_bytes: int | None = None,
     ) -> FunctionPtr:
         ret = self.lower(t.get_result(), ctx)
         if t.kind == cx.TypeKind.FUNCTIONPROTO:
@@ -255,6 +289,8 @@ class TypeLowerer:
             param_names=param_names,
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(t),
+            size_bytes=size_bytes or 0,
+            align_bytes=align_bytes,
         )
 
     @staticmethod
@@ -282,17 +318,33 @@ class TypeLowerer:
         return names if any(name for name in names) else None
 
     def _lower_pointer_to_value(
-        self, pointee: cx.Type, qualifiers: Qualifiers, ctx: TypeContext
+        self,
+        pointee: cx.Type,
+        qualifiers: Qualifiers,
+        ctx: TypeContext,
+        *,
+        size_bytes: int | None,
+        align_bytes: int | None,
     ) -> Type:
         lowered = self.lower(pointee, ctx)
         if qualifiers != Qualifiers():
             lowered = QualifiedType(unqualified=lowered, qualifiers=qualifiers)
-        return Pointer(pointee=lowered)
+        return Pointer(
+            pointee=lowered,
+            size_bytes=size_bytes or 0,
+            align_bytes=align_bytes,
+        )
 
     def _lower_array(self, t: cx.Type, ctx: TypeContext) -> Type:
         element = self.lower(t.get_array_element_type(), ctx)
         size = t.get_array_size() if t.kind == cx.TypeKind.CONSTANTARRAY else None
-        return Array(element=element, size=size, array_kind=_array_kind(t, ctx))
+        return Array(
+            element=element,
+            size=size,
+            array_kind=_array_kind(t, ctx),
+            size_bytes=_safe_size(t) or 0,
+            align_bytes=_safe_align(t),
+        )
 
     def _lower_record(self, t: cx.Type) -> Type:
         decl = t.get_declaration()
@@ -310,6 +362,7 @@ class TypeLowerer:
                 c_name=decl.spelling,
                 is_union=(decl.kind == cx.CursorKind.UNION_DECL),
                 size_bytes=max(0, t.get_size()),
+                align_bytes=_safe_align(t),
                 is_anonymous=False,
             )
 
@@ -348,7 +401,11 @@ class TypeLowerer:
                 size_bytes=_safe_size(t),
                 align_bytes=_safe_align(t),
             )
-        return ComplexType(element=element, size_bytes=max(0, t.get_size()))
+        return ComplexType(
+            element=element,
+            size_bytes=max(0, t.get_size()),
+            align_bytes=_safe_align(t),
+        )
 
     def _lower_vector(self, t: cx.Type, *, is_ext_vector: bool) -> Type:
         element = self.lower(self.compat.get_element_type(t), TypeContext.FIELD)
@@ -357,6 +414,7 @@ class TypeLowerer:
             count=self.compat.get_num_elements(t),
             size_bytes=max(0, t.get_size()),
             is_ext_vector=is_ext_vector,
+            align_bytes=_safe_align(t),
         )
 
     def _lower_atomic(self, t: cx.Type, ctx: TypeContext) -> Type:

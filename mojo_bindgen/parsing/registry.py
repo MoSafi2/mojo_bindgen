@@ -180,6 +180,7 @@ class RecordRegistry:
             c_name=struct.c_name,
             is_union=struct.is_union,
             size_bytes=struct.size_bytes,
+            align_bytes=struct.align_bytes,
             is_anonymous=struct.is_anonymous,
         )
 

@@ -62,6 +62,27 @@ def _abi() -> TargetABI:
     return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
 
+def _field(
+    *,
+    name: str,
+    source_name: str,
+    type,
+    byte_offset: int,
+    size_bytes: int | None = None,
+    **kwargs,
+) -> Field:
+    if size_bytes is None:
+        size_bytes = getattr(type, "size_bytes", 0) or 0
+    return Field(
+        name=name,
+        source_name=source_name,
+        type=type,
+        byte_offset=byte_offset,
+        size_bytes=size_bytes,
+        **kwargs,
+    )
+
+
 def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     unit = Unit(
         source_header="demo.h",
@@ -314,11 +335,17 @@ def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None
                 name="Payload",
                 c_name="Payload",
                 fields=[
-                    Field(name="a", source_name="a", type=_i32(), byte_offset=0),
-                    Field(
+                    _field(name="a", source_name="a", type=_i32(), byte_offset=0),
+                    _field(
                         name="b",
                         source_name="b",
-                        type=StructRef(decl_id="struct:Widget", name="Widget", c_name="Widget"),
+                        type=StructRef(
+                            decl_id="struct:Widget",
+                            name="Widget",
+                            c_name="Widget",
+                            size_bytes=16,
+                            align_bytes=8,
+                        ),
                         byte_offset=0,
                     ),
                 ],
@@ -375,8 +402,8 @@ def test_lower_unit_uses_byte_storage_fallback_for_ineligible_union() -> None:
                 name="Dup",
                 c_name="Dup",
                 fields=[
-                    Field(name="a", source_name="a", type=_i32(), byte_offset=0),
-                    Field(name="b", source_name="b", type=_i32(), byte_offset=0),
+                    _field(name="a", source_name="a", type=_i32(), byte_offset=0),
+                    _field(name="b", source_name="b", type=_i32(), byte_offset=0),
                 ],
                 size_bytes=4,
                 align_bytes=4,
@@ -442,7 +469,7 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
                 decl_id="union:payload",
                 name="Payload",
                 c_name="Payload",
-                fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+                fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
                 size_bytes=8,
                 align_bytes=8,
                 is_union=True,
@@ -453,8 +480,8 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
                 name="Holder",
                 c_name="Holder",
                 fields=[
-                    Field(name="tag", source_name="tag", type=_i32(), byte_offset=0),
-                    Field(
+                    _field(name="tag", source_name="tag", type=_i32(), byte_offset=0),
+                    _field(
                         name="payload",
                         source_name="payload",
                         type=StructRef(
@@ -463,6 +490,7 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
                             c_name="Payload",
                             is_union=True,
                             size_bytes=8,
+                            align_bytes=8,
                         ),
                         byte_offset=8,
                     ),

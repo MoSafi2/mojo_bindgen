@@ -13,9 +13,7 @@ from mojo_bindgen.ir import (
     OpaqueRecordRef,
     Pointer,
     QualifiedType,
-    Struct,
     StructRef,
-    TargetABI,
     Type,
     TypeRef,
     UnsupportedType,
@@ -41,99 +39,61 @@ def peel_layout_wrappers(t: Type) -> Type:
 
 def type_layout(
     t: Type,
-    *,
-    target_abi: TargetABI,
-    record_map: dict[str, Struct],
 ) -> tuple[int, int] | None:
     """Return CIR size/alignment facts for ``t`` or ``None`` when unavailable."""
 
-    return _type_layout_worker(
-        peel_layout_wrappers(t),
-        record_map=record_map,
-        target_abi=target_abi,
-        visiting=set(),
-    )
+    return _type_layout_worker(peel_layout_wrappers(t))
 
 
 def type_align(
     t: Type,
-    *,
-    target_abi: TargetABI,
-    record_map: dict[str, Struct],
 ) -> int | None:
     """Return CIR alignment facts for ``t`` or ``None`` when unavailable."""
 
-    layout = type_layout(
-        t,
-        target_abi=target_abi,
-        record_map=record_map,
-    )
+    layout = type_layout(t)
     if layout is None:
         return None
     _, align_bytes = layout
     return align_bytes
 
 
-def _type_layout_worker(
-    t: Type,
-    *,
-    record_map: dict[str, Struct],
-    target_abi: TargetABI,
-    visiting: set[str],
-) -> tuple[int, int] | None:
+def _type_layout_worker(t: Type) -> tuple[int, int] | None:
     if isinstance(t, IntType):
         return t.size_bytes, t.align_bytes or t.size_bytes
     if isinstance(t, FloatType):
         return t.size_bytes, t.align_bytes or t.size_bytes
     if isinstance(t, EnumRef):
-        return _type_layout_worker(
-            peel_layout_wrappers(t.underlying),
-            record_map=record_map,
-            target_abi=target_abi,
-            visiting=visiting,
-        )
+        return _type_layout_worker(peel_layout_wrappers(t.underlying))
     if isinstance(t, (Pointer, FunctionPtr, OpaqueRecordRef)):
-        return target_abi.pointer_size_bytes, target_abi.pointer_align_bytes
+        if t.align_bytes is None:
+            return None
+        return t.size_bytes, t.align_bytes
     if isinstance(t, UnsupportedType):
         if t.size_bytes is None or t.align_bytes is None:
             return None
         return t.size_bytes, t.align_bytes
     if isinstance(t, ComplexType):
+        if t.align_bytes is not None:
+            return t.size_bytes, t.align_bytes
         return t.size_bytes, t.element.align_bytes or t.element.size_bytes
     if isinstance(t, VectorType):
-        element_layout = _type_layout_worker(
-            peel_layout_wrappers(t.element),
-            record_map=record_map,
-            target_abi=target_abi,
-            visiting=visiting,
-        )
+        if t.align_bytes is not None:
+            return t.size_bytes, t.align_bytes
+        element_layout = _type_layout_worker(peel_layout_wrappers(t.element))
         if element_layout is None:
-            return t.size_bytes, t.size_bytes
+            return None
         _, element_align = element_layout
-        return t.size_bytes, max(
-            element_align,
-            t.size_bytes if t.is_ext_vector else element_align,
-        )
+        return t.size_bytes, element_align
     if isinstance(t, StructRef):
-        if t.decl_id in visiting:
+        if t.align_bytes is None:
             return None
-        target = record_map.get(t.decl_id)
-        if target is None:
-            return None
-        visiting.add(t.decl_id)
-        try:
-            return target.size_bytes, target.align_bytes
-        finally:
-            visiting.remove(t.decl_id)
+        return t.size_bytes, t.align_bytes
     if isinstance(t, Array):
+        if t.align_bytes is not None:
+            return t.size_bytes, t.align_bytes
         if t.array_kind != "fixed" or t.size is None:
-            return target_abi.pointer_size_bytes, target_abi.pointer_align_bytes
-        element_layout = _type_layout_worker(
-            peel_layout_wrappers(t.element),
-            record_map=record_map,
-            target_abi=target_abi,
-            visiting=visiting,
-        )
+            return None
+        element_layout = _type_layout_worker(peel_layout_wrappers(t.element))
         if element_layout is None:
             return None
         element_size, element_align = element_layout

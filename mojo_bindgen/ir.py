@@ -183,6 +183,8 @@ class Pointer(SerDeMixin):
     """
 
     pointee: Type | None  # None == void*
+    size_bytes: int = 0
+    align_bytes: int | None = None
 
 
 @dataclass
@@ -198,6 +200,8 @@ class Array(SerDeMixin):
     element: Type
     size: int | None
     array_kind: ArrayKind = "fixed"
+    size_bytes: int = 0
+    align_bytes: int | None = None
 
 
 @dataclass
@@ -213,6 +217,8 @@ class FunctionPtr(SerDeMixin):
     is_variadic: bool = False
     calling_convention: str | None = None
     is_noreturn: bool = False
+    size_bytes: int = 0
+    align_bytes: int | None = None
 
 
 @dataclass
@@ -229,6 +235,8 @@ class OpaqueRecordRef(SerDeMixin):
         fields={
             "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
             "c_name": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "size_bytes": SerdeFieldSpec(omit_if_default=True),
+            "align_bytes": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
@@ -236,6 +244,8 @@ class OpaqueRecordRef(SerDeMixin):
     name: str
     c_name: str
     is_union: bool = False
+    size_bytes: int | None = None
+    align_bytes: int | None = None
 
 
 @dataclass
@@ -264,6 +274,7 @@ class ComplexType(SerDeMixin):
 
     element: FloatType
     size_bytes: int
+    align_bytes: int | None = None
 
 
 @dataclass
@@ -278,6 +289,7 @@ class VectorType(SerDeMixin):
     count: int | None
     size_bytes: int
     is_ext_vector: bool = False
+    align_bytes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -295,7 +307,11 @@ class StructRef(SerDeMixin):
     """
 
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "size_bytes": SerdeFieldSpec(omit_if_default=True),
+            "align_bytes": SerdeFieldSpec(omit_if_default=True),
+        }
     )
 
     decl_id: str
@@ -303,6 +319,7 @@ class StructRef(SerDeMixin):
     c_name: str
     is_union: bool = False
     size_bytes: int = 0
+    align_bytes: int | None = None
     is_anonymous: bool = False
 
 
