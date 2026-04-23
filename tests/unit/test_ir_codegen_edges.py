@@ -743,8 +743,12 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
         name="holder",
         c_name="holder",
         fields=[
-            _field(name="value", source_name="value", type=my_uint_ref, byte_offset=0, size_bytes=4),
-            _field(name="ptr", source_name="ptr", type=my_uint_ptr_ref, byte_offset=8, size_bytes=8),
+            _field(
+                name="value", source_name="value", type=my_uint_ref, byte_offset=0, size_bytes=4
+            ),
+            _field(
+                name="ptr", source_name="ptr", type=my_uint_ptr_ref, byte_offset=8, size_bytes=8
+            ),
         ],
         size_bytes=16,
         align_bytes=8,
