@@ -4,6 +4,7 @@
 # FFI mode: external_call
 
 from std.ffi import c_int
+from std.sys.info import size_of
 
 # macro MCC_FILE: predefined macro preserved without evaluation
 # define MCC_FILE __FILE__
@@ -15,5 +16,4 @@ comptime MCC_TARGET = c_int(9)
 # macro MCC_NULL: null pointer macro is not emitted directly
 # define MCC_NULL ( ( void * ) 0 )
 
-# macro MCC_SIZEOF: unsupported macro replacement list
-# define MCC_SIZEOF sizeof ( int )
+comptime MCC_SIZEOF = size_of[c_int]()

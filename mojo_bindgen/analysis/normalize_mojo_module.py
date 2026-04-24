@@ -73,6 +73,7 @@ class NormalizeMojoModulePass:
         self._needs_simd_import = False
         self._needs_complex_import = False
         self._needs_atomic_import = False
+        self._needs_sys_info_import = False
 
         normalized_decls = [self._normalize_decl(decl) for decl in module.decls]
         all_decls = [*self._synth_aliases, *self._ordered_decls(normalized_decls)]
@@ -375,6 +376,7 @@ class NormalizeMojoModulePass:
         needs_simd_import = self._module.capabilities.needs_simd
         needs_complex_import = self._module.capabilities.needs_complex
         needs_atomic_import = self._module.capabilities.needs_atomic
+        needs_sys_info_import = False
 
         if self._module.capabilities.needs_unsafe_union:
             ffi_names.add("UnsafeUnion")
@@ -390,6 +392,7 @@ class NormalizeMojoModulePass:
             self._collect_decl_imports(
                 decl,
                 ffi_names=ffi_names,
+                mark_sys_info=lambda: self._set_flag("sys_info"),
                 mark_opaque=lambda: self._set_flag("opaque"),
                 mark_simd=lambda: self._set_flag("simd"),
                 mark_complex=lambda: self._set_flag("complex"),
@@ -400,6 +403,7 @@ class NormalizeMojoModulePass:
         needs_simd_import = needs_simd_import or self._needs_simd_import
         needs_complex_import = needs_complex_import or self._needs_complex_import
         needs_atomic_import = needs_atomic_import or self._needs_atomic_import
+        needs_sys_info_import = needs_sys_info_import or self._needs_sys_info_import
 
         imports: list[ModuleImport] = []
         ordered_ffi = []
@@ -418,6 +422,8 @@ class NormalizeMojoModulePass:
         ordered_ffi.extend(sorted(name for name in ffi_names if name.startswith("c_")))
         if ordered_ffi:
             imports.append(ModuleImport(module="std.ffi", names=ordered_ffi))
+        if needs_sys_info_import:
+            imports.append(ModuleImport(module="std.sys.info", names=["size_of"]))
         if needs_opaque_imports:
             imports.append(
                 ModuleImport(
@@ -438,6 +444,7 @@ class NormalizeMojoModulePass:
         decl: MojoDecl,
         *,
         ffi_names: set[str],
+        mark_sys_info,
         mark_opaque,
         mark_simd,
         mark_complex,
@@ -449,6 +456,7 @@ class NormalizeMojoModulePass:
                     self._collect_type_imports(
                         member.type,
                         ffi_names=ffi_names,
+                        mark_sys_info=mark_sys_info,
                         mark_opaque=mark_opaque,
                         mark_simd=mark_simd,
                         mark_complex=mark_complex,
@@ -458,6 +466,7 @@ class NormalizeMojoModulePass:
                     self._collect_type_imports(
                         member.storage_type,
                         ffi_names=ffi_names,
+                        mark_sys_info=mark_sys_info,
                         mark_opaque=mark_opaque,
                         mark_simd=mark_simd,
                         mark_complex=mark_complex,
@@ -467,6 +476,7 @@ class NormalizeMojoModulePass:
                         self._collect_type_imports(
                             field.logical_type,
                             ffi_names=ffi_names,
+                            mark_sys_info=mark_sys_info,
                             mark_opaque=mark_opaque,
                             mark_simd=mark_simd,
                             mark_complex=mark_complex,
@@ -477,6 +487,7 @@ class NormalizeMojoModulePass:
                     self._collect_type_imports(
                         param.type,
                         ffi_names=ffi_names,
+                        mark_sys_info=mark_sys_info,
                         mark_opaque=mark_opaque,
                         mark_simd=mark_simd,
                         mark_complex=mark_complex,
@@ -486,6 +497,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 decl.underlying_type,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -496,6 +508,7 @@ class NormalizeMojoModulePass:
                 self._collect_type_imports(
                     decl.type_value,
                     ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
                     mark_opaque=mark_opaque,
                     mark_simd=mark_simd,
                     mark_complex=mark_complex,
@@ -505,6 +518,7 @@ class NormalizeMojoModulePass:
                 self._collect_const_expr_imports(
                     decl.const_value,
                     ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
                     mark_opaque=mark_opaque,
                     mark_simd=mark_simd,
                     mark_complex=mark_complex,
@@ -514,6 +528,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 decl.return_type,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -523,6 +538,7 @@ class NormalizeMojoModulePass:
                 self._collect_type_imports(
                     param.type,
                     ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
                     mark_opaque=mark_opaque,
                     mark_simd=mark_simd,
                     mark_complex=mark_complex,
@@ -532,6 +548,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 decl.value_type,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -543,6 +560,7 @@ class NormalizeMojoModulePass:
         expr: MojoConstExpr,
         *,
         ffi_names: set[str],
+        mark_sys_info,
         mark_opaque,
         mark_simd,
         mark_complex,
@@ -563,6 +581,7 @@ class NormalizeMojoModulePass:
             self._collect_const_expr_imports(
                 expr.operand,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -573,6 +592,7 @@ class NormalizeMojoModulePass:
             self._collect_const_expr_imports(
                 expr.lhs,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -581,6 +601,7 @@ class NormalizeMojoModulePass:
             self._collect_const_expr_imports(
                 expr.rhs,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -591,6 +612,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 expr.target,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -599,6 +621,7 @@ class NormalizeMojoModulePass:
             self._collect_const_expr_imports(
                 expr.expr,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -606,9 +629,11 @@ class NormalizeMojoModulePass:
             )
             return
         if isinstance(expr, MojoSizeOfExpr):
+            mark_sys_info()
             self._collect_type_imports(
                 expr.target,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -621,6 +646,7 @@ class NormalizeMojoModulePass:
         t: MojoType,
         *,
         ffi_names: set[str],
+        mark_sys_info,
         mark_opaque,
         mark_simd,
         mark_complex,
@@ -639,6 +665,7 @@ class NormalizeMojoModulePass:
                 self._collect_type_imports(
                     t.pointee,
                     ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
                     mark_opaque=mark_opaque,
                     mark_simd=mark_simd,
                     mark_complex=mark_complex,
@@ -649,6 +676,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 t.element,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -669,6 +697,7 @@ class NormalizeMojoModulePass:
                     self._collect_type_imports(
                         arg.type,
                         ffi_names=ffi_names,
+                        mark_sys_info=mark_sys_info,
                         mark_opaque=mark_opaque,
                         mark_simd=mark_simd,
                         mark_complex=mark_complex,
@@ -680,6 +709,7 @@ class NormalizeMojoModulePass:
                 self._collect_type_imports(
                     param.type,
                     ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
                     mark_opaque=mark_opaque,
                     mark_simd=mark_simd,
                     mark_complex=mark_complex,
@@ -688,6 +718,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 t.ret,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -699,6 +730,7 @@ class NormalizeMojoModulePass:
                 self._collect_type_imports(
                     param,
                     ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
                     mark_opaque=mark_opaque,
                     mark_simd=mark_simd,
                     mark_complex=mark_complex,
@@ -707,6 +739,7 @@ class NormalizeMojoModulePass:
             self._collect_type_imports(
                 t.ret,
                 ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
                 mark_opaque=mark_opaque,
                 mark_simd=mark_simd,
                 mark_complex=mark_complex,
@@ -724,6 +757,8 @@ class NormalizeMojoModulePass:
             self._needs_complex_import = True
         elif name == "atomic":
             self._needs_atomic_import = True
+        elif name == "sys_info":
+            self._needs_sys_info_import = True
 
     def _effective_link_mode(self, decl: FunctionDecl) -> LinkMode:
         if (

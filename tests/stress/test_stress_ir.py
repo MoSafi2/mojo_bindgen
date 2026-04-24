@@ -79,12 +79,14 @@ def test_pathological_macros_preserves_supported_and_unsupported_forms() -> None
     unit = parse_case(next(path for path in case_dirs() if path.name == "pathological_macros"))
     macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
 
-    assert {"PM_INT", "PM_FILE", "PM_EMPTY", "PM_FUNC", "PM_GENERIC"} <= macros.keys()
+    assert {"PM_INT", "PM_FILE", "PM_SIZEOF", "PM_EMPTY", "PM_FUNC", "PM_GENERIC"} <= macros.keys()
 
     assert macros["PM_INT"].kind == "object_like_supported"
     assert macros["PM_INT"].expr is not None
     assert macros["PM_FILE"].kind == "predefined"
     assert macros["PM_FILE"].tokens == ["__FILE__"]
+    assert macros["PM_SIZEOF"].kind == "object_like_supported"
+    assert macros["PM_SIZEOF"].expr is not None
     assert macros["PM_EMPTY"].kind == "empty"
     assert macros["PM_EMPTY"].tokens == []
     assert macros["PM_FUNC"].kind == "function_like_unsupported"

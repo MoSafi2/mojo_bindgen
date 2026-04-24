@@ -43,6 +43,7 @@ from mojo_bindgen.mojo_ir import (
     MojoBuiltin,
     MojoIntLiteral,
     MojoModule,
+    MojoSizeOfExpr,
     NamedType,
     Param,
     ParametricBase,
@@ -243,6 +244,29 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         'def install(cb: UnsafePointer[install_cb, MutExternalOrigin], widget: UnsafePointer[Widget, ImmutExternalOrigin]) abi("C") -> None:'
         in out
     )
+
+
+def test_normalize_and_render_sizeof_imports_std_sys_info() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            AliasDecl(
+                name="SIZE",
+                kind=AliasKind.CONST_VALUE,
+                const_value=MojoSizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
+            ),
+        ],
+    )
+
+    normalized = normalize_mojo_module(module)
+    assert ModuleImport(module="std.sys.info", names=["size_of"]) in normalized.imports
+
+    out = render_mojo_module(normalized)
+    assert "from std.sys.info import size_of" in out
+    assert "comptime SIZE = size_of[c_int]()" in out
 
 
 def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() -> None:

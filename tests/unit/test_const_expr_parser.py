@@ -13,6 +13,7 @@ from mojo_bindgen.ir import (
     IntType,
     NullPtrLiteral,
     RefExpr,
+    SizeOfExpr,
     StringLiteral,
 )
 from mojo_bindgen.parsing.lowering import ConstExprParser, LiteralResolver
@@ -75,9 +76,12 @@ def test_const_expr_parser_cast_size_t_minus_one() -> None:
     assert folded.expr.value == -1
 
 
-def test_const_expr_parser_rejects_still_unsupported_expression_subset() -> None:
+def test_const_expr_parser_parses_sizeof_type_expressions() -> None:
     parser = ConstExprParser(LiteralResolver([]))
-    assert parser.parse_tokens(["sizeof", "(", "int", ")"]) is None
+    out = parser.parse_tokens(["sizeof", "(", "int", ")"])
+    assert out is not None
+    assert isinstance(out.expr, SizeOfExpr)
+    assert isinstance(out.expr.target, IntType)
 
 
 def test_const_expr_parser_classifies_broader_predefined_and_function_like_macros() -> None:

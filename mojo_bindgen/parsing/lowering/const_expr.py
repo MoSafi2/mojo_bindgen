@@ -25,6 +25,7 @@ from mojo_bindgen.ir import (
     IntType,
     NullPtrLiteral,
     RefExpr,
+    SizeOfExpr,
     StringLiteral,
     UnaryExpr,
     VoidType,
@@ -349,6 +350,11 @@ class ConstExprParser:
         tok = stream.pop()
         if tok is None:
             return None
+        if tok == "sizeof":
+            sizeof_expr = self._parse_sizeof_expr(stream)
+            if sizeof_expr is not None:
+                return sizeof_expr
+            return None
         if tok == "(":
             # C cast: ``(typename) -1`` — not ``(typename) - (1)`` binary minus.
             toks = stream._tokens
@@ -380,6 +386,39 @@ class ConstExprParser:
                 expr=UnaryExpr(op=tok, operand=operand.expr), primitive=operand.primitive
             )
         return self._parse_leaf(tok)
+
+    def _parse_sizeof_expr(self, stream: _TokenStream) -> ParsedConstExpr | None:
+        """Parse a ``sizeof(type)`` token sequence into a :class:`SizeOfExpr`."""
+        start = stream._index
+        if stream.pop() != "(":
+            return None
+        depth = 1
+        inner: list[str] = []
+        while True:
+            tok = stream.pop()
+            if tok is None:
+                stream._index = start
+                return None
+            if tok == "(":
+                depth += 1
+            elif tok == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            if depth > 0:
+                inner.append(tok)
+        type_spelling = " ".join(inner).strip()
+        if not type_spelling:
+            stream._index = start
+            return None
+        size_type = self.literal_resolver.int_type_for_type_spelling(type_spelling)
+        if size_type is None:
+            stream._index = start
+            return None
+        return ParsedConstExpr(
+            expr=SizeOfExpr(target=size_type),
+            primitive=size_type,
+        )
 
     def _parse_leaf(self, raw: str) -> ParsedConstExpr | None:
         value, suffix = _match_int_literal(raw)

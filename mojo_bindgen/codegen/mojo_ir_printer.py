@@ -512,7 +512,7 @@ class MojoIRPrinter:
         if isinstance(expr, MojoCastExpr):
             return f"{self._render_type(expr.target)}({self._render_const_expr(expr.expr)})"
         if isinstance(expr, MojoSizeOfExpr):
-            return f"__builtin_sizeof[{self._render_type(expr.target)}]()"
+            return f"size_of[{self._render_type(expr.target)}]()"
         raise MojoIRPrintError(f"unsupported MojoConstExpr node: {type(expr).__name__!r}")
 
     @staticmethod
