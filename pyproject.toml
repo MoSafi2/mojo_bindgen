@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mojo-bindgen"
-version = "0.1.0"
+version = "0.1.1a"
 description = "Generate Mojo FFI bindings from C headers using libclang"
 readme = "README.md"
 license = "MIT"
@@ -26,11 +26,7 @@ classifiers = [
     "Topic :: Software Development :: Code Generators",
     "Typing :: Typed",
 ]
-dependencies = [
-    "libclang>=18.1.1,<19",
-    "rich",
-    "typer",
-]
+dependencies = ["libclang>=18.1.1,<19", "rich", "typer"]
 
 [project.urls]
 Homepage = "https://github.com/MoSafi2/mojo_bindgen"
@@ -40,12 +36,7 @@ Documentation = "https://github.com/MoSafi2/mojo_bindgen/blob/main/README.md"
 Changelog = "https://github.com/MoSafi2/mojo_bindgen/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = [
-    "build>=1.4",
-    "pyright>=1.1.400",
-    "pytest>=9",
-    "ruff>=0.8",
-]
+dev = ["build>=1.4", "pyright>=1.1.400", "pytest>=9", "ruff>=0.8"]
 
 [project.scripts]
 mojo-bindgen = "mojo_bindgen.cli:main"

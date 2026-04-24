@@ -1621,8 +1621,8 @@ packages:
   timestamp: 1776964305277
 - pypi: ./
   name: mojo-bindgen
-  version: 0.1.0
-  sha256: 6ce820b693e8808f61af1335ff95fc08fde5b4727067d1db3611496fa07d004a
+  version: 0.1.1a0
+  sha256: 5c9a66f47e354ba102c9cde91efe26b0f8b4314dbb4bbde8a5f7517d322181b0
   requires_dist:
   - libclang>=18.1.1,<19
   - rich
