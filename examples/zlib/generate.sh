@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-# Generate Mojo FFI bindings for the system zlib (libz.so / libz.dylib / zlib.dll).
+# Example driver for the system zlib header.
+# It generates both:
+#   - `zlib_bindings.mojo` for `external_call`
+#   - `zlib_bindings_dl.mojo` for `owned_dl_handle` when a shared library path is found
+# and then builds/runs `zlib_dl_smoke.mojo` for the runtime-loaded path.
 #
-# Prerequisites:
+# Expects:
 #   - mojo-bindgen on PATH (e.g. `pixi shell` from the repository root), or Pixi
 #     at the repo root so this script can run `pixi run mojo-bindgen`.
 #   - Development headers for zlib (e.g. zlib1g-dev on Debian/Ubuntu).
 #
-# mojo-bindgen only emits declarations from the *primary* header file. A thin
-# wrapper that only #include's <zlib.h> produces an empty module because every
-# declaration is attributed to zlib.h, not the wrapper — so we locate zlib.h
-# and pass it as the input file.
-#
-# The shared library short name is "z" (libz.so), not "zlib", so we pass
-# --library z --link-name z.
-#
-# Two outputs:
-#   - zlib_bindings.mojo — external_call (link-time); mojo build needs -lz.
-#   - zlib_bindings_dl.mojo — OwnedDLHandle + --library-path-hint to libz;
-#     zlib_dl_smoke.mojo builds and runs a tiny binary that loads libz at runtime
-#     (no -lz).
+# Notes:
+#   - mojo-bindgen emits declarations from the primary header only, so this
+#     script locates `zlib.h` directly instead of using a wrapper.
+#   - The short link name is `z`, not `zlib`.
+#   - The owned-dl-handle variant is skipped if no shared-library path can be found.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,7 +57,7 @@ find_zlib_h() {
   return 1
 }
 
-# Path to the zlib shared library for OwnedDLHandle (--library-path-hint).
+# Path to the zlib shared library used as `--library-path-hint`.
 find_libz_so() {
   local p
   if command -v gcc >/dev/null 2>&1; then

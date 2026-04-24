@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Generate Mojo FFI bindings for the system libpng (libpng*.so / libpng*.dylib / libpng*.dll).
+# Example driver for the system libpng header.
+# It finds the real primary `png.h`, generates `libpng_bindings.mojo`, and
+# builds/runs `libpng_smoke.mojo` to verify the bindings link and execute.
 #
-# Prerequisites:
+# Expects:
 #   - mojo-bindgen on PATH (e.g. `pixi shell` from the repository root), or Pixi
 #     at the repo root so this script can run `pixi run mojo-bindgen`.
 #   - Development headers for libpng (e.g. libpng-dev on Debian/Ubuntu).
 #
-# mojo-bindgen only emits declarations from the *primary* header file. A thin
-# wrapper that only #include's <png.h> produces an empty module because every
-# declaration is attributed to png.h, not the wrapper — so we locate png.h
-# and pass it as the input file.
-#
-# Also builds/runs libpng_smoke.mojo to prove generated bindings work at runtime.
+# Notes:
+#   - mojo-bindgen emits declarations from the primary header only, so this
+#     script locates `png.h` directly instead of using a wrapper header.
+#   - The link name may be `png16` or a similar system-specific variant; this
+#     script derives it from `pkg-config` when possible.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

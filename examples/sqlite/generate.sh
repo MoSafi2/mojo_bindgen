@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# Generate Mojo FFI bindings for SQLite (libsqlite3.so / libsqlite3.dylib / sqlite3.dll).
+# Example driver for SQLite.
+# It uses the vendored `sqlite3.h` when present, otherwise a system header,
+# generates `sqlite3_bindings.mojo`, and builds/runs `sqlite_smoke.mojo`.
 #
-# Prerequisites:
+# Expects:
 #   - mojo-bindgen on PATH (e.g. `pixi shell` from the repository root), or Pixi
 #     at the repo root so this script can run `pixi run mojo-bindgen`.
 #   - Development headers for SQLite (e.g. libsqlite3-dev on Debian/Ubuntu), or use
 #     the vendored examples/sqlite/sqlite3.h in this repository.
 #
-# mojo-bindgen only emits declarations from the *primary* header file — pass sqlite3.h
-# directly (vendored or from pkg-config include paths).
-#
-# Also builds/runs sqlite_smoke.mojo to prove generated bindings work at runtime.
+# Notes:
+#   - mojo-bindgen emits declarations from the primary header only, so this
+#     script passes `sqlite3.h` directly.
+#   - `sqlite_smoke.mojo` links against `-lsqlite3`; the script also adds an
+#     extra `-L...` when SQLite lives in a non-default environment path.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,8 +26,7 @@ else
   BG=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
 fi
 
-# Use `pixi run mojo` so the compiler finds `std` and matches the project toolchain (plain `mojo`
-# on PATH can fail to resolve the standard library when not run from an activated Pixi env).
+# Use the repository Pixi environment so Mojo resolves `std` consistently.
 MOJO=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo)
 
 find_sqlite3_h() {
@@ -55,7 +57,7 @@ find_sqlite3_h() {
   return 1
 }
 
-# Extra linker search path when -lsqlite3 is not on the default path (e.g. Pixi/conda).
+# Extra linker search path when SQLite is installed outside the default system path.
 sqlite_link_extra() {
   local p
   if command -v pkg-config >/dev/null 2>&1; then

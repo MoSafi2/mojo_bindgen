@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Generate Mojo FFI bindings for the system Cairo (libcairo.so / libcairo.dylib / cairo.dll).
+# Example driver for the system Cairo header.
+# It finds the real primary `cairo.h`, generates `cairo_bindings.mojo`, and
+# builds/runs `cairo_smoke.mojo` to prove the emitted bindings link and work.
 #
-# Prerequisites:
+# Expects:
 #   - mojo-bindgen on PATH (e.g. `pixi shell` from the repository root), or Pixi
 #     at the repo root so this script can run `pixi run mojo-bindgen`.
 #   - Development headers for Cairo (e.g. libcairo2-dev on Debian/Ubuntu).
 #
-# mojo-bindgen only emits declarations from the *primary* header file. A thin
-# wrapper that only #include's <cairo/cairo.h> produces an empty module because
-# every declaration is attributed to cairo/cairo.h, not the wrapper — so we
-# locate cairo/cairo.h and pass it as the input file.
-#
-# The shared library link name is "cairo" (libcairo.so).
-# Also builds/runs cairo_smoke.mojo to prove generated bindings work at runtime.
+# Notes:
+#   - mojo-bindgen emits declarations from the primary header only, so this
+#     script locates `cairo/cairo.h` directly instead of using a wrapper.
+#   - The shared-library link name is `cairo`.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
