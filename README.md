@@ -2,7 +2,7 @@
 
 # mojo-bindgen
 
-> [!NOTE]
+> [!WARNING]
 > Alpha stage: this project is under heavy development and may change quickly.
 
 **C headers → Mojo FFI.** This tool uses [libclang](https://pypi.org/project/libclang/) to parse a primary C header, build an internal IR, and emit a `.mojo` module with `external_call` or `owned_dl_handle` linking—so you spend less time hand-writing glue and more time calling native code from Mojo.
