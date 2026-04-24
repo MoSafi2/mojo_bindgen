@@ -9,5 +9,5 @@ comptime int32_t = c_int
 
 comptime cta_cb_t = def (value: int32_t) thin abi("C") -> int32_t
 
-def cta_install(cb: UnsafePointer[cta_cb_t, MutExternalOrigin]) abi("C") -> None:
-    external_call["cta_install", NoneType, UnsafePointer[cta_cb_t, MutExternalOrigin]](cb)
+def cta_install(cb: cta_cb_t) abi("C") -> None:
+    external_call["cta_install", NoneType, cta_cb_t](cb)

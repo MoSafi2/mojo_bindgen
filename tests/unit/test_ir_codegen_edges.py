@@ -833,28 +833,21 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     assert (
         'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in external_out
     )
+    assert 'def pfr_select_add() abi("C") -> pfr_binary_op_t:' in external_out
     assert (
-        'def pfr_select_add() abi("C") -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:'
-        in external_out
-    )
-    assert (
-        'def pfr_select_add_direct() abi("C") -> '
-        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:"
+        'def pfr_select_add_direct() abi("C") -> pfr_select_add_direct_return_cb:'
     ) in external_out
+    assert 'return external_call["pfr_select_add", pfr_binary_op_t]()' in external_out
     assert (
-        'return external_call["pfr_select_add", UnsafePointer[pfr_binary_op_t, MutExternalOrigin]]()'
+        'return external_call["pfr_select_add_direct", pfr_select_add_direct_return_cb]()'
         in external_out
     )
     assert (
-        'return external_call["pfr_select_add_direct", '
-        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()" in external_out
-    )
-    assert (
-        'def pfr_call(op: UnsafePointer[pfr_binary_op_t, MutExternalOrigin], lhs: c_int, rhs: c_int) abi("C") -> c_int:'
+        'def pfr_call(op: pfr_binary_op_t, lhs: c_int, rhs: c_int) abi("C") -> c_int:'
         in external_out
     )
     assert (
-        'return external_call["pfr_call", c_int, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], c_int, c_int](op, lhs, rhs)'
+        'return external_call["pfr_call", c_int, pfr_binary_op_t, c_int, c_int](op, lhs, rhs)'
         in external_out
     )
 
@@ -865,24 +858,15 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         )
     ).generate(unit)
     assert 'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in dl_out
+    assert "def pfr_select_add() raises -> pfr_binary_op_t:" in dl_out
+    assert ("def pfr_select_add_direct() raises -> pfr_select_add_direct_return_cb:") in dl_out
+    assert 'return _bindgen_dl().call["pfr_select_add", pfr_binary_op_t]()' in dl_out
     assert (
-        "def pfr_select_add() raises -> UnsafePointer[pfr_binary_op_t, MutExternalOrigin]:"
+        'return _bindgen_dl().call["pfr_select_add_direct", pfr_select_add_direct_return_cb]()'
         in dl_out
     )
     assert (
-        "def pfr_select_add_direct() raises -> "
-        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]:"
-    ) in dl_out
-    assert (
-        'return _bindgen_dl().call["pfr_select_add", UnsafePointer[pfr_binary_op_t, MutExternalOrigin]]()'
-        in dl_out
-    )
-    assert (
-        'return _bindgen_dl().call["pfr_select_add_direct", '
-        "UnsafePointer[pfr_select_add_direct_return_cb, MutExternalOrigin]]()" in dl_out
-    )
-    assert (
-        'return _bindgen_dl().call["pfr_call", c_int, UnsafePointer[pfr_binary_op_t, MutExternalOrigin], c_int, c_int](op, lhs, rhs)'
+        'return _bindgen_dl().call["pfr_call", c_int, pfr_binary_op_t, c_int, c_int](op, lhs, rhs)'
         in dl_out
     )
 
@@ -959,8 +943,8 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
     )
     assert "comptime sqlite3_module_xCreate_cb = def (" in out
     assert "comptime sqlite3_module_xConnect_cb = def (" in out
-    assert "var xCreate: UnsafePointer[sqlite3_module_xCreate_cb, MutExternalOrigin]" in out
-    assert "var xConnect: UnsafePointer[sqlite3_module_xConnect_cb, MutExternalOrigin]" in out
+    assert "var xCreate: sqlite3_module_xCreate_cb" in out
+    assert "var xConnect: sqlite3_module_xConnect_cb" in out
     assert "# function pointer (fixed):" not in out
 
 
@@ -1155,16 +1139,15 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
         "zName: UnsafePointer[c_char, MutExternalOrigin], "
         "eTextRep: c_int, "
         "ctx: MutOpaquePointer[MutExternalOrigin], "
-        "xCompare: UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], "
-        "xDestroy: UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]"
+        "xCompare: sqlite3_create_collation_v2_xCompare_cb, "
+        "xDestroy: sqlite3_create_collation_v2_xDestroy_cb"
         ') abi("C") -> c_int:'
     ) in out
     assert (
         'return external_call["sqlite3_create_collation_v2", c_int, '
         "UnsafePointer[sqlite3, MutExternalOrigin], "
         "UnsafePointer[c_char, MutExternalOrigin], c_int, MutOpaquePointer[MutExternalOrigin], "
-        "UnsafePointer[sqlite3_create_collation_v2_xCompare_cb, MutExternalOrigin], "
-        "UnsafePointer[sqlite3_create_collation_v2_xDestroy_cb, MutExternalOrigin]]"
+        "sqlite3_create_collation_v2_xCompare_cb, sqlite3_create_collation_v2_xDestroy_cb]"
         "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
     ) in out
 
@@ -1214,12 +1197,12 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
     )
     assert "comptime nested_cb_t = def (" in out
     assert (
-        "def install_nested_cb(slot: UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], "
-        'MutExternalOrigin], MutExternalOrigin]) abi("C") -> None:'
+        "def install_nested_cb(slot: UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], "
+        'MutExternalOrigin]) abi("C") -> None:'
     ) in out
     assert (
         'external_call["install_nested_cb", NoneType, '
-        "UnsafePointer[UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], MutExternalOrigin], MutExternalOrigin]](slot)"
+        "UnsafePointer[UnsafePointer[nested_cb_t, MutExternalOrigin], MutExternalOrigin]](slot)"
     ) in out
 
 
@@ -1291,4 +1274,4 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
     )
     assert "from std.ffi import external_call, c_int" in out
     assert 'comptime only_cb_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in out
-    assert 'def get_only_cb() abi("C") -> UnsafePointer[only_cb_t, MutExternalOrigin]:' in out
+    assert 'def get_only_cb() abi("C") -> only_cb_t:' in out

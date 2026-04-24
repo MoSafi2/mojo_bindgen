@@ -40,7 +40,6 @@ from mojo_bindgen.mojo_ir import (
     NamedType,
     Param,
     ParametricType,
-    PointerMutability,
     PointerType,
     StoredMember,
     StructDecl,
@@ -210,11 +209,6 @@ class NormalizeMojoModulePass:
         if isinstance(t, BuiltinType):
             return t
         if isinstance(t, NamedType):
-            if t.name in self._callback_signature_names:
-                return PointerType(
-                    pointee=t,
-                    mutability=PointerMutability.MUT,
-                )
             return t
         if isinstance(t, PointerType):
             return replace(
@@ -248,11 +242,7 @@ class NormalizeMojoModulePass:
             if allow_inline_callback:
                 return normalized
             alias_name = self._ensure_callback_alias(context, normalized)
-            return PointerType(
-                pointee=NamedType(alias_name),
-                mutability=normalized.mutability,
-                origin=normalized.origin,
-            )
+            return NamedType(alias_name)
         raise NormalizeMojoModuleError(f"unsupported MojoType node: {type(t).__name__!r}")
 
     def _normalize_callback_type(

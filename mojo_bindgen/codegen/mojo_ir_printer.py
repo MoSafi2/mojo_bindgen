@@ -481,7 +481,7 @@ class MojoIRPrinter:
             f"{self._render_callback_param_name(param, i)}: {self._render_type(param.type)}"
             for i, param in enumerate(callback.params)
         )
-        ret = self._render_type(callback.ret)
+        ret = self._render_signature_return_type(callback.ret)
         parts = ["def", f"({params})"]
         if callback.thin:
             parts.append("thin")
@@ -491,6 +491,10 @@ class MojoIRPrinter:
             parts.append("raises")
         parts.extend(["->", ret])
         return " ".join(parts)
+
+    def _render_signature_return_type(self, t: MojoType) -> str:
+        rendered = self._render_type(t)
+        return "None" if rendered == "NoneType" else rendered
 
     def _render_const_expr(self, expr: MojoConstExpr) -> str:
         if isinstance(expr, MojoIntLiteral):

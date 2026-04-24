@@ -235,13 +235,49 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
     assert "var value: c_int" in out
     assert "comptime READY = Self(c_int(1))" in out
     assert 'comptime Widget_handler_cb = def (arg0: c_int) thin abi("C") -> c_int' in out
-    assert "var handler: UnsafePointer[Widget_handler_cb, MutExternalOrigin]" in out
+    assert "var handler: Widget_handler_cb" in out
     assert "def enabled(self) -> Bool:" in out
     assert "def set_enabled(mut self, value: Bool):" in out
     assert "comptime Packet = UnsafeUnion[c_int, Widget]" in out
     assert "comptime LIMIT = (1 + 2)" in out
     assert (
-        'def install(cb: UnsafePointer[install_cb, MutExternalOrigin], widget: UnsafePointer[Widget, ImmutExternalOrigin]) abi("C") -> None:'
+        'def install(cb: install_cb, widget: UnsafePointer[Widget, ImmutExternalOrigin]) abi("C") -> None:'
+        in out
+    )
+
+
+def test_render_callback_alias_uses_none_in_signature_position() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            AliasDecl(
+                name="log_callback_t",
+                kind=AliasKind.CALLBACK_SIGNATURE,
+                type_value=CallbackType(
+                    params=[
+                        CallbackParam(
+                            name="msg",
+                            type=PointerType(
+                                pointee=BuiltinType(MojoBuiltin.C_CHAR),
+                                mutability=PointerMutability.IMMUT,
+                            ),
+                        )
+                    ],
+                    ret=BuiltinType(MojoBuiltin.NONE),
+                ),
+            )
+        ],
+    )
+
+    out = render_mojo_module(
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
+    )
+
+    assert (
+        'comptime log_callback_t = def (msg: UnsafePointer[c_char, ImmutExternalOrigin]) thin abi("C") -> None'
         in out
     )
 
@@ -317,10 +353,7 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
     assert normalized.decls[0].name == "Widget_handler_cb"
     widget = next(decl for decl in normalized.decls if isinstance(decl, StructDecl))
     assert isinstance(widget.members[0], StoredMember)
-    assert widget.members[0].type == PointerType(
-        pointee=NamedType("Widget_handler_cb"),
-        mutability=PointerMutability.MUT,
-    )
+    assert widget.members[0].type == NamedType("Widget_handler_cb")
 
 
 def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
@@ -695,8 +728,5 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
         "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:"
         in rendered
     )
-    assert (
-        'def install(cb: UnsafePointer[binary_cb_t, MutExternalOrigin]) abi("C") -> None:'
-        in rendered
-    )
+    assert 'def install(cb: binary_cb_t) abi("C") -> None:' in rendered
     assert "def load_widget() raises -> UnsafePointer[Widget, MutExternalOrigin]:" in rendered

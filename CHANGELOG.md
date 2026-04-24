@@ -2,14 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [Unreleased]
 
-## [0.1.0a] - 2026-04-21
+## [0.1a] - 2026-04-24
 
 ### Added
 
-- Initial published packaging metadata, MIT license, and PEP 561 `py.typed` marker.
-- Development tooling: Ruff, Pyright (scoped; see `pyproject.toml`), and CI workflow.
+- First public alpha release of `mojo-bindgen`.
+- CLI packaging for `mojo-bindgen`, including PyPI metadata, MIT license, and
+  `py.typed`.
+- `libclang`-based C parsing and structured lowering through CIR and Mojo IR.
+- Mojo code generation for both `external_call` and `owned_dl_handle` linking modes.
+- Support for core C surfaces including scalars, typedef chains, pointers,
+  arrays, structs, unions, enums, bitfields, callbacks, globals, constants,
+  and a supported subset of object-like macros.
+- Numeric lowering for Mojo-native constructs including `SIMD[...]`,
+  `ComplexSIMD[...]`, and representable `Atomic[...]`.
+- JSON IR output support for debugging and downstream tooling.
+- Worked examples for SQLite, Cairo, libpng, and zlib.
+- Development tooling and automation: Ruff, Pyright, Pixi tasks, CI validation,
+  and release publishing workflow.
