@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.cir_canonicalizer import CIRCanonicalizer
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.analysis.reachability import ReachabilityMaterializePass
@@ -27,6 +28,7 @@ class AnalysisOrchestrator:
         """Run the CIR repair sequence before MojoIR lowering."""
         current = ValidateIRPass().run(unit)
         current = ReachabilityMaterializePass().run(current).unit
+        current = CIRCanonicalizer().canonicalize(current)
         return current
 
     def lower(self, unit: Unit) -> MojoModule:

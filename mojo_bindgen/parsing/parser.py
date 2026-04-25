@@ -169,6 +169,7 @@ class ClangParser:
             else:
                 decls.append(lowered)
         decls.extend(decl_lowerer.collect_macros())
+
         return decls
 
 

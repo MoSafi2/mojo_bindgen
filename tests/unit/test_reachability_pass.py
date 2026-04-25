@@ -185,5 +185,5 @@ def test_run_ir_passes_includes_reachability() -> None:
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
     out = run_ir_passes(unit)
-    assert isinstance(out.decls[0], Struct)
-    assert out.decls[0].decl_id == orphan.decl_id
+    assert isinstance(out.decls[-1], Struct)
+    assert out.decls[-1].decl_id == orphan.decl_id
