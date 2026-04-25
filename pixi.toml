@@ -17,7 +17,7 @@ example-libpng = "bash examples/libpng/generate.sh"
 example-sqlite = "bash examples/sqlite/generate.sh"
 
 [dependencies]
-mojo = ">=1.0.0b1.dev2026042317,<2"
+mojo = ">=1.0.0b1.dev2026042405,<2"
 python = ">=3.14.4,<3.15"
 pip = ">=26.0.1,<27"
 rich = ">=15.0.0,<16"
@@ -34,7 +34,7 @@ nodejs = ">=25.8.2,<25.9"
 [feature.dev.pypi-dependencies]
 pytest = ">=9.0.3, <10"
 build = ">=1.4.4, <2"
-ruff = ">=0.15.11, <0.16"
+ruff = ">=0.15.12, <0.16"
 pyright = ">=1.1.409, <2"
 
 [feature.dev.tasks]
