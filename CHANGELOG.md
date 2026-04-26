@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 ## [Unreleased]
 
 ### Added
-- added CIRCanoncanlizer pass, for now only deduplicates IR nodes #f9b4156d5be1d8123c6256a68966d23c8778246c
+- added CIRCanoncanlizer pass, for now only deduplicates IR nodes #f9b4156
 
 ## [0.1a] - 2026-04-24
 
