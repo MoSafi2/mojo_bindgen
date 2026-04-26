@@ -5,9 +5,9 @@ All notable changes to this project are documented in this file.
 ## [Unreleased]
 
 ### Added
-- added CIRCanoncanlizer pass, for now only deduplicates IR nodes #f9b4156
+- added CIRCanoncanlizer pass, for now only deduplicates IR nodes. [f9b4156](https://github.com/MoSafi2/mojo_bindgen/commit/f9b4156d5be1d8123c6256a68966d23c8778246c)
 
-## [0.1a] - 2026-04-24
+## [0.1.1a] - 2026-04-24
 
 ### Added
 
