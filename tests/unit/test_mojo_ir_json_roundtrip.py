@@ -152,9 +152,14 @@ def test_mojo_decl_json_roundtrip() -> None:
         AliasDecl,
         BuiltinType,
         CallTarget,
+        ComptimeMember,
         FunctionDecl,
         GlobalDecl,
         MojoBuiltin,
+        MojoCallExpr,
+        MojoCastExpr,
+        MojoIntLiteral,
+        MojoRefExpr,
         StructDecl,
         mojo_decl_from_json,
     )
@@ -183,12 +188,42 @@ def test_mojo_decl_json_roundtrip() -> None:
                     "byte_offset": 4,
                 },
             ],
-            "enum_members": [],
+            "comptime_members": [
+                {
+                    "kind": "ComptimeMember",
+                    "name": "ORIGIN",
+                    "const_value": {
+                        "kind": "MojoCallExpr",
+                        "callee": {"kind": "MojoRefExpr", "name": "Self"},
+                        "args": [
+                            {
+                                "kind": "MojoCastExpr",
+                                "target": {"kind": "BuiltinType", "name": "c_int"},
+                                "expr": {"kind": "MojoIntLiteral", "value": 0},
+                            }
+                        ],
+                    },
+                }
+            ],
             "initializers": [],
             "diagnostics": [],
         }
     )
     assert isinstance(struct_decl, StructDecl)
+    assert struct_decl.comptime_members == [
+        ComptimeMember(
+            name="ORIGIN",
+            const_value=MojoCallExpr(
+                callee=MojoRefExpr("Self"),
+                args=[
+                    MojoCastExpr(
+                        target=BuiltinType(MojoBuiltin.C_INT),
+                        expr=MojoIntLiteral(0),
+                    )
+                ],
+            ),
+        )
+    ]
 
     alias_decl = AliasDecl.from_json_dict(
         {
@@ -294,7 +329,7 @@ def test_mojo_module_roundtrip() -> None:
                         byte_offset=0,
                     )
                 ],
-                enum_members=[],
+                comptime_members=[],
             ),
             AliasDecl(
                 name="binary_op_t",

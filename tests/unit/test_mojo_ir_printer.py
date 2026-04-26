@@ -27,10 +27,9 @@ from mojo_bindgen.mojo_ir import (
     CallbackParam,
     CallbackType,
     CallTarget,
+    ComptimeMember,
     ConstArg,
     DTypeArg,
-    EnumDecl,
-    EnumMember,
     FunctionDecl,
     FunctionKind,
     GlobalDecl,
@@ -41,8 +40,11 @@ from mojo_bindgen.mojo_ir import (
     ModuleImport,
     MojoBinaryExpr,
     MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
     MojoIntLiteral,
     MojoModule,
+    MojoRefExpr,
     MojoSizeOfExpr,
     NamedType,
     Param,
@@ -52,6 +54,7 @@ from mojo_bindgen.mojo_ir import (
     PointerType,
     StoredMember,
     StructDecl,
+    StructKind,
     StructTraits,
     SupportDecl,
     SupportDeclKind,
@@ -69,18 +72,42 @@ def _abi() -> TargetABI:
     return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
 
-def test_enum_decl_roundtrip_keeps_underlying_type() -> None:
-    decl = EnumDecl(
+def test_enum_struct_roundtrip_keeps_comptime_members() -> None:
+    decl = StructDecl(
         name="Flags",
-        underlying_type=BuiltinType(MojoBuiltin.C_INT),
-        enumerants=[EnumMember(name="READY", value=1)],
+        kind=StructKind.ENUM,
+        fieldwise_init=True,
+        traits=[StructTraits.COPYABLE, StructTraits.MOVABLE, StructTraits.REGISTER_PASSABLE],
+        members=[
+            StoredMember(
+                index=0,
+                name="value",
+                type=BuiltinType(MojoBuiltin.C_INT),
+                byte_offset=0,
+            )
+        ],
+        comptime_members=[
+            ComptimeMember(
+                name="READY",
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Self"),
+                    args=[
+                        MojoCastExpr(
+                            target=BuiltinType(MojoBuiltin.C_INT),
+                            expr=MojoIntLiteral(1),
+                        )
+                    ],
+                ),
+            )
+        ],
     )
 
     raw = decl.to_json_dict()
-    restored = EnumDecl.from_json_dict(raw)
+    restored = StructDecl.from_json_dict(raw)
 
-    assert raw["underlying_type"] == {"kind": "BuiltinType", "name": "c_int"}
-    assert restored.underlying_type == BuiltinType(MojoBuiltin.C_INT)
+    assert raw["struct_kind"] == "enum"
+    assert restored.members[0].type == BuiltinType(MojoBuiltin.C_INT)
+    assert restored.comptime_members[0].name == "READY"
     assert restored.fieldwise_init is True
 
 
@@ -108,12 +135,48 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
         decls=[
-            EnumDecl(
+            StructDecl(
                 name="Flags",
-                underlying_type=BuiltinType(MojoBuiltin.C_INT),
-                enumerants=[
-                    EnumMember(name="READY", value=1),
-                    EnumMember(name="ERROR", value=2),
+                kind=StructKind.ENUM,
+                fieldwise_init=True,
+                traits=[
+                    StructTraits.COPYABLE,
+                    StructTraits.MOVABLE,
+                    StructTraits.REGISTER_PASSABLE,
+                ],
+                members=[
+                    StoredMember(
+                        index=0,
+                        name="value",
+                        type=BuiltinType(MojoBuiltin.C_INT),
+                        byte_offset=0,
+                    )
+                ],
+                comptime_members=[
+                    ComptimeMember(
+                        name="READY",
+                        const_value=MojoCallExpr(
+                            callee=MojoRefExpr("Self"),
+                            args=[
+                                MojoCastExpr(
+                                    target=BuiltinType(MojoBuiltin.C_INT),
+                                    expr=MojoIntLiteral(1),
+                                )
+                            ],
+                        ),
+                    ),
+                    ComptimeMember(
+                        name="ERROR",
+                        const_value=MojoCallExpr(
+                            callee=MojoRefExpr("Self"),
+                            args=[
+                                MojoCastExpr(
+                                    target=BuiltinType(MojoBuiltin.C_INT),
+                                    expr=MojoIntLiteral(2),
+                                )
+                            ],
+                        ),
+                    ),
                 ],
             ),
             StructDecl(
@@ -617,10 +680,37 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                     ret=BuiltinType(MojoBuiltin.C_INT),
                 ),
             ),
-            EnumDecl(
+            StructDecl(
                 name="Flags",
-                underlying_type=BuiltinType(MojoBuiltin.C_INT),
-                enumerants=[EnumMember(name="READY", value=1)],
+                kind=StructKind.ENUM,
+                fieldwise_init=True,
+                traits=[
+                    StructTraits.COPYABLE,
+                    StructTraits.MOVABLE,
+                    StructTraits.REGISTER_PASSABLE,
+                ],
+                members=[
+                    StoredMember(
+                        index=0,
+                        name="value",
+                        type=BuiltinType(MojoBuiltin.C_INT),
+                        byte_offset=0,
+                    )
+                ],
+                comptime_members=[
+                    ComptimeMember(
+                        name="READY",
+                        const_value=MojoCallExpr(
+                            callee=MojoRefExpr("Self"),
+                            args=[
+                                MojoCastExpr(
+                                    target=BuiltinType(MojoBuiltin.C_INT),
+                                    expr=MojoIntLiteral(1),
+                                )
+                            ],
+                        ),
+                    )
+                ],
             ),
             StructDecl(
                 name="Widget",

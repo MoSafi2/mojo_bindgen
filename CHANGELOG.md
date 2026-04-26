@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 
 ### Added
 - added CIRCanoncanlizer pass, for now only deduplicates IR nodes. [f9b4156](https://github.com/MoSafi2/mojo_bindgen/commit/f9b4156d5be1d8123c6256a68966d23c8778246c)
+### Changed
+
+- Lower named CIR enums into `StructDecl(kind=ENUM)` in MojoIR instead of a
+  separate `EnumDecl` shape.
+- Add struct-local `comptime` members to MojoIR so enum constants and similar
+  in-struct aliases can be represented and rendered directly from `StructDecl`.
 
 ## [0.1.1a] - 2026-04-24
 

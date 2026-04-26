@@ -15,7 +15,7 @@ from mojo_bindgen.mojo_ir import (
     CallbackParam,
     CallbackType,
     CallTarget,
-    EnumDecl,
+    ComptimeMember,
     FunctionDecl,
     FunctionKind,
     GlobalDecl,
@@ -26,6 +26,7 @@ from mojo_bindgen.mojo_ir import (
     ModuleImport,
     MojoBinaryExpr,
     MojoBuiltin,
+    MojoCallExpr,
     MojoCastExpr,
     MojoCharLiteral,
     MojoConstExpr,
@@ -189,8 +190,6 @@ class MojoIRPrinter:
     def _render_decl(self, decl: MojoDecl) -> str:
         if isinstance(decl, StructDecl):
             return self._render_struct_decl(decl)
-        if isinstance(decl, EnumDecl):
-            return self._render_enum_decl(decl)
         if isinstance(decl, AliasDecl):
             return self._render_alias_decl(decl)
         if isinstance(decl, FunctionDecl):
@@ -221,24 +220,8 @@ class MojoIRPrinter:
         b.dedent()
         return b.render()
 
-    def _render_enum_decl(self, decl: EnumDecl) -> str:
-        b = CodeBuilder()
-        b.extend(self._diagnostic_lines(decl.diagnostics))
-        if decl.align_decorator is not None:
-            b.add(f"@align({decl.align_decorator})")
-        if decl.fieldwise_init:
-            b.add("@fieldwise_init")
-        b.add("struct " + decl.name + "(Copyable, Movable, RegisterPassable):")
-        b.indent()
-        base_text = self._render_type(decl.underlying_type)
-        b.add(f"var value: {base_text}")
-        for member in decl.enumerants:
-            b.add(f"comptime {member.name} = Self({base_text}({member.value}))")
-        b.dedent()
-        return b.render()
-
     def _render_plain_struct_body(self, b: CodeBuilder, decl: StructDecl) -> None:
-        if not decl.members and not decl.initializers:
+        if not decl.members and not decl.comptime_members and not decl.initializers:
             b.add("pass")
             return
 
@@ -263,6 +246,9 @@ class MojoIRPrinter:
                 b.add(f"var {member.storage_name}: {self._render_type(member.storage_type)}")
             else:
                 b.add(f"var {member.name}: InlineArray[UInt8, {member.size_bytes}]")
+
+        for member in decl.comptime_members:
+            self._render_comptime_member(b, member)
 
         for initializer in decl.initializers:
             self._render_initializer(
@@ -422,11 +408,11 @@ class MojoIRPrinter:
                 b.add(
                     f"# global variable {decl.link_name}: {value_type} (atomic global requires manual binding (use Atomic APIs on a pointer))"
                 )
-                return b.render()
-            const_kw = "const " if decl.is_const else ""
-            b.add(
-                f"# global variable {decl.link_name}: {const_kw}{value_type} (manual binding required)"
-            )
+            else:
+                const_kw = "const " if decl.is_const else ""
+                b.add(
+                    f"# global variable {decl.link_name}: {const_kw}{value_type} (manual binding required)"
+                )
             return b.render()
 
         wrapper = "GlobalConst" if decl.is_const else "GlobalVar"
@@ -434,6 +420,15 @@ class MojoIRPrinter:
         b.add(f"# global `{decl.link_name}` -> {value_type}")
         b.add(f'comptime {decl.name} = {wrapper}[T={value_type}, link="{link_lit}"]')
         return b.render()
+
+    def _render_comptime_member(self, b: CodeBuilder, member: ComptimeMember) -> None:
+        if member.type_value is not None:
+            b.add(f"comptime {member.name} = {self._render_type(member.type_value)}")
+            return
+        if member.const_value is not None:
+            b.add(f"comptime {member.name} = {self._render_const_expr(member.const_value)}")
+            return
+        b.add(f"# comptime {member.name}: missing payload")
 
     def _render_type(self, t: MojoType) -> str:
         if isinstance(t, BuiltinType):
@@ -515,6 +510,9 @@ class MojoIRPrinter:
             return f"({lhs} {expr.op} {rhs})"
         if isinstance(expr, MojoCastExpr):
             return f"{self._render_type(expr.target)}({self._render_const_expr(expr.expr)})"
+        if isinstance(expr, MojoCallExpr):
+            args = ", ".join(self._render_const_expr(arg) for arg in expr.args)
+            return f"{self._render_const_expr(expr.callee)}({args})"
         if isinstance(expr, MojoSizeOfExpr):
             return f"size_of[{self._render_type(expr.target)}]()"
         raise MojoIRPrintError(f"unsupported MojoConstExpr node: {type(expr).__name__!r}")

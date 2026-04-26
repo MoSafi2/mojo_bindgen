@@ -14,7 +14,7 @@ from mojo_bindgen.mojo_ir import (
     CallbackParam,
     CallbackType,
     CallTarget,
-    EnumDecl,
+    ComptimeMember,
     FunctionDecl,
     FunctionKind,
     FunctionType,
@@ -25,6 +25,7 @@ from mojo_bindgen.mojo_ir import (
     LinkMode,
     ModuleImport,
     MojoBinaryExpr,
+    MojoCallExpr,
     MojoCastExpr,
     MojoCharLiteral,
     MojoConstExpr,
@@ -92,17 +93,14 @@ class NormalizeMojoModulePass:
                 decl,
                 align_decorator=self._resolve_align_decorator(decl),
                 members=[self._normalize_member(decl.name, member) for member in decl.members],
+                comptime_members=[
+                    self._normalize_comptime_member(decl.name, member)
+                    for member in decl.comptime_members
+                ],
                 initializers=[
                     self._normalize_initializer(decl.name, initializer)
                     for initializer in decl.initializers
                 ],
-            )
-        if isinstance(decl, EnumDecl):
-            return replace(
-                decl,
-                underlying_type=self._normalize_type(
-                    decl.underlying_type, (decl.name, "underlying")
-                ),
             )
         if isinstance(decl, AliasDecl):
             if decl.kind == AliasKind.CALLBACK_SIGNATURE:
@@ -199,6 +197,27 @@ class NormalizeMojoModulePass:
             ],
         )
 
+    def _normalize_comptime_member(
+        self,
+        struct_name: str,
+        member: ComptimeMember,
+    ) -> ComptimeMember:
+        return replace(
+            member,
+            type_value=(
+                None
+                if member.type_value is None
+                else self._normalize_type(member.type_value, (struct_name, member.name, "type"))
+            ),
+            const_value=(
+                None
+                if member.const_value is None
+                else self._normalize_const_expr(
+                    member.const_value, (struct_name, member.name, "const")
+                )
+            ),
+        )
+
     def _normalize_type(
         self,
         t: MojoType,
@@ -291,6 +310,15 @@ class NormalizeMojoModulePass:
                 expr,
                 target=self._normalize_type(expr.target, (*context, "cast_target")),
                 expr=self._normalize_const_expr(expr.expr, (*context, "cast_expr")),
+            )
+        if isinstance(expr, MojoCallExpr):
+            return replace(
+                expr,
+                callee=self._normalize_const_expr(expr.callee, (*context, "callee")),
+                args=[
+                    self._normalize_const_expr(arg, (*context, f"arg{i}"))
+                    for i, arg in enumerate(expr.args)
+                ],
             )
         if isinstance(expr, MojoSizeOfExpr):
             return replace(
@@ -472,6 +500,27 @@ class NormalizeMojoModulePass:
                             mark_complex=mark_complex,
                             mark_atomic=mark_atomic,
                         )
+            for member in decl.comptime_members:
+                if member.type_value is not None:
+                    self._collect_type_imports(
+                        member.type_value,
+                        ffi_names=ffi_names,
+                        mark_sys_info=mark_sys_info,
+                        mark_opaque=mark_opaque,
+                        mark_simd=mark_simd,
+                        mark_complex=mark_complex,
+                        mark_atomic=mark_atomic,
+                    )
+                if member.const_value is not None:
+                    self._collect_const_expr_imports(
+                        member.const_value,
+                        ffi_names=ffi_names,
+                        mark_sys_info=mark_sys_info,
+                        mark_opaque=mark_opaque,
+                        mark_simd=mark_simd,
+                        mark_complex=mark_complex,
+                        mark_atomic=mark_atomic,
+                    )
             for initializer in decl.initializers:
                 for param in initializer.params:
                     self._collect_type_imports(
@@ -483,16 +532,6 @@ class NormalizeMojoModulePass:
                         mark_complex=mark_complex,
                         mark_atomic=mark_atomic,
                     )
-        elif isinstance(decl, EnumDecl):
-            self._collect_type_imports(
-                decl.underlying_type,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
         elif isinstance(decl, AliasDecl):
             if decl.type_value is not None:
                 self._collect_type_imports(
@@ -617,6 +656,27 @@ class NormalizeMojoModulePass:
                 mark_complex=mark_complex,
                 mark_atomic=mark_atomic,
             )
+            return
+        if isinstance(expr, MojoCallExpr):
+            self._collect_const_expr_imports(
+                expr.callee,
+                ffi_names=ffi_names,
+                mark_sys_info=mark_sys_info,
+                mark_opaque=mark_opaque,
+                mark_simd=mark_simd,
+                mark_complex=mark_complex,
+                mark_atomic=mark_atomic,
+            )
+            for arg in expr.args:
+                self._collect_const_expr_imports(
+                    arg,
+                    ffi_names=ffi_names,
+                    mark_sys_info=mark_sys_info,
+                    mark_opaque=mark_opaque,
+                    mark_simd=mark_simd,
+                    mark_complex=mark_complex,
+                    mark_atomic=mark_atomic,
+                )
             return
         if isinstance(expr, MojoSizeOfExpr):
             mark_sys_info()
@@ -777,7 +837,7 @@ class NormalizeMojoModulePass:
         def sort_key(decl: MojoDecl) -> tuple[int, int]:
             if isinstance(decl, AliasDecl):
                 rank = 0
-            elif isinstance(decl, (EnumDecl, StructDecl)):
+            elif isinstance(decl, StructDecl):
                 rank = 1
             elif isinstance(decl, GlobalDecl):
                 rank = 2

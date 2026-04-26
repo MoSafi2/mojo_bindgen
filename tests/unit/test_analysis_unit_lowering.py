@@ -35,12 +35,16 @@ from mojo_bindgen.mojo_ir import (
     ArrayType,
     BuiltinType,
     CallbackType,
-    EnumDecl,
+    ComptimeMember,
     FunctionDecl,
     FunctionKind,
     GlobalDecl,
     LinkMode,
     MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoIntLiteral,
+    MojoRefExpr,
     NamedType,
     PaddingMember,
     ParametricBase,
@@ -127,7 +131,12 @@ def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     assert lowered.link_name == "demo"
     assert lowered.link_mode == LinkMode.EXTERNAL_CALL
     assert lowered.library_path_hint is None
-    assert [type(decl) for decl in lowered.decls] == [AliasDecl, EnumDecl, FunctionDecl, GlobalDecl]
+    assert [type(decl) for decl in lowered.decls] == [
+        AliasDecl,
+        StructDecl,
+        FunctionDecl,
+        GlobalDecl,
+    ]
 
 
 def test_lower_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
@@ -197,10 +206,32 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
         kind=AliasKind.TYPE_ALIAS,
         type_value=BuiltinType(MojoBuiltin.C_UINT),
     )
-    assert isinstance(enum_decl, EnumDecl)
+    assert isinstance(enum_decl, StructDecl)
     assert enum_decl.name == "Flags"
+    assert enum_decl.kind == StructKind.ENUM
     assert enum_decl.fieldwise_init is True
-    assert enum_decl.enumerants[0].name == "needs_work"
+    assert enum_decl.members == [
+        StoredMember(
+            index=0,
+            name="value",
+            type=BuiltinType(MojoBuiltin.C_INT),
+            byte_offset=0,
+        )
+    ]
+    assert enum_decl.comptime_members == [
+        ComptimeMember(
+            name="needs_work",
+            const_value=MojoCallExpr(
+                callee=MojoRefExpr("Self"),
+                args=[
+                    MojoCastExpr(
+                        target=BuiltinType(MojoBuiltin.C_INT),
+                        expr=MojoIntLiteral(7),
+                    )
+                ],
+            ),
+        )
+    ]
 
 
 def test_lower_unit_lowers_function_and_global() -> None:

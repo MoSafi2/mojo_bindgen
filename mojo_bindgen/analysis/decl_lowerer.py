@@ -38,22 +38,27 @@ from mojo_bindgen.mojo_ir import (
     BuiltinType,
     CallbackType,
     CallTarget,
-    EnumDecl,
-    EnumMember,
+    ComptimeMember,
     FunctionDecl,
     FunctionKind,
     GlobalDecl,
     GlobalKind,
     LinkMode,
     MojoBinaryExpr,
+    MojoCallExpr,
     MojoCastExpr,
     MojoConstExpr,
     MojoDecl,
     MojoIntLiteral,
+    MojoRefExpr,
     MojoUnaryExpr,
     Param,
     ParametricBase,
     ParametricType,
+    StoredMember,
+    StructDecl,
+    StructKind,
+    StructTraits,
 )
 
 
@@ -119,14 +124,38 @@ class UnitDeclLowerer:
             type_value=lowered_type,
         )
 
-    def _lower_enum(self, decl: Enum) -> EnumDecl:
-        return EnumDecl(
+    def _lower_enum(self, decl: Enum) -> StructDecl:
+        underlying = self.session.type_lowerer.run(decl.underlying)
+        return StructDecl(
             name=mojo_ident(decl.name),
-            underlying_type=self.session.type_lowerer.run(decl.underlying),
-            align_decorator=None,
+            traits=[
+                StructTraits.COPYABLE,
+                StructTraits.MOVABLE,
+                StructTraits.REGISTER_PASSABLE,
+            ],
             fieldwise_init=True,
-            enumerants=[
-                EnumMember(name=mojo_ident(member.name), value=member.value)
+            kind=StructKind.ENUM,
+            members=[
+                StoredMember(
+                    index=0,
+                    name="value",
+                    type=underlying,
+                    byte_offset=0,
+                )
+            ],
+            comptime_members=[
+                ComptimeMember(
+                    name=mojo_ident(member.name),
+                    const_value=MojoCallExpr(
+                        callee=MojoRefExpr("Self"),
+                        args=[
+                            MojoCastExpr(
+                                target=underlying,
+                                expr=MojoIntLiteral(member.value),
+                            )
+                        ],
+                    ),
+                )
                 for member in decl.enumerants
             ],
         )

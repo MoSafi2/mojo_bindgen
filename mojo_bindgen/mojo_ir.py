@@ -331,6 +331,12 @@ class MojoSizeOfExpr(SerDeMixin):
     target: MojoType
 
 
+@dataclass(frozen=True)
+class MojoCallExpr(SerDeMixin):
+    callee: MojoConstExpr
+    args: list[MojoConstExpr] = field(default_factory=list)
+
+
 MojoConstExpr = Union[
     MojoIntLiteral,
     MojoFloatLiteral,
@@ -341,6 +347,7 @@ MojoConstExpr = Union[
     MojoBinaryExpr,
     MojoCastExpr,
     MojoSizeOfExpr,
+    MojoCallExpr,
 ]
 
 
@@ -395,9 +402,10 @@ StructMember = Union[
 
 
 @dataclass(frozen=True)
-class EnumMember(SerDeMixin):
+class ComptimeMember(SerDeMixin):
     name: str
-    value: int
+    type_value: MojoType | None = None
+    const_value: MojoConstExpr | None = None
 
 
 @dataclass(frozen=True)
@@ -439,14 +447,12 @@ class AliasKind(StrEnum):
     MACRO_VALUE = "macro_value"
 
 
-# TODO: Enum is quite seperate from Struct now, move it out
 @dataclass
 class StructDecl(SerDeMixin):
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
         fields={
             "kind": SerdeFieldSpec(json_key="struct_kind"),
             "align_decorator": SerdeFieldSpec(omit_if_default=True),
-            "underlying_type": SerdeFieldSpec(omit_if_default=True),
             "passability": SerdeFieldSpec(omit_if_default=True),
         }
     )
@@ -459,23 +465,8 @@ class StructDecl(SerDeMixin):
     fieldwise_init: bool = False
     kind: StructKind = StructKind.PLAIN
     members: list[StructMember] = field(default_factory=list)
+    comptime_members: list[ComptimeMember] = field(default_factory=list)
     initializers: list[Initializer] = field(default_factory=list)
-    diagnostics: list[LoweringNote] = field(default_factory=list)
-
-
-@dataclass
-class EnumDecl(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "align_decorator": SerdeFieldSpec(omit_if_default=True),
-            "fieldwise_init": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-    name: str
-    underlying_type: MojoType
-    align_decorator: int | None = None
-    fieldwise_init: bool = True
-    enumerants: list[EnumMember] = field(default_factory=list)
     diagnostics: list[LoweringNote] = field(default_factory=list)
 
 
@@ -540,7 +531,6 @@ class GlobalDecl(SerDeMixin):
 
 MojoDecl = Union[
     StructDecl,
-    EnumDecl,
     AliasDecl,
     FunctionDecl,
     GlobalDecl,
@@ -622,6 +612,7 @@ _MOJO_CONST_EXPR_FROM_JSON: dict[str, Callable[[dict[str, object]], MojoConstExp
     "MojoBinaryExpr": MojoBinaryExpr.from_json_dict,
     "MojoCastExpr": MojoCastExpr.from_json_dict,
     "MojoSizeOfExpr": MojoSizeOfExpr.from_json_dict,
+    "MojoCallExpr": MojoCallExpr.from_json_dict,
 }
 
 
@@ -633,6 +624,22 @@ def mojo_const_expr_from_json(d: dict[str, object]) -> MojoConstExpr:
         deser = _MOJO_CONST_EXPR_FROM_JSON[kind]
     except KeyError:
         raise ValueError(f"unknown MojoConstExpr kind: {kind!r}") from None
+    return deser(d)
+
+
+_COMPTIME_MEMBER_FROM_JSON: dict[str, Callable[[dict[str, object]], ComptimeMember]] = {
+    "ComptimeMember": ComptimeMember.from_json_dict,
+}
+
+
+def comptime_member_from_json(d: dict[str, object]) -> ComptimeMember:
+    kind = d.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"unknown ComptimeMember kind: {kind!r}")
+    try:
+        deser = _COMPTIME_MEMBER_FROM_JSON[kind]
+    except KeyError:
+        raise ValueError(f"unknown ComptimeMember kind: {kind!r}") from None
     return deser(d)
 
 
@@ -657,7 +664,6 @@ def struct_member_from_json(d: dict[str, object]) -> StructMember:
 
 _MOJO_DECL_FROM_JSON: dict[str, Callable[[dict[str, object]], MojoDecl]] = {
     "StructDecl": StructDecl.from_json_dict,
-    "EnumDecl": EnumDecl.from_json_dict,
     "AliasDecl": AliasDecl.from_json_dict,
     "FunctionDecl": FunctionDecl.from_json_dict,
     "GlobalDecl": GlobalDecl.from_json_dict,
@@ -685,10 +691,9 @@ __all__ = [
     "CallTarget",
     "CallbackParam",
     "CallbackType",
+    "ComptimeMember",
     "ConstArg",
     "DTypeArg",
-    "EnumDecl",
-    "EnumMember",
     "FunctionDecl",
     "FunctionKind",
     "FunctionType",
@@ -702,6 +707,7 @@ __all__ = [
     "ModuleCapabilities",
     "MojoBinaryExpr",
     "MojoBuiltin",
+    "MojoCallExpr",
     "MojoCastExpr",
     "MojoCharLiteral",
     "MojoConstExpr",
@@ -734,6 +740,7 @@ __all__ = [
     "SupportDecl",
     "SupportDeclKind",
     "TypeArg",
+    "comptime_member_from_json",
     "mojo_const_expr_from_json",
     "mojo_decl_from_json",
     "mojo_type_from_json",

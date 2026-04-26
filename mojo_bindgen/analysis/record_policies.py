@@ -80,6 +80,17 @@ class PolicyInferencePass:
     def _assign_decl_policies(self, decl: MojoDecl) -> MojoDecl:
         if not isinstance(decl, StructDecl):
             return decl
+        if decl.kind == StructKind.ENUM:
+            return replace(
+                decl,
+                passability=MojoPassability.REGISTER_PASSABLE,
+                traits=[
+                    StructTraits.COPYABLE,
+                    StructTraits.MOVABLE,
+                    StructTraits.REGISTER_PASSABLE,
+                ],
+                fieldwise_init=True,
+            )
         passability = self._record_passability(decl.name)
         if self._has_representable_atomic_storage(decl):
             return replace(
