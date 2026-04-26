@@ -145,17 +145,6 @@ class LoweringNote(SerDeMixin):
     category: str
 
 
-@dataclass
-class ModuleCapabilities(SerDeMixin):
-    needs_opaque_pointer_types: bool = False
-    needs_atomic: bool = False
-    needs_simd: bool = False
-    needs_complex: bool = False
-    needs_unsafe_union: bool = False
-    needs_dl_handle_helpers: bool = False
-    needs_global_helpers: bool = False
-
-
 @dataclass(frozen=True)
 class ModuleImport(SerDeMixin):
     module: str
@@ -170,6 +159,19 @@ class SupportDeclKind(StrEnum):
 @dataclass(frozen=True)
 class SupportDecl(SerDeMixin):
     kind: SupportDeclKind
+
+
+@dataclass
+class ModuleDependencies(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "imports": SerdeFieldSpec(omit_if_default=True),
+            "support_decls": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    imports: list[ModuleImport] = field(default_factory=list)
+    support_decls: list[SupportDecl] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -542,8 +544,7 @@ class MojoModule(SerDeMixin):
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
         fields={
             "library_path_hint": SerdeFieldSpec(omit_if_default=True),
-            "imports": SerdeFieldSpec(omit_if_default=True),
-            "support_decls": SerdeFieldSpec(omit_if_default=True),
+            "dependencies": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
@@ -552,9 +553,7 @@ class MojoModule(SerDeMixin):
     link_name: str
     link_mode: LinkMode
     library_path_hint: str | None = None
-    capabilities: ModuleCapabilities = field(default_factory=ModuleCapabilities)
-    imports: list[ModuleImport] = field(default_factory=list)
-    support_decls: list[SupportDecl] = field(default_factory=list)
+    dependencies: ModuleDependencies = field(default_factory=ModuleDependencies)
     decls: list[MojoDecl] = field(default_factory=list)
 
     def to_json(self, *, indent: int | None = 2) -> str:
@@ -704,7 +703,7 @@ __all__ = [
     "LinkMode",
     "LoweringNote",
     "ModuleImport",
-    "ModuleCapabilities",
+    "ModuleDependencies",
     "MojoBinaryExpr",
     "MojoBuiltin",
     "MojoCallExpr",

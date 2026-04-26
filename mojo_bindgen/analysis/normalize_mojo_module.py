@@ -23,6 +23,7 @@ from mojo_bindgen.mojo_ir import (
     Initializer,
     InitializerParam,
     LinkMode,
+    ModuleDependencies,
     ModuleImport,
     MojoBinaryExpr,
     MojoCallExpr,
@@ -69,21 +70,16 @@ class NormalizeMojoModulePass:
         }
         self._synth_aliases: list[AliasDecl] = []
         self._synth_aliases_by_path: dict[tuple[str, ...], str] = {}
-        self._needs_opaque_imports = False
-        self._needs_simd_import = False
-        self._needs_complex_import = False
-        self._needs_atomic_import = False
-        self._needs_sys_info_import = False
+        self._imports_by_module: dict[str, set[str]] = {}
+        self._support_decl_kinds: set[SupportDeclKind] = set()
 
         normalized_decls = [self._normalize_decl(decl) for decl in module.decls]
         all_decls = [*self._synth_aliases, *self._ordered_decls(normalized_decls)]
-        support_decls = self._collect_support_decls(all_decls)
-        imports = self._collect_imports(all_decls, support_decls)
+        dependencies = self._collect_dependencies(all_decls)
 
         return replace(
             module,
-            imports=imports,
-            support_decls=support_decls,
+            dependencies=dependencies,
             decls=all_decls,
         )
 
@@ -365,70 +361,42 @@ class NormalizeMojoModulePass:
         )
         return name
 
-    def _collect_support_decls(self, decls: list[MojoDecl]) -> list[SupportDecl]:
-        need_dl_helpers = self._module.capabilities.needs_dl_handle_helpers
-        need_global_helpers = self._module.capabilities.needs_global_helpers
+    def _collect_dependencies(self, decls: list[MojoDecl]) -> ModuleDependencies:
+        self._seed_dependencies(self._module.dependencies)
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:
                 if decl.call_target.link_mode == LinkMode.OWNED_DL_HANDLE:
-                    need_dl_helpers = True
+                    self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
             elif isinstance(decl, GlobalDecl) and decl.kind == GlobalKind.WRAPPER:
-                need_global_helpers = True
-                need_dl_helpers = True
+                self._record_support_decl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS)
+                self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
 
-        support_decls: list[SupportDecl] = []
-        if need_dl_helpers:
-            support_decls.append(SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS))
-        if need_global_helpers:
-            support_decls.append(SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS))
-        return support_decls
-
-    def _collect_imports(
-        self,
-        decls: list[MojoDecl],
-        support_decls: list[SupportDecl],
-    ) -> list[ModuleImport]:
-        ffi_names: set[str] = set()
-        needs_opaque_imports = self._module.capabilities.needs_opaque_pointer_types
-        needs_simd_import = self._module.capabilities.needs_simd
-        needs_complex_import = self._module.capabilities.needs_complex
-        needs_atomic_import = self._module.capabilities.needs_atomic
-        needs_sys_info_import = False
-
-        if self._module.capabilities.needs_unsafe_union:
-            ffi_names.add("UnsafeUnion")
-
-        for support in support_decls:
-            if support.kind == SupportDeclKind.DL_HANDLE_HELPERS:
-                ffi_names.update({"DEFAULT_RTLD", "OwnedDLHandle"})
+        if SupportDeclKind.DL_HANDLE_HELPERS in self._support_decl_kinds:
+            self._record_import("std.ffi", "DEFAULT_RTLD", "OwnedDLHandle")
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:
                 if decl.call_target.link_mode == LinkMode.EXTERNAL_CALL:
-                    ffi_names.add("external_call")
+                    self._record_import("std.ffi", "external_call")
             self._collect_decl_imports(
                 decl,
-                ffi_names=ffi_names,
-                mark_sys_info=lambda: self._set_flag("sys_info"),
-                mark_opaque=lambda: self._set_flag("opaque"),
-                mark_simd=lambda: self._set_flag("simd"),
-                mark_complex=lambda: self._set_flag("complex"),
-                mark_atomic=lambda: self._set_flag("atomic"),
             )
 
-        needs_opaque_imports = needs_opaque_imports or self._needs_opaque_imports
-        needs_simd_import = needs_simd_import or self._needs_simd_import
-        needs_complex_import = needs_complex_import or self._needs_complex_import
-        needs_atomic_import = needs_atomic_import or self._needs_atomic_import
-        needs_sys_info_import = needs_sys_info_import or self._needs_sys_info_import
-
-        imports: list[ModuleImport] = []
-        ordered_ffi = []
         if self._module.link_mode == LinkMode.EXTERNAL_CALL and any(
             not isinstance(decl, AliasDecl) for decl in decls
         ):
-            ffi_names.add("external_call")
+            self._record_import("std.ffi", "external_call")
+
+        return ModuleDependencies(
+            imports=self._ordered_imports(),
+            support_decls=self._ordered_support_decls(),
+        )
+
+    def _ordered_imports(self) -> list[ModuleImport]:
+        imports: list[ModuleImport] = []
+        ffi_names = self._imports_by_module.get("std.ffi", set())
+        ordered_ffi: list[str] = []
         if "external_call" in ffi_names:
             ordered_ffi.append("external_call")
         if "DEFAULT_RTLD" in ffi_names:
@@ -438,162 +406,79 @@ class NormalizeMojoModulePass:
         if "UnsafeUnion" in ffi_names:
             ordered_ffi.append("UnsafeUnion")
         ordered_ffi.extend(sorted(name for name in ffi_names if name.startswith("c_")))
+        ordered_ffi.extend(
+            sorted(
+                name
+                for name in ffi_names
+                if name not in set(ordered_ffi) and not name.startswith("c_")
+            )
+        )
         if ordered_ffi:
             imports.append(ModuleImport(module="std.ffi", names=ordered_ffi))
-        if needs_sys_info_import:
-            imports.append(ModuleImport(module="std.sys.info", names=["size_of"]))
-        if needs_opaque_imports:
+        preferred_modules = (
+            "std.sys.info",
+            "std.memory",
+            "std.builtin.simd",
+            "std.complex",
+            "std.atomic",
+        )
+        for module_name in preferred_modules:
+            names = self._imports_by_module.get(module_name)
+            if names:
+                imports.append(ModuleImport(module=module_name, names=sorted(names)))
+        for module_name in sorted(
+            name for name in self._imports_by_module if name not in {"std.ffi", *preferred_modules}
+        ):
             imports.append(
-                ModuleImport(
-                    module="std.memory",
-                    names=["ImmutOpaquePointer", "MutOpaquePointer"],
-                )
+                ModuleImport(module=module_name, names=sorted(self._imports_by_module[module_name]))
             )
-        if needs_simd_import:
-            imports.append(ModuleImport(module="std.builtin.simd", names=["SIMD"]))
-        if needs_complex_import:
-            imports.append(ModuleImport(module="std.complex", names=["ComplexSIMD"]))
-        if needs_atomic_import:
-            imports.append(ModuleImport(module="std.atomic", names=["Atomic"]))
         return imports
+
+    def _ordered_support_decls(self) -> list[SupportDecl]:
+        ordered: list[SupportDecl] = []
+        for kind in (
+            SupportDeclKind.DL_HANDLE_HELPERS,
+            SupportDeclKind.GLOBAL_SYMBOL_HELPERS,
+        ):
+            if kind in self._support_decl_kinds:
+                ordered.append(SupportDecl(kind))
+        return ordered
 
     def _collect_decl_imports(
         self,
         decl: MojoDecl,
-        *,
-        ffi_names: set[str],
-        mark_sys_info,
-        mark_opaque,
-        mark_simd,
-        mark_complex,
-        mark_atomic,
     ) -> None:
         if isinstance(decl, StructDecl):
             for member in decl.members:
                 if isinstance(member, StoredMember):
-                    self._collect_type_imports(
-                        member.type,
-                        ffi_names=ffi_names,
-                        mark_sys_info=mark_sys_info,
-                        mark_opaque=mark_opaque,
-                        mark_simd=mark_simd,
-                        mark_complex=mark_complex,
-                        mark_atomic=mark_atomic,
-                    )
+                    self._collect_type_imports(member.type)
                 elif isinstance(member, BitfieldGroupMember):
-                    self._collect_type_imports(
-                        member.storage_type,
-                        ffi_names=ffi_names,
-                        mark_sys_info=mark_sys_info,
-                        mark_opaque=mark_opaque,
-                        mark_simd=mark_simd,
-                        mark_complex=mark_complex,
-                        mark_atomic=mark_atomic,
-                    )
+                    self._collect_type_imports(member.storage_type)
                     for field in member.fields:
-                        self._collect_type_imports(
-                            field.logical_type,
-                            ffi_names=ffi_names,
-                            mark_sys_info=mark_sys_info,
-                            mark_opaque=mark_opaque,
-                            mark_simd=mark_simd,
-                            mark_complex=mark_complex,
-                            mark_atomic=mark_atomic,
-                        )
+                        self._collect_type_imports(field.logical_type)
             for member in decl.comptime_members:
                 if member.type_value is not None:
-                    self._collect_type_imports(
-                        member.type_value,
-                        ffi_names=ffi_names,
-                        mark_sys_info=mark_sys_info,
-                        mark_opaque=mark_opaque,
-                        mark_simd=mark_simd,
-                        mark_complex=mark_complex,
-                        mark_atomic=mark_atomic,
-                    )
+                    self._collect_type_imports(member.type_value)
                 if member.const_value is not None:
-                    self._collect_const_expr_imports(
-                        member.const_value,
-                        ffi_names=ffi_names,
-                        mark_sys_info=mark_sys_info,
-                        mark_opaque=mark_opaque,
-                        mark_simd=mark_simd,
-                        mark_complex=mark_complex,
-                        mark_atomic=mark_atomic,
-                    )
+                    self._collect_const_expr_imports(member.const_value)
             for initializer in decl.initializers:
                 for param in initializer.params:
-                    self._collect_type_imports(
-                        param.type,
-                        ffi_names=ffi_names,
-                        mark_sys_info=mark_sys_info,
-                        mark_opaque=mark_opaque,
-                        mark_simd=mark_simd,
-                        mark_complex=mark_complex,
-                        mark_atomic=mark_atomic,
-                    )
+                    self._collect_type_imports(param.type)
         elif isinstance(decl, AliasDecl):
             if decl.type_value is not None:
-                self._collect_type_imports(
-                    decl.type_value,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
+                self._collect_type_imports(decl.type_value)
             if decl.const_value is not None:
-                self._collect_const_expr_imports(
-                    decl.const_value,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
+                self._collect_const_expr_imports(decl.const_value)
         elif isinstance(decl, FunctionDecl):
-            self._collect_type_imports(
-                decl.return_type,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_type_imports(decl.return_type)
             for param in decl.params:
-                self._collect_type_imports(
-                    param.type,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
+                self._collect_type_imports(param.type)
         elif isinstance(decl, GlobalDecl):
-            self._collect_type_imports(
-                decl.value_type,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_type_imports(decl.value_type)
 
     def _collect_const_expr_imports(
         self,
         expr: MojoConstExpr,
-        *,
-        ffi_names: set[str],
-        mark_sys_info,
-        mark_opaque,
-        mark_simd,
-        mark_complex,
-        mark_atomic,
     ) -> None:
         if isinstance(
             expr,
@@ -607,208 +492,80 @@ class NormalizeMojoModulePass:
         ):
             return
         if isinstance(expr, MojoUnaryExpr):
-            self._collect_const_expr_imports(
-                expr.operand,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_const_expr_imports(expr.operand)
             return
         if isinstance(expr, MojoBinaryExpr):
-            self._collect_const_expr_imports(
-                expr.lhs,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
-            self._collect_const_expr_imports(
-                expr.rhs,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_const_expr_imports(expr.lhs)
+            self._collect_const_expr_imports(expr.rhs)
             return
         if isinstance(expr, MojoCastExpr):
-            self._collect_type_imports(
-                expr.target,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
-            self._collect_const_expr_imports(
-                expr.expr,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_type_imports(expr.target)
+            self._collect_const_expr_imports(expr.expr)
             return
         if isinstance(expr, MojoCallExpr):
-            self._collect_const_expr_imports(
-                expr.callee,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_const_expr_imports(expr.callee)
             for arg in expr.args:
-                self._collect_const_expr_imports(
-                    arg,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
+                self._collect_const_expr_imports(arg)
             return
         if isinstance(expr, MojoSizeOfExpr):
-            mark_sys_info()
-            self._collect_type_imports(
-                expr.target,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._record_import("std.sys.info", "size_of")
+            self._collect_type_imports(expr.target)
             return
 
-    def _collect_type_imports(
-        self,
-        t: MojoType,
-        *,
-        ffi_names: set[str],
-        mark_sys_info,
-        mark_opaque,
-        mark_simd,
-        mark_complex,
-        mark_atomic,
-    ) -> None:
+    def _collect_type_imports(self, t: MojoType) -> None:
         if isinstance(t, BuiltinType):
             if t.name.value.startswith("c_"):
-                ffi_names.add(t.name.value)
+                self._record_import("std.ffi", t.name.value)
             return
         if isinstance(t, NamedType):
             return
         if isinstance(t, PointerType):
             if t.pointee is None:
-                mark_opaque()
+                self._record_import("std.memory", "ImmutOpaquePointer", "MutOpaquePointer")
             else:
-                self._collect_type_imports(
-                    t.pointee,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
+                self._collect_type_imports(t.pointee)
             return
         if isinstance(t, ArrayType):
-            self._collect_type_imports(
-                t.element,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+            self._collect_type_imports(t.element)
             return
         if isinstance(t, ParametricType):
             if t.base.value == "SIMD":
-                mark_simd()
+                self._record_import("std.builtin.simd", "SIMD")
             elif t.base.value == "ComplexSIMD":
-                mark_complex()
+                self._record_import("std.complex", "ComplexSIMD")
             elif t.base.value == "Atomic":
-                mark_atomic()
+                self._record_import("std.atomic", "Atomic")
             elif t.base.value == "UnsafeUnion":
-                ffi_names.add("UnsafeUnion")
+                self._record_import("std.ffi", "UnsafeUnion")
             for arg in t.args:
                 if isinstance(arg, TypeArg):
-                    self._collect_type_imports(
-                        arg.type,
-                        ffi_names=ffi_names,
-                        mark_sys_info=mark_sys_info,
-                        mark_opaque=mark_opaque,
-                        mark_simd=mark_simd,
-                        mark_complex=mark_complex,
-                        mark_atomic=mark_atomic,
-                    )
+                    self._collect_type_imports(arg.type)
             return
         if isinstance(t, CallbackType):
             for param in t.params:
-                self._collect_type_imports(
-                    param.type,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
-            self._collect_type_imports(
-                t.ret,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+                self._collect_type_imports(param.type)
+            self._collect_type_imports(t.ret)
             return
         if isinstance(t, FunctionType):
             for param in t.params:
-                self._collect_type_imports(
-                    param,
-                    ffi_names=ffi_names,
-                    mark_sys_info=mark_sys_info,
-                    mark_opaque=mark_opaque,
-                    mark_simd=mark_simd,
-                    mark_complex=mark_complex,
-                    mark_atomic=mark_atomic,
-                )
-            self._collect_type_imports(
-                t.ret,
-                ffi_names=ffi_names,
-                mark_sys_info=mark_sys_info,
-                mark_opaque=mark_opaque,
-                mark_simd=mark_simd,
-                mark_complex=mark_complex,
-                mark_atomic=mark_atomic,
-            )
+                self._collect_type_imports(param)
+            self._collect_type_imports(t.ret)
             return
         raise NormalizeMojoModuleError(f"unsupported MojoType node: {type(t).__name__!r}")
 
-    def _set_flag(self, name: str) -> None:
-        if name == "opaque":
-            self._needs_opaque_imports = True
-        elif name == "simd":
-            self._needs_simd_import = True
-        elif name == "complex":
-            self._needs_complex_import = True
-        elif name == "atomic":
-            self._needs_atomic_import = True
-        elif name == "sys_info":
-            self._needs_sys_info_import = True
+    def _seed_dependencies(self, dependencies: ModuleDependencies) -> None:
+        for imp in dependencies.imports:
+            self._record_import(imp.module, *imp.names)
+        for support in dependencies.support_decls:
+            self._record_support_decl(support.kind)
+
+    def _record_import(self, module: str, *names: str) -> None:
+        if not names:
+            return
+        self._imports_by_module.setdefault(module, set()).update(names)
+
+    def _record_support_decl(self, kind: SupportDeclKind) -> None:
+        self._support_decl_kinds.add(kind)
 
     def _effective_link_mode(self, decl: FunctionDecl) -> LinkMode:
         if (

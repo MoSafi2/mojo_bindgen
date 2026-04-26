@@ -12,6 +12,9 @@ All notable changes to this project are documented in this file.
   separate `EnumDecl` shape.
 - Add struct-local `comptime` members to MojoIR so enum constants and similar
   in-struct aliases can be represented and rendered directly from `StructDecl`.
+- Replace MojoIR module capability toggles with a concrete dependency container
+  that records imports and support helpers explicitly for normalization and
+  printing.
 
 ## [0.1.1a] - 2026-04-24
 

@@ -37,6 +37,7 @@ from mojo_bindgen.mojo_ir import (
     Initializer,
     InitializerParam,
     LinkMode,
+    ModuleDependencies,
     ModuleImport,
     MojoBinaryExpr,
     MojoBuiltin,
@@ -361,7 +362,7 @@ def test_normalize_and_render_sizeof_imports_std_sys_info() -> None:
     )
 
     normalized = normalize_mojo_module(module)
-    assert ModuleImport(module="std.sys.info", names=["size_of"]) in normalized.imports
+    assert ModuleImport(module="std.sys.info", names=["size_of"]) in normalized.dependencies.imports
 
     out = render_mojo_module(normalized)
     assert "from std.sys.info import size_of" in out
@@ -402,13 +403,13 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
 
     normalized = normalize_mojo_module(module)
 
-    assert normalized.imports == [
+    assert normalized.dependencies.imports == [
         ModuleImport(
             module="std.ffi",
             names=["DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
         )
     ]
-    assert normalized.support_decls == [
+    assert normalized.dependencies.support_decls == [
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
         SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS),
     ]
@@ -417,6 +418,47 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
     widget = next(decl for decl in normalized.decls if isinstance(decl, StructDecl))
     assert isinstance(widget.members[0], StoredMember)
     assert widget.members[0].type == NamedType("Widget_handler_cb")
+
+
+def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        dependencies=ModuleDependencies(
+            imports=[ModuleImport(module="std.ffi", names=["c_int", "external_call"])],
+            support_decls=[SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS)],
+        ),
+        decls=[
+            AliasDecl(
+                name="SIZE",
+                kind=AliasKind.CONST_VALUE,
+                const_value=MojoSizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
+            ),
+            FunctionDecl(
+                name="install",
+                link_name="install",
+                params=[],
+                return_type=BuiltinType(MojoBuiltin.NONE),
+                kind=FunctionKind.WRAPPER,
+                call_target=CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="install"),
+            ),
+        ],
+    )
+
+    normalized = normalize_mojo_module(module)
+
+    assert normalized.dependencies.imports == [
+        ModuleImport(
+            module="std.ffi",
+            names=["external_call", "DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
+        ),
+        ModuleImport(module="std.sys.info", names=["size_of"]),
+    ]
+    assert normalized.dependencies.support_decls == [
+        SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
+    ]
 
 
 def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
@@ -512,7 +554,7 @@ def test_normalize_and_printer_keep_union_byte_fallback_without_unsafe_union_imp
         )
     )
 
-    assert normalized.imports == []
+    assert normalized.dependencies.imports == []
 
     rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(normalized)
 

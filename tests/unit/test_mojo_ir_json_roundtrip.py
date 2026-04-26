@@ -299,12 +299,15 @@ def test_mojo_module_roundtrip() -> None:
         FunctionDecl,
         FunctionType,
         GlobalDecl,
-        ModuleCapabilities,
+        ModuleDependencies,
+        ModuleImport,
         MojoBuiltin,
         MojoModule,
         ParametricType,
         StoredMember,
         StructDecl,
+        SupportDecl,
+        SupportDeclKind,
     )
 
     module = MojoModule(
@@ -312,10 +315,12 @@ def test_mojo_module_roundtrip() -> None:
         library="demo",
         link_name="demo",
         link_mode="external_call",
-        capabilities=ModuleCapabilities(
-            needs_simd=True,
-            needs_global_helpers=True,
-            ffi_scalar_imports=["c_int"],
+        dependencies=ModuleDependencies(
+            imports=[
+                ModuleImport(module="std.ffi", names=["c_int"]),
+                ModuleImport(module="std.builtin.simd", names=["SIMD"]),
+            ],
+            support_decls=[SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS)],
         ),
         decls=[
             StructDecl(

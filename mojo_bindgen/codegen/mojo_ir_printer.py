@@ -100,8 +100,8 @@ class MojoIRPrinter:
         parts: list[str] = []
         if self._options.module_comment:
             parts.append(self._render_module_header(module))
-        if module.imports:
-            parts.append(self._render_import_block(module.imports))
+        if module.dependencies.imports:
+            parts.append(self._render_import_block(module.dependencies.imports))
         support_block = self._render_support_decls(module)
         if support_block:
             parts.append(support_block)
@@ -125,7 +125,7 @@ class MojoIRPrinter:
 
     def _render_support_decls(self, module: MojoModule) -> str:
         chunks: list[str] = []
-        for support in module.support_decls:
+        for support in module.dependencies.support_decls:
             if support.kind == SupportDeclKind.DL_HANDLE_HELPERS:
                 chunks.append(self._render_dl_handle_helper(module))
             elif support.kind == SupportDeclKind.GLOBAL_SYMBOL_HELPERS:
