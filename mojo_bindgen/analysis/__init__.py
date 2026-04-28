@@ -6,7 +6,7 @@ from mojo_bindgen.analysis.const_lowering import (
     lower_const_expr,
 )
 from mojo_bindgen.analysis.decl_lowerer import UnitLoweringError
-from mojo_bindgen.analysis.mojo_emit_options import FFIScalarStyle, MojoEmitOptions
+from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.normalize_mojo_module import (
     NormalizeMojoModuleError,
     NormalizeMojoModulePass,
@@ -62,7 +62,6 @@ __all__ = [
     "AnalysisResult",
     "AnalysisOrchestrator",
     "ConstExprLoweringError",
-    "FFIScalarStyle",
     "GeneratedArtifacts",
     "IRValidationError",
     "LowerConstExprPass",

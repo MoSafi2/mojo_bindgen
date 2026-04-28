@@ -3,9 +3,9 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 
-from std.ffi import external_call, c_uchar
+from std.ffi import external_call
 
-comptime uint8_t = c_uchar
+comptime uint8_t = UInt8
 
 @fieldwise_init
 struct faf_block(Copyable, Movable):

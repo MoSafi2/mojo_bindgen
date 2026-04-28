@@ -3,11 +3,11 @@
 # library: policy_matrix  link_name: policy_matrix
 # FFI mode: external_call
 
-from std.ffi import external_call, c_char, c_int, c_uchar, c_uint
+from std.ffi import external_call, c_char, c_int
 
-comptime uint8_t = c_uchar
+comptime uint8_t = UInt8
 
-comptime uint32_t = c_uint
+comptime uint32_t = UInt32
 
 @align(4)
 @fieldwise_init

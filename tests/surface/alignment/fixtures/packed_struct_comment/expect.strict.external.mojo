@@ -3,11 +3,11 @@
 # library: packed_struct_comment  link_name: packed_struct_comment
 # FFI mode: external_call
 
-from std.ffi import external_call, c_uchar, c_uint
+from std.ffi import external_call
 
-comptime uint8_t = c_uchar
+comptime uint8_t = UInt8
 
-comptime uint32_t = c_uint
+comptime uint32_t = UInt32
 
 # NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
 # NOTE[struct_lowering]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted

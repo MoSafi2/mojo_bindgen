@@ -12,9 +12,6 @@ LinkingMode = Literal["external_call", "owned_dl_handle"]
 FFIOriginStyle = Literal["external", "any"]
 """Pointer provenance styles supported by the generated Mojo bindings."""
 
-FFIScalarStyle = Literal["fixed_width", "std_ffi_aliases"]
-"""Scalar lowering: fixed-width ints vs ``std.ffi`` ``c_int`` / ``c_long`` / …."""
-
 
 @dataclass
 class MojoEmitOptions:
@@ -43,6 +40,3 @@ class MojoEmitOptions:
 
     ffi_origin: FFIOriginStyle = "external"
     """Pointer provenance for mapped types: ``external`` → Mut/Immut*ExternalOrigin (recommended for C FFI); ``any`` → *AnyOrigin."""
-
-    ffi_scalar_style: FFIScalarStyle = "std_ffi_aliases"
-    """``std_ffi_aliases`` (default): ``c_int``, ``c_long``, … from ``std.ffi``. ``fixed_width``: ``Int32`` / ``Int64`` / … from Clang sizes."""

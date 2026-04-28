@@ -13,6 +13,11 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Lower exact-width stdint typedef aliases such as `int32_t`, `uint32_t`,
+  `int64_t`, and `uint64_t` to Mojo fixed-width integer types while preserving
+  ordinary C ABI scalar aliases such as `c_int` and `c_long`.
+- Remove the stale, unused `ffi_scalar_style` emit option and public
+  `FFIScalarStyle` export.
 - Lower named CIR enums into `StructDecl(kind=ENUM)` in MojoIR instead of a
   separate `EnumDecl` shape.
 - Add struct-local `comptime` members to MojoIR so enum constants and similar

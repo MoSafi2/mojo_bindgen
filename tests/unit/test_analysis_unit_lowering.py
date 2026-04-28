@@ -62,6 +62,14 @@ def _i32() -> IntType:
     return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
 
+def _i64() -> IntType:
+    return IntType(int_kind=IntKind.LONG, size_bytes=8, align_bytes=8)
+
+
+def _u64() -> IntType:
+    return IntType(int_kind=IntKind.ULONG, size_bytes=8, align_bytes=8)
+
+
 def _abi() -> TargetABI:
     return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
 
@@ -626,11 +634,132 @@ def test_lower_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
     assert typedef_decl == AliasDecl(
         name="int32_t",
         kind=AliasKind.TYPE_ALIAS,
-        type_value=BuiltinType(MojoBuiltin.C_INT),
+        type_value=NamedType("Int32"),
     )
     assert isinstance(fn_decl, FunctionDecl)
     assert [param.type for param in fn_decl.params] == [NamedType("int32_t"), NamedType("int32_t")]
     assert fn_decl.return_type == NamedType("int32_t")
+
+
+def test_lower_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width() -> None:
+    aliases = {
+        "int8_t": (IntType(int_kind=IntKind.SCHAR, size_bytes=1, align_bytes=1), "Int8"),
+        "uint8_t": (IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1), "UInt8"),
+        "int16_t": (IntType(int_kind=IntKind.SHORT, size_bytes=2, align_bytes=2), "Int16"),
+        "uint16_t": (IntType(int_kind=IntKind.USHORT, size_bytes=2, align_bytes=2), "UInt16"),
+        "int32_t": (_i32(), "Int32"),
+        "uint32_t": (IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4), "UInt32"),
+        "int64_t": (_i64(), "Int64"),
+        "uint64_t": (_u64(), "UInt64"),
+    }
+    refs = [
+        TypeRef(decl_id=f"typedef:{name}", name=name, canonical=canonical)
+        for name, (canonical, _mojo_name) in aliases.items()
+    ]
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Function(
+                decl_id="fn:take_all",
+                name="take_all",
+                link_name="take_all",
+                ret=VoidType(),
+                params=[CIRParam(name=f"a{i}", type=ref) for i, ref in enumerate(refs)],
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+
+    assert lowered.decls[: len(aliases)] == [
+        AliasDecl(
+            name=name,
+            kind=AliasKind.TYPE_ALIAS,
+            type_value=NamedType(mojo_name),
+        )
+        for name, (_canonical, mojo_name) in aliases.items()
+    ]
+
+
+def test_lower_unit_lowers_local_exact_width_typedef_and_chain() -> None:
+    int64_ref = TypeRef(
+        decl_id="typedef:int64_t",
+        name="int64_t",
+        canonical=_i64(),
+    )
+    alias_ref = TypeRef(
+        decl_id="typedef:my_i64",
+        name="my_i64",
+        canonical=_i64(),
+    )
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Typedef(
+                decl_id="typedef:int64_t",
+                name="int64_t",
+                aliased=_i64(),
+                canonical=_i64(),
+            ),
+            Typedef(
+                decl_id="typedef:my_i64",
+                name="my_i64",
+                aliased=int64_ref,
+                canonical=_i64(),
+            ),
+            Function(
+                decl_id="fn:use_i64",
+                name="use_i64",
+                link_name="use_i64",
+                ret=alias_ref,
+                params=[CIRParam(name="value", type=alias_ref)],
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+
+    assert lowered.decls[0] == AliasDecl(
+        name="int64_t",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=NamedType("Int64"),
+    )
+    assert lowered.decls[1] == AliasDecl(
+        name="my_i64",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=NamedType("int64_t"),
+    )
+
+
+def test_lower_unit_keeps_ordinary_long_as_c_long() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Function(
+                decl_id="fn:take_long",
+                name="take_long",
+                link_name="take_long",
+                ret=_i64(),
+                params=[CIRParam(name="value", type=_i64())],
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    fn_decl = lowered.decls[0]
+
+    assert isinstance(fn_decl, FunctionDecl)
+    assert fn_decl.return_type == BuiltinType(MojoBuiltin.C_LONG)
+    assert fn_decl.params[0].type == BuiltinType(MojoBuiltin.C_LONG)
 
 
 def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> None:

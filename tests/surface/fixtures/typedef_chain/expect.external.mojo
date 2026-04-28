@@ -3,9 +3,9 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 
-from std.ffi import external_call, c_uint
+from std.ffi import external_call
 
-comptime uint32_t = c_uint
+comptime uint32_t = UInt32
 
 comptime tc_word = uint32_t
 

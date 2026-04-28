@@ -126,6 +126,26 @@ def _fixed_width_int_name(t: IntType) -> str | None:
     return None
 
 
+_EXACT_WIDTH_STDINT_ALIASES: dict[str, str] = {
+    "int8_t": "Int8",
+    "uint8_t": "UInt8",
+    "int16_t": "Int16",
+    "uint16_t": "UInt16",
+    "int32_t": "Int32",
+    "uint32_t": "UInt32",
+    "int64_t": "Int64",
+    "uint64_t": "UInt64",
+}
+
+
+def exact_width_stdint_alias_type(name: str) -> NamedType | None:
+    """Return the Mojo fixed-width type for exact-width stdint typedef aliases."""
+    mojo_name = _EXACT_WIDTH_STDINT_ALIASES.get(name)
+    if mojo_name is None:
+        return None
+    return NamedType(name=mojo_name)
+
+
 @dataclass
 class LowerTypePass:
     """Lower CIR types into surface-oriented MojoIR type nodes."""

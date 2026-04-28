@@ -1,10 +1,10 @@
 # Each non-comment line must be present in the emitted file.
-from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle, c_int
+from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle
 from std.builtin.simd import SIMD
 from std.atomic import Atomic
 struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
 struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
-comptime int32_t = c_int
+comptime int32_t = Int32
 comptime gcr_vec4 = SIMD[DType.float32, 4]
 comptime gcr_mut = GlobalVar[T=int32_t, link="gcr_mut"]
 comptime gcr_limit = GlobalConst[T=int32_t, link="gcr_limit"]

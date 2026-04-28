@@ -23,7 +23,7 @@ from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.struct_lowering import (
     StructLoweringContext,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
 from mojo_bindgen.analysis.type_walk import _walk_typeref_nodes
 from mojo_bindgen.ir import (
     BinaryExpr,
@@ -101,7 +101,9 @@ class LowerUnitPass:
                 continue
             seen_typedef_ids.add(ref.decl_id)
             alias_name = mojo_ident(ref.name)
-            lowered_type = type_lowerer.run(ref.canonical)
+            lowered_type = exact_width_stdint_alias_type(ref.name)
+            if lowered_type is None:
+                lowered_type = type_lowerer.run(ref.canonical)
             if isinstance(lowered_type, CallbackType):
                 lowered.append(
                     AliasDecl(

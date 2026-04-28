@@ -16,7 +16,7 @@ from mojo_bindgen.analysis.struct_lowering import (
     StructLoweringContext,
     lower_struct,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
 from mojo_bindgen.analysis.union_lowering import LowerUnionPass
 from mojo_bindgen.ir import (
     Const,
@@ -109,7 +109,9 @@ class UnitDeclLowerer:
 
     def _lower_typedef(self, decl: Typedef) -> AliasDecl | None:
         alias_name = mojo_ident(decl.name)
-        lowered_type = self.session.type_lowerer.run(decl.aliased)
+        lowered_type = exact_width_stdint_alias_type(decl.name)
+        if lowered_type is None:
+            lowered_type = self.session.type_lowerer.run(decl.aliased)
         if isinstance(lowered_type, CallbackType):
             return AliasDecl(
                 name=alias_name,

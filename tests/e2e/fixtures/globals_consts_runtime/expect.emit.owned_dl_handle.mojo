@@ -3,7 +3,7 @@ from std.builtin.simd import SIMD
 from std.atomic import Atomic
 comptime _BINDGEN_LIB_PATH: String
 def _bindgen_dl() raises -> OwnedDLHandle:
-comptime int32_t = c_int
+comptime int32_t = Int32
 comptime gcr_vec4 = SIMD[DType.float32, 4]
 comptime gcr_mut = GlobalVar[T=int32_t, link="gcr_mut"]
 comptime gcr_limit = GlobalConst[T=int32_t, link="gcr_limit"]

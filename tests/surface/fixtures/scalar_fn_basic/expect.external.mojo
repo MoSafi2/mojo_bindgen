@@ -3,9 +3,9 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 
-from std.ffi import external_call, c_int
+from std.ffi import external_call
 
-comptime int32_t = c_int
+comptime int32_t = Int32
 
 def sf_add(a: int32_t, b: int32_t) abi("C") -> int32_t:
     return external_call["sf_add", int32_t, int32_t, int32_t](a, b)

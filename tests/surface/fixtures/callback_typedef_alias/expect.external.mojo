@@ -3,9 +3,9 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 
-from std.ffi import external_call, c_int
+from std.ffi import external_call
 
-comptime int32_t = c_int
+comptime int32_t = Int32
 
 comptime cta_cb_t = def (value: int32_t) thin abi("C") -> int32_t
 
