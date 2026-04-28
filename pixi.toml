@@ -3,6 +3,14 @@ authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
 channels = ["https://conda.modular.com/max-nightly/", "conda-forge"]
 name = "mojo_bindgen"
 platforms = ["linux-64"]
+preview = ["pixi-build"]
+
+[package.build] 
+backend = { name = "pixi-build-python", version = "0.*" }
+
+[package.host-dependencies] 
+hatchling = "==1.26.3"
+
 
 # `default` includes the `dev` feature (full tooling). Use `-e install` for a smaller
 # runtime-only environment (Mojo + mojo-bindgen, no notebooks or dev PyPI tools).
@@ -25,6 +33,7 @@ typer = ">=0.25.0,<0.26"
 
 [pypi-dependencies]
 mojo-bindgen = { path = ".", editable = true }
+build = ">=1.4.4, <2"
 
 [feature.dev.dependencies]
 ipykernel = ">=7.1.0,<8"
@@ -33,7 +42,6 @@ nodejs = ">=25.8.2,<25.9"
 
 [feature.dev.pypi-dependencies]
 pytest = ">=9.0.3, <10"
-build = ">=1.4.4, <2"
 ruff = ">=0.15.12, <0.16"
 pyright = ">=1.1.409, <2"
 
