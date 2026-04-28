@@ -6,12 +6,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
+from mojo_bindgen.ir import ByteOrder
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
-    BitfieldGroupMember,
     BitfieldField,
+    BitfieldGroupMember,
     BuiltinType,
     CallbackParam,
     CallbackType,
@@ -52,7 +53,6 @@ from mojo_bindgen.mojo_ir import (
     StructKind,
     SupportDeclKind,
 )
-from mojo_bindgen.ir import ByteOrder
 
 
 @dataclass(frozen=True)

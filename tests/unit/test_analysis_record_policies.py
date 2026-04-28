@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis import assign_record_policies, lower_unit
 from mojo_bindgen.ir import (
-    ByteOrder,
     AtomicType,
+    ByteOrder,
     Field,
     IntKind,
     IntType,

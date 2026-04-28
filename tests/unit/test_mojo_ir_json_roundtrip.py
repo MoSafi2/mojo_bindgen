@@ -114,14 +114,14 @@ def test_struct_member_json_roundtrip() -> None:
 
     bitfields = struct_member_from_json(
         {
-                "kind": "BitfieldGroupMember",
-                "storage_name": "__bits0",
-                "storage_type": {"kind": "BuiltinType", "name": "c_uint"},
-                "byte_offset": 0,
-                "first_index": 0,
-                "storage_width_bits": 32,
-                "fields": [
-                    {
+            "kind": "BitfieldGroupMember",
+            "storage_name": "__bits0",
+            "storage_type": {"kind": "BuiltinType", "name": "c_uint"},
+            "byte_offset": 0,
+            "first_index": 0,
+            "storage_width_bits": 32,
+            "fields": [
+                {
                     "kind": "BitfieldField",
                     "index": 0,
                     "name": "ready",
