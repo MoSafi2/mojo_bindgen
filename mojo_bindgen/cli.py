@@ -80,6 +80,22 @@ def run(
             help="Preserve parsed C alignment emission behavior. By default, omit @align for ordinary records and keep ABI comments only.",
         ),
     ] = False,
+    layout_tests: Annotated[
+        bool | None,
+        typer.Option(
+            "--layout-tests/--no-layout-tests",
+            help="Write a Mojo record-layout test sidecar with file output.",
+        ),
+    ] = None,
+    layout_test_output: Annotated[
+        Path | None,
+        typer.Option(
+            "--layout-test-output",
+            metavar="PATH",
+            help="Write layout-test sidecar to this path.",
+            show_default=False,
+        ),
+    ] = None,
 ) -> int:
     """Generate Mojo FFI from a C header using libclang.
 
@@ -106,6 +122,7 @@ def run(
         stderr_console.print(f"[bold red]mojo-bindgen error:[/bold red] {e}")
         raise typer.Exit(code=1) from e
 
+    artifacts = None
     if json_output:
         text = unit.to_json()
     else:
@@ -114,7 +131,26 @@ def run(
             library_path_hint=library_path_hint,
             strict_abi=strict_abi,
         )
-        text = MojoGenerator(opts).generate(unit)
+        emit_layout_tests = _should_emit_layout_tests(
+            json_output=json_output,
+            output=output,
+            layout_tests=layout_tests,
+            layout_test_output=layout_test_output,
+        )
+        if emit_layout_tests:
+            if output is not None:
+                sidecar_import_module = output.stem
+            else:
+                assert layout_test_output is not None
+                sidecar_import_module = stem
+            artifacts = MojoGenerator(opts).generate_artifacts(
+                unit,
+                layout_tests=True,
+                main_module_name=sidecar_import_module,
+            )
+            text = artifacts.bindings_source
+        else:
+            text = MojoGenerator(opts).generate(unit)
 
     if output is None:
         sys.stdout.write(text)
@@ -122,7 +158,32 @@ def run(
             sys.stdout.write("\n")
     else:
         output.write_text(text, encoding="utf-8")
+    if artifacts is not None and artifacts.layout_test_source is not None:
+        sidecar = layout_test_output
+        if sidecar is None:
+            if output is None:
+                return 0
+            sidecar = output.with_name(f"{output.stem}_test.mojo")
+        sidecar.write_text(artifacts.layout_test_source, encoding="utf-8")
     return 0
+
+
+def _should_emit_layout_tests(
+    *,
+    json_output: bool,
+    output: Path | None,
+    layout_tests: bool | None,
+    layout_test_output: Path | None,
+) -> bool:
+    if json_output:
+        return False
+    if layout_test_output is not None:
+        return layout_tests is not False
+    if output is None:
+        return False
+    if layout_tests is None:
+        return True
+    return layout_tests
 
 
 def main(argv: list[str] | None = None) -> int:

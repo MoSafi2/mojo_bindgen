@@ -14,9 +14,12 @@ from mojo_bindgen.analysis.normalize_mojo_module import (
 )
 from mojo_bindgen.analysis.orchestrator import (
     AnalysisOrchestrator,
+    AnalysisResult,
+    GeneratedArtifacts,
     MojoGenerator,
     analyze_to_mojo_module,
     generate_mojo,
+    generate_mojo_artifacts,
     run_ir_passes,
 )
 from mojo_bindgen.analysis.reachability import (
@@ -56,9 +59,11 @@ from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 __all__ = [
     "AssignRecordPoliciesError",
     "AssignRecordPoliciesPass",
+    "AnalysisResult",
     "AnalysisOrchestrator",
     "ConstExprLoweringError",
     "FFIScalarStyle",
+    "GeneratedArtifacts",
     "IRValidationError",
     "LowerConstExprPass",
     "LowerTypePass",
@@ -82,6 +87,7 @@ __all__ = [
     "analyze_to_mojo_module",
     "assign_record_policies",
     "generate_mojo",
+    "generate_mojo_artifacts",
     "iter_type_nodes",
     "lower_const_expr",
     "lower_struct",

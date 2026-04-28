@@ -115,6 +115,133 @@ def test_non_json_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) 
     }
 
 
+def test_output_mode_writes_default_layout_test_sidecar(monkeypatch, tmp_path: Path) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyArtifacts:
+        bindings_source = "bindings"
+        layout_test_source = "layout tests"
+
+    class DummyParser:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def run(self) -> _DummyUnit:
+            return _DummyUnit()
+
+    class DummyGenerator:
+        def __init__(self, _opts) -> None:
+            pass
+
+        def generate_artifacts(self, _unit, *, layout_tests: bool, main_module_name: str):
+            calls["layout_tests"] = layout_tests
+            calls["main_module_name"] = main_module_name
+            return DummyArtifacts()
+
+    monkeypatch.setattr(cli, "ClangParser", DummyParser)
+    monkeypatch.setattr(cli, "MojoGenerator", DummyGenerator)
+
+    output = tmp_path / "demo_bindings.mojo"
+    rc = cli.main([str(tmp_path / "demo.h"), "-o", str(output)])
+
+    assert rc == 0
+    assert output.read_text(encoding="utf-8") == "bindings"
+    assert (tmp_path / "demo_bindings_test.mojo").read_text(encoding="utf-8") == "layout tests"
+    assert calls == {"layout_tests": True, "main_module_name": "demo_bindings"}
+
+
+def test_no_layout_tests_suppresses_default_sidecar(monkeypatch, tmp_path: Path) -> None:
+    class DummyParser:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def run(self) -> _DummyUnit:
+            return _DummyUnit()
+
+    class DummyGenerator:
+        def __init__(self, _opts) -> None:
+            pass
+
+        def generate(self, _unit: _DummyUnit) -> str:
+            return "bindings"
+
+    monkeypatch.setattr(cli, "ClangParser", DummyParser)
+    monkeypatch.setattr(cli, "MojoGenerator", DummyGenerator)
+
+    output = tmp_path / "demo.mojo"
+    rc = cli.main([str(tmp_path / "demo.h"), "-o", str(output), "--no-layout-tests"])
+
+    assert rc == 0
+    assert output.read_text(encoding="utf-8") == "bindings"
+    assert not (tmp_path / "demo_test.mojo").exists()
+
+
+def test_custom_layout_test_output_writes_requested_sidecar(monkeypatch, tmp_path: Path) -> None:
+    class DummyArtifacts:
+        bindings_source = "bindings"
+        layout_test_source = "custom layout"
+
+    class DummyParser:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def run(self) -> _DummyUnit:
+            return _DummyUnit()
+
+    class DummyGenerator:
+        def __init__(self, _opts) -> None:
+            pass
+
+        def generate_artifacts(self, _unit, *, layout_tests: bool, main_module_name: str):
+            assert layout_tests is True
+            assert main_module_name == "demo"
+            return DummyArtifacts()
+
+    monkeypatch.setattr(cli, "ClangParser", DummyParser)
+    monkeypatch.setattr(cli, "MojoGenerator", DummyGenerator)
+
+    output = tmp_path / "demo.mojo"
+    sidecar = tmp_path / "checks.mojo"
+    rc = cli.main(
+        [
+            str(tmp_path / "demo.h"),
+            "-o",
+            str(output),
+            "--layout-test-output",
+            str(sidecar),
+        ]
+    )
+
+    assert rc == 0
+    assert sidecar.read_text(encoding="utf-8") == "custom layout"
+
+
+def test_stdout_does_not_write_layout_tests_by_default(monkeypatch, capsys, tmp_path: Path) -> None:
+    class DummyParser:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def run(self) -> _DummyUnit:
+            return _DummyUnit()
+
+    class DummyGenerator:
+        def __init__(self, _opts) -> None:
+            pass
+
+        def generate(self, _unit: _DummyUnit) -> str:
+            return "bindings"
+
+    monkeypatch.setattr(cli, "ClangParser", DummyParser)
+    monkeypatch.setattr(cli, "MojoGenerator", DummyGenerator)
+
+    rc = cli.main([str(tmp_path / "demo.h")])
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert captured.out == "bindings\n"
+    assert list(tmp_path.glob("*_test.mojo")) == []
+
+
 def test_parser_failures_return_exit_code_1(monkeypatch, capsys, tmp_path: Path) -> None:
     class DummyParser:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
