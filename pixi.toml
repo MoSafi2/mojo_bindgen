@@ -17,7 +17,7 @@ example-libpng = "bash examples/libpng/generate.sh"
 example-sqlite = "bash examples/sqlite/generate.sh"
 
 [dependencies]
-mojo = ">=1.0.0b1.dev2026042605,<2"
+mojo = ">=1.0.0b1.dev2026042717,<2"
 python = ">=3.14.4,<3.15"
 pip = ">=26.0.1,<27"
 rich = ">=15.0.0,<16"
