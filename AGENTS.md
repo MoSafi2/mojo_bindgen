@@ -15,7 +15,8 @@ Tests live under `tests/`:
 - `tests/surface/` for parser/emitter goldens
 - `tests/corpus/`, `tests/stress/`, and `tests/e2e/` for broader coverage
 
-Supporting material lives in `examples/`, `docs/`, `scripts/`, and `plans/`.
+Supporting material lives in `examples/`, `docs/`, `scripts/`, `typings/`, and
+`CONTRIBUTING.md`.
 
 ## Build, Test, and Development Commands
 
@@ -36,6 +37,12 @@ pixi run build
 - `pixi run test-light`: skips `expensive` tests for faster feedback
 - `pixi run check-light`: CI-aligned validation (`format-check`, lint, pyright, light tests)
 - `pixi run build`: build sdist and wheel
+- `pixi run precommit`: format, apply safe Ruff fixes, restage, and run `check-light`
+- `pixi run example-zlib` / `example-cairo` / `example-libpng` / `example-sqlite`:
+  generate and exercise example bindings
+
+The default Pixi environment includes development tooling. Use
+`pixi install -e install` for the smaller runtime-only environment.
 
 Without Pixi, use `pip install -e ".[dev]"` and run `pytest`, `ruff`, and `pyright` directly.
 
