@@ -1,4 +1,5 @@
 import sqlite3_bindings as sql
+from std.ffi import c_int
 from std.memory import alloc
 
 
@@ -15,6 +16,19 @@ def _assert(label: String, cond: Bool) raises:
 
 def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutExternalOrigin]:
     return rebind[UnsafePointer[Int8, ImmutExternalOrigin]](s.unsafe_ptr())
+
+
+def _ignore_exec_row(
+    data: MutOpaquePointer[MutExternalOrigin],
+    columns: c_int,
+    values: UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin],
+    names: UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin],
+) abi("C") -> c_int:
+    return 0
+
+
+def _ignore_bound_value(value: MutOpaquePointer[MutExternalOrigin]) abi("C"):
+    pass
 
 
 def _errmsg(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) -> String:
@@ -61,7 +75,7 @@ def _exec(
     var rc = sql.sqlite3_exec(
         db,
         _cstr(s),
-        UnsafePointer[sql.sqlite3_exec_cb, MutExternalOrigin](),
+        _ignore_exec_row,
         MutOpaquePointer[MutExternalOrigin](),
         UnsafePointer[
             UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
@@ -161,7 +175,7 @@ def run_text_roundtrip(
         1,
         txt,
         -1,
-        UnsafePointer[sql.sqlite3_bind_text_a4_cb, MutExternalOrigin](),
+        _ignore_bound_value,
     )
     _assert("bind.text", rc == sql.SQLITE_OK)
 
@@ -203,7 +217,7 @@ def run_blob_roundtrip(
         1,
         rebind[ImmutOpaquePointer[ImmutExternalOrigin]](buf),
         4,
-        UnsafePointer[sql.sqlite3_bind_blob_a4_cb, MutExternalOrigin](),
+        _ignore_bound_value,
     )
     _assert("bind.blob", rc == sql.SQLITE_OK)
 

@@ -24,6 +24,10 @@ def _cstr_mut(s: StaticString) -> UnsafePointer[Int8, MutExternalOrigin]:
     return rebind[UnsafePointer[Int8, MutExternalOrigin]](s.unsafe_ptr())
 
 
+def _ignore_png_message(png_ptr: png.png_structp, msg: png.png_const_charp) abi("C"):
+    pass
+
+
 def run_version_checks() raises:
     var access_version = png.png_access_version_number()
     _assert("libpng.version_positive", access_version > 0)
@@ -274,8 +278,8 @@ def run_transform_and_options_checks() raises:
     var png_ptr = png.png_create_write_struct(
         _cstr("1.6.43"),
         MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[png.png_error_ptr, MutExternalOrigin](),
-        UnsafePointer[png.png_error_ptr, MutExternalOrigin](),
+        _ignore_png_message,
+        _ignore_png_message,
     )
     _assert("libpng.create_write_struct", png_ptr != png.png_structp())
 
