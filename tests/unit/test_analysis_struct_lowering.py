@@ -5,6 +5,7 @@ from __future__ import annotations
 from mojo_bindgen.analysis.struct_lowering import StructLoweringContext, lower_struct
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
+    ByteOrder,
     AtomicType,
     Field,
     IntKind,
@@ -45,7 +46,11 @@ def _bool() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def _field(
@@ -349,6 +354,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
             storage_type=BuiltinType(MojoBuiltin.C_UINT),
             byte_offset=0,
             first_index=0,
+            storage_width_bits=32,
             fields=[
                 BitfieldField(
                     index=0,
@@ -373,6 +379,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
             storage_type=BuiltinType(MojoBuiltin.C_UCHAR),
             byte_offset=4,
             first_index=3,
+            storage_width_bits=8,
             fields=[
                 BitfieldField(
                     index=3,

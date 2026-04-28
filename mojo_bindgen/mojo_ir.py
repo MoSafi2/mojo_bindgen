@@ -392,6 +392,7 @@ class BitfieldGroupMember(SerDeMixin):
     storage_type: MojoType
     byte_offset: int
     first_index: int
+    storage_width_bits: int
     fields: list[BitfieldField] = field(default_factory=list)
 
 

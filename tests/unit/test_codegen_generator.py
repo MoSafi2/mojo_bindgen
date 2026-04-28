@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import mojo_bindgen.analysis.orchestrator as generator_mod
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import Function, IntKind, IntType, TargetABI, Unit, VoidType
+from mojo_bindgen.ir import ByteOrder, Function, IntKind, IntType, TargetABI, Unit, VoidType
 from mojo_bindgen.mojo_ir import LinkMode, MojoModule
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def _demo_unit() -> Unit:

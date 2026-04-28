@@ -181,6 +181,7 @@ def _lower_typed_members(
                 storage_type=lowered_storage_type,
                 byte_offset=run_layout.byte_offset,
                 first_index=run_layout.first_index,
+                storage_width_bits=run_layout.storage_width_bits,
                 fields=lowered_fields,
             )
         )

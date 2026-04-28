@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mojo_bindgen.ir import Unit
+from mojo_bindgen.ir import ByteOrder, Unit
 from mojo_bindgen.parsing.parser import ClangParser
 
 
@@ -16,6 +16,7 @@ def test_clang_parser_records_target_abi_on_unit(tmp_path: Path) -> None:
 
     assert unit.target_abi.pointer_size_bytes > 0
     assert unit.target_abi.pointer_align_bytes > 0
+    assert unit.target_abi.byte_order in (ByteOrder.LITTLE, ByteOrder.BIG)
 
 
 def test_unit_json_roundtrip_preserves_target_abi(tmp_path: Path) -> None:
@@ -26,3 +27,4 @@ def test_unit_json_roundtrip_preserves_target_abi(tmp_path: Path) -> None:
     restored = Unit.from_json_dict(unit.to_json_dict())
 
     assert restored.target_abi == unit.target_abi
+    assert restored.target_abi.byte_order == unit.target_abi.byte_order

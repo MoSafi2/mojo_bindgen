@@ -114,13 +114,14 @@ def test_struct_member_json_roundtrip() -> None:
 
     bitfields = struct_member_from_json(
         {
-            "kind": "BitfieldGroupMember",
-            "storage_name": "__bits0",
-            "storage_type": {"kind": "BuiltinType", "name": "c_uint"},
-            "byte_offset": 0,
-            "first_index": 0,
-            "fields": [
-                {
+                "kind": "BitfieldGroupMember",
+                "storage_name": "__bits0",
+                "storage_type": {"kind": "BuiltinType", "name": "c_uint"},
+                "byte_offset": 0,
+                "first_index": 0,
+                "storage_width_bits": 32,
+                "fields": [
+                    {
                     "kind": "BitfieldField",
                     "index": 0,
                     "name": "ready",
@@ -144,6 +145,7 @@ def test_struct_member_json_roundtrip() -> None:
     )
     assert isinstance(bitfields, BitfieldGroupMember)
     assert bitfields.storage_type == BuiltinType(name=MojoBuiltin.C_UINT)
+    assert bitfields.storage_width_bits == 32
 
 
 def test_mojo_decl_json_roundtrip() -> None:

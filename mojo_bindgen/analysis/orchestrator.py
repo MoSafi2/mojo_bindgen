@@ -123,7 +123,13 @@ class MojoGenerator:
         main_module_name: str | None = None,
     ) -> GeneratedArtifacts:
         analysis = self.analyze_with_artifacts(unit)
-        bindings_source = self.render(analysis.mojo_module)
+        bindings_source = render_mojo_module(
+            analysis.mojo_module,
+            MojoIRPrintOptions(
+                module_comment=self._options.module_comment,
+                byte_order=analysis.normalized_unit.target_abi.byte_order,
+            ),
+        )
         layout_test_source = None
         if layout_tests:
             module_name = main_module_name or analysis.mojo_module.library

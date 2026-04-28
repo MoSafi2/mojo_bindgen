@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis import assign_record_policies, lower_unit
 from mojo_bindgen.ir import (
+    ByteOrder,
     AtomicType,
     Field,
     IntKind,
@@ -45,7 +46,11 @@ def _bool() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def _field(

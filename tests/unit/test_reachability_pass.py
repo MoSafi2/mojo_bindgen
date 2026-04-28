@@ -8,6 +8,7 @@ from mojo_bindgen.analysis.reachability import (
     materialize_reachable_struct_refs,
 )
 from mojo_bindgen.ir import (
+    ByteOrder,
     Function,
     FunctionPtr,
     IntKind,
@@ -27,7 +28,11 @@ def _i32() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def test_materializes_orphan_struct_ref_from_parameter() -> None:

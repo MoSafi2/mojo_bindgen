@@ -5,6 +5,7 @@ from __future__ import annotations
 from mojo_bindgen.analysis import lower_unit
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    ByteOrder,
     Const,
     Enum,
     Enumerant,
@@ -71,7 +72,11 @@ def _u64() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def _field(

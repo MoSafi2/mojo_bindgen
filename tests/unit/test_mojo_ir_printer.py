@@ -16,7 +16,7 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
     MojoIRPrintOptions,
     render_mojo_module,
 )
-from mojo_bindgen.ir import Field, IntKind, IntType, Struct, TargetABI, Unit
+from mojo_bindgen.ir import ByteOrder, Field, IntKind, IntType, Struct, TargetABI, Unit
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -70,7 +70,11 @@ def _i32_type() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def test_enum_struct_roundtrip_keeps_comptime_members() -> None:
@@ -205,6 +209,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                         storage_type=BuiltinType(MojoBuiltin.C_UINT),
                         byte_offset=16,
                         first_index=2,
+                        storage_width_bits=32,
                         fields=[
                             BitfieldField(
                                 index=2,
@@ -308,6 +313,99 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         'def install(cb: install_cb, widget: UnsafePointer[Widget, ImmutExternalOrigin]) abi("C") -> None:'
         in out
     )
+
+
+def test_render_bitfield_accessors_reflect_target_byte_order() -> None:
+    little = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            StructDecl(
+                name="Flags",
+                members=[
+                    BitfieldGroupMember(
+                        storage_name="__bf0",
+                        storage_type=BuiltinType(MojoBuiltin.C_UINT),
+                        byte_offset=0,
+                        first_index=0,
+                        storage_width_bits=32,
+                        fields=[
+                            BitfieldField(
+                                index=0,
+                                name="ready",
+                                logical_type=BuiltinType(MojoBuiltin.BOOL),
+                                bit_offset=0,
+                                bit_width=1,
+                                signed=False,
+                                bool_semantics=True,
+                            ),
+                            BitfieldField(
+                                index=1,
+                                name="mode",
+                                logical_type=BuiltinType(MojoBuiltin.C_UINT),
+                                bit_offset=1,
+                                bit_width=3,
+                                signed=False,
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+    big = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            StructDecl(
+                name="Flags",
+                members=[
+                    BitfieldGroupMember(
+                        storage_name="__bf0",
+                        storage_type=BuiltinType(MojoBuiltin.C_UINT),
+                        byte_offset=0,
+                        first_index=0,
+                        storage_width_bits=32,
+                        fields=[
+                            BitfieldField(
+                                index=0,
+                                name="ready",
+                                logical_type=BuiltinType(MojoBuiltin.BOOL),
+                                bit_offset=0,
+                                bit_width=1,
+                                signed=False,
+                                bool_semantics=True,
+                            ),
+                            BitfieldField(
+                                index=1,
+                                name="mode",
+                                logical_type=BuiltinType(MojoBuiltin.C_UINT),
+                                bit_offset=1,
+                                bit_width=3,
+                                signed=False,
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+    little_rendered = MojoIRPrinter(
+        MojoIRPrintOptions(module_comment=False, byte_order=ByteOrder.LITTLE)
+    ).render(little)
+    big_rendered = MojoIRPrinter(
+        MojoIRPrintOptions(module_comment=False, byte_order=ByteOrder.BIG)
+    ).render(big)
+
+    assert "self.__bf0 >> 0" in little_rendered
+    assert "self.__bf0 >> 1" in little_rendered
+    assert "self.__bf0 >> 31" in big_rendered
+    assert "self.__bf0 >> 28" in big_rendered
 
 
 def test_render_callback_alias_uses_none_in_signature_position() -> None:

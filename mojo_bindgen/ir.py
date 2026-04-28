@@ -115,6 +115,13 @@ MacroDeclKind = Literal[
 # Classification of preserved preprocessor macro declarations.
 
 
+class ByteOrder(StrEnum):
+    """Target byte order used for storage layout and bitfield accessors."""
+
+    LITTLE = "little"
+    BIG = "big"
+
+
 @dataclass(frozen=True)
 class Qualifiers(SerDeMixin):
     """C type qualifiers preserved on pointee types and other referenced types."""
@@ -692,6 +699,7 @@ class TargetABI(SerDeMixin):
 
     pointer_size_bytes: int
     pointer_align_bytes: int
+    byte_order: ByteOrder
 
 
 Decl = Union[

@@ -5,6 +5,7 @@ from __future__ import annotations
 from mojo_bindgen.analysis.record_layout import analyze_record_layout
 from mojo_bindgen.analysis.type_layout import type_layout
 from mojo_bindgen.ir import (
+    ByteOrder,
     Field,
     IntKind,
     IntType,
@@ -21,7 +22,11 @@ def _i32() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def test_type_layout_uses_real_union_alignment_from_cir() -> None:

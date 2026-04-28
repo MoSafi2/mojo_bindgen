@@ -11,6 +11,7 @@ from mojo_bindgen.mojo_ir import (
     AliasKind,
     ArrayType,
     BitfieldGroupMember,
+    BitfieldField,
     BuiltinType,
     CallbackParam,
     CallbackType,
@@ -51,11 +52,13 @@ from mojo_bindgen.mojo_ir import (
     StructKind,
     SupportDeclKind,
 )
+from mojo_bindgen.ir import ByteOrder
 
 
 @dataclass(frozen=True)
 class MojoIRPrintOptions:
     module_comment: bool = True
+    byte_order: ByteOrder = ByteOrder.LITTLE
 
 
 class MojoIRPrintError(ValueError):
@@ -293,7 +296,7 @@ class MojoIRPrinter:
         for bitfield in group.fields:
             logical_type = self._render_type(bitfield.logical_type)
             mask_text = self._storage_mask_text(bitfield.bit_width)
-            shift = max(0, bitfield.bit_offset - group.byte_offset * 8)
+            shift = self._bitfield_shift(group, bitfield)
             b.add(f"def {bitfield.name}(self) -> {logical_type}:")
             b.indent()
             b.add(f"var raw = (self.{group.storage_name} >> {shift}) & {storage_type}({mask_text})")
@@ -321,6 +324,12 @@ class MojoIRPrinter:
                 f"((raw_value & {storage_type}({mask_text})) << {shift})"
             )
             b.dedent()
+
+    def _bitfield_shift(self, group: BitfieldGroupMember, bitfield: BitfieldField) -> int:
+        bit_offset = bitfield.bit_offset - group.byte_offset * 8
+        if self._options.byte_order == ByteOrder.LITTLE:
+            return max(0, bit_offset)
+        return max(0, group.storage_width_bits - bit_offset - bitfield.bit_width)
 
     def _render_alias_decl(self, decl: AliasDecl) -> str:
         b = CodeBuilder()

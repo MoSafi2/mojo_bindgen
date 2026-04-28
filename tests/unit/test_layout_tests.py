@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import Field, IntKind, IntType, Struct, TargetABI, Unit
+from mojo_bindgen.ir import ByteOrder, Field, IntKind, IntType, Struct, TargetABI, Unit
 from mojo_bindgen.layout_tests import collect_layout_record_checks, render_layout_test_module
 from mojo_bindgen.mojo_ir import (
     BitfieldField,
@@ -19,7 +19,11 @@ from mojo_bindgen.mojo_ir import (
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def _i32() -> IntType:
@@ -139,6 +143,7 @@ def test_collect_layout_record_checks_for_bitfield_storage_group_offset() -> Non
                 storage_type=BuiltinType(MojoBuiltin.C_UINT),
                 byte_offset=0,
                 first_index=0,
+                storage_width_bits=32,
                 fields=[
                     BitfieldField(
                         index=0,

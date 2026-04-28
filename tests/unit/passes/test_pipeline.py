@@ -6,6 +6,7 @@ from mojo_bindgen.analysis import lower_unit, run_ir_passes
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 from mojo_bindgen.ir import (
+    ByteOrder,
     Field,
     Function,
     IntKind,
@@ -33,7 +34,11 @@ def _i32() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+    )
 
 
 def test_run_ir_passes_validates_already_normalized_ir() -> None:
