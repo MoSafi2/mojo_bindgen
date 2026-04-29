@@ -9,8 +9,8 @@ from typing import Annotated, Literal
 import typer
 from rich.console import Console
 
-from mojo_bindgen.analysis import MojoEmitOptions, MojoGenerator
-from mojo_bindgen.parsing.parser import ClangParser, ParseError
+from mojo_bindgen.orchestrator import BindgenOptions, BindgenOrchestrator
+from mojo_bindgen.parsing.parser import ParseError
 
 stderr_console = Console(stderr=True)
 
@@ -104,53 +104,32 @@ def run(
       mojo-bindgen path/to/header.h --json -o unit.json
       mojo-bindgen include/me.h --compile-arg=-I./include -o out.mojo
     """
-    stem = header.stem if header.suffix else str(header)
-    library_name = library if library is not None else stem
-    link_name_value = link_name if link_name is not None else library_name
-    compile_args = compile_arg
-
     try:
-        parser = ClangParser(
-            header,
-            library=library_name,
-            link_name=link_name_value,
-            compile_args=compile_args,
-            raise_on_error=True,
+        orchestrator = BindgenOrchestrator(
+            BindgenOptions(
+                header=header,
+                library=library,
+                link_name=link_name,
+                compile_args=compile_arg,
+                linking=linking,
+                library_path_hint=library_path_hint,
+                strict_abi=strict_abi,
+                module_comment=True,
+                layout_tests=layout_tests,
+                json_output=json_output,
+                output=output,
+                layout_test_output=layout_test_output,
+            )
         )
-        unit = parser.run()
+        result = orchestrator.run()
     except (ParseError, FileNotFoundError, OSError) as e:
         stderr_console.print(f"[bold red]mojo-bindgen error:[/bold red] {e}")
         raise typer.Exit(code=1) from e
 
-    artifacts = None
     if json_output:
-        text = unit.to_json()
+        text = result.unit.to_json()
     else:
-        opts = MojoEmitOptions(
-            linking=linking,
-            library_path_hint=library_path_hint,
-            strict_abi=strict_abi,
-        )
-        emit_layout_tests = _should_emit_layout_tests(
-            json_output=json_output,
-            output=output,
-            layout_tests=layout_tests,
-            layout_test_output=layout_test_output,
-        )
-        if emit_layout_tests:
-            if output is not None:
-                sidecar_import_module = output.stem
-            else:
-                assert layout_test_output is not None
-                sidecar_import_module = stem
-            artifacts = MojoGenerator(opts).generate_artifacts(
-                unit,
-                layout_tests=True,
-                main_module_name=sidecar_import_module,
-            )
-            text = artifacts.bindings_source
-        else:
-            text = MojoGenerator(opts).generate(unit)
+        text = result.bindings_source
 
     if output is None:
         sys.stdout.write(text)
@@ -158,32 +137,13 @@ def run(
             sys.stdout.write("\n")
     else:
         output.write_text(text, encoding="utf-8")
-    if artifacts is not None and artifacts.layout_test_source is not None:
+    if result.layout_test_source is not None:
         sidecar = layout_test_output
-        if sidecar is None:
-            if output is None:
-                return 0
+        if sidecar is None and output is not None:
             sidecar = output.with_name(f"{output.stem}_test.mojo")
-        sidecar.write_text(artifacts.layout_test_source, encoding="utf-8")
+        if sidecar is not None:
+            sidecar.write_text(result.layout_test_source, encoding="utf-8")
     return 0
-
-
-def _should_emit_layout_tests(
-    *,
-    json_output: bool,
-    output: Path | None,
-    layout_tests: bool | None,
-    layout_test_output: Path | None,
-) -> bool:
-    if json_output:
-        return False
-    if layout_test_output is not None:
-        return layout_tests is not False
-    if output is None:
-        return False
-    if layout_tests is None:
-        return True
-    return layout_tests
 
 
 def main(argv: list[str] | None = None) -> int:

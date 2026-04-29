@@ -1,10 +1,14 @@
-"""Tests for the public analysis-owned MojoGenerator orchestration path."""
+"""Tests for the top-level bindgen orchestrator."""
 
 from __future__ import annotations
 
-import mojo_bindgen.analysis.orchestrator as generator_mod
+from dataclasses import dataclass
+from pathlib import Path
+
+import mojo_bindgen.orchestrator as orchestrator_mod
+from mojo_bindgen import BindgenOptions, BindgenOrchestrator, bindgen
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import ByteOrder, Function, IntKind, IntType, TargetABI, Unit, VoidType
+from mojo_bindgen.ir import ByteOrder, Function, TargetABI, Unit, VoidType
 from mojo_bindgen.mojo_ir import LinkMode, MojoModule
 
 
@@ -34,7 +38,54 @@ def _demo_unit() -> Unit:
     )
 
 
-def test_mojo_generator_lower_uses_analysis_orchestrator(monkeypatch) -> None:
+def _options_for_unit(unit: Unit, emit_options: MojoEmitOptions | None = None) -> BindgenOptions:
+    options = emit_options or MojoEmitOptions()
+    return BindgenOptions(
+        header=Path(unit.source_header),
+        library=unit.library,
+        link_name=unit.link_name,
+        linking=options.linking,
+        library_path_hint=options.library_path_hint,
+        strict_abi=options.strict_abi,
+        module_comment=options.module_comment,
+    )
+
+
+def test_parse_builds_clang_parser(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyParser:
+        def __init__(
+            self, header: Path, *, library: str, link_name: str, compile_args, raise_on_error
+        ):
+            calls["header"] = header
+            calls["library"] = library
+            calls["link_name"] = link_name
+            calls["compile_args"] = compile_args
+            calls["raise_on_error"] = raise_on_error
+
+        def run(self) -> Unit:
+            return _demo_unit()
+
+    monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
+
+    options = BindgenOptions(
+        header=Path("demo.h"),
+        compile_args=["-I./include"],
+    )
+    result = BindgenOrchestrator(options).parse()
+
+    assert result == _demo_unit()
+    assert calls == {
+        "header": Path("demo.h"),
+        "library": "demo",
+        "link_name": "demo",
+        "compile_args": ["-I./include"],
+        "raise_on_error": True,
+    }
+
+
+def test_analyze_uses_analysis_orchestrator(monkeypatch) -> None:
     unit = _demo_unit()
     lowered = MojoModule(
         source_header="demo.h",
@@ -44,7 +95,7 @@ def test_mojo_generator_lower_uses_analysis_orchestrator(monkeypatch) -> None:
     )
     captured: dict[str, object] = {}
 
-    class DummyOrchestrator:
+    class DummyAnalysisOrchestrator:
         def __init__(self, options) -> None:
             captured["options"] = options
 
@@ -52,115 +103,130 @@ def test_mojo_generator_lower_uses_analysis_orchestrator(monkeypatch) -> None:
             captured["unit"] = arg
             return lowered
 
-    monkeypatch.setattr(generator_mod, "AnalysisOrchestrator", DummyOrchestrator)
+    monkeypatch.setattr(orchestrator_mod, "AnalysisOrchestrator", DummyAnalysisOrchestrator)
 
-    result = generator_mod.MojoGenerator(MojoEmitOptions()).lower(unit)
+    result = BindgenOrchestrator(_options_for_unit(unit)).analyze(unit)
 
     assert result is lowered
-    assert captured == {
-        "options": MojoEmitOptions(),
-        "unit": unit,
-    }
+    assert captured["unit"] is unit
+    assert captured["options"] == MojoEmitOptions()
 
 
-def test_analysis_orchestrator_runs_full_analysis_sequence(monkeypatch) -> None:
+def test_codegen_renders_bindings_and_layout_tests(monkeypatch) -> None:
     unit = _demo_unit()
-    normalized = _demo_unit()
-    lowered = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
-    )
-    policy_applied = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
-    )
-    normalized_module = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
-    )
-    calls: list[tuple[str, object]] = []
-
-    def fake_run_ir_passes(self, arg):
-        calls.append(("run_ir_passes", arg))
-        return normalized
-
-    def fake_lower_unit(arg, *, options):
-        calls.append(("lower_unit", arg, options))
-        return lowered
-
-    def fake_assign_record_policies(arg):
-        calls.append(("assign_record_policies", arg))
-        return policy_applied
-
-    def fake_normalize_mojo_module(arg):
-        calls.append(("normalize", arg))
-        return normalized_module
-
-    monkeypatch.setattr(generator_mod.AnalysisOrchestrator, "run_ir_passes", fake_run_ir_passes)
-    monkeypatch.setattr(generator_mod, "lower_unit", fake_lower_unit)
-    monkeypatch.setattr(generator_mod, "assign_record_policies", fake_assign_record_policies)
-    monkeypatch.setattr(generator_mod, "normalize_mojo_module", fake_normalize_mojo_module)
-
-    result = generator_mod.AnalysisOrchestrator(MojoEmitOptions()).analyze(unit)
-
-    assert result is normalized_module
-    assert calls == [
-        ("run_ir_passes", unit),
-        ("lower_unit", normalized, MojoEmitOptions()),
-        ("assign_record_policies", lowered),
-        ("normalize", policy_applied),
-    ]
-
-
-def test_mojo_generator_render_passes_module_comment_to_printer(monkeypatch) -> None:
     module = MojoModule(
         source_header="demo.h",
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
     )
-    captured: dict[str, object] = {}
+    calls: dict[str, object] = {}
 
     def fake_render_mojo_module(arg, options):
-        captured["module"] = arg
-        captured["module_comment"] = options.module_comment
+        calls["module"] = arg
+        calls["module_comment"] = options.module_comment
         return "generated"
 
-    monkeypatch.setattr(generator_mod, "render_mojo_module", fake_render_mojo_module)
+    def fake_render_layout_test_module(*, normalized_unit, mojo_module, main_module_name):
+        calls["normalized_unit"] = normalized_unit
+        calls["layout_module"] = mojo_module
+        calls["main_module_name"] = main_module_name
+        return "layout"
 
-    result = generator_mod.MojoGenerator(MojoEmitOptions(module_comment=False)).render(module)
+    monkeypatch.setattr(orchestrator_mod, "render_mojo_module", fake_render_mojo_module)
+    monkeypatch.setattr(
+        orchestrator_mod, "render_layout_test_module", fake_render_layout_test_module
+    )
 
-    assert result == "generated"
-    assert captured == {
+    options = BindgenOptions(
+        header=Path("demo.h"),
+        output=Path("/tmp/demo_bindings.mojo"),
+        layout_tests=True,
+        module_comment=False,
+    )
+    artifacts = BindgenOrchestrator(options).codegen(module, normalized_unit=unit)
+
+    assert artifacts.bindings_source == "generated"
+    assert artifacts.layout_test_source == "layout"
+    assert calls == {
         "module": module,
         "module_comment": False,
+        "normalized_unit": unit,
+        "layout_module": module,
+        "main_module_name": "demo_bindings",
     }
 
 
-def test_mojo_generator_ignores_strict_abi_in_default_pipeline() -> None:
-    unit = Unit(
+def test_run_returns_full_result(monkeypatch) -> None:
+    unit = _demo_unit()
+    module = MojoModule(
         source_header="demo.h",
         library="demo",
         link_name="demo",
-        target_abi=_abi(),
-        decls=[
-            Function(
-                decl_id="fn:add",
-                name="add",
-                link_name="add",
-                ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-                params=[],
-            )
-        ],
+        link_mode=LinkMode.EXTERNAL_CALL,
     )
 
-    default_out = generator_mod.MojoGenerator(MojoEmitOptions()).generate(unit)
-    strict_out = generator_mod.MojoGenerator(MojoEmitOptions(strict_abi=True)).generate(unit)
+    @dataclass(frozen=True)
+    class DummyAnalysisResult:
+        normalized_unit: Unit
+        mojo_module: MojoModule
 
-    assert strict_out == default_out
+    class DummyAnalysisOrchestrator:
+        def __init__(self, _options) -> None:
+            pass
+
+        def analyze_with_artifacts(self, arg):
+            assert arg == unit
+            return DummyAnalysisResult(normalized_unit=unit, mojo_module=module)
+
+    class DummyRendered:
+        bindings_source = "generated"
+        layout_test_source = None
+
+    monkeypatch.setattr(orchestrator_mod, "AnalysisOrchestrator", DummyAnalysisOrchestrator)
+    monkeypatch.setattr(
+        BindgenOrchestrator,
+        "parse",
+        lambda self: unit,
+    )
+    monkeypatch.setattr(
+        BindgenOrchestrator,
+        "codegen",
+        lambda self, _module, *, normalized_unit=None: DummyRendered(),
+    )
+
+    result = BindgenOrchestrator(_options_for_unit(unit)).run()
+
+    assert result.unit is unit
+    assert result.mojo_module is module
+    assert result.bindings_source == "generated"
+    assert result.layout_test_source is None
+
+
+def test_bindgen_wrapper_uses_orchestrator(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class DummyResult:
+        unit = _demo_unit()
+        mojo_module = MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+        )
+        bindings_source = "generated"
+        layout_test_source = None
+
+    class DummyOrchestrator:
+        def __init__(self, options) -> None:
+            captured["options"] = options
+
+        def run(self):
+            return DummyResult()
+
+    monkeypatch.setattr(orchestrator_mod, "BindgenOrchestrator", DummyOrchestrator)
+
+    result = bindgen(_options_for_unit(_demo_unit()))
+
+    assert result.bindings_source == "generated"
+    assert captured["options"].header == Path("demo.h")

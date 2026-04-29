@@ -9,13 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.analysis import analyze_to_mojo_module
-from mojo_bindgen.analysis.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.codegen.mojo_ir_printer import (
     MojoIRPrinter,
     MojoIRPrintOptions,
     render_mojo_module,
 )
+from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.ir import ByteOrder, Field, IntKind, IntType, Struct, TargetABI, Unit
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
@@ -60,6 +59,7 @@ from mojo_bindgen.mojo_ir import (
     SupportDeclKind,
     TypeArg,
 )
+from tests.bindgen_helpers import analyze_to_mojo_module
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -552,7 +552,7 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
 
 
 def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:
-    normalize_mod = importlib.import_module("mojo_bindgen.analysis.normalize_mojo_module")
+    normalize_mod = importlib.import_module("mojo_bindgen.codegen.normalize_mojo_module")
 
     def fail(*_args, **_kwargs):
         raise AssertionError("render_mojo_module should not normalize")

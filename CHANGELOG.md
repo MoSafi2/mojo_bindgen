@@ -13,6 +13,11 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Split bindgen into explicit parsing, analysis, codegen, and top-level
+  orchestration layers. The new public surface is
+  `BindgenOptions` / `BindgenOrchestrator` / `BindgenResult` / `bindgen`, and
+  the old `MojoGenerator` / `generate_mojo` / `generate_mojo_artifacts` /
+  `analyze_to_mojo_module` APIs are removed.
 - Unify MojoIR callable signatures under `FunctionType` so function-pointer
   lowering, callback typedefs, and callback aliases all share the same schema.
   This removes the separate `CallbackType` / `CallbackParam` MojoIR shape.

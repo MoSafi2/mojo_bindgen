@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.analysis import MojoGenerator
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AtomicType,
@@ -25,6 +24,7 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.parsing.lowering import TypeContext
 from mojo_bindgen.parsing.parser import ClangParser
+from tests.bindgen_helpers import MojoGenerator
 
 
 def _has_libclang() -> bool:

@@ -9,9 +9,19 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
     MojoIRPrintOptions,
     render_mojo_module,
 )
+from mojo_bindgen.codegen.normalize_mojo_module import (
+    NormalizeMojoModuleError,
+    NormalizeMojoModulePass,
+    normalize_mojo_module,
+)
+from mojo_bindgen.layout_tests import render_layout_test_module
 
 __all__ = [
+    "NormalizeMojoModuleError",
+    "NormalizeMojoModulePass",
     "MojoIRPrinter",
     "MojoIRPrintOptions",
+    "normalize_mojo_module",
+    "render_layout_test_module",
     "render_mojo_module",
 ]
