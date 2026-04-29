@@ -419,7 +419,9 @@ class MojoIRPrinter:
             f"((raw_value & {storage_type}({mask_text})) << {shift})"
         )
 
-    def _bitfield_shifts(self, group: BitfieldGroupMember, bitfield: BitfieldField) -> tuple[int, int]:
+    def _bitfield_shifts(
+        self, group: BitfieldGroupMember, bitfield: BitfieldField
+    ) -> tuple[int, int]:
         bit_offset = bitfield.bit_offset - group.byte_offset * 8
         little_shift = max(0, bit_offset)
         big_shift = max(0, group.storage_width_bits - bit_offset - bitfield.bit_width)
