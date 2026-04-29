@@ -6,7 +6,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
-from mojo_bindgen.ir import ByteOrder
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -58,7 +57,6 @@ from mojo_bindgen.mojo_ir import (
 @dataclass(frozen=True)
 class MojoIRPrintOptions:
     module_comment: bool = True
-    byte_order: ByteOrder = ByteOrder.LITTLE
 
 
 class MojoIRPrintError(ValueError):
@@ -296,40 +294,136 @@ class MojoIRPrinter:
         for bitfield in group.fields:
             logical_type = self._render_type(bitfield.logical_type)
             mask_text = self._storage_mask_text(bitfield.bit_width)
-            shift = self._bitfield_shift(group, bitfield)
             b.add(f"def {bitfield.name}(self) -> {logical_type}:")
             b.indent()
-            b.add(f"var raw = (self.{group.storage_name} >> {shift}) & {storage_type}({mask_text})")
-            if bitfield.bool_semantics:
-                b.add(f"return raw != {storage_type}(0)")
-            elif bitfield.signed and bitfield.bit_width > 0:
-                sign_bit_text = hex(1 << (bitfield.bit_width - 1))
-                b.add(f"if raw & {storage_type}({sign_bit_text}) != {storage_type}(0):")
-                b.indent()
-                b.add(f"return {logical_type}(raw | ~{storage_type}({mask_text}))")
-                b.dedent()
-                b.add(f"return {logical_type}(raw)")
-            else:
-                b.add(f"return {logical_type}(raw)")
+            self._render_bitfield_accessor_read(
+                b,
+                group,
+                bitfield,
+                logical_type,
+                storage_type,
+                mask_text,
+            )
             b.dedent()
             b.add(f"def set_{bitfield.name}(mut self, value: {logical_type}):")
             b.indent()
-            if bitfield.bool_semantics:
-                b.add(f"var raw_value = {storage_type}(1) if value else {storage_type}(0)")
-            else:
-                b.add(f"var raw_value = {storage_type}(value) & {storage_type}({mask_text})")
-            b.add(f"var clear_mask = ~({storage_type}({mask_text}) << {shift})")
-            b.add(
-                f"self.{group.storage_name} = (self.{group.storage_name} & clear_mask) | "
-                f"((raw_value & {storage_type}({mask_text})) << {shift})"
-            )
+            self._render_bitfield_accessor_write(b, group, bitfield, storage_type, mask_text)
             b.dedent()
 
-    def _bitfield_shift(self, group: BitfieldGroupMember, bitfield: BitfieldField) -> int:
+    def _render_bitfield_accessor_read(
+        self,
+        b: CodeBuilder,
+        group: BitfieldGroupMember,
+        bitfield: BitfieldField,
+        logical_type: str,
+        storage_type: str,
+        mask_text: str,
+    ) -> None:
+        little_shift, big_shift = self._bitfield_shifts(group, bitfield)
+        b.add("comptime if is_little_endian():")
+        b.indent()
+        self._render_bitfield_accessor_read_branch(
+            b,
+            group.storage_name,
+            logical_type,
+            storage_type,
+            mask_text,
+            little_shift,
+            bitfield,
+        )
+        b.dedent()
+        b.add("elif is_big_endian():")
+        b.indent()
+        self._render_bitfield_accessor_read_branch(
+            b,
+            group.storage_name,
+            logical_type,
+            storage_type,
+            mask_text,
+            big_shift,
+            bitfield,
+        )
+        b.dedent()
+
+    def _render_bitfield_accessor_read_branch(
+        self,
+        b: CodeBuilder,
+        storage_name: str,
+        logical_type: str,
+        storage_type: str,
+        mask_text: str,
+        shift: int,
+        bitfield: BitfieldField,
+    ) -> None:
+        b.add(f"var raw = (self.{storage_name} >> {shift}) & {storage_type}({mask_text})")
+        if bitfield.bool_semantics:
+            b.add(f"return raw != {storage_type}(0)")
+        elif bitfield.signed and bitfield.bit_width > 0:
+            sign_bit_text = hex(1 << (bitfield.bit_width - 1))
+            b.add(f"if raw & {storage_type}({sign_bit_text}) != {storage_type}(0):")
+            b.indent()
+            b.add(f"return {logical_type}(raw | ~{storage_type}({mask_text}))")
+            b.dedent()
+            b.add(f"return {logical_type}(raw)")
+        else:
+            b.add(f"return {logical_type}(raw)")
+
+    def _render_bitfield_accessor_write(
+        self,
+        b: CodeBuilder,
+        group: BitfieldGroupMember,
+        bitfield: BitfieldField,
+        storage_type: str,
+        mask_text: str,
+    ) -> None:
+        little_shift, big_shift = self._bitfield_shifts(group, bitfield)
+        b.add("comptime if is_little_endian():")
+        b.indent()
+        self._render_bitfield_accessor_write_branch(
+            b,
+            group.storage_name,
+            storage_type,
+            mask_text,
+            little_shift,
+            bitfield,
+        )
+        b.dedent()
+        b.add("elif is_big_endian():")
+        b.indent()
+        self._render_bitfield_accessor_write_branch(
+            b,
+            group.storage_name,
+            storage_type,
+            mask_text,
+            big_shift,
+            bitfield,
+        )
+        b.dedent()
+
+    def _render_bitfield_accessor_write_branch(
+        self,
+        b: CodeBuilder,
+        storage_name: str,
+        storage_type: str,
+        mask_text: str,
+        shift: int,
+        bitfield: BitfieldField,
+    ) -> None:
+        if bitfield.bool_semantics:
+            b.add(f"var raw_value = {storage_type}(1) if value else {storage_type}(0)")
+        else:
+            b.add(f"var raw_value = {storage_type}(value) & {storage_type}({mask_text})")
+        b.add(f"var clear_mask = ~({storage_type}({mask_text}) << {shift})")
+        b.add(
+            f"self.{storage_name} = (self.{storage_name} & clear_mask) | "
+            f"((raw_value & {storage_type}({mask_text})) << {shift})"
+        )
+
+    def _bitfield_shifts(self, group: BitfieldGroupMember, bitfield: BitfieldField) -> tuple[int, int]:
         bit_offset = bitfield.bit_offset - group.byte_offset * 8
-        if self._options.byte_order == ByteOrder.LITTLE:
-            return max(0, bit_offset)
-        return max(0, group.storage_width_bits - bit_offset - bitfield.bit_width)
+        little_shift = max(0, bit_offset)
+        big_shift = max(0, group.storage_width_bits - bit_offset - bitfield.bit_width)
+        return little_shift, big_shift
 
     def _render_alias_decl(self, decl: AliasDecl) -> str:
         b = CodeBuilder()

@@ -453,6 +453,7 @@ class NormalizeMojoModulePass:
                 if isinstance(member, StoredMember):
                     self._collect_type_imports(member.type)
                 elif isinstance(member, BitfieldGroupMember):
+                    self._record_import("std.sys.info", "is_big_endian", "is_little_endian")
                     self._collect_type_imports(member.storage_type)
                     for field in member.fields:
                         self._collect_type_imports(field.logical_type)

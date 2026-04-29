@@ -116,7 +116,7 @@ MacroDeclKind = Literal[
 
 
 class ByteOrder(StrEnum):
-    """Target byte order used for storage layout and bitfield accessors."""
+    """Target byte order used for storage layout and ABI decisions."""
 
     LITTLE = "little"
     BIG = "big"

@@ -127,7 +127,6 @@ class MojoGenerator:
             analysis.mojo_module,
             MojoIRPrintOptions(
                 module_comment=self._options.module_comment,
-                byte_order=analysis.normalized_unit.target_abi.byte_order,
             ),
         )
         layout_test_source = None

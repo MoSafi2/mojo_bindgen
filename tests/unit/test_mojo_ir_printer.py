@@ -315,47 +315,8 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
     )
 
 
-def test_render_bitfield_accessors_reflect_target_byte_order() -> None:
-    little = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
-            StructDecl(
-                name="Flags",
-                members=[
-                    BitfieldGroupMember(
-                        storage_name="__bf0",
-                        storage_type=BuiltinType(MojoBuiltin.C_UINT),
-                        byte_offset=0,
-                        first_index=0,
-                        storage_width_bits=32,
-                        fields=[
-                            BitfieldField(
-                                index=0,
-                                name="ready",
-                                logical_type=BuiltinType(MojoBuiltin.BOOL),
-                                bit_offset=0,
-                                bit_width=1,
-                                signed=False,
-                                bool_semantics=True,
-                            ),
-                            BitfieldField(
-                                index=1,
-                                name="mode",
-                                logical_type=BuiltinType(MojoBuiltin.C_UINT),
-                                bit_offset=1,
-                                bit_width=3,
-                                signed=False,
-                            ),
-                        ],
-                    )
-                ],
-            )
-        ],
-    )
-    big = MojoModule(
+def test_render_bitfield_accessors_branch_on_target_endianness_comptime() -> None:
+    module = MojoModule(
         source_header="demo.h",
         library="demo",
         link_name="demo",
@@ -395,17 +356,22 @@ def test_render_bitfield_accessors_reflect_target_byte_order() -> None:
         ],
     )
 
-    little_rendered = MojoIRPrinter(
-        MojoIRPrintOptions(module_comment=False, byte_order=ByteOrder.LITTLE)
-    ).render(little)
-    big_rendered = MojoIRPrinter(
-        MojoIRPrintOptions(module_comment=False, byte_order=ByteOrder.BIG)
-    ).render(big)
+    normalized = normalize_mojo_module(module)
+    assert normalized.dependencies.imports == [
+        ModuleImport(module="std.ffi", names=["external_call", "c_uint"]),
+        ModuleImport(module="std.sys.info", names=["is_big_endian", "is_little_endian"]),
+    ]
 
-    assert "self.__bf0 >> 0" in little_rendered
-    assert "self.__bf0 >> 1" in little_rendered
-    assert "self.__bf0 >> 31" in big_rendered
-    assert "self.__bf0 >> 28" in big_rendered
+    rendered = render_mojo_module(normalized, MojoIRPrintOptions(module_comment=False))
+
+    assert "from std.sys.info import is_big_endian, is_little_endian" in rendered
+    assert "@parameter" in rendered
+    assert "if is_little_endian():" in rendered
+    assert "elif is_big_endian():" in rendered
+    assert "self.__bf0 >> 0" in rendered
+    assert "self.__bf0 >> 1" in rendered
+    assert "self.__bf0 >> 31" in rendered
+    assert "self.__bf0 >> 28" in rendered
 
 
 def test_render_callback_alias_uses_none_in_signature_position() -> None:

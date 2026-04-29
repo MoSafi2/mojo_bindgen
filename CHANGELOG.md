@@ -13,9 +13,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Make synthesized bitfield accessors respect target byte order by carrying
-  endianness in `TargetABI` and passing it to the Mojo printer instead of
-  duplicating it on bitfield group members.
+- Make synthesized bitfield accessors branch at comptime on
+  `std.sys.info.is_little_endian()` / `is_big_endian()` while keeping target
+  byte order in `TargetABI` for ABI metadata instead of printer-side selection.
 - Lower exact-width stdint typedef aliases such as `int32_t`, `uint32_t`,
   `int64_t`, and `uint64_t` to Mojo fixed-width integer types while preserving
   ordinary C ABI scalar aliases such as `c_int` and `c_long`.
