@@ -29,16 +29,20 @@ struct ag_explicit_align(TrivialRegisterPassable):
 
 @align(32)
 @fieldwise_init
-struct ag_alignas_field(Copyable, Movable):
+struct ag_alignas_field(TrivialRegisterPassable):
     var tag: c_char
-    var __pad0: InlineArray[UInt8, 28]
+    var __pad0_0: UInt32
+    var __pad0_1: UInt64
+    var __pad0_2: UInt64
+    var __pad0_3: UInt64
     var value: c_int
 
 @align(16)
 @fieldwise_init
-struct ag_field_align(Copyable, Movable):
+struct ag_field_align(TrivialRegisterPassable):
     var tag: c_char
-    var __pad0: InlineArray[UInt8, 12]
+    var __pad0_0: UInt32
+    var __pad0_1: UInt64
     var value: c_int
 
 # NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted

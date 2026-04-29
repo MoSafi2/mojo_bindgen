@@ -29,6 +29,8 @@ All notable changes to this project are documented in this file.
   ordinary C ABI scalar aliases such as `c_int` and `c_long`.
 - Lower `size_t` and `ssize_t` typedef aliases to Mojo native `UInt` and `Int`
   respectively instead of emitting FFI scalar builtins.
+- Render synthesized struct padding as aligned Mojo integer fields so padded
+  records can remain register-passable when their real fields are passable.
 - Remove the stale, unused `ffi_scalar_style` emit option and public
   `FFIScalarStyle` export.
 - Lower named CIR enums into `StructDecl(kind=ENUM)` in MojoIR instead of a

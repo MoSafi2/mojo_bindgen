@@ -41,6 +41,7 @@ from mojo_bindgen.mojo_ir import (
     MojoUnaryExpr,
     NamedType,
     OpaqueStorageMember,
+    PaddingMember,
     Param,
     ParametricBase,
     ParametricType,
@@ -61,6 +62,21 @@ class MojoIRPrintOptions:
 
 class MojoIRPrintError(ValueError):
     """Raised when normalized MojoIR cannot be rendered as valid Mojo source."""
+
+
+def _padding_scalar_chunks(byte_offset: int, size_bytes: int) -> list[str]:
+    chunks: list[str] = []
+    offset = byte_offset
+    remaining = size_bytes
+    chunk_types = ((8, "UInt64"), (4, "UInt32"), (2, "UInt16"), (1, "UInt8"))
+    while remaining > 0:
+        for chunk_size, chunk_type in chunk_types:
+            if remaining >= chunk_size and offset % chunk_size == 0:
+                chunks.append(chunk_type)
+                offset += chunk_size
+                remaining -= chunk_size
+                break
+    return chunks
 
 
 class CodeBuilder:
@@ -246,7 +262,7 @@ class MojoIRPrinter:
             elif isinstance(member, BitfieldGroupMember):
                 b.add(f"var {member.storage_name}: {self._render_type(member.storage_type)}")
             else:
-                b.add(f"var {member.name}: InlineArray[UInt8, {member.size_bytes}]")
+                self._render_padding_member(b, member)
 
         for member in decl.comptime_members:
             self._render_comptime_member(b, member)
@@ -284,6 +300,17 @@ class MojoIRPrinter:
             else:
                 b.add(f"self.{param_name} = {param_name}")
         b.dedent()
+
+    @staticmethod
+    def _render_padding_member(b: CodeBuilder, member: PaddingMember) -> None:
+        chunks = _padding_scalar_chunks(member.byte_offset, member.size_bytes)
+        if not chunks:
+            return
+        if len(chunks) == 1:
+            b.add(f"var {member.name}: {chunks[0]}")
+            return
+        for i, chunk_type in enumerate(chunks):
+            b.add(f"var {member.name}_{i}: {chunk_type}")
 
     def _render_bitfield_group_accessors(
         self,

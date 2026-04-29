@@ -109,7 +109,7 @@ def test_assign_record_policies_marks_fieldwise_exact_struct_register_passable()
     assert widget.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
 
 
-def test_assign_record_policies_keeps_padding_struct_non_register_passable() -> None:
+def test_assign_record_policies_keeps_padding_struct_register_passable() -> None:
     [padded] = _lowered_structs(
         Struct(
             decl_id="struct:Padded",
@@ -126,8 +126,8 @@ def test_assign_record_policies_keeps_padding_struct_non_register_passable() -> 
     )
 
     assert padded.fieldwise_init is True
-    assert padded.passability == MojoPassability.MEMORY_ONLY
-    assert padded.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert padded.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
+    assert padded.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
 
 
 def test_assign_record_policies_keeps_incomplete_struct_copyable_only() -> None:

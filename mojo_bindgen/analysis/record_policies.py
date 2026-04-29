@@ -162,7 +162,9 @@ class PolicyInferencePass:
             return self._type_passability(member.type)
         if isinstance(member, BitfieldGroupMember):
             return self._type_passability(member.storage_type)
-        if isinstance(member, (OpaqueStorageMember, PaddingMember)):
+        if isinstance(member, PaddingMember):
+            return MojoPassability.TRIVIAL_REGISTER_PASSABLE
+        if isinstance(member, OpaqueStorageMember):
             return MojoPassability.MEMORY_ONLY
         raise AssignRecordPoliciesError(
             f"unsupported StructMember for passability: {type(member).__name__!r}"

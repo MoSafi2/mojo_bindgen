@@ -755,7 +755,7 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
     rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(lowered)
 
     assert "@align(16)\n@fieldwise_init\nstruct Aligned" in rendered
-    assert "var __pad0: InlineArray[UInt8, 4]" in rendered
+    assert "var __pad0: UInt32" in rendered
     assert "var storage: InlineArray[UInt8, 5]" in rendered
     assert "var __bf0: c_uchar" in rendered
     assert "def enabled(self) -> Bool:" in rendered
