@@ -13,12 +13,11 @@ from mojo_bindgen.mojo_ir import (
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
-    CallbackParam,
-    CallbackType,
     CallTarget,
     ComptimeMember,
     FunctionDecl,
     FunctionKind,
+    FunctionType,
     GlobalDecl,
     GlobalKind,
     Initializer,
@@ -42,6 +41,7 @@ from mojo_bindgen.mojo_ir import (
     MojoUnaryExpr,
     NamedType,
     OpaqueStorageMember,
+    Param,
     ParametricBase,
     ParametricType,
     PointerMutability,
@@ -435,11 +435,11 @@ class MojoIRPrinter:
         non_macro_notes = [note for note in decl.diagnostics if note.category != "macro_comment"]
         b.extend(self._diagnostic_lines(non_macro_notes))
         if decl.kind == AliasKind.CALLBACK_SIGNATURE:
-            if not isinstance(decl.type_value, CallbackType):
+            if not isinstance(decl.type_value, FunctionType):
                 raise MojoIRPrintError(
-                    f"callback alias {decl.name!r} is missing normalized CallbackType payload"
+                    f"callback alias {decl.name!r} is missing normalized FunctionType payload"
                 )
-            b.add(f"comptime {decl.name} = {self._render_callback_signature(decl.type_value)}")
+            b.add(f"comptime {decl.name} = {self._render_function_signature(decl.type_value)}")
             return b.render()
 
         if decl.type_value is not None:
@@ -549,8 +549,8 @@ class MojoIRPrinter:
         if isinstance(t, ParametricType):
             args = ", ".join(self._render_parametric_arg(arg) for arg in t.args)
             return f"{t.base.value}[{args}]"
-        if isinstance(t, CallbackType):
-            return self._render_callback_signature(t)
+        if isinstance(t, FunctionType):
+            return self._render_function_signature(t)
         raise MojoIRPrintError(f"unsupported MojoType node: {type(t).__name__!r}")
 
     def _render_pointer_type(self, t: PointerType) -> str:
@@ -576,18 +576,18 @@ class MojoIRPrinter:
             return self._render_type(arg.type)
         raise MojoIRPrintError(f"unsupported parametric argument node: {type(arg).__name__!r}")
 
-    def _render_callback_signature(self, callback: CallbackType) -> str:
+    def _render_function_signature(self, function_type: FunctionType) -> str:
         params = ", ".join(
-            f"{self._render_callback_param_name(param, i)}: {self._render_type(param.type)}"
-            for i, param in enumerate(callback.params)
+            f"{self._render_function_param_name(param, i)}: {self._render_type(param.type)}"
+            for i, param in enumerate(function_type.params)
         )
-        ret = self._render_signature_return_type(callback.ret)
+        ret = self._render_signature_return_type(function_type.ret)
         parts = ["def", f"({params})"]
-        if callback.thin:
+        if function_type.thin:
             parts.append("thin")
-        if callback.abi:
-            parts.append(f'abi("{callback.abi}")')
-        if callback.raises:
+        if function_type.abi:
+            parts.append(f'abi("{function_type.abi}")')
+        if function_type.raises:
             parts.append("raises")
         parts.extend(["->", ret])
         return " ".join(parts)
@@ -635,7 +635,7 @@ class MojoIRPrinter:
         return f"a{index}"
 
     @staticmethod
-    def _render_callback_param_name(param: CallbackParam, index: int) -> str:
+    def _render_function_param_name(param: Param, index: int) -> str:
         if param.name.strip():
             return mojo_ident(param.name, fallback=f"arg{index}")
         return f"arg{index}"

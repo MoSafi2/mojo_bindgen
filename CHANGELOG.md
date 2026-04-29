@@ -13,6 +13,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Unify MojoIR callable signatures under `FunctionType` so function-pointer
+  lowering, callback typedefs, and callback aliases all share the same schema.
+  This removes the separate `CallbackType` / `CallbackParam` MojoIR shape.
 - Make synthesized bitfield accessors branch at comptime on
   `std.sys.info.is_little_endian()` / `is_big_endian()` while keeping target
   byte order in `TargetABI` for ABI metadata instead of printer-side selection.

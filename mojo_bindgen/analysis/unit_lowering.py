@@ -43,7 +43,7 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
-    CallbackType,
+    FunctionType,
     MojoDecl,
     MojoModule,
 )
@@ -104,7 +104,7 @@ class LowerUnitPass:
             lowered_type = exact_width_stdint_alias_type(ref.name)
             if lowered_type is None:
                 lowered_type = type_lowerer.run(ref.canonical)
-            if isinstance(lowered_type, CallbackType):
+            if isinstance(lowered_type, FunctionType):
                 lowered.append(
                     AliasDecl(
                         name=alias_name,

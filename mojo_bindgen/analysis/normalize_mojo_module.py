@@ -11,8 +11,6 @@ from mojo_bindgen.mojo_ir import (
     ArrayType,
     BitfieldGroupMember,
     BuiltinType,
-    CallbackParam,
-    CallbackType,
     CallTarget,
     ComptimeMember,
     FunctionDecl,
@@ -63,7 +61,7 @@ class NormalizeMojoModulePass:
     def run(self, module: MojoModule) -> MojoModule:
         self._module = module
         self._reserved_names = {decl.name for decl in module.decls}
-        self._callback_signature_names = {
+        self._function_signature_names = {
             decl.name
             for decl in module.decls
             if isinstance(decl, AliasDecl) and decl.kind == AliasKind.CALLBACK_SIGNATURE
@@ -100,12 +98,12 @@ class NormalizeMojoModulePass:
             )
         if isinstance(decl, AliasDecl):
             if decl.kind == AliasKind.CALLBACK_SIGNATURE:
-                callback = self._callback_type_from_type(decl.type_value)
-                if callback is None:
+                function_type = self._function_type_from_type(decl.type_value)
+                if function_type is None:
                     return decl
                 return replace(
                     decl,
-                    type_value=self._normalize_callback_type(callback, (decl.name,)),
+                    type_value=self._normalize_function_type(function_type, (decl.name,)),
                 )
             return replace(
                 decl,
@@ -219,7 +217,7 @@ class NormalizeMojoModulePass:
         t: MojoType,
         context: tuple[str, ...],
         *,
-        allow_inline_callback: bool = False,
+        allow_inline_function: bool = False,
     ) -> MojoType:
         if isinstance(t, BuiltinType):
             return t
@@ -251,31 +249,31 @@ class NormalizeMojoModulePass:
                     for i, arg in enumerate(t.args)
                 ],
             )
-        callback = self._callback_type_from_type(t)
-        if callback is not None:
-            normalized = self._normalize_callback_type(callback, context)
-            if allow_inline_callback:
+        function_type = self._function_type_from_type(t)
+        if function_type is not None:
+            normalized = self._normalize_function_type(function_type, context)
+            if allow_inline_function:
                 return normalized
-            alias_name = self._ensure_callback_alias(context, normalized)
+            alias_name = self._ensure_function_alias(context, normalized)
             return NamedType(alias_name)
         raise NormalizeMojoModuleError(f"unsupported MojoType node: {type(t).__name__!r}")
 
-    def _normalize_callback_type(
-        self, callback: CallbackType, context: tuple[str, ...]
-    ) -> CallbackType:
+    def _normalize_function_type(
+        self, function_type: FunctionType, context: tuple[str, ...]
+    ) -> FunctionType:
         return replace(
-            callback,
+            function_type,
             params=[
-                CallbackParam(
+                Param(
                     name=param.name,
                     type=self._normalize_type(
                         param.type,
                         (*context, param.name or f"arg{i}"),
                     ),
                 )
-                for i, param in enumerate(callback.params)
+                for i, param in enumerate(function_type.params)
             ],
-            ret=self._normalize_type(callback.ret, (*context, "return")),
+            ret=self._normalize_type(function_type.ret, (*context, "return")),
         )
 
     def _normalize_const_expr(self, expr: MojoConstExpr, context: tuple[str, ...]) -> MojoConstExpr:
@@ -323,10 +321,10 @@ class NormalizeMojoModulePass:
             )
         raise NormalizeMojoModuleError(f"unsupported MojoConstExpr node: {type(expr).__name__!r}")
 
-    def _ensure_callback_alias(
+    def _ensure_function_alias(
         self,
         path: tuple[str, ...],
-        callback: CallbackType,
+        function_type: FunctionType,
     ) -> str:
         existing = self._synth_aliases_by_path.get(path)
         if existing is not None:
@@ -349,14 +347,14 @@ class NormalizeMojoModulePass:
             name = f"{base}_{suffix}"
             suffix += 1
         self._reserved_names.add(name)
-        self._callback_signature_names.add(name)
+        self._function_signature_names.add(name)
 
         self._synth_aliases_by_path[path] = name
         self._synth_aliases.append(
             AliasDecl(
                 name=name,
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=callback,
+                type_value=function_type,
             )
         )
         return name
@@ -542,14 +540,9 @@ class NormalizeMojoModulePass:
                 if isinstance(arg, TypeArg):
                     self._collect_type_imports(arg.type)
             return
-        if isinstance(t, CallbackType):
-            for param in t.params:
-                self._collect_type_imports(param.type)
-            self._collect_type_imports(t.ret)
-            return
         if isinstance(t, FunctionType):
             for param in t.params:
-                self._collect_type_imports(param)
+                self._collect_type_imports(param.type)
             self._collect_type_imports(t.ret)
             return
         raise NormalizeMojoModuleError(f"unsupported MojoType node: {type(t).__name__!r}")
@@ -578,16 +571,11 @@ class NormalizeMojoModulePass:
         return decl.call_target.link_mode
 
     @staticmethod
-    def _callback_type_from_type(t: MojoType | None) -> CallbackType | None:
+    def _function_type_from_type(t: MojoType | None) -> FunctionType | None:
         if t is None:
             return None
-        if isinstance(t, CallbackType):
-            return t
         if isinstance(t, FunctionType):
-            return CallbackType(
-                params=[CallbackParam(name="", type=param) for param in t.params],
-                ret=t.ret,
-            )
+            return t
         return None
 
     @staticmethod

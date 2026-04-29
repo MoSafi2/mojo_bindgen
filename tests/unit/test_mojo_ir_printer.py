@@ -24,14 +24,13 @@ from mojo_bindgen.mojo_ir import (
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
-    CallbackParam,
-    CallbackType,
     CallTarget,
     ComptimeMember,
     ConstArg,
     DTypeArg,
     FunctionDecl,
     FunctionKind,
+    FunctionType,
     GlobalDecl,
     GlobalKind,
     Initializer,
@@ -198,8 +197,8 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                     StoredMember(
                         index=1,
                         name="handler",
-                        type=CallbackType(
-                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=FunctionType(
+                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=8,
@@ -272,8 +271,8 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 params=[
                     Param(
                         name="cb",
-                        type=CallbackType(
-                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=FunctionType(
+                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                     ),
@@ -383,9 +382,9 @@ def test_render_callback_alias_uses_none_in_signature_position() -> None:
             AliasDecl(
                 name="log_callback_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=CallbackType(
+                type_value=FunctionType(
                     params=[
-                        CallbackParam(
+                        Param(
                             name="msg",
                             type=PointerType(
                                 pointee=BuiltinType(MojoBuiltin.C_CHAR),
@@ -446,8 +445,8 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
                     StoredMember(
                         index=0,
                         name="handler",
-                        type=CallbackType(
-                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=FunctionType(
+                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=0,
@@ -774,10 +773,10 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
             AliasDecl(
                 name="binary_cb_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=CallbackType(
+                type_value=FunctionType(
                     params=[
-                        CallbackParam(name="arg0", type=BuiltinType(MojoBuiltin.C_INT)),
-                        CallbackParam(
+                        Param(name="arg0", type=BuiltinType(MojoBuiltin.C_INT)),
+                        Param(
                             name="arg1",
                             type=PointerType(pointee=None, mutability=PointerMutability.MUT),
                         ),
@@ -830,8 +829,8 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                     StoredMember(
                         index=1,
                         name="callback",
-                        type=CallbackType(
-                            params=[CallbackParam(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=FunctionType(
+                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=8,

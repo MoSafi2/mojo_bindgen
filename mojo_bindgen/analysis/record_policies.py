@@ -10,7 +10,6 @@ from mojo_bindgen.mojo_ir import (
     ArrayType,
     BitfieldGroupMember,
     BuiltinType,
-    CallbackType,
     FunctionType,
     MojoBuiltin,
     MojoDecl,
@@ -174,7 +173,7 @@ class PolicyInferencePass:
             if t.name in _TRIVIAL_BUILTINS:
                 return MojoPassability.TRIVIAL_REGISTER_PASSABLE
             return MojoPassability.MEMORY_ONLY
-        if isinstance(t, (CallbackType, FunctionType, PointerType)):
+        if isinstance(t, (FunctionType, PointerType)):
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
         if isinstance(t, ArrayType):
             return MojoPassability.MEMORY_ONLY

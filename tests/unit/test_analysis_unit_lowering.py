@@ -35,10 +35,10 @@ from mojo_bindgen.mojo_ir import (
     AliasKind,
     ArrayType,
     BuiltinType,
-    CallbackType,
     ComptimeMember,
     FunctionDecl,
     FunctionKind,
+    FunctionType,
     GlobalDecl,
     LinkMode,
     MojoBuiltin,
@@ -598,9 +598,9 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
     fn_decl = lowered.decls[1]
 
     assert isinstance(typedef_decl, AliasDecl)
-    assert isinstance(typedef_decl.type_value, CallbackType)
+    assert isinstance(typedef_decl.type_value, FunctionType)
     assert isinstance(fn_decl, FunctionDecl)
-    assert isinstance(fn_decl.params[0].type, CallbackType)
+    assert isinstance(fn_decl.params[0].type, FunctionType)
     assert fn_decl.params[0].type.params[0].type == PointerType(
         pointee=None,
         mutability=PointerMutability.MUT,

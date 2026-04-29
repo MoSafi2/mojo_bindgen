@@ -25,12 +25,12 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.mojo_ir import (
     ArrayType,
     BuiltinType,
-    CallbackParam,
-    CallbackType,
     ConstArg,
     DTypeArg,
     MojoBuiltin,
     NamedType,
+    Param,
+    FunctionType,
     ParametricBase,
     ParametricType,
     PointerMutability,
@@ -121,15 +121,18 @@ def test_lower_type_keeps_raw_function_pointer_signature_shape() -> None:
         calling_convention="c",
     )
 
-    assert lower_type(fn_ptr) == CallbackType(
+    assert lower_type(fn_ptr) == FunctionType(
         params=[
-            CallbackParam(
+            Param(
                 name="",
                 type=PointerType(pointee=None, mutability=PointerMutability.MUT),
             ),
-            CallbackParam(name="", type=NamedType(name="my_uint")),
+            Param(name="", type=NamedType(name="my_uint")),
         ],
         ret=BuiltinType(name=MojoBuiltin.C_INT),
+        abi="C",
+        thin=True,
+        raises=False,
     )
 
 

@@ -239,37 +239,21 @@ class ParametricType(SerDeMixin):
     args: list[ParametricArg] = field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class CallbackParam(SerDeMixin):
-    name: str
-    type: MojoType
-
-
 @dataclass
-class CallbackType(SerDeMixin):
+class FunctionType(SerDeMixin):
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
         fields={
             "thin": SerdeFieldSpec(omit_if_default=True),
             "raises": SerdeFieldSpec(omit_if_default=True),
             "abi": SerdeFieldSpec(omit_if_default=True),
-            "mutability": SerdeFieldSpec(omit_if_default=True),
-            "origin": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
-    params: list[CallbackParam] = field(default_factory=list)
+    params: list[Param] = field(default_factory=list)
     ret: MojoType = field(default_factory=lambda: BuiltinType(MojoBuiltin.NONE))
     abi: str = "C"
     thin: bool = True
     raises: bool = False
-    mutability: PointerMutability = PointerMutability.MUT
-    origin: PointerOrigin = PointerOrigin.EXTERNAL
-
-
-@dataclass
-class FunctionType(SerDeMixin):
-    params: list[MojoType] = field(default_factory=list)
-    ret: MojoType = field(default_factory=lambda: BuiltinType(MojoBuiltin.NONE))
 
 
 MojoType = Union[
@@ -278,7 +262,6 @@ MojoType = Union[
     PointerType,
     ArrayType,
     ParametricType,
-    CallbackType,
     FunctionType,
 ]
 
@@ -586,7 +569,6 @@ _MOJO_TYPE_FROM_JSON: dict[str, Callable[[dict[str, object]], MojoType]] = {
     "PointerType": PointerType.from_json_dict,
     "ArrayType": ArrayType.from_json_dict,
     "ParametricType": ParametricType.from_json_dict,
-    "CallbackType": CallbackType.from_json_dict,
     "FunctionType": FunctionType.from_json_dict,
 }
 
@@ -689,8 +671,6 @@ __all__ = [
     "BitfieldGroupMember",
     "BuiltinType",
     "CallTarget",
-    "CallbackParam",
-    "CallbackType",
     "ComptimeMember",
     "ConstArg",
     "DTypeArg",

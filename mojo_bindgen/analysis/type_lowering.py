@@ -33,13 +33,13 @@ from mojo_bindgen.mojo_ir import (
     PRIMITIVE_BUILTINS,
     ArrayType,
     BuiltinType,
-    CallbackParam,
-    CallbackType,
     ConstArg,
     DTypeArg,
+    FunctionType,
     MojoBuiltin,
     MojoType,
     NamedType,
+    Param,
     ParametricBase,
     ParametricType,
     PointerMutability,
@@ -278,23 +278,21 @@ class LowerTypePass:
     # ------------------------
     # Function pointers
     # ------------------------
-    def _lower_function_ptr(self, t: FunctionPtr) -> CallbackType:
+    def _lower_function_ptr(self, t: FunctionPtr) -> FunctionType:
         param_names = t.param_names or []
         params = [
-            CallbackParam(
+            Param(
                 name=param_names[i] if i < len(param_names) else "",
                 type=self.run(param),
             )
             for i, param in enumerate(t.params)
         ]
-        return CallbackType(
+        return FunctionType(
             params=params,
             ret=self.run(t.ret),
             abi="C" if t.calling_convention in (None, "", "c") else t.calling_convention,
             thin=True,
             raises=False,
-            mutability=PointerMutability.MUT,
-            origin=PointerOrigin.EXTERNAL,
         )
 
     # ------------------------

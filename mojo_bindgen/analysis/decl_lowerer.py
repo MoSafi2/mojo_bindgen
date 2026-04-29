@@ -36,13 +36,13 @@ from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
     BuiltinType,
-    CallbackType,
     CallTarget,
     ComptimeMember,
     FunctionDecl,
     FunctionKind,
     GlobalDecl,
     GlobalKind,
+    FunctionType,
     LinkMode,
     MojoBinaryExpr,
     MojoCallExpr,
@@ -112,7 +112,7 @@ class UnitDeclLowerer:
         lowered_type = exact_width_stdint_alias_type(decl.name)
         if lowered_type is None:
             lowered_type = self.session.type_lowerer.run(decl.aliased)
-        if isinstance(lowered_type, CallbackType):
+        if isinstance(lowered_type, FunctionType):
             return AliasDecl(
                 name=alias_name,
                 kind=AliasKind.CALLBACK_SIGNATURE,

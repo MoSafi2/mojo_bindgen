@@ -14,6 +14,7 @@ def test_mojo_type_json_roundtrip() -> None:
         FunctionType,
         MojoBuiltin,
         NamedType,
+        Param,
         ParametricType,
         PointerType,
         mojo_type_from_json,
@@ -58,8 +59,14 @@ def test_mojo_type_json_roundtrip() -> None:
         {
             "kind": "FunctionType",
             "params": [
-                {"kind": "BuiltinType", "name": "c_int"},
-                {"kind": "NamedType", "name": "binary_op_t"},
+                {
+                    "name": "lhs",
+                    "type": {"kind": "BuiltinType", "name": "c_int"},
+                },
+                {
+                    "name": "rhs",
+                    "type": {"kind": "NamedType", "name": "binary_op_t"},
+                },
             ],
             "ret": {"kind": "BuiltinType", "name": "c_int"},
             "abi": "C",
@@ -67,7 +74,7 @@ def test_mojo_type_json_roundtrip() -> None:
         }
     )
     assert isinstance(fn, FunctionType)
-    assert fn.params[1] == NamedType(name="binary_op_t")
+    assert fn.params[1] == Param(name="rhs", type=NamedType(name="binary_op_t"))
     assert fn.ret == BuiltinType(MojoBuiltin.C_INT)
 
 
