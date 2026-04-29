@@ -365,8 +365,7 @@ def test_render_bitfield_accessors_branch_on_target_endianness_comptime() -> Non
     rendered = render_mojo_module(normalized, MojoIRPrintOptions(module_comment=False))
 
     assert "from std.sys.info import is_big_endian, is_little_endian" in rendered
-    assert "@parameter" in rendered
-    assert "if is_little_endian():" in rendered
+    assert "comptime if is_little_endian():" in rendered
     assert "elif is_big_endian():" in rendered
     assert "self.__bf0 >> 0" in rendered
     assert "self.__bf0 >> 1" in rendered
