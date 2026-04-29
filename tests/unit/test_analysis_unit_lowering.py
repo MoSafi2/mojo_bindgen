@@ -199,6 +199,12 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
                 aliased=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
                 canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
             ),
+            Typedef(
+                decl_id="typedef:ssize_t",
+                name="ssize_t",
+                aliased=_i64(),
+                canonical=_i64(),
+            ),
             Enum(
                 decl_id="enum:flags",
                 name="Flags",
@@ -212,12 +218,18 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
     lowered = lower_unit(unit)
 
     typedef_decl = lowered.decls[0]
-    enum_decl = lowered.decls[1]
+    signed_typedef_decl = lowered.decls[1]
+    enum_decl = lowered.decls[2]
 
     assert typedef_decl == AliasDecl(
         name="size_t",
         kind=AliasKind.TYPE_ALIAS,
-        type_value=BuiltinType(MojoBuiltin.C_UINT),
+        type_value=NamedType("UInt"),
+    )
+    assert signed_typedef_decl == AliasDecl(
+        name="ssize_t",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=NamedType("Int"),
     )
     assert isinstance(enum_decl, StructDecl)
     assert enum_decl.name == "Flags"
@@ -739,6 +751,31 @@ def test_lower_unit_lowers_local_exact_width_typedef_and_chain() -> None:
         name="my_i64",
         kind=AliasKind.TYPE_ALIAS,
         type_value=NamedType("int64_t"),
+    )
+
+
+def test_lower_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Typedef(
+                decl_id="typedef:raw_uint_t",
+                name="raw_uint_t",
+                aliased=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
+                canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+
+    assert lowered.decls[0] == AliasDecl(
+        name="raw_uint_t",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=BuiltinType(MojoBuiltin.C_UINT),
     )
 
 

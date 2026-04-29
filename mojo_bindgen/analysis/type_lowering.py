@@ -135,11 +135,13 @@ _EXACT_WIDTH_STDINT_ALIASES: dict[str, str] = {
     "uint32_t": "UInt32",
     "int64_t": "Int64",
     "uint64_t": "UInt64",
+    "size_t": "UInt",
+    "ssize_t": "Int",
 }
 
 
 def exact_width_stdint_alias_type(name: str) -> NamedType | None:
-    """Return the Mojo fixed-width type for exact-width stdint typedef aliases."""
+    """Return the Mojo type for common stdint and platform-sized typedef aliases."""
     mojo_name = _EXACT_WIDTH_STDINT_ALIASES.get(name)
     if mojo_name is None:
         return None
