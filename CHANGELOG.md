@@ -43,6 +43,9 @@ All notable changes to this project are documented in this file.
 - Render C data pointers as `Optional[UnsafePointer[...]]` or optional opaque
   pointer aliases so generated Mojo signatures represent nullable C pointers
   explicitly.
+- Update generated layout-test sidecars to use the newer Mojo reflection API
+  (`reflect[T]()` with `field_offset[...]()`) instead of the legacy
+  `offset_of[...]()` form.
 
 ## [0.1.1a] - 2026-04-24
 

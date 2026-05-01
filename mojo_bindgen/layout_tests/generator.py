@@ -100,7 +100,7 @@ def _layout_record_check(
         checks.append(
             LayoutCheck(
                 label=f"{mojo_name}.{member_name}.offset",
-                expression=f'offset_of[{mojo_name}, name="{member_name}"]()',
+                expression=f"r.field_offset[index={field_fact.index}]()",
                 expected=field_fact.byte_offset,
             )
         )
@@ -111,7 +111,7 @@ def _layout_record_check(
         checks.append(
             LayoutCheck(
                 label=f"{mojo_name}.{run.name}.offset",
-                expression=f'offset_of[{mojo_name}, name="{run.name}"]()',
+                expression=f"r.field_offset[index={run.first_index}]()",
                 expected=run.byte_offset,
             )
         )
@@ -154,7 +154,7 @@ def render_layout_test_module(
         f"# layout tests for: {main_module_name}",
         "",
         "from std.sys.info import align_of, size_of",
-        "from std.reflection import offset_of",
+        "from std.reflection import reflect",
     ]
     if checks:
         imported = ", ".join(record.record_name for record in checks)
@@ -171,6 +171,7 @@ def render_layout_test_module(
 
     for record in checks:
         lines.extend(["", "", f"def test_layout_{record.record_name}() raises:"])
+        lines.append(f"    comptime r = reflect[{record.record_name}]()")
         for check in record.checks:
             lines.append(
                 f'    _check_eq("{check.label}", Int({check.expression}), {check.expected})'
