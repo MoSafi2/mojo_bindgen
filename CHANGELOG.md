@@ -10,7 +10,14 @@ All notable changes to this project are documented in this file.
 
 ### Removed
 
-## [0.2] - 2026-05-1
+## [0.2.1] - 2026-05-01
+
+### Changed
+
+- Bump the package version to `0.2.1` and update the release tag naming to use
+  the `compiler` suffix.
+
+## [0.2] - 2026-05-01
 
 
 ### Added
