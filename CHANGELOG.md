@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+### Changed
+
+### Removed
+
+## [0.2] - 2026-05-1
+
+
+### Added
+
 - added CIRCanoncanlizer pass, for now only deduplicates IR nodes. [f9b4156](https://github.com/MoSafi2/mojo_bindgen/commit/f9b4156d5be1d8123c6256a68966d23c8778246c)
 - Generate optional Mojo record-layout test sidecars from normalized CIR facts,
   including `--layout-tests`, `--no-layout-tests`, `--layout-test-output`, and
