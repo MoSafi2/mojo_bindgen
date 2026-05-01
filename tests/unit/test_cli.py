@@ -120,7 +120,9 @@ def test_output_mode_writes_default_layout_test_sidecar(monkeypatch, tmp_path: P
 
     assert rc == 0
     assert output.read_text(encoding="utf-8") == "bindings"
-    assert (tmp_path / "demo_bindings_test.mojo").read_text(encoding="utf-8") == "layout tests"
+    assert (tmp_path / "demo_bindings_layout_tests.mojo").read_text(
+        encoding="utf-8"
+    ) == "layout tests"
 
 
 def test_no_layout_tests_suppresses_default_sidecar(monkeypatch, tmp_path: Path) -> None:
@@ -143,7 +145,7 @@ def test_no_layout_tests_suppresses_default_sidecar(monkeypatch, tmp_path: Path)
 
     assert rc == 0
     assert output.read_text(encoding="utf-8") == "bindings"
-    assert not (tmp_path / "demo_test.mojo").exists()
+    assert not (tmp_path / "demo_layout_tests.mojo").exists()
 
 
 def test_custom_layout_test_output_writes_requested_sidecar(monkeypatch, tmp_path: Path) -> None:
@@ -197,7 +199,7 @@ def test_stdout_does_not_write_layout_tests_by_default(monkeypatch, capsys, tmp_
 
     assert rc == 0
     assert captured.out == "bindings\n"
-    assert list(tmp_path.glob("*_test.mojo")) == []
+    assert list(tmp_path.glob("*_layout_tests.mojo")) == []
 
 
 def test_orchestrator_failures_return_exit_code_1(monkeypatch, capsys, tmp_path: Path) -> None:

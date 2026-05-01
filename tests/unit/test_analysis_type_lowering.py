@@ -86,10 +86,12 @@ def test_lower_type_uses_pointer_pointee_constness_for_mutability() -> None:
     assert lower_type(const_int_ptr) == PointerType(
         pointee=BuiltinType(name=MojoBuiltin.C_INT),
         mutability=PointerMutability.IMMUT,
+        nullable=True,
     )
     assert lower_type(void_ptr) == PointerType(
         pointee=None,
         mutability=PointerMutability.MUT,
+        nullable=True,
     )
 
 
@@ -125,7 +127,7 @@ def test_lower_type_keeps_raw_function_pointer_signature_shape() -> None:
         params=[
             Param(
                 name="",
-                type=PointerType(pointee=None, mutability=PointerMutability.MUT),
+                type=PointerType(pointee=None, mutability=PointerMutability.MUT, nullable=True),
             ),
             Param(name="", type=NamedType(name="my_uint")),
         ],

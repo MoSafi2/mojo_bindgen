@@ -616,6 +616,7 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
     assert fn_decl.params[0].type.params[0].type == PointerType(
         pointee=None,
         mutability=PointerMutability.MUT,
+        nullable=True,
     )
 
 

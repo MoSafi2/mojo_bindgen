@@ -140,7 +140,7 @@ def run(
     if result.layout_test_source is not None:
         sidecar = layout_test_output
         if sidecar is None and output is not None:
-            sidecar = output.with_name(f"{output.stem}_test.mojo")
+            sidecar = output.with_name(f"{output.stem}_layout_tests.mojo")
         if sidecar is not None:
             sidecar.write_text(result.layout_test_source, encoding="utf-8")
     return 0

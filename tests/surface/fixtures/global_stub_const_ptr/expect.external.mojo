@@ -49,5 +49,5 @@ struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]
 struct gscp_cfg(Copyable, Movable):
     pass
 
-# global `gscp_default_cfg` -> UnsafePointer[gscp_cfg, ImmutExternalOrigin]
-comptime gscp_default_cfg = GlobalVar[T=UnsafePointer[gscp_cfg, ImmutExternalOrigin], link="gscp_default_cfg"]
+# global `gscp_default_cfg` -> Optional[UnsafePointer[gscp_cfg, ImmutExternalOrigin]]
+comptime gscp_default_cfg = GlobalVar[T=Optional[UnsafePointer[gscp_cfg, ImmutExternalOrigin]], link="gscp_default_cfg"]

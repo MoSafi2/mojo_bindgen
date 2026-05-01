@@ -63,7 +63,7 @@ def run_write_roundtrip_checks() raises:
 
     var image_write = alloc[png.png_image](1)
     image_write[0] = png.png_image(
-        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
+        opaque=Optional[UnsafePointer[png.png_control, MutExternalOrigin]](),
         version=c_uint(png.PNG_IMAGE_VERSION),
         width=c_uint(IMAGE_W),
         height=c_uint(IMAGE_H),
@@ -80,13 +80,13 @@ def run_write_roundtrip_checks() raises:
         0,
         rebind[ImmutOpaquePointer[ImmutExternalOrigin]](pixels),
         IMAGE_W * CHANNELS,
-        ImmutOpaquePointer[ImmutExternalOrigin](),
+        Optional[ImmutOpaquePointer[ImmutExternalOrigin]](),
     )
     _assert("libpng.write_to_file", write_ok != 0)
 
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
-        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
+        opaque=Optional[UnsafePointer[png.png_control, MutExternalOrigin]](),
         version=c_uint(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
@@ -108,7 +108,7 @@ def run_write_roundtrip_checks() raises:
         png.png_const_colorp(),
         rebind[MutOpaquePointer[MutExternalOrigin]](out_pixels),
         IMAGE_W * CHANNELS,
-        MutOpaquePointer[MutExternalOrigin](),
+        Optional[MutOpaquePointer[MutExternalOrigin]](),
     )
     _assert("libpng.finish_read", finish_ok != 0)
     _assert("libpng.pixel_roundtrip_0", out_pixels[0] == pixels[0])
@@ -144,7 +144,7 @@ def run_memory_roundtrip_checks() raises:
     # Build a writer-side png_image matching run_write_roundtrip_checks().
     var image_write = alloc[png.png_image](1)
     image_write[0] = png.png_image(
-        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
+        opaque=Optional[UnsafePointer[png.png_control, MutExternalOrigin]](),
         version=c_uint(png.PNG_IMAGE_VERSION),
         width=c_uint(IMAGE_W),
         height=c_uint(IMAGE_H),
@@ -160,12 +160,12 @@ def run_memory_roundtrip_checks() raises:
     var memory_bytes_out = alloc[png.png_alloc_size_t](1)
     var write_size_ok = png.png_image_write_to_memory(
         image_write,
-        MutOpaquePointer[MutExternalOrigin](),
+        Optional[MutOpaquePointer[MutExternalOrigin]](),
         memory_bytes_out,
         0,
         rebind[ImmutOpaquePointer[ImmutExternalOrigin]](pixels),
         IMAGE_W * CHANNELS,
-        ImmutOpaquePointer[ImmutExternalOrigin](),
+        Optional[ImmutOpaquePointer[ImmutExternalOrigin]](),
     )
     _assert("libpng.write_to_memory_size", write_size_ok != 0)
     _assert("libpng.write_to_memory_size_nonzero", memory_bytes_out[0] > 0)
@@ -178,13 +178,13 @@ def run_memory_roundtrip_checks() raises:
         0,
         rebind[ImmutOpaquePointer[ImmutExternalOrigin]](pixels),
         IMAGE_W * CHANNELS,
-        ImmutOpaquePointer[ImmutExternalOrigin](),
+        Optional[ImmutOpaquePointer[ImmutExternalOrigin]](),
     )
     _assert("libpng.write_to_memory", write_ok != 0)
 
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
-        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
+        opaque=Optional[UnsafePointer[png.png_control, MutExternalOrigin]](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
@@ -198,7 +198,7 @@ def run_memory_roundtrip_checks() raises:
     var begin_ok = png.png_image_begin_read_from_memory(
         image_read,
         rebind[ImmutOpaquePointer[ImmutExternalOrigin]](png_bytes),
-        memory_bytes_out[0],
+        UInt(memory_bytes_out[0]),
     )
     _assert("libpng.begin_read_from_memory", begin_ok != 0)
     image_read[0].format = UInt32(png.PNG_FORMAT_BGRA)
@@ -209,7 +209,7 @@ def run_memory_roundtrip_checks() raises:
         png.png_const_colorp(),
         rebind[MutOpaquePointer[MutExternalOrigin]](out_pixels),
         IMAGE_W * CHANNELS,
-        MutOpaquePointer[MutExternalOrigin](),
+        Optional[MutOpaquePointer[MutExternalOrigin]](),
     )
     _assert("libpng.finish_read_memory", finish_ok != 0)
     _assert("libpng.pixel_roundtrip_mem_0", out_pixels[0] == pixels[0])
@@ -227,7 +227,7 @@ def run_alpha_removal_compositing_checks() raises:
     # background color.
     var image_read = alloc[png.png_image](1)
     image_read[0] = png.png_image(
-        opaque=UnsafePointer[png.png_control, MutExternalOrigin](),
+        opaque=Optional[UnsafePointer[png.png_control, MutExternalOrigin]](),
         version=UInt32(png.PNG_IMAGE_VERSION),
         width=0,
         height=0,
@@ -256,7 +256,7 @@ def run_alpha_removal_compositing_checks() raises:
         background_ptr,
         rebind[MutOpaquePointer[MutExternalOrigin]](out_rgb),
         IMAGE_W * 3,
-        MutOpaquePointer[MutExternalOrigin](),
+        Optional[MutOpaquePointer[MutExternalOrigin]](),
     )
     _assert("libpng.alpha_finish_read", finish_ok != 0)
 
@@ -277,27 +277,33 @@ def run_alpha_removal_compositing_checks() raises:
 def run_transform_and_options_checks() raises:
     var png_ptr = png.png_create_write_struct(
         _cstr("1.6.43"),
-        MutOpaquePointer[MutExternalOrigin](),
+        Optional[MutOpaquePointer[MutExternalOrigin]](),
         _ignore_png_message,
         _ignore_png_message,
     )
     _assert("libpng.create_write_struct", png_ptr != png.png_structp())
 
-    var info_ptr = png.png_create_info_struct(png_ptr)
+    var info_ptr = png.png_create_info_struct(
+        rebind[png.png_const_structrp](png_ptr)
+    )
     _assert("libpng.create_info_struct", info_ptr != png.png_infop())
+    var png_const_ptr = rebind[png.png_const_structrp](png_ptr)
+    var info_const_ptr = rebind[png.png_const_inforp](info_ptr)
 
     # Configure representative writer-side options.
     png.png_set_crc_action(
         png_ptr, png.PNG_CRC_WARN_USE, png.PNG_CRC_WARN_DISCARD
     )
-    png.png_set_filter(png_ptr, png.PNG_FILTER_TYPE_BASE, png.PNG_ALL_FILTERS)
+    png.png_set_filter(
+        png_ptr, png.PNG_FILTER_TYPE_BASE, png.PNG_ALL_FILTERS
+    )
     png.png_set_compression_level(png_ptr, 6)
     png.png_set_compression_strategy(png_ptr, 0)
     png.png_set_flush(png_ptr, 2)
     png.png_set_text_compression_level(png_ptr, 6)
 
     png.png_set_IHDR(
-        png_ptr,
+        png_const_ptr,
         info_ptr,
         UInt32(IMAGE_W),
         UInt32(IMAGE_H),
@@ -308,7 +314,7 @@ def run_transform_and_options_checks() raises:
         png.PNG_FILTER_TYPE_BASE,
     )
     png.png_set_pHYs(
-        png_ptr,
+        png_const_ptr,
         info_ptr,
         3780,
         3780,
@@ -322,11 +328,11 @@ def run_transform_and_options_checks() raises:
         text=_cstr_mut("mojo-bindgen-smoke"),
         text_length=18,
         itxt_length=0,
-        lang=UnsafePointer[Int8, MutExternalOrigin](),
-        lang_key=UnsafePointer[Int8, MutExternalOrigin](),
+        lang=Optional[UnsafePointer[Int8, MutExternalOrigin]](),
+        lang_key=Optional[UnsafePointer[Int8, MutExternalOrigin]](),
     )
     png.png_set_text(
-        png_ptr,
+        png_const_ptr,
         info_ptr,
         rebind[png.png_const_textp](text_entry),
         1,
@@ -341,8 +347,8 @@ def run_transform_and_options_checks() raises:
     var get_filter = alloc[Int32](1)
 
     var ihdr_valid = png.png_get_IHDR(
-        png_ptr,
-        info_ptr,
+        png_const_ptr,
+        info_const_ptr,
         get_w,
         get_h,
         get_bd,
@@ -361,7 +367,7 @@ def run_transform_and_options_checks() raises:
     var res_y = alloc[UInt32](1)
     var unit_type = alloc[Int32](1)
     var phys_valid = png.png_get_pHYs(
-        png_ptr, info_ptr, res_x, res_y, unit_type
+        png_const_ptr, info_const_ptr, res_x, res_y, unit_type
     )
     _assert("libpng.get_phys_valid", phys_valid != 0)
     _assert("libpng.get_phys_x", res_x[0] == 3780)
@@ -370,7 +376,9 @@ def run_transform_and_options_checks() raises:
 
     var out_text = alloc[png.png_textp](1)
     var out_count = alloc[Int32](1)
-    var text_count = png.png_get_text(png_ptr, info_ptr, out_text, out_count)
+    var text_count = png.png_get_text(
+        png_const_ptr, info_ptr, out_text, out_count
+    )
     _assert("libpng.get_text_count", text_count >= 1)
     _assert("libpng.get_text_num", out_count[0] >= 1)
 

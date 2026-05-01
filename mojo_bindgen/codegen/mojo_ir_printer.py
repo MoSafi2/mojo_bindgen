@@ -587,8 +587,13 @@ class MojoIRPrinter:
                 if t.mutability == PointerMutability.IMMUT
                 else "MutOpaquePointer"
             )
-            return f"{ptr_name}[{self._origin_name(t.origin, t.mutability)}]"
-        return f"UnsafePointer[{self._render_type(t.pointee)}, {self._origin_name(t.origin, t.mutability)}]"
+            rendered = f"{ptr_name}[{self._origin_name(t.origin, t.mutability)}]"
+        else:
+            rendered = (
+                f"UnsafePointer[{self._render_type(t.pointee)}, "
+                f"{self._origin_name(t.origin, t.mutability)}]"
+            )
+        return f"Optional[{rendered}]" if t.nullable else rendered
 
     def _render_parametric_arg(self, arg: object) -> str:
         from mojo_bindgen.mojo_ir import ConstArg, DTypeArg, NameArg, TypeArg

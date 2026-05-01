@@ -40,6 +40,9 @@ All notable changes to this project are documented in this file.
 - Replace MojoIR module capability toggles with a concrete dependency container
   that records imports and support helpers explicitly for normalization and
   printing.
+- Render C data pointers as `Optional[UnsafePointer[...]]` or optional opaque
+  pointer aliases so generated Mojo signatures represent nullable C pointers
+  explicitly.
 
 ## [0.1.1a] - 2026-04-24
 

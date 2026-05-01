@@ -220,11 +220,17 @@ ParametricArg = Union[DTypeArg, ConstArg, NameArg, TypeArg]
 
 @dataclass
 class PointerType(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"origin": SerdeFieldSpec(omit_if_default=True)})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "origin": SerdeFieldSpec(omit_if_default=True),
+            "nullable": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
 
     pointee: MojoType | None
     mutability: PointerMutability
     origin: PointerOrigin = PointerOrigin.EXTERNAL
+    nullable: bool = False
 
 
 @dataclass(frozen=True)

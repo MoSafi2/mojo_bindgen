@@ -175,7 +175,11 @@ class PolicyInferencePass:
             if t.name in _TRIVIAL_BUILTINS:
                 return MojoPassability.TRIVIAL_REGISTER_PASSABLE
             return MojoPassability.MEMORY_ONLY
-        if isinstance(t, (FunctionType, PointerType)):
+        if isinstance(t, FunctionType):
+            return MojoPassability.TRIVIAL_REGISTER_PASSABLE
+        if isinstance(t, PointerType):
+            if t.nullable:
+                return MojoPassability.REGISTER_PASSABLE
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
         if isinstance(t, ArrayType):
             return MojoPassability.MEMORY_ONLY

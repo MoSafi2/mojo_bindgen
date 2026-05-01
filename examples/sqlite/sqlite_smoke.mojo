@@ -19,23 +19,29 @@ def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutExternalOrigin]:
 
 
 def _ignore_exec_row(
-    data: MutOpaquePointer[MutExternalOrigin],
+    data: Optional[MutOpaquePointer[MutExternalOrigin]],
     columns: c_int,
-    values: UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin],
-    names: UnsafePointer[UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin],
+    values: Optional[
+        UnsafePointer[Optional[UnsafePointer[Int8, MutExternalOrigin]], MutExternalOrigin]
+    ],
+    names: Optional[
+        UnsafePointer[Optional[UnsafePointer[Int8, MutExternalOrigin]], MutExternalOrigin]
+    ],
 ) abi("C") -> c_int:
     return 0
 
 
-def _ignore_bound_value(value: MutOpaquePointer[MutExternalOrigin]) abi("C"):
+def _ignore_bound_value(
+    value: Optional[UnsafePointer[NoneType, MutExternalOrigin]],
+) abi("C"):
     pass
 
 
 def _errmsg(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) -> String:
     var p = sql.sqlite3_errmsg(db)
-    if p == UnsafePointer[Int8, ImmutExternalOrigin]():
+    if p == Optional[UnsafePointer[Int8, ImmutExternalOrigin]]():
         return "<null errmsg>"
-    return String(p)
+    return String(p.value())
 
 
 def _check_db_rc(
@@ -52,19 +58,19 @@ def _check_db_rc(
 
 
 def _open_memory() raises -> UnsafePointer[sql.sqlite3, MutExternalOrigin]:
-    var ppDb = alloc[UnsafePointer[sql.sqlite3, MutExternalOrigin]](1)
+    var ppDb = alloc[Optional[UnsafePointer[sql.sqlite3, MutExternalOrigin]]](1)
     var rc = sql.sqlite3_open_v2(
         _cstr(":memory:\0"),
         ppDb,
         sql.SQLITE_OPEN_READWRITE | sql.SQLITE_OPEN_CREATE,
-        UnsafePointer[Int8, ImmutExternalOrigin](),
+        Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
     )
     _assert("open.rc", rc == sql.SQLITE_OK)
     _assert(
         "open.nonnull",
-        ppDb[0] != UnsafePointer[sql.sqlite3, MutExternalOrigin](),
+        ppDb[0] != Optional[UnsafePointer[sql.sqlite3, MutExternalOrigin]](),
     )
-    return ppDb[0]
+    return ppDb[0].value()
 
 
 def _exec(
@@ -76,10 +82,8 @@ def _exec(
         db,
         _cstr(s),
         _ignore_exec_row,
-        MutOpaquePointer[MutExternalOrigin](),
-        UnsafePointer[
-            UnsafePointer[Int8, MutExternalOrigin], MutExternalOrigin
-        ](),
+        Optional[MutOpaquePointer[MutExternalOrigin]](),
+        alloc[Optional[UnsafePointer[Int8, MutExternalOrigin]]](1),
     )
     _check_db_rc(label, db, rc)
 
@@ -89,18 +93,16 @@ def _prepare(
     s: StaticString,
     label: String,
 ) raises -> UnsafePointer[sql.sqlite3_stmt, MutExternalOrigin]:
-    var pp = alloc[UnsafePointer[sql.sqlite3_stmt, MutExternalOrigin]](1)
+    var pp = alloc[Optional[UnsafePointer[sql.sqlite3_stmt, MutExternalOrigin]]](1)
     var rc = sql.sqlite3_prepare_v2(
         db,
         _cstr(s),
         -1,
         pp,
-        UnsafePointer[
-            UnsafePointer[Int8, ImmutExternalOrigin], MutExternalOrigin
-        ](),
+        alloc[Optional[UnsafePointer[Int8, ImmutExternalOrigin]]](1),
     )
     _check_db_rc(label, db, rc)
-    return pp[0]
+    return pp[0].value()
 
 
 def _finalize(
@@ -118,7 +120,7 @@ def _finalize(
 def run_basic_checks() raises:
     _assert("libversion_number", sql.sqlite3_libversion_number() > 0)
     var v = sql.sqlite3_libversion()
-    _assert("libversion_ptr", v != UnsafePointer[Int8, ImmutExternalOrigin]())
+    _assert("libversion_ptr", v != Optional[UnsafePointer[Int8, ImmutExternalOrigin]]())
     print("basic|PASS")
 
 
@@ -192,7 +194,7 @@ def run_text_roundtrip(
     )
 
     var p = sql.sqlite3_column_text(stmt, 0)
-    _assert("col.text.ptr", p != UnsafePointer[UInt8, ImmutExternalOrigin]())
+    _assert("col.text.ptr", p != Optional[UnsafePointer[UInt8, ImmutExternalOrigin]]())
 
     _finalize(stmt, "finalize.text.select")
 
@@ -237,7 +239,7 @@ def run_blob_roundtrip(
     _assert("blob.size", size == 4)
 
     var data = sql.sqlite3_column_blob(stmt, 0)
-    _assert("blob.ptr", data != ImmutOpaquePointer[ImmutExternalOrigin]())
+    _assert("blob.ptr", data != Optional[ImmutOpaquePointer[ImmutExternalOrigin]]())
 
     _finalize(stmt, "finalize.blob.select")
 

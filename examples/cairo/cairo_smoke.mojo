@@ -158,6 +158,9 @@ from cairo_bindings import (
     cairo_region_equal,
     cairo_region_translate,
     cairo_recording_surface_create,
+    cairo_matrix_t,
+    cairo_rectangle_int_t,
+    cairo_region_t,
     cairo_glyph_t,
     cairo_t,
     cairo_surface_t,
@@ -210,7 +213,7 @@ def _approx_eq(a: Float64, b: Float64, eps: Float64 = 1e-9) -> Bool:
 
 
 def _draw_panel_border(
-    cr: UnsafePointer[cairo_t, MutExternalOrigin],
+    cr: Optional[UnsafePointer[cairo_t, MutExternalOrigin]],
     x: Float64,
     y: Float64,
     w: Float64,
@@ -228,7 +231,8 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert("version_positive", cairo_version() > 0)
     _assert(
         "version_string_nonnull",
-        cairo_version_string() != UnsafePointer[Int8, ImmutExternalOrigin](),
+        cairo_version_string()
+        != Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
     )
 
     var surf = cairo_image_surface_create(
@@ -253,7 +257,7 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert(
         "status_to_string_nonnull",
         cairo_status_to_string(materialize[OK]())
-        != UnsafePointer[Int8, ImmutExternalOrigin](),
+        != Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
     )
 
     cairo_save(cr)
@@ -313,12 +317,12 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert(
         "get_target_nonnull",
         cairo_get_target(cr)
-        != UnsafePointer[cairo_surface_t, MutExternalOrigin](),
+        != Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]](),
     )
     _assert(
         "get_group_target_nonnull",
         cairo_get_group_target(cr)
-        != UnsafePointer[cairo_surface_t, MutExternalOrigin](),
+        != Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]](),
     )
 
     cairo_destroy(cr)
@@ -327,7 +331,7 @@ def run_metadata_and_lifecycle_checks() raises:
 
 
 def draw_composite_scene(
-    cr: UnsafePointer[cairo_t, MutExternalOrigin]
+    cr: Optional[UnsafePointer[cairo_t, MutExternalOrigin]]
 ) raises:
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0)
     cairo_paint(cr)
@@ -456,12 +460,14 @@ def draw_composite_scene(
     )
     var matrix = alloc[_cairo_matrix](1)
     cairo_pattern_get_matrix(rgba_pat, matrix)
-    cairo_pattern_set_matrix(rgba_pat, matrix)
-    var surf_ptr = alloc[UnsafePointer[cairo_surface_t, MutExternalOrigin]](1)
-    _ok(
-        "pattern_get_surface",
-        cairo_pattern_get_surface(surface_pat, surf_ptr),
+    cairo_pattern_set_matrix(
+        rgba_pat,
+        rebind[Optional[UnsafePointer[cairo_matrix_t, ImmutExternalOrigin]]](
+            matrix
+        ),
     )
+    var surf_ptr = alloc[Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]]](1)
+    _ok("pattern_get_surface", cairo_pattern_get_surface(surface_pat, surf_ptr))
     var x0 = alloc[Float64](1)
     var y0 = alloc[Float64](1)
     var x1 = alloc[Float64](1)
@@ -553,7 +559,7 @@ def draw_composite_scene(
     _assert(
         "panel4_get_source_nonnull",
         cairo_get_source(cr)
-        != UnsafePointer[cairo_pattern_t, MutExternalOrigin](),
+        != Optional[UnsafePointer[cairo_pattern_t, MutExternalOrigin]](),
     )
     cairo_pattern_destroy(source_probe)
     cairo_restore(cr)
@@ -623,7 +629,7 @@ def draw_composite_scene(
     _assert(
         "panel6_toy_family_nonnull",
         cairo_toy_font_face_get_family(tf)
-        != UnsafePointer[Int8, ImmutExternalOrigin](),
+        != Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
     )
     cairo_font_face_destroy(tf)
 
@@ -643,7 +649,7 @@ def draw_composite_scene(
     var glyphs = cairo_glyph_allocate(4)
     _assert(
         "panel6_glyph_alloc_nonnull",
-        glyphs != UnsafePointer[cairo_glyph_t, MutExternalOrigin](),
+        glyphs != Optional[UnsafePointer[cairo_glyph_t, MutExternalOrigin]](),
     )
     cairo_glyph_free(glyphs)
     cairo_restore(cr)
@@ -653,7 +659,7 @@ def draw_composite_scene(
     cairo_translate(cr, 20.0, 420.0)
     var rec = cairo_recording_surface_create(
         materialize[_cairo_content.CAIRO_CONTENT_COLOR_ALPHA](),
-        UnsafePointer[_cairo_rectangle, ImmutExternalOrigin](),
+        Optional[UnsafePointer[_cairo_rectangle, ImmutExternalOrigin]](),
     )
     _ok("panel7_recording_surface_create", cairo_surface_status(rec))
     var rec_cr = cairo_create(rec)
@@ -708,7 +714,11 @@ def run_non_visual_object_checks() raises:
     )
     _assert(
         "font_options_antialias",
-        cairo_font_options_get_antialias(opts).value
+        cairo_font_options_get_antialias(
+            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
+                opts
+            )
+        ).value
         == _cairo_antialias.CAIRO_ANTIALIAS_GRAY.value,
     )
     cairo_font_options_set_subpixel_order(
@@ -716,7 +726,11 @@ def run_non_visual_object_checks() raises:
     )
     _assert(
         "font_options_subpixel",
-        cairo_font_options_get_subpixel_order(opts).value
+        cairo_font_options_get_subpixel_order(
+            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
+                opts
+            )
+        ).value
         == _cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB.value,
     )
     cairo_font_options_set_hint_style(
@@ -724,7 +738,11 @@ def run_non_visual_object_checks() raises:
     )
     _assert(
         "font_options_hint_style",
-        cairo_font_options_get_hint_style(opts).value
+        cairo_font_options_get_hint_style(
+            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
+                opts
+            )
+        ).value
         == _cairo_hint_style.CAIRO_HINT_STYLE_FULL.value,
     )
     cairo_font_options_set_hint_metrics(
@@ -732,7 +750,11 @@ def run_non_visual_object_checks() raises:
     )
     _assert(
         "font_options_hint_metrics",
-        cairo_font_options_get_hint_metrics(opts).value
+        cairo_font_options_get_hint_metrics(
+            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
+                opts
+            )
+        ).value
         == _cairo_hint_metrics.CAIRO_HINT_METRICS_ON.value,
     )
     cairo_font_options_destroy(opts2)
@@ -740,48 +762,61 @@ def run_non_visual_object_checks() raises:
 
     var rect_storage = alloc[_cairo_rectangle_int](1)
     rect_storage[0] = _cairo_rectangle_int(10, 10, 60, 60)
-    var reg = cairo_region_create_rectangle(rect_storage)
+    var reg = cairo_region_create_rectangle(
+        rebind[Optional[UnsafePointer[cairo_rectangle_int_t, ImmutExternalOrigin]]](
+            rect_storage
+        )
+    )
     rect_storage.free()
-    _ok("region_create_rectangle", cairo_region_status(reg))
+    var reg_const = rebind[Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]](
+        reg
+    )
+    _ok("region_create_rectangle", cairo_region_status(reg_const))
     _assert(
         "region_not_empty",
-        cairo_region_is_empty(reg) == 0,
+        cairo_region_is_empty(reg_const) == 0,
     )
     _assert(
         "region_contains_inside",
-        cairo_region_contains_point(reg, 30, 30) != 0,
+        cairo_region_contains_point(reg_const, 30, 30) != 0,
     )
     _assert(
         "region_contains_outside",
-        cairo_region_contains_point(reg,2,2)== 0,
+        cairo_region_contains_point(reg_const, 2, 2) == 0,
     )
     _assert(
         "region_rects_nonneg",
-        cairo_region_num_rectangles(reg) >= 0,
+        cairo_region_num_rectangles(reg_const) >= 0,
     )
 
     var extents = alloc[_cairo_rectangle_int](1)
-    cairo_region_get_extents(reg,extents)
+    cairo_region_get_extents(reg_const, extents)
     extents.free()
-    var reg2 = cairo_region_copy(reg)
+    var reg2 = cairo_region_copy(reg_const)
+    var reg2_const = rebind[Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]](
+        reg2
+    )
     _assert(
         "region_equal_after_copy",
-        cairo_region_equal(reg,reg2)!= 0,
+        cairo_region_equal(reg_const, reg2_const) != 0,
     )
     cairo_region_translate(reg2, 5, 5)
     _assert(
         "region_not_equal_after_translate",
-        cairo_region_equal(reg,reg2)== 0,
+        cairo_region_equal(reg_const, reg2_const) == 0,
     )
     cairo_region_destroy(reg2)
     var reg_ref = cairo_region_reference(reg)
     cairo_region_destroy(reg_ref)
 
     var empty = cairo_region_create()
-    _ok("region_create_empty", cairo_region_status(empty))
+    var empty_const = rebind[Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]](
+        empty
+    )
+    _ok("region_create_empty", cairo_region_status(empty_const))
     _assert(
         "region_empty_is_empty",
-        cairo_region_is_empty(empty)!= 0,
+        cairo_region_is_empty(empty_const) != 0,
     )
     cairo_region_destroy(empty)
     cairo_region_destroy(reg)
@@ -789,7 +824,7 @@ def run_non_visual_object_checks() raises:
 
 
 def run_png_roundtrip_from_composite(
-    surface: UnsafePointer[cairo_surface_t, MutExternalOrigin]
+    surface: Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]]
 ) raises:
     var out_path = CStringSlice("/tmp/mojo_bindgen_cairo_smoke_composite.png\0")
     _ok(

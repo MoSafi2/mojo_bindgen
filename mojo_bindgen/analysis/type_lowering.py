@@ -257,11 +257,13 @@ class LowerTypePass:
                 pointee=None,
                 mutability=mutability,
                 origin=PointerOrigin.EXTERNAL,
+                nullable=True,
             )
         return PointerType(
             pointee=self.run(pointee),
             mutability=mutability,
             origin=PointerOrigin.EXTERNAL,
+            nullable=True,
         )
 
     # ------------------------
