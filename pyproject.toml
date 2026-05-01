@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mojo-bindgen"
-version = "0.1.1a"
+version = "0.2"
 description = "Generate Mojo FFI bindings from C headers using libclang"
 readme = "README.md"
 license = "MIT"
