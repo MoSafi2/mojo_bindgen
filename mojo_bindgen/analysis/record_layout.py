@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from mojo_bindgen.analysis.bitfield_layout import BitfieldRunLayout, analyze_bitfield_layout
 from mojo_bindgen.analysis.lowering_support import field_display_name
 from mojo_bindgen.analysis.type_layout import type_align
-from mojo_bindgen.ir import Struct, TargetABI, Unit
+from mojo_bindgen.ir import Array, Struct, StructRef, TargetABI, Unit
 
 
 def struct_by_decl_id(unit: Unit) -> dict[str, Struct]:
@@ -112,7 +112,10 @@ def _analyze_plain_fields(decl: Struct) -> tuple[list[PlainFieldFact], list[str]
 
         field_name = field_display_name(field, index)
         align_bytes = type_align(field.type)
-        if align_bytes is None or field.size_bytes <= 0:
+        if align_bytes is None or (
+            field.size_bytes <= 0
+            and not (isinstance(field.type, Array) or isinstance(field.type, StructRef))
+        ):
             problems.append(f"field `{field_name}` has unsupported layout metadata")
             continue
 

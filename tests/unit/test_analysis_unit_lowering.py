@@ -33,7 +33,6 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
     BuiltinType,
     ComptimeMember,
     FunctionDecl,
@@ -446,7 +445,7 @@ def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None
     assert union_decl.diagnostics == []
 
 
-def test_lower_unit_uses_byte_storage_fallback_for_ineligible_union() -> None:
+def test_lower_unit_uses_unsafe_union_for_repeated_types_union() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -474,9 +473,9 @@ def test_lower_unit_uses_byte_storage_fallback_for_ineligible_union() -> None:
 
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
-    assert union_decl.type_value == ArrayType(
-        element=BuiltinType(MojoBuiltin.UINT8),
-        count=4,
+    assert union_decl.type_value == ParametricType(
+        base=ParametricBase.UNSAFE_UNION,
+        args=[TypeArg(type=BuiltinType(MojoBuiltin.C_INT))],
     )
     assert union_decl.diagnostics[0].category == "union_lowering"
 

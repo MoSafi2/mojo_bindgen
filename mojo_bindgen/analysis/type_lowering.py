@@ -272,6 +272,10 @@ class LowerTypePass:
     def _lower_array(self, t: Array) -> MojoType:
         if t.array_kind == "fixed" and t.size is not None:
             return ArrayType(element=self.run(t.element), count=t.size)
+
+        if t.array_kind == "flexible" and t.size is None:
+            # Flexible array members mapped as InlineArray[T, 0]
+            return ArrayType(element=self.run(t.element), count=0)
         # fallback: pointer
         return PointerType(
             pointee=self.run(t.element),

@@ -102,9 +102,13 @@ def test_lower_type_maps_fixed_arrays_and_pointer_falls_back_for_flexible_arrays
         element=BuiltinType(name=MojoBuiltin.C_SHORT),
         count=4,
     )
-    assert lower_type(Array(element=element, size=None, array_kind="flexible")) == PointerType(
+    assert lower_type(Array(element=element, size=4, array_kind="flexible")) == PointerType(
         pointee=BuiltinType(name=MojoBuiltin.C_SHORT),
         mutability=PointerMutability.MUT,
+    )
+    assert lower_type(Array(element=element, size=None, array_kind="flexible")) == ArrayType(
+        element=BuiltinType(name=MojoBuiltin.C_SHORT),
+        count=0,
     )
 
 

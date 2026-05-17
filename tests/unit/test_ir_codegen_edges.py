@@ -1028,7 +1028,7 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
     assert "var payload: Payload" in out
 
 
-def test_generator_emits_documented_inline_array_fallback_for_ineligible_union() -> None:
+def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_union() -> None:
     i32 = _i32()
     union_decl = Struct(
         decl_id="union:Dup",
@@ -1074,8 +1074,8 @@ def test_generator_emits_documented_inline_array_fallback_for_ineligible_union()
             decls=[union_decl, holder],
         )
     )
-    assert "comptime Dup = InlineArray[UInt8, 4]" in out
-    assert "lowered as InlineArray[UInt8, 4] to preserve layout" in out
+    assert "duplicates lowered type of earlier member `a`" in out
+    assert "comptime Dup = UnsafeUnion[c_int]" in out
     assert "var payload: Dup" in out
 
 
