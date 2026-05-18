@@ -39,6 +39,7 @@ from mojo_bindgen.ir import (
     TypeRef,
     UnaryExpr,
     Unit,
+    Enum,
 )
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
@@ -58,11 +59,22 @@ class LowerUnitPass:
     def run(self, unit: Unit) -> MojoModule:
         type_lowerer = LowerTypePass()
         record_map = record_by_decl_id(unit)
+        enum_variants: dict[str, str] = {}
+        for decl in unit.decls:
+            if isinstance(decl, Enum):
+                enum_mojo_name = mojo_ident(decl.name)
+                for member in decl.enumerants:
+                    variant_name = mojo_ident(member.name)
+                    enum_variants[member.name] = f"{enum_mojo_name}.{variant_name}.value"
+
         session = LoweringSession(
             unit=unit,
             options=self._options,
             type_lowerer=type_lowerer,
-            const_lowerer=LowerConstExprPass(type_lowering=type_lowerer),
+            const_lowerer=LowerConstExprPass(
+                type_lowering=type_lowerer,
+                enum_variants=enum_variants,
+            ),
             struct_context=StructLoweringContext(
                 record_map=record_map,
                 target_abi=unit.target_abi,

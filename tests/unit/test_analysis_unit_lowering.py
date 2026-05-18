@@ -26,6 +26,8 @@ from mojo_bindgen.ir import (
     TypeRef,
     Unit,
     VoidType,
+    BinaryExpr,
+    RefExpr,
 )
 from mojo_bindgen.ir import (
     Param as CIRParam,
@@ -45,6 +47,7 @@ from mojo_bindgen.mojo_ir import (
     MojoCastExpr,
     MojoIntLiteral,
     MojoRefExpr,
+    MojoBinaryExpr,
     NamedType,
     PaddingMember,
     ParametricBase,
@@ -828,4 +831,45 @@ def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> 
     assert decl.type_value is None
     assert decl.diagnostics[0].message == (
         "constant expression could not be lowered; placeholder alias emitted"
+    )
+
+
+def test_lower_unit_qualifies_enum_variant_refs_in_macros() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Enum(
+                decl_id="enum:flags",
+                name="Flags",
+                c_name="Flags",
+                underlying=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
+                enumerants=[Enumerant(name="my_flag", c_name="MY_FLAG", value=1)],
+            ),
+            MacroDecl(
+                name="SHIFTED_FLAG",
+                tokens=["(", "1", "<<", "MY_FLAG", ")"],
+                kind="object_like_supported",
+                expr=BinaryExpr(
+                    op="<<",
+                    lhs=IntLiteral(1),
+                    rhs=RefExpr("my_flag"),
+                ),
+                type=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    macro_decl = lowered.decls[1]
+
+    assert isinstance(macro_decl, AliasDecl)
+    assert macro_decl.kind == AliasKind.MACRO_VALUE
+    
+    assert macro_decl.const_value == MojoBinaryExpr(
+        op="<<",
+        lhs=MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=MojoIntLiteral(1)),
+        rhs=MojoRefExpr("Flags.my_flag.value"),
     )

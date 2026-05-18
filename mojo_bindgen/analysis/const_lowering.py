@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
@@ -42,6 +42,7 @@ class LowerConstExprPass:
     """Lower CIR constant expressions into Mojo-facing constant expressions."""
 
     type_lowering: LowerTypePass
+    enum_variants: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
     def _parse_float_literal(value: str) -> float:
@@ -61,6 +62,8 @@ class LowerConstExprPass:
         if isinstance(expr, CharLiteral):
             return MojoCharLiteral(expr.value)
         if isinstance(expr, RefExpr):
+            if expr.name in self.enum_variants:
+                return MojoRefExpr(self.enum_variants[expr.name])
             return MojoRefExpr(mojo_ident(expr.name))
         if isinstance(expr, UnaryExpr):
             return MojoUnaryExpr(op=expr.op, operand=self.run(expr.operand))
