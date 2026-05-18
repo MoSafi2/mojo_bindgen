@@ -30,6 +30,7 @@ from mojo_bindgen.ir import (
     CastExpr,
     Const,
     ConstExpr,
+    Enum,
     Function,
     GlobalVar,
     MacroDecl,
@@ -39,7 +40,6 @@ from mojo_bindgen.ir import (
     TypeRef,
     UnaryExpr,
     Unit,
-    Enum,
 )
 from mojo_bindgen.mojo_ir import (
     AliasDecl,

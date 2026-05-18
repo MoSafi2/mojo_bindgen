@@ -5,6 +5,7 @@ from __future__ import annotations
 from mojo_bindgen.analysis import lower_unit
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    BinaryExpr,
     ByteOrder,
     Const,
     Enum,
@@ -19,6 +20,7 @@ from mojo_bindgen.ir import (
     MacroDecl,
     NullPtrLiteral,
     Pointer,
+    RefExpr,
     Struct,
     StructRef,
     TargetABI,
@@ -26,8 +28,6 @@ from mojo_bindgen.ir import (
     TypeRef,
     Unit,
     VoidType,
-    BinaryExpr,
-    RefExpr,
 )
 from mojo_bindgen.ir import (
     Param as CIRParam,
@@ -42,12 +42,12 @@ from mojo_bindgen.mojo_ir import (
     FunctionType,
     GlobalDecl,
     LinkMode,
+    MojoBinaryExpr,
     MojoBuiltin,
     MojoCallExpr,
     MojoCastExpr,
     MojoIntLiteral,
     MojoRefExpr,
-    MojoBinaryExpr,
     NamedType,
     PaddingMember,
     ParametricBase,
@@ -867,7 +867,7 @@ def test_lower_unit_qualifies_enum_variant_refs_in_macros() -> None:
 
     assert isinstance(macro_decl, AliasDecl)
     assert macro_decl.kind == AliasKind.MACRO_VALUE
-    
+
     assert macro_decl.const_value == MojoBinaryExpr(
         op="<<",
         lhs=MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=MojoIntLiteral(1)),
