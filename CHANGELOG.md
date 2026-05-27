@@ -6,7 +6,16 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Handle repeated field types in anonymous unions by still lowering them to
+  `UnsafeUnion`, contributed by WolfDan in PR #9.
+- Lower flexible array member declarations as `InlineArray[T, 0]` instead of
+  deriving their size from the containing struct, contributed by WolfDan in PR
+  #9.
+
 ### Changed
+
+- Revert the enum-comptime macro reference lowering from `8280b5c`; enum
+  references in macro expressions will get a more principled fix in a follow-up.
 
 ### Removed
 
