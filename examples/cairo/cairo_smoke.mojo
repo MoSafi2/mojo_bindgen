@@ -3,197 +3,14 @@
 
 from std.ffi import CStringSlice
 from std.memory import alloc
-from cairo_bindings import (
-    cairo_version,
-    cairo_version_string,
-    cairo_debug_reset_static_data,
-    cairo_image_surface_create,
-    cairo_image_surface_create_from_png,
-    cairo_image_surface_get_height,
-    cairo_image_surface_get_width,
-    cairo_surface_create_similar,
-    cairo_surface_destroy,
-    cairo_surface_status,
-    cairo_surface_write_to_png,
-    cairo_surface_flush,
-    cairo_surface_mark_dirty,
-    cairo_surface_mark_dirty_rectangle,
-    cairo_create,
-    cairo_destroy,
-    cairo_reference,
-    cairo_get_reference_count,
-    cairo_status,
-    cairo_status_to_string,
-    cairo_save,
-    cairo_restore,
-    cairo_set_operator,
-    cairo_get_operator,
-    cairo_set_tolerance,
-    cairo_get_tolerance,
-    cairo_set_antialias,
-    cairo_get_antialias,
-    cairo_set_fill_rule,
-    cairo_get_fill_rule,
-    cairo_set_line_width,
-    cairo_get_line_width,
-    cairo_set_line_cap,
-    cairo_get_line_cap,
-    cairo_set_line_join,
-    cairo_get_line_join,
-    cairo_set_miter_limit,
-    cairo_get_miter_limit,
-    cairo_get_dash_count,
-    cairo_get_target,
-    cairo_get_group_target,
-    cairo_set_source_rgb,
-    cairo_set_source_rgba,
-    cairo_set_source_surface,
-    cairo_set_source,
-    cairo_get_source,
-    cairo_paint,
-    cairo_paint_with_alpha,
-    cairo_fill,
-    cairo_fill_preserve,
-    cairo_stroke,
-    cairo_stroke_preserve,
-    cairo_in_stroke,
-    cairo_in_clip,
-    cairo_mask,
-    cairo_mask_surface,
-    cairo_new_path,
-    cairo_new_sub_path,
-    cairo_close_path,
-    cairo_move_to,
-    cairo_line_to,
-    cairo_curve_to,
-    cairo_rel_move_to,
-    cairo_rel_line_to,
-    cairo_rel_curve_to,
-    cairo_arc,
-    cairo_arc_negative,
-    cairo_rectangle,
-    cairo_clip,
-    cairo_clip_preserve,
-    cairo_reset_clip,
-    cairo_translate,
-    cairo_scale,
-    cairo_rotate,
-    cairo_identity_matrix,
-    cairo_pattern_create_rgb,
-    cairo_pattern_create_rgba,
-    cairo_pattern_create_for_surface,
-    cairo_pattern_create_linear,
-    cairo_pattern_create_radial,
-    cairo_pattern_create_mesh,
-    cairo_pattern_reference,
-    cairo_pattern_destroy,
-    cairo_pattern_get_reference_count,
-    cairo_pattern_status,
-    cairo_pattern_get_type,
-    cairo_pattern_add_color_stop_rgb,
-    cairo_pattern_add_color_stop_rgba,
-    cairo_pattern_set_extend,
-    cairo_pattern_get_extend,
-    cairo_pattern_set_filter,
-    cairo_pattern_get_filter,
-    cairo_pattern_get_surface,
-    cairo_pattern_get_linear_points,
-    cairo_pattern_get_radial_circles,
-    cairo_pattern_get_rgba,
-    cairo_pattern_set_matrix,
-    cairo_pattern_get_matrix,
-    cairo_mesh_pattern_begin_patch,
-    cairo_mesh_pattern_end_patch,
-    cairo_mesh_pattern_move_to,
-    cairo_mesh_pattern_line_to,
-    cairo_mesh_pattern_set_control_point,
-    cairo_mesh_pattern_set_corner_color_rgb,
-    cairo_mesh_pattern_set_corner_color_rgba,
-    cairo_mesh_pattern_get_patch_count,
-    cairo_push_group,
-    cairo_push_group_with_content,
-    cairo_pop_group,
-    cairo_pop_group_to_source,
-    cairo_font_options_create,
-    cairo_font_options_copy,
-    cairo_font_options_destroy,
-    cairo_font_options_status,
-    cairo_font_options_merge,
-    cairo_font_options_equal,
-    cairo_font_options_hash,
-    cairo_font_options_set_antialias,
-    cairo_font_options_get_antialias,
-    cairo_font_options_set_subpixel_order,
-    cairo_font_options_get_subpixel_order,
-    cairo_font_options_set_hint_style,
-    cairo_font_options_get_hint_style,
-    cairo_font_options_set_hint_metrics,
-    cairo_font_options_get_hint_metrics,
-    cairo_select_font_face,
-    cairo_set_font_size,
-    cairo_get_font_face,
-    cairo_font_face_reference,
-    cairo_font_face_destroy,
-    cairo_font_face_get_reference_count,
-    cairo_font_face_status,
-    cairo_font_face_get_type,
-    cairo_toy_font_face_create,
-    cairo_toy_font_face_get_slant,
-    cairo_toy_font_face_get_weight,
-    cairo_toy_font_face_get_family,
-    cairo_show_text,
-    cairo_text_path,
-    cairo_glyph_allocate,
-    cairo_glyph_free,
-    cairo_region_create,
-    cairo_region_create_rectangle,
-    cairo_region_copy,
-    cairo_region_destroy,
-    cairo_region_reference,
-    cairo_region_status,
-    cairo_region_get_extents,
-    cairo_region_num_rectangles,
-    cairo_region_is_empty,
-    cairo_region_contains_point,
-    cairo_region_equal,
-    cairo_region_translate,
-    cairo_recording_surface_create,
-    cairo_matrix_t,
-    cairo_rectangle_int_t,
-    cairo_region_t,
-    cairo_glyph_t,
-    cairo_t,
-    cairo_surface_t,
-    cairo_pattern_t,
-    cairo_font_options_t,
-    _cairo_status,
-    _cairo_format,
-    _cairo_content,
-    _cairo_operator,
-    _cairo_antialias,
-    _cairo_fill_rule,
-    _cairo_line_cap,
-    _cairo_line_join,
-    _cairo_extend,
-    _cairo_filter,
-    _cairo_pattern_type,
-    _cairo_subpixel_order,
-    _cairo_hint_style,
-    _cairo_hint_metrics,
-    _cairo_font_slant,
-    _cairo_font_weight,
-    _cairo_font_type,
-    _cairo_matrix,
-    _cairo_rectangle_int,
-    _cairo_rectangle,
-)
+from cairo_bindings import *
 
-comptime OK = _cairo_status.CAIRO_STATUS_SUCCESS
+comptime OK = CAIRO_STATUS_SUCCESS
 comptime SCENE_W = 960
 comptime SCENE_H = 640
 
 
-def _ok(label: String, status: _cairo_status) raises:
+def _ok(label: String, status: cairo_status_t) raises:
     if status.value != OK.value:
         raise Error(label + " -> cairo status " + String(status.value))
     print(label + "|ok")
@@ -236,11 +53,11 @@ def run_metadata_and_lifecycle_checks() raises:
     )
 
     var surf = cairo_image_surface_create(
-        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 96, 96
+        materialize[CAIRO_FORMAT_ARGB32](), 96, 96
     )
     _ok("base_surface_create", cairo_surface_status(surf))
     var sim = cairo_surface_create_similar(
-        surf, materialize[_cairo_content.CAIRO_CONTENT_COLOR_ALPHA](), 32, 32
+        surf, materialize[CAIRO_CONTENT_COLOR_ALPHA](), 32, 32
     )
     _ok("surface_create_similar", cairo_surface_status(sim))
     cairo_surface_destroy(sim)
@@ -266,50 +83,50 @@ def run_metadata_and_lifecycle_checks() raises:
     cairo_restore(cr)
     _assert("line_width_restored", _approx_eq(cairo_get_line_width(cr), 2.0))
 
-    cairo_set_operator(cr, materialize[_cairo_operator.CAIRO_OPERATOR_XOR]())
+    cairo_set_operator(cr, materialize[CAIRO_OPERATOR_XOR]())
     _assert(
         "operator_roundtrip",
         cairo_get_operator(cr).value
-        == _cairo_operator.CAIRO_OPERATOR_XOR.value,
+        == CAIRO_OPERATOR_XOR.value,
     )
-    cairo_set_operator(cr, materialize[_cairo_operator.CAIRO_OPERATOR_OVER]())
+    cairo_set_operator(cr, materialize[CAIRO_OPERATOR_OVER]())
     cairo_set_tolerance(cr, 0.25)
     _assert("tolerance_roundtrip", _approx_eq(cairo_get_tolerance(cr), 0.25))
     cairo_set_antialias(
-        cr, materialize[_cairo_antialias.CAIRO_ANTIALIAS_NONE]()
+        cr, materialize[CAIRO_ANTIALIAS_NONE]()
     )
     _assert(
         "antialias_roundtrip",
         cairo_get_antialias(cr).value
-        == _cairo_antialias.CAIRO_ANTIALIAS_NONE.value,
+        == CAIRO_ANTIALIAS_NONE.value,
     )
     cairo_set_antialias(
-        cr, materialize[_cairo_antialias.CAIRO_ANTIALIAS_DEFAULT]()
+        cr, materialize[CAIRO_ANTIALIAS_DEFAULT]()
     )
     cairo_set_fill_rule(
-        cr, materialize[_cairo_fill_rule.CAIRO_FILL_RULE_EVEN_ODD]()
+        cr, materialize[CAIRO_FILL_RULE_EVEN_ODD]()
     )
     _assert(
         "fill_rule_roundtrip",
         cairo_get_fill_rule(cr).value
-        == _cairo_fill_rule.CAIRO_FILL_RULE_EVEN_ODD.value,
+        == CAIRO_FILL_RULE_EVEN_ODD.value,
     )
     cairo_set_fill_rule(
-        cr, materialize[_cairo_fill_rule.CAIRO_FILL_RULE_WINDING]()
+        cr, materialize[CAIRO_FILL_RULE_WINDING]()
     )
-    cairo_set_line_cap(cr, materialize[_cairo_line_cap.CAIRO_LINE_CAP_ROUND]())
+    cairo_set_line_cap(cr, materialize[CAIRO_LINE_CAP_ROUND]())
     _assert(
         "line_cap_roundtrip",
         cairo_get_line_cap(cr).value
-        == _cairo_line_cap.CAIRO_LINE_CAP_ROUND.value,
+        == CAIRO_LINE_CAP_ROUND.value,
     )
     cairo_set_line_join(
-        cr, materialize[_cairo_line_join.CAIRO_LINE_JOIN_BEVEL]()
+        cr, materialize[CAIRO_LINE_JOIN_BEVEL]()
     )
     _assert(
         "line_join_roundtrip",
         cairo_get_line_join(cr).value
-        == _cairo_line_join.CAIRO_LINE_JOIN_BEVEL.value,
+        == CAIRO_LINE_JOIN_BEVEL.value,
     )
     cairo_set_miter_limit(cr, 5.5)
     _assert("miter_roundtrip", _approx_eq(cairo_get_miter_limit(cr), 5.5))
@@ -370,7 +187,7 @@ def draw_composite_scene(
     _assert(
         "pattern_linear_type",
         cairo_pattern_get_type(lin).value
-        == _cairo_pattern_type.CAIRO_PATTERN_TYPE_LINEAR.value,
+        == CAIRO_PATTERN_TYPE_LINEAR.value,
     )
     cairo_pattern_add_color_stop_rgb(lin, 0.0, 1.0, 0.0, 0.0)
     cairo_pattern_add_color_stop_rgba(lin, 1.0, 0.0, 0.0, 1.0, 1.0)
@@ -413,7 +230,7 @@ def draw_composite_scene(
     cairo_paint_with_alpha(cr, 0.7)
 
     var tiny = cairo_image_surface_create(
-        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), 8, 8
+        materialize[CAIRO_FORMAT_ARGB32](), 8, 8
     )
     var tiny_cr = cairo_create(tiny)
     cairo_set_source_rgb(tiny_cr, 0.0, 0.0, 0.0)
@@ -423,20 +240,20 @@ def draw_composite_scene(
     var surface_pat = cairo_pattern_create_for_surface(tiny)
     _ok("pattern_surface_create", cairo_pattern_status(surface_pat))
     cairo_pattern_set_extend(
-        surface_pat, materialize[_cairo_extend.CAIRO_EXTEND_REPEAT]()
+        surface_pat, materialize[CAIRO_EXTEND_REPEAT]()
     )
     _assert(
         "pattern_extend_roundtrip",
         cairo_pattern_get_extend(surface_pat).value
-        == _cairo_extend.CAIRO_EXTEND_REPEAT.value,
+        == CAIRO_EXTEND_REPEAT.value,
     )
     cairo_pattern_set_filter(
-        surface_pat, materialize[_cairo_filter.CAIRO_FILTER_BILINEAR]()
+        surface_pat, materialize[CAIRO_FILTER_BILINEAR]()
     )
     _assert(
         "pattern_filter_roundtrip",
         cairo_pattern_get_filter(surface_pat).value
-        == _cairo_filter.CAIRO_FILTER_BILINEAR.value,
+        == CAIRO_FILTER_BILINEAR.value,
     )
 
     var p_ref = cairo_pattern_reference(surface_pat)
@@ -458,7 +275,7 @@ def draw_composite_scene(
         "pattern_get_rgba",
         cairo_pattern_get_rgba(rgba_pat, sr, sg, sb, sa),
     )
-    var matrix = alloc[_cairo_matrix](1)
+    var matrix = alloc[cairo_matrix_t](1)
     cairo_pattern_get_matrix(rgba_pat, matrix)
     cairo_pattern_set_matrix(
         rgba_pat,
@@ -545,7 +362,7 @@ def draw_composite_scene(
     cairo_pattern_destroy(group_pat)
 
     cairo_push_group_with_content(
-        cr, materialize[_cairo_content.CAIRO_CONTENT_COLOR]()
+        cr, materialize[CAIRO_CONTENT_COLOR]()
     )
     cairo_set_source_rgb(cr, 0.1, 0.8, 0.2)
     cairo_rectangle(cr, 40.0, 30.0, 120.0, 100.0)
@@ -574,7 +391,7 @@ def draw_composite_scene(
     cairo_pattern_destroy(mask_pat)
 
     var alpha_surf = cairo_image_surface_create(
-        materialize[_cairo_format.CAIRO_FORMAT_A8](), 280, 160
+        materialize[CAIRO_FORMAT_A8](), 280, 160
     )
     var alpha_cr = cairo_create(alpha_surf)
     cairo_set_source_rgba(alpha_cr, 0.0, 0.0, 0.0, 1.0)
@@ -593,8 +410,8 @@ def draw_composite_scene(
     cairo_select_font_face(
         cr,
         rebind[UnsafePointer[Int8, ImmutExternalOrigin]](family.unsafe_ptr()),
-        materialize[_cairo_font_slant.CAIRO_FONT_SLANT_NORMAL](),
-        materialize[_cairo_font_weight.CAIRO_FONT_WEIGHT_BOLD](),
+        materialize[CAIRO_FONT_SLANT_NORMAL](),
+        materialize[CAIRO_FONT_WEIGHT_BOLD](),
     )
     cairo_set_font_size(cr, 22.0)
     var ff = cairo_get_font_face(cr)
@@ -602,7 +419,7 @@ def draw_composite_scene(
     _assert(
         "panel6_font_face_toy",
         cairo_font_face_get_type(ff).value
-        == _cairo_font_type.CAIRO_FONT_TYPE_TOY.value,
+        == CAIRO_FONT_TYPE_TOY.value,
     )
     var ff2 = cairo_font_face_reference(ff)
     _assert(
@@ -612,19 +429,19 @@ def draw_composite_scene(
 
     var tf = cairo_toy_font_face_create(
         rebind[UnsafePointer[Int8, ImmutExternalOrigin]](family.unsafe_ptr()),
-        materialize[_cairo_font_slant.CAIRO_FONT_SLANT_ITALIC](),
-        materialize[_cairo_font_weight.CAIRO_FONT_WEIGHT_NORMAL](),
+        materialize[CAIRO_FONT_SLANT_ITALIC](),
+        materialize[CAIRO_FONT_WEIGHT_NORMAL](),
     )
     _ok("panel6_toy_font_create", cairo_font_face_status(tf))
     _assert(
         "panel6_toy_slant",
         cairo_toy_font_face_get_slant(tf).value
-        == _cairo_font_slant.CAIRO_FONT_SLANT_ITALIC.value,
+        == CAIRO_FONT_SLANT_ITALIC.value,
     )
     _assert(
         "panel6_toy_weight",
         cairo_toy_font_face_get_weight(tf).value
-        == _cairo_font_weight.CAIRO_FONT_WEIGHT_NORMAL.value,
+        == CAIRO_FONT_WEIGHT_NORMAL.value,
     )
     _assert(
         "panel6_toy_family_nonnull",
@@ -658,8 +475,8 @@ def draw_composite_scene(
     cairo_save(cr)
     cairo_translate(cr, 20.0, 420.0)
     var rec = cairo_recording_surface_create(
-        materialize[_cairo_content.CAIRO_CONTENT_COLOR_ALPHA](),
-        Optional[UnsafePointer[_cairo_rectangle, ImmutExternalOrigin]](),
+        materialize[CAIRO_CONTENT_COLOR_ALPHA](),
+        Optional[UnsafePointer[cairo_rectangle_t, ImmutExternalOrigin]](),
     )
     _ok("panel7_recording_surface_create", cairo_surface_status(rec))
     var rec_cr = cairo_create(rec)
@@ -710,7 +527,7 @@ def run_non_visual_object_checks() raises:
         == 0,
     )
     cairo_font_options_set_antialias(
-        opts, materialize[_cairo_antialias.CAIRO_ANTIALIAS_GRAY]()
+        opts, materialize[CAIRO_ANTIALIAS_GRAY]()
     )
     _assert(
         "font_options_antialias",
@@ -719,10 +536,10 @@ def run_non_visual_object_checks() raises:
                 opts
             )
         ).value
-        == _cairo_antialias.CAIRO_ANTIALIAS_GRAY.value,
+        == CAIRO_ANTIALIAS_GRAY.value,
     )
     cairo_font_options_set_subpixel_order(
-        opts, materialize[_cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB]()
+        opts, materialize[CAIRO_SUBPIXEL_ORDER_RGB]()
     )
     _assert(
         "font_options_subpixel",
@@ -731,10 +548,10 @@ def run_non_visual_object_checks() raises:
                 opts
             )
         ).value
-        == _cairo_subpixel_order.CAIRO_SUBPIXEL_ORDER_RGB.value,
+        == CAIRO_SUBPIXEL_ORDER_RGB.value,
     )
     cairo_font_options_set_hint_style(
-        opts, materialize[_cairo_hint_style.CAIRO_HINT_STYLE_FULL]()
+        opts, materialize[CAIRO_HINT_STYLE_FULL]()
     )
     _assert(
         "font_options_hint_style",
@@ -743,10 +560,10 @@ def run_non_visual_object_checks() raises:
                 opts
             )
         ).value
-        == _cairo_hint_style.CAIRO_HINT_STYLE_FULL.value,
+        == CAIRO_HINT_STYLE_FULL.value,
     )
     cairo_font_options_set_hint_metrics(
-        opts, materialize[_cairo_hint_metrics.CAIRO_HINT_METRICS_ON]()
+        opts, materialize[CAIRO_HINT_METRICS_ON]()
     )
     _assert(
         "font_options_hint_metrics",
@@ -755,13 +572,13 @@ def run_non_visual_object_checks() raises:
                 opts
             )
         ).value
-        == _cairo_hint_metrics.CAIRO_HINT_METRICS_ON.value,
+        == CAIRO_HINT_METRICS_ON.value,
     )
     cairo_font_options_destroy(opts2)
     cairo_font_options_destroy(opts)
 
-    var rect_storage = alloc[_cairo_rectangle_int](1)
-    rect_storage[0] = _cairo_rectangle_int(10, 10, 60, 60)
+    var rect_storage = alloc[cairo_rectangle_int_t](1)
+    rect_storage[0] = cairo_rectangle_int_t(10, 10, 60, 60)
     var reg = cairo_region_create_rectangle(
         rebind[Optional[UnsafePointer[cairo_rectangle_int_t, ImmutExternalOrigin]]](
             rect_storage
@@ -789,7 +606,7 @@ def run_non_visual_object_checks() raises:
         cairo_region_num_rectangles(reg_const) >= 0,
     )
 
-    var extents = alloc[_cairo_rectangle_int](1)
+    var extents = alloc[cairo_rectangle_int_t](1)
     cairo_region_get_extents(reg_const, extents)
     extents.free()
     var reg2 = cairo_region_copy(reg_const)
@@ -856,7 +673,7 @@ def main() raises:
     run_metadata_and_lifecycle_checks()
 
     var surface = cairo_image_surface_create(
-        materialize[_cairo_format.CAIRO_FORMAT_ARGB32](), SCENE_W, SCENE_H
+        materialize[CAIRO_FORMAT_ARGB32](), SCENE_W, SCENE_H
     )
     _ok("composite_surface_create", cairo_surface_status(surface))
     var cr = cairo_create(surface)

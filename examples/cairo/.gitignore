@@ -1,3 +1,4 @@
 cairo_bindings.mojo
 cairo_smoke
 *.o
+cairo_bindings_layout_tests.mojo

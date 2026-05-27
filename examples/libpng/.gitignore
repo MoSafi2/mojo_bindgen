@@ -1,3 +1,4 @@
 libpng_bindings.mojo
 libpng_smoke
 *.o
+libpng_bindings_layout_tests.mojo
