@@ -115,6 +115,15 @@ MacroDeclKind = Literal[
 # Classification of preserved preprocessor macro declarations.
 
 
+@dataclass(frozen=True)
+class DocComment(SerDeMixin):
+    """Source documentation associated with a C declaration cursor."""
+
+    text: str
+    brief: str | None = None
+    source: Literal["clang_raw"] = "clang_raw"
+
+
 class ByteOrder(StrEnum):
     """Target byte order used for storage layout and ABI decisions."""
 
@@ -381,6 +390,7 @@ class Field(SerDeMixin):
             "is_bitfield": SerdeFieldSpec(omit_if_default=True),
             "bit_offset": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
             "bit_width": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
+            "doc": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
@@ -396,6 +406,7 @@ class Field(SerDeMixin):
     """Bit offset within the storage unit (from clang). Meaningful if ``is_bitfield``."""
     bit_width: int = 0
     """Width in bits. Meaningful if ``is_bitfield``."""
+    doc: DocComment | None = None
 
 
 @dataclass
@@ -407,7 +418,10 @@ class Struct(SerDeMixin):
     """
 
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
     )
 
     decl_id: str
@@ -421,6 +435,7 @@ class Struct(SerDeMixin):
     is_complete: bool = True
     is_packed: bool = False
     requested_align_bytes: int | None = None
+    doc: DocComment | None = None
 
 
 PRIMITIVES_KINDS = Union[IntKind, FloatKind, VoidType]
@@ -534,10 +549,13 @@ ConstExpr = Union[
 
 @dataclass
 class Enumerant(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
     name: str  # Mojo-mapped constant name
     c_name: str  # original C name
     value: int
     enum_decl_id: str | None = None
+    doc: DocComment | None = None
     KIND: ClassVar[str | None] = None
 
 
@@ -553,7 +571,10 @@ class Enum(SerDeMixin):
     """
 
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
     )
 
     decl_id: str
@@ -564,6 +585,7 @@ class Enum(SerDeMixin):
     tag_name: str | None = None
     public_name: str | None = None
     is_anonymous: bool = False
+    doc: DocComment | None = None
 
 
 @dataclass
@@ -582,6 +604,7 @@ class Typedef(SerDeMixin):
         fields={
             "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
             "canonical": SerdeFieldSpec(missing_from=lambda d: d["aliased"]),
+            "doc": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
@@ -589,12 +612,16 @@ class Typedef(SerDeMixin):
     name: str
     aliased: Type
     canonical: Type
+    doc: DocComment | None = None
 
 
 @dataclass
 class Param(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
     name: str  # "" for anonymous params
     type: Type
+    doc: DocComment | None = None
     KIND: ClassVar[str | None] = None
 
 
@@ -616,8 +643,12 @@ class Function(SerDeMixin):
             "is_variadic",
             "calling_convention",
             "is_noreturn",
+            "doc",
         ),
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])},
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        },
     )
 
     name: str  # Mojo-mapped name (post NameMapper)
@@ -628,6 +659,7 @@ class Function(SerDeMixin):
     decl_id: str = ""
     calling_convention: str | None = None
     is_noreturn: bool = False
+    doc: DocComment | None = None
 
 
 @dataclass
@@ -640,9 +672,12 @@ class Const(SerDeMixin):
     preserves the expression shape when full evaluation is not desirable.
     """
 
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
     name: str
     type: Type
     expr: ConstExpr
+    doc: DocComment | None = None
 
 
 @dataclass
@@ -655,7 +690,12 @@ class MacroDecl(SerDeMixin):
     macros the parser can structurally understand today.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="macro_kind")})
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="macro_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
 
     name: str
     tokens: list[str]
@@ -663,6 +703,7 @@ class MacroDecl(SerDeMixin):
     expr: ConstExpr | None = None
     type: Type | None = None
     diagnostic: str | None = None
+    doc: DocComment | None = None
 
 
 @dataclass
@@ -675,7 +716,10 @@ class GlobalVar(SerDeMixin):
     """
 
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
+        fields={
+            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
     )
 
     decl_id: str
@@ -684,6 +728,7 @@ class GlobalVar(SerDeMixin):
     type: Type
     is_const: bool = False
     initializer: ConstExpr | None = None
+    doc: DocComment | None = None
 
 
 @dataclass(frozen=True)

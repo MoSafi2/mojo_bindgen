@@ -121,24 +121,19 @@ class ClangFrontend:
         """Parse the configured header into a libclang translation unit."""
         index = cx.Index.create()
         args = build_c_parse_args(list(self.compile_args), default_std="-std=gnu11")
+        options = _translation_unit_parse_options()
         if self.include_headers:
             umbrella_path = self._umbrella_header_path()
             return index.parse(
                 str(umbrella_path),
                 args=args,
                 unsaved_files=[(str(umbrella_path), self._umbrella_header())],
-                options=(
-                    cx.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD
-                    | cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES
-                ),
+                options=options,
             )
         return index.parse(
             str(self.header),
             args=args,
-            options=(
-                cx.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD
-                | cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES
-            ),
+            options=options,
         )
 
     def collect_diagnostics(self, tu: cx.TranslationUnit) -> list[FrontendDiagnostic]:
@@ -191,6 +186,19 @@ class ClangFrontend:
 def _escape_include_path(header: Path) -> str:
     """Escape a header path for a C quoted include directive."""
     return str(header).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _translation_unit_parse_options() -> int:
+    options = (
+        cx.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD
+        | cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES
+    )
+    include_brief_comments = getattr(
+        cx.TranslationUnit,
+        "PARSE_INCLUDE_BRIEF_COMMENTS_IN_CODE_COMPLETION",
+        0,
+    )
+    return options | include_brief_comments
 
 
 @dataclass

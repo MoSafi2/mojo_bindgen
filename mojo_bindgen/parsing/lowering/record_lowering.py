@@ -13,6 +13,7 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import Field, IntType, Struct, StructRef, Type
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 from mojo_bindgen.parsing.registry import RecordRegistry
 
@@ -246,6 +247,7 @@ class RecordLowerer:
                 align_bytes=0,
                 is_union=(cursor.kind == cx.CursorKind.UNION_DECL),
                 is_complete=False,
+                doc=cursor_doc_comment(cursor),
             )
         return None
 
@@ -275,6 +277,7 @@ class RecordLowerer:
             align_bytes=max(1, cursor.type.get_align()),
             is_union=cursor.kind == cx.CursorKind.UNION_DECL,
             is_anonymous=naming.is_anonymous,
+            doc=cursor_doc_comment(cursor),
         )
         self.registry.store(record)
 
@@ -306,6 +309,13 @@ class RecordLowerer:
                 is_bitfield=True,
                 bit_offset=site.bit_offset,
                 bit_width=site.bit_width,
+                doc=(
+                    cursor_doc_comment(site.field_cursor)
+                    if site.field_cursor is not None
+                    else cursor_doc_comment(site.attached_record)
+                    if site.attached_record is not None
+                    else None
+                ),
             )
 
         field_type = self._lower_field_site_type(site)
@@ -316,6 +326,13 @@ class RecordLowerer:
             byte_offset=site.byte_offset,
             size_bytes=site.size_bytes,
             is_anonymous=site.is_anonymous,
+            doc=(
+                cursor_doc_comment(site.field_cursor)
+                if site.field_cursor is not None
+                else cursor_doc_comment(site.attached_record)
+                if site.attached_record is not None
+                else None
+            ),
         )
 
     def _lower_field_site_type(self, site: FieldSite) -> Type:

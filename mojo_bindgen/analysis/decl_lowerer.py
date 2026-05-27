@@ -117,6 +117,7 @@ class UnitDeclLowerer:
                 name=alias_name,
                 kind=AliasKind.CALLBACK_SIGNATURE,
                 type_value=lowered_type,
+                doc=decl.doc,
             )
         if getattr(lowered_type, "name", None) == alias_name:
             return None
@@ -124,6 +125,7 @@ class UnitDeclLowerer:
             name=alias_name,
             kind=AliasKind.TYPE_ALIAS,
             type_value=lowered_type,
+            doc=decl.doc,
         )
 
     def _lower_enum(self, decl: Enum) -> list[MojoDecl]:
@@ -138,6 +140,7 @@ class UnitDeclLowerer:
             ],
             fieldwise_init=True,
             kind=StructKind.ENUM,
+            doc=decl.doc,
             members=[
                 StoredMember(
                     index=0,
@@ -161,6 +164,7 @@ class UnitDeclLowerer:
                         )
                     ],
                 ),
+                doc=member.doc,
             )
             for member in decl.enumerants
         ]
@@ -174,6 +178,7 @@ class UnitDeclLowerer:
                 Param(
                     name=(mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}"),
                     type=self.session.type_lowerer.run(param.type),
+                    doc=param.doc,
                 )
                 for i, param in enumerate(decl.params)
             ],
@@ -183,6 +188,7 @@ class UnitDeclLowerer:
                 link_mode=_link_mode_for_options(self.session.options),
                 symbol=decl.link_name,
             ),
+            doc=decl.doc,
         )
 
     def _lower_global(self, decl: GlobalVar) -> GlobalDecl:
@@ -196,6 +202,7 @@ class UnitDeclLowerer:
             value_type=lowered_type,
             is_const=decl.is_const,
             kind=(GlobalKind.STUB if is_atomic else GlobalKind.WRAPPER),
+            doc=decl.doc,
         )
 
     def _lower_const(self, decl: Const) -> AliasDecl:
@@ -208,11 +215,13 @@ class UnitDeclLowerer:
                 diagnostics=[
                     stub_note("constant expression could not be lowered; placeholder alias emitted")
                 ],
+                doc=decl.doc,
             )
         return AliasDecl(
             name=mojo_ident(decl.name),
             kind=AliasKind.CONST_VALUE,
             const_value=self._typed_const_value(value, decl.type),
+            doc=decl.doc,
         )
 
     def _lower_macro(self, decl: MacroDecl) -> AliasDecl:
@@ -236,6 +245,7 @@ class UnitDeclLowerer:
                     name=mojo_ident(decl.name),
                     kind=AliasKind.MACRO_VALUE,
                     const_value=self._typed_const_value(value, decl.type),
+                    doc=decl.doc,
                 )
         return AliasDecl(
             name=mojo_ident(decl.name),
@@ -248,6 +258,7 @@ class UnitDeclLowerer:
                 if decl.diagnostic
                 else [stub_note("macro lowering is incomplete; placeholder alias emitted")]
             ),
+            doc=decl.doc,
         )
 
     def _lower_struct(self, decl: Struct) -> MojoDecl:
@@ -286,6 +297,7 @@ class UnitDeclLowerer:
             name=mojo_ident(decl.name),
             kind=AliasKind.MACRO_VALUE,
             diagnostics=self._macro_comment_notes(decl, message),
+            doc=decl.doc,
         )
 
     def _macro_comment_notes(self, decl: MacroDecl, message: str):

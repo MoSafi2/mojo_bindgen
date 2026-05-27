@@ -22,6 +22,7 @@ from mojo_bindgen.ir import (
     Typedef,
 )
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
+from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
 from mojo_bindgen.parsing.frontend import ClangCompat, ClangFrontend
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
 from mojo_bindgen.parsing.lowering.macro_env import collect_object_like_macro_env
@@ -94,6 +95,7 @@ class DeclLowerer:
                     expr=parsed.expr,
                     type=parsed.primitive,
                     diagnostic=parsed.diagnostic,
+                    doc=cursor_doc_comment(cursor),
                 )
             )
         return out
@@ -113,7 +115,13 @@ class DeclLowerer:
                     TypeContext.PARAM,
                     source_cursor=child,
                 )
-                params.append(Param(name=child.spelling, type=param_type))
+                params.append(
+                    Param(
+                        name=child.spelling,
+                        type=param_type,
+                        doc=cursor_doc_comment(child),
+                    )
+                )
 
         is_variadic = fn_type.kind == cx.TypeKind.FUNCTIONPROTO and fn_type.is_function_variadic()
         if fn_type.kind == cx.TypeKind.FUNCTIONNOPROTO:
@@ -131,6 +139,7 @@ class DeclLowerer:
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(fn_type),
             is_noreturn=self._function_is_noreturn(cursor),
+            doc=cursor_doc_comment(cursor),
         )
 
     @staticmethod
@@ -154,7 +163,12 @@ class DeclLowerer:
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
                 out.append(
-                    Const(name=child.spelling, type=underlying, expr=IntLiteral(child.enum_value))
+                    Const(
+                        name=child.spelling,
+                        type=underlying,
+                        expr=IntLiteral(child.enum_value),
+                        doc=cursor_doc_comment(child),
+                    )
                 )
         return out
 
@@ -174,6 +188,7 @@ class DeclLowerer:
                         c_name=child.spelling,
                         value=child.enum_value,
                         enum_decl_id=self.registry.decl_id_for_cursor(cursor),
+                        doc=cursor_doc_comment(child),
                     )
                 )
         is_anonymous = "@EA@" in self.registry.decl_id_for_cursor(cursor)
@@ -186,6 +201,7 @@ class DeclLowerer:
             tag_name=(None if is_anonymous else c_name),
             public_name=(c_name if is_anonymous else None),
             is_anonymous=is_anonymous,
+            doc=cursor_doc_comment(cursor),
         )
 
     def _build_typedef(self, cursor: cx.Cursor) -> Typedef:
@@ -198,6 +214,7 @@ class DeclLowerer:
             name=name,
             aliased=aliased,
             canonical=canonical,
+            doc=cursor_doc_comment(cursor),
         )
 
     @staticmethod
@@ -214,4 +231,5 @@ class DeclLowerer:
             type=self.type_lowerer.lower(cursor.type, TypeContext.PARAM),
             is_const=cursor.type.is_const_qualified(),
             initializer=None if parsed is None else parsed.expr,
+            doc=cursor_doc_comment(cursor),
         )

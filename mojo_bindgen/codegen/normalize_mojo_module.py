@@ -132,6 +132,7 @@ class NormalizeMojoModulePass:
                         type=self._normalize_type(
                             param.type, (decl.name, param.name or f"param{i}")
                         ),
+                        doc=param.doc,
                     )
                     for i, param in enumerate(decl.params)
                 ],

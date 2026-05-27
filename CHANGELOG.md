@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Capture C documentation comments from libclang and emit them into generated
+  Mojo bindings, with `--doc-comments` / `--no-doc-comments` control.
 - Add repeatable `--include-header` support to emit declarations from selected
   additional headers while still treating their other includes as non-emitted
   dependencies.

@@ -32,6 +32,9 @@ class MojoEmitOptions:
     module_comment: bool = True
     """Emit a leading comment with source header and library metadata."""
 
+    emit_doc_comments: bool = True
+    """Emit captured source documentation comments into generated Mojo bindings."""
+
     warn_abi: bool = True
     """Emit comments reminding that packed/aligned layouts need verification."""
 

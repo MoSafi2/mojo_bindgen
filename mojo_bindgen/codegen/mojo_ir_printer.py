@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
+from mojo_bindgen.ir import DocComment
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
@@ -58,6 +59,7 @@ from mojo_bindgen.mojo_ir import (
 @dataclass(frozen=True)
 class MojoIRPrintOptions:
     module_comment: bool = True
+    emit_doc_comments: bool = True
 
 
 class MojoIRPrintError(ValueError):
@@ -77,6 +79,84 @@ def _padding_scalar_chunks(byte_offset: int, size_bytes: int) -> list[str]:
                 remaining -= chunk_size
                 break
     return chunks
+
+
+def _clean_doc_comment(doc: DocComment | None) -> list[str]:
+    if doc is None or not doc.text.strip():
+        return []
+
+    text = doc.text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    first = lines[0].lstrip()
+    if first.startswith("///") or first.startswith("//!"):
+        cleaned = [_strip_line_doc_marker(line) for line in lines]
+    else:
+        cleaned = _strip_block_doc_markers(lines)
+
+    return _dedent_doc_lines(_trim_blank_doc_lines(cleaned))
+
+
+def _strip_line_doc_marker(line: str) -> str:
+    stripped = line.lstrip()
+    for marker in ("///", "//!"):
+        if stripped.startswith(marker):
+            stripped = stripped[len(marker) :]
+            if stripped.startswith(" "):
+                stripped = stripped[1:]
+            return stripped.rstrip()
+    return line.rstrip()
+
+
+def _strip_block_doc_markers(lines: list[str]) -> list[str]:
+    out = list(lines)
+    if out:
+        first = out[0].lstrip()
+        for marker in ("/**<", "/*!<", "/**", "/*!"):
+            if first.startswith(marker):
+                first = first[len(marker) :]
+                out[0] = first
+                break
+    if out and out[-1].rstrip().endswith("*/"):
+        out[-1] = out[-1].rstrip()[:-2]
+
+    cleaned: list[str] = []
+    for line in out:
+        stripped = line.lstrip()
+        if stripped.startswith("*"):
+            stripped = stripped[1:]
+            if stripped.startswith(" "):
+                stripped = stripped[1:]
+            cleaned.append(stripped.rstrip())
+        else:
+            cleaned.append(line.rstrip())
+    return cleaned
+
+
+def _trim_blank_doc_lines(lines: list[str]) -> list[str]:
+    start = 0
+    end = len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return lines[start:end]
+
+
+def _dedent_doc_lines(lines: list[str]) -> list[str]:
+    indents = [len(line) - len(line.lstrip(" ")) for line in lines if line.strip()]
+    if not indents:
+        return []
+    indent = min(indents)
+    if indent <= 0:
+        return lines
+    return [line[indent:] if line.strip() else "" for line in lines]
+
+
+def _escape_docstring_line(line: str) -> str:
+    return line.replace('"""', '\\"\\"\\"')
 
 
 class CodeBuilder:
@@ -230,6 +310,7 @@ class MojoIRPrinter:
         trait_text = f"({', '.join(traits)})" if traits else ""
         b.add(f"struct {decl.name}{trait_text}:")
         b.indent()
+        self._render_docstring(b, decl.doc)
         if decl.kind == StructKind.OPAQUE:
             b.add("pass")
         else:
@@ -256,6 +337,7 @@ class MojoIRPrinter:
 
         for member in decl.members:
             if isinstance(member, StoredMember):
+                b.extend(self._doc_comment_lines(member.doc))
                 b.add(f"var {member.name}: {self._render_type(member.type)}")
             elif isinstance(member, OpaqueStorageMember):
                 b.add(f"var {member.name}: InlineArray[UInt8, {member.size_bytes}]")
@@ -321,6 +403,7 @@ class MojoIRPrinter:
         for bitfield in group.fields:
             logical_type = self._render_type(bitfield.logical_type)
             mask_text = self._storage_mask_text(bitfield.bit_width)
+            b.extend(self._doc_comment_lines(bitfield.doc))
             b.add(f"def {bitfield.name}(self) -> {logical_type}:")
             b.indent()
             self._render_bitfield_accessor_read(
@@ -456,6 +539,7 @@ class MojoIRPrinter:
 
     def _render_alias_decl(self, decl: AliasDecl) -> str:
         b = CodeBuilder()
+        b.extend(self._doc_comment_lines(decl.doc))
         macro_comment_lines = [
             f"# {note.message}" for note in decl.diagnostics if note.category == "macro_comment"
         ]
@@ -481,7 +565,6 @@ class MojoIRPrinter:
 
     def _render_function_decl(self, decl: FunctionDecl) -> str:
         b = CodeBuilder()
-        b.extend(self._diagnostic_lines(decl.diagnostics))
         params = [
             f"{self._render_param_name(param.name, i)}: {self._render_type(param.type)}"
             for i, param in enumerate(decl.params)
@@ -497,39 +580,49 @@ class MojoIRPrinter:
         )
 
         if decl.kind == FunctionKind.VARIADIC_STUB:
+            b.extend(self._doc_comment_lines(decl.doc))
+            b.extend(self._diagnostic_lines(decl.diagnostics))
             b.add("# variadic C function - not callable from thin FFI:")
             b.add(f"# {return_type} {symbol}({params_text}, ...)")
             return b.render()
         if decl.kind == FunctionKind.NON_REGISTER_RETURN_STUB:
+            b.extend(self._doc_comment_lines(decl.doc))
+            b.extend(self._diagnostic_lines(decl.diagnostics))
             b.add(
                 "# C return type is not RegisterPassable - external_call cannot model this return; bind manually."
             )
             b.add(f"# {return_type} {symbol}({params_text})")
             return b.render()
 
+        b.extend(self._diagnostic_lines(decl.diagnostics))
         if decl.call_target.link_mode == LinkMode.EXTERNAL_CALL:
             if return_type == "NoneType":
                 b.add(f'def {decl.name}({params_text}) abi("C") -> None:')
                 b.indent()
+                self._render_docstring(b, decl.doc)
                 b.add(f"external_call[{bracket_inner}]({call_args})")
             else:
                 b.add(f'def {decl.name}({params_text}) abi("C") -> {return_type}:')
                 b.indent()
+                self._render_docstring(b, decl.doc)
                 b.add(f"return external_call[{bracket_inner}]({call_args})")
         else:
             if return_type == "NoneType":
                 b.add(f"def {decl.name}({params_text}) raises -> None:")
                 b.indent()
+                self._render_docstring(b, decl.doc)
                 b.add(f"_bindgen_dl().call[{bracket_inner}]({call_args})")
             else:
                 b.add(f"def {decl.name}({params_text}) raises -> {return_type}:")
                 b.indent()
+                self._render_docstring(b, decl.doc)
                 b.add(f"return _bindgen_dl().call[{bracket_inner}]({call_args})")
         b.dedent()
         return b.render()
 
     def _render_global_decl(self, decl: GlobalDecl) -> str:
         b = CodeBuilder()
+        b.extend(self._doc_comment_lines(decl.doc))
         b.extend(self._diagnostic_lines(decl.diagnostics))
         value_type = self._render_type(decl.value_type)
         if decl.kind == GlobalKind.STUB:
@@ -659,6 +752,25 @@ class MojoIRPrinter:
         return [
             f"# {note.severity.value.upper()}[{note.category}]: {note.message}" for note in notes
         ]
+
+    def _doc_comment_lines(self, doc: DocComment | None) -> list[str]:
+        if not self._options.emit_doc_comments:
+            return []
+        lines = _clean_doc_comment(doc)
+        if not lines:
+            return []
+        return ["#" if not line else f"# {line}" for line in lines]
+
+    def _render_docstring(self, b: CodeBuilder, doc: DocComment | None) -> None:
+        if not self._options.emit_doc_comments:
+            return
+        lines = _clean_doc_comment(doc)
+        if not lines:
+            return
+        b.add('"""')
+        for line in lines:
+            b.add(_escape_docstring_line(line))
+        b.add('"""')
 
     @staticmethod
     def _render_param_name(name: str, index: int) -> str:

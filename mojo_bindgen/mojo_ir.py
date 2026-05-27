@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import ClassVar, Union
 
-from mojo_bindgen.ir import FloatKind, IntKind
+from mojo_bindgen.ir import DocComment, FloatKind, IntKind
 from mojo_bindgen.serde import SerdeFieldSpec, SerDeMixin, SerdeSpec
 
 
@@ -345,10 +345,13 @@ MojoConstExpr = Union[
 # TODO: check if size is needed here
 @dataclass(frozen=True)
 class StoredMember(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
     index: int
     name: str
     type: MojoType
     byte_offset: int
+    doc: DocComment | None = None
 
 
 @dataclass(frozen=True)
@@ -366,6 +369,8 @@ class OpaqueStorageMember(SerDeMixin):
 
 @dataclass(frozen=True)
 class BitfieldField(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
     index: int
     name: str
     logical_type: MojoType
@@ -373,6 +378,7 @@ class BitfieldField(SerDeMixin):
     bit_width: int
     signed: bool
     bool_semantics: bool = False
+    doc: DocComment | None = None
 
 
 @dataclass
@@ -447,6 +453,7 @@ class StructDecl(SerDeMixin):
             "kind": SerdeFieldSpec(json_key="struct_kind"),
             "align_decorator": SerdeFieldSpec(omit_if_default=True),
             "passability": SerdeFieldSpec(omit_if_default=True),
+            "doc": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
@@ -461,11 +468,17 @@ class StructDecl(SerDeMixin):
     comptime_members: list[ComptimeMember] = field(default_factory=list)
     initializers: list[Initializer] = field(default_factory=list)
     diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
 
 
 @dataclass
 class AliasDecl(SerDeMixin):
-    SERDE = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="alias_kind")})
+    SERDE = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="alias_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
 
     name: str
     kind: AliasKind
@@ -473,6 +486,7 @@ class AliasDecl(SerDeMixin):
     const_type: MojoType | None = None
     const_value: MojoConstExpr | None = None
     diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
 
     def has_payload(self) -> bool:
         return self.type_value is not None or self.const_value is not None
@@ -486,8 +500,11 @@ class AliasDecl(SerDeMixin):
 
 @dataclass(frozen=True)
 class Param(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
     name: str
     type: MojoType
+    doc: DocComment | None = None
 
 
 @dataclass(frozen=True)
@@ -498,7 +515,12 @@ class CallTarget(SerDeMixin):
 
 @dataclass
 class FunctionDecl(SerDeMixin):
-    SERDE = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="function_kind")})
+    SERDE = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="function_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
 
     name: str
     link_name: str
@@ -509,11 +531,17 @@ class FunctionDecl(SerDeMixin):
         default_factory=lambda: CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="")
     )
     diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
 
 
 @dataclass
 class GlobalDecl(SerDeMixin):
-    SERDE = SerdeSpec(fields={"kind": SerdeFieldSpec(json_key="global_kind")})
+    SERDE = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="global_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
 
     name: str
     link_name: str
@@ -521,6 +549,7 @@ class GlobalDecl(SerDeMixin):
     is_const: bool = False
     kind: GlobalKind = GlobalKind.WRAPPER
     diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
 
 
 MojoDecl = Union[

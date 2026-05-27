@@ -48,6 +48,7 @@ def _options_for_unit(unit: Unit, emit_options: MojoEmitOptions | None = None) -
         library_path_hint=options.library_path_hint,
         strict_abi=options.strict_abi,
         module_comment=options.module_comment,
+        emit_doc_comments=options.emit_doc_comments,
     )
 
 

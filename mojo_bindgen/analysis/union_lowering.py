@@ -49,6 +49,7 @@ class LowerUnionPass:
                 name=record_name(decl),
                 kind=AliasKind.UNION_LAYOUT,
                 diagnostics=[stub_note("incomplete union placeholder emitted; layout not lowered")],
+                doc=decl.doc,
             )
 
         alias_name = record_name(decl)
@@ -110,6 +111,7 @@ class LowerUnionPass:
                     args=[TypeArg(type=arm) for arm in arms],
                 ),
                 diagnostics=diagnostics,
+                doc=decl.doc,
             )
 
         return AliasDecl(
@@ -125,6 +127,7 @@ class LowerUnionPass:
                     f"union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout"
                 ),
             ],
+            doc=decl.doc,
         )
 
     @staticmethod

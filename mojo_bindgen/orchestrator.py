@@ -28,6 +28,7 @@ class BindgenOptions:
     library_path_hint: str | None = None
     strict_abi: bool = False
     module_comment: bool = True
+    emit_doc_comments: bool = True
     layout_tests: bool | None = None
     json_output: bool = False
     output: Path | None = None
@@ -65,6 +66,7 @@ class BindgenOrchestrator:
             library_path_hint=self._options.library_path_hint,
             strict_abi=self._options.strict_abi,
             module_comment=self._options.module_comment,
+            emit_doc_comments=self._options.emit_doc_comments,
         )
 
     def parse(self) -> Unit:
@@ -126,7 +128,10 @@ class BindgenOrchestrator:
     ) -> RenderedArtifacts:
         bindings_source = render_mojo_module(
             module,
-            MojoIRPrintOptions(module_comment=self._options.module_comment),
+            MojoIRPrintOptions(
+                module_comment=self._options.module_comment,
+                emit_doc_comments=self._options.emit_doc_comments,
+            ),
         )
         layout_test_source = None
         if self._should_emit_layout_tests() and normalized_unit is not None:

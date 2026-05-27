@@ -93,6 +93,7 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
             diagnostic_notes=diagnostic_notes,
             fallback_reasons=(),
         ),
+        doc=decl.doc,
     )
 
 
@@ -135,6 +136,7 @@ def _lower_typed_members(
                 name=field_mojo_name(field, field_fact.index),
                 type=lowered_type,
                 byte_offset=field_fact.byte_offset,
+                doc=field.doc,
             )
         )
 
@@ -172,6 +174,7 @@ def _lower_typed_members(
                     bit_width=field_layout.bit_width,
                     signed=field_layout.signed,
                     bool_semantics=field_layout.bool_semantics,
+                    doc=field_layout.field.doc,
                 )
             )
 
@@ -294,6 +297,7 @@ def _incomplete_struct_decl(decl: Struct) -> StructDecl:
         members=[],
         initializers=[],
         diagnostics=[],
+        doc=decl.doc,
     )
 
 
@@ -319,6 +323,7 @@ def _opaque_storage_struct_decl(
             diagnostic_notes=diagnostic_notes,
             fallback_reasons=fallback_reasons,
         ),
+        doc=decl.doc,
     )
 
 

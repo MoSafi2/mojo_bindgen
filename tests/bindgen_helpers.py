@@ -20,6 +20,7 @@ def _bindgen_options_from_emit_options(unit: Unit, options: MojoEmitOptions) -> 
         library_path_hint=options.library_path_hint,
         strict_abi=options.strict_abi,
         module_comment=options.module_comment,
+        emit_doc_comments=options.emit_doc_comments,
     )
 
 
@@ -54,7 +55,10 @@ class MojoGenerator:
     def render(self, module: MojoModule) -> str:
         return render_mojo_module(
             module,
-            MojoIRPrintOptions(module_comment=self._options.module_comment),
+            MojoIRPrintOptions(
+                module_comment=self._options.module_comment,
+                emit_doc_comments=self._options.emit_doc_comments,
+            ),
         )
 
     def generate(self, unit: Unit) -> str:

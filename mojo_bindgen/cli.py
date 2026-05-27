@@ -91,6 +91,13 @@ def run(
             help="Preserve parsed C alignment emission behavior. By default, omit @align for ordinary records and keep ABI comments only.",
         ),
     ] = False,
+    doc_comments: Annotated[
+        bool,
+        typer.Option(
+            "--doc-comments/--no-doc-comments",
+            help="Emit captured C documentation comments into Mojo output.",
+        ),
+    ] = True,
     layout_tests: Annotated[
         bool | None,
         typer.Option(
@@ -128,6 +135,7 @@ def run(
                 library_path_hint=library_path_hint,
                 strict_abi=strict_abi,
                 module_comment=True,
+                emit_doc_comments=doc_comments,
                 layout_tests=layout_tests,
                 json_output=json_output,
                 output=output,
