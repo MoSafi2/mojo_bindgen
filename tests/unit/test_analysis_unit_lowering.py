@@ -5,6 +5,7 @@ from __future__ import annotations
 from mojo_bindgen.analysis import lower_unit
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    BinaryExpr,
     ByteOrder,
     Const,
     Enum,
@@ -19,6 +20,7 @@ from mojo_bindgen.ir import (
     MacroDecl,
     NullPtrLiteral,
     Pointer,
+    RefExpr,
     Struct,
     StructRef,
     TargetABI,
@@ -33,7 +35,6 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
     BuiltinType,
     ComptimeMember,
     FunctionDecl,
@@ -41,6 +42,7 @@ from mojo_bindgen.mojo_ir import (
     FunctionType,
     GlobalDecl,
     LinkMode,
+    MojoBinaryExpr,
     MojoBuiltin,
     MojoCallExpr,
     MojoCastExpr,
@@ -446,7 +448,7 @@ def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None
     assert union_decl.diagnostics == []
 
 
-def test_lower_unit_uses_byte_storage_fallback_for_ineligible_union() -> None:
+def test_lower_unit_uses_unsafe_union_for_repeated_types_union() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -474,9 +476,9 @@ def test_lower_unit_uses_byte_storage_fallback_for_ineligible_union() -> None:
 
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
-    assert union_decl.type_value == ArrayType(
-        element=BuiltinType(MojoBuiltin.UINT8),
-        count=4,
+    assert union_decl.type_value == ParametricType(
+        base=ParametricBase.UNSAFE_UNION,
+        args=[TypeArg(type=BuiltinType(MojoBuiltin.C_INT))],
     )
     assert union_decl.diagnostics[0].category == "union_lowering"
 
@@ -829,4 +831,45 @@ def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> 
     assert decl.type_value is None
     assert decl.diagnostics[0].message == (
         "constant expression could not be lowered; placeholder alias emitted"
+    )
+
+
+def test_lower_unit_qualifies_enum_variant_refs_in_macros() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Enum(
+                decl_id="enum:flags",
+                name="Flags",
+                c_name="Flags",
+                underlying=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
+                enumerants=[Enumerant(name="my_flag", c_name="MY_FLAG", value=1)],
+            ),
+            MacroDecl(
+                name="SHIFTED_FLAG",
+                tokens=["(", "1", "<<", "MY_FLAG", ")"],
+                kind="object_like_supported",
+                expr=BinaryExpr(
+                    op="<<",
+                    lhs=IntLiteral(1),
+                    rhs=RefExpr("my_flag"),
+                ),
+                type=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
+            ),
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    macro_decl = lowered.decls[1]
+
+    assert isinstance(macro_decl, AliasDecl)
+    assert macro_decl.kind == AliasKind.MACRO_VALUE
+
+    assert macro_decl.const_value == MojoBinaryExpr(
+        op="<<",
+        lhs=MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=MojoIntLiteral(1)),
+        rhs=MojoRefExpr("Flags.my_flag.value"),
     )

@@ -91,10 +91,9 @@ class LowerUnionPass:
             key = self._type_key(lowered)
             prior_name = seen_keys.get(key)
             if prior_name is not None:
-                eligible = False
                 diagnostics.append(
                     union_note(
-                        f"union member `{field_name}` duplicates lowered type of earlier member `{prior_name}`; using byte-storage fallback"
+                        f"union member `{field_name}` duplicates lowered type of earlier member `{prior_name}`;"
                     )
                 )
                 continue
@@ -110,6 +109,7 @@ class LowerUnionPass:
                     base=ParametricBase.UNSAFE_UNION,
                     args=[TypeArg(type=arm) for arm in arms],
                 ),
+                diagnostics=diagnostics,
             )
 
         return AliasDecl(

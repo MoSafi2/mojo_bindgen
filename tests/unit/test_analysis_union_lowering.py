@@ -24,6 +24,10 @@ from mojo_bindgen.mojo_ir import (
 )
 
 
+def _i16() -> IntType:
+    return IntType(int_kind=IntKind.SHORT, size_bytes=2, align_bytes=4)
+
+
 def _i32() -> IntType:
     return IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)
 
@@ -75,6 +79,7 @@ def test_lower_union_falls_back_for_duplicate_member_types() -> None:
         fields=[
             Field(name="a", source_name="a", type=_i32(), byte_offset=0),
             Field(name="b", source_name="b", type=_i32(), byte_offset=0),
+            Field(name="c", source_name="c", type=_i16(), byte_offset=0),
         ],
         size_bytes=4,
         align_bytes=4,
@@ -84,9 +89,12 @@ def test_lower_union_falls_back_for_duplicate_member_types() -> None:
 
     lowered = lower_union(decl)
 
-    assert lowered.type_value == ArrayType(
-        element=BuiltinType(MojoBuiltin.UINT8),
-        count=4,
+    assert lowered.type_value == ParametricType(
+        base=ParametricBase.UNSAFE_UNION,
+        args=[
+            TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),
+            TypeArg(type=BuiltinType(MojoBuiltin.C_SHORT)),
+        ],
     )
     assert lowered.diagnostics[0].category == "union_lowering"
     assert "duplicates lowered type of earlier member" in lowered.diagnostics[0].message
