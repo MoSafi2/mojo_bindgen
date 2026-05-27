@@ -30,7 +30,6 @@ from mojo_bindgen.ir import (
     CastExpr,
     Const,
     ConstExpr,
-    Enum,
     Function,
     GlobalVar,
     MacroDecl,
