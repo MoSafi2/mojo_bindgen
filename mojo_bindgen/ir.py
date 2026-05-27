@@ -342,6 +342,8 @@ class EnumRef(SerDeMixin):
     name: str
     c_name: str
     underlying: IntType
+    tag_name: str | None = None
+    public_name: str | None = None
 
 
 @dataclass
@@ -535,6 +537,7 @@ class Enumerant(SerDeMixin):
     name: str  # Mojo-mapped constant name
     c_name: str  # original C name
     value: int
+    enum_decl_id: str | None = None
     KIND: ClassVar[str | None] = None
 
 
@@ -558,6 +561,9 @@ class Enum(SerDeMixin):
     c_name: str
     underlying: IntType
     enumerants: list[Enumerant]
+    tag_name: str | None = None
+    public_name: str | None = None
+    is_anonymous: bool = False
 
 
 @dataclass

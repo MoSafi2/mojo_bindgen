@@ -15,6 +15,9 @@ All notable changes to this project are documented in this file.
 
 - Revert the enum-comptime macro reference lowering from `8280b5c`; enum
   references in macro expressions will get a more principled fix in a follow-up.
+- Lower C enum enumerators as top-level typed MojoIR aliases, preserving C's
+  ordinary identifier namespace while keeping enum tag names separate from
+  typedef-backed public wrapper names.
 
 ### Removed
 

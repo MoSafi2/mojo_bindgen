@@ -112,6 +112,11 @@ class NormalizeMojoModulePass:
                     if decl.type_value is None
                     else self._normalize_type(decl.type_value, (decl.name,))
                 ),
+                const_type=(
+                    None
+                    if decl.const_type is None
+                    else self._normalize_type(decl.const_type, (decl.name, "const_type"))
+                ),
                 const_value=(
                     None
                     if decl.const_value is None
@@ -466,6 +471,8 @@ class NormalizeMojoModulePass:
         elif isinstance(decl, AliasDecl):
             if decl.type_value is not None:
                 self._collect_type_imports(decl.type_value)
+            if decl.const_type is not None:
+                self._collect_type_imports(decl.const_type)
             if decl.const_value is not None:
                 self._collect_const_expr_imports(decl.const_value)
         elif isinstance(decl, FunctionDecl):

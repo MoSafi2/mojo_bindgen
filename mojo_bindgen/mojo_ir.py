@@ -436,6 +436,7 @@ class AliasKind(StrEnum):
     CALLBACK_SIGNATURE = "callback_signature"
     UNION_LAYOUT = "union_layout"
     CONST_VALUE = "const_value"
+    ENUMERANT_VALUE = "enumerant_value"
     MACRO_VALUE = "macro_value"
 
 
@@ -469,6 +470,7 @@ class AliasDecl(SerDeMixin):
     name: str
     kind: AliasKind
     type_value: MojoType | None = None
+    const_type: MojoType | None = None
     const_value: MojoConstExpr | None = None
     diagnostics: list[LoweringNote] = field(default_factory=list)
 

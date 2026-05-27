@@ -169,14 +169,23 @@ class DeclLowerer:
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
                 enumerants.append(
-                    Enumerant(name=child.spelling, c_name=child.spelling, value=child.enum_value)
+                    Enumerant(
+                        name=child.spelling,
+                        c_name=child.spelling,
+                        value=child.enum_value,
+                        enum_decl_id=self.registry.decl_id_for_cursor(cursor),
+                    )
                 )
+        is_anonymous = "@EA@" in self.registry.decl_id_for_cursor(cursor)
         return Enum(
             decl_id=self.registry.decl_id_for_cursor(cursor),
             name=c_name,
             c_name=c_name,
             underlying=underlying,
             enumerants=enumerants,
+            tag_name=(None if is_anonymous else c_name),
+            public_name=(c_name if is_anonymous else None),
+            is_anonymous=is_anonymous,
         )
 
     def _build_typedef(self, cursor: cx.Cursor) -> Typedef:

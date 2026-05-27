@@ -34,7 +34,6 @@ from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
     BuiltinType,
-    ComptimeMember,
     FunctionDecl,
     FunctionKind,
     FunctionType,
@@ -146,6 +145,7 @@ def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     assert [type(decl) for decl in lowered.decls] == [
         AliasDecl,
         StructDecl,
+        AliasDecl,
         FunctionDecl,
         GlobalDecl,
     ]
@@ -219,6 +219,7 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
     typedef_decl = lowered.decls[0]
     signed_typedef_decl = lowered.decls[1]
     enum_decl = lowered.decls[2]
+    enumerant_decl = lowered.decls[3]
 
     assert typedef_decl == AliasDecl(
         name="size_t",
@@ -242,20 +243,21 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
             byte_offset=0,
         )
     ]
-    assert enum_decl.comptime_members == [
-        ComptimeMember(
-            name="needs_work",
-            const_value=MojoCallExpr(
-                callee=MojoRefExpr("Self"),
-                args=[
-                    MojoCastExpr(
-                        target=BuiltinType(MojoBuiltin.C_INT),
-                        expr=MojoIntLiteral(7),
-                    )
-                ],
-            ),
-        )
-    ]
+    assert enum_decl.comptime_members == []
+    assert enumerant_decl == AliasDecl(
+        name="needs_work",
+        kind=AliasKind.ENUMERANT_VALUE,
+        const_type=NamedType("Flags"),
+        const_value=MojoCallExpr(
+            callee=MojoRefExpr("Flags"),
+            args=[
+                MojoCastExpr(
+                    target=BuiltinType(MojoBuiltin.C_INT),
+                    expr=MojoIntLiteral(7),
+                )
+            ],
+        ),
+    )
 
 
 def test_lower_unit_lowers_function_and_global() -> None:

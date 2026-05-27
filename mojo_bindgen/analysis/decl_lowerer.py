@@ -37,7 +37,6 @@ from mojo_bindgen.mojo_ir import (
     AliasKind,
     BuiltinType,
     CallTarget,
-    ComptimeMember,
     FunctionDecl,
     FunctionKind,
     FunctionType,
@@ -52,6 +51,7 @@ from mojo_bindgen.mojo_ir import (
     MojoIntLiteral,
     MojoRefExpr,
     MojoUnaryExpr,
+    NamedType,
     Param,
     ParametricBase,
     ParametricType,
@@ -126,10 +126,11 @@ class UnitDeclLowerer:
             type_value=lowered_type,
         )
 
-    def _lower_enum(self, decl: Enum) -> StructDecl:
+    def _lower_enum(self, decl: Enum) -> list[MojoDecl]:
         underlying = self.session.type_lowerer.run(decl.underlying)
-        return StructDecl(
-            name=mojo_ident(decl.name),
+        enum_name = mojo_ident(decl.name)
+        enum_decl = StructDecl(
+            name=enum_name,
             traits=[
                 StructTraits.COPYABLE,
                 StructTraits.MOVABLE,
@@ -145,22 +146,25 @@ class UnitDeclLowerer:
                     byte_offset=0,
                 )
             ],
-            comptime_members=[
-                ComptimeMember(
-                    name=mojo_ident(member.name),
-                    const_value=MojoCallExpr(
-                        callee=MojoRefExpr("Self"),
-                        args=[
-                            MojoCastExpr(
-                                target=underlying,
-                                expr=MojoIntLiteral(member.value),
-                            )
-                        ],
-                    ),
-                )
-                for member in decl.enumerants
-            ],
         )
+        enumerants = [
+            AliasDecl(
+                name=mojo_ident(member.name),
+                kind=AliasKind.ENUMERANT_VALUE,
+                const_type=NamedType(enum_name),
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr(enum_name),
+                    args=[
+                        MojoCastExpr(
+                            target=underlying,
+                            expr=MojoIntLiteral(member.value),
+                        )
+                    ],
+                ),
+            )
+            for member in decl.enumerants
+        ]
+        return [enum_decl, *enumerants]
 
     def _lower_function(self, decl: Function) -> FunctionDecl:
         return FunctionDecl(

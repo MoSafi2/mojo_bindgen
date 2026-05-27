@@ -5,11 +5,13 @@
 
 from std.ffi import external_call, c_uint
 
+comptime ENB_ADD = enb_mode(c_uint(1))
+
+comptime ENB_SUB = enb_mode(c_uint(2))
+
 @fieldwise_init
 struct enb_mode(Copyable, Movable, RegisterPassable):
     var value: c_uint
-    comptime ENB_ADD = Self(c_uint(1))
-    comptime ENB_SUB = Self(c_uint(2))
 
 def enb_flip(mode: enb_mode) abi("C") -> enb_mode:
     return external_call["enb_flip", enb_mode, enb_mode](mode)
