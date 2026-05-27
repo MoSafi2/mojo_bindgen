@@ -75,6 +75,17 @@ mojo-bindgen include/mylib.h \
   -o mylib_bindings.mojo
 ```
 
+Emit declarations from additional include headers with repeated
+`--include-header`. Dependency headers are still parsed for type information
+and macro expansion, but are not emitted unless listed:
+
+```bash
+mojo-bindgen include/mylib.h \
+  --include-header include/mylib_extra.h \
+  --compile-arg=-I./include \
+  -o mylib_bindings.mojo
+```
+
 By default the parser uses `-std=gnu11` when no C standard is provided. Pin a
 standard explicitly if your header requires one:
 
@@ -173,10 +184,9 @@ verify emitted layouts and symbols against your target toolchain.
 - **Linkage and compiler edge cases:** `inline`, compiler-specific linkage
   hints, and other extension-heavy cases can still require manual review and
   may lead to symbol mismatches at runtime.
-- **Primary-header model:** declarations are emitted from the primary header
-  you pass to the tool. Thin wrapper headers that only include another header
-  can produce unexpectedly small output if the real declarations belong to the
-  included file instead.
+- **Include-header model:** declarations are emitted from the primary header
+  you pass to the tool plus any headers named with `--include-header`. Other
+  headers included by those files are parsed as dependencies but not emitted.
 
 ## Real-world examples
 
@@ -208,10 +218,10 @@ matrix.
 
 ### The generated module is empty or missing declarations
 
-`mojo-bindgen` emits declarations from the primary header you pass in. If you
-point it at a thin wrapper that only includes another header, Clang may
-attribute declarations to the included header instead of the wrapper. In that
-case, pass the real header directly.
+`mojo-bindgen` emits declarations from the primary header you pass in and any
+headers listed with `--include-header`. If a thin wrapper only includes another
+header whose declarations should be emitted, pass that included header with
+`--include-header` or use it as the primary header directly.
 
 ### Parsing fails on project headers
 

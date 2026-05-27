@@ -7,6 +7,7 @@ lives in dedicated frontend, registry, lowering, and diagnostics modules.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,8 +62,10 @@ class ClangParser:
         link_name: str,
         compile_args: list[str] | None = None,
         raise_on_error: bool = True,
+        include_headers: Sequence[Path | str] | None = None,
     ) -> None:
         self.header = _resolve_header_path(header)
+        self.include_headers = _resolve_include_headers(self.header, include_headers)
         self.library = library
         self.link_name = link_name
         self.compile_args = (
@@ -100,6 +103,7 @@ class ClangParser:
             ClangFrontendConfig(
                 header=self.header,
                 compile_args=tuple(self.compile_args),
+                include_headers=tuple(self.include_headers),
             )
         )
         tu = frontend.parse_translation_unit()
@@ -151,7 +155,7 @@ class ClangParser:
         """Lower top-level cursors and append macro declarations."""
         decls: list[Decl] = []
         completed_marker = 0
-        for cursor in session.frontend.iter_primary_cursors(session.tu):
+        for cursor in session.frontend.iter_emittable_cursors(session.tu):
             lowered = decl_lowerer.lower_top_level_decl(cursor)
             if lowered is None:
                 continue
@@ -182,10 +186,29 @@ def _handle_frontend_errors(
         raise ParseError(f"libclang reported errors parsing {header}:\n{message}")
 
 
+def _resolve_include_headers(
+    primary_header: Path,
+    include_headers: Sequence[Path | str] | None,
+) -> list[Path]:
+    """Resolve, validate, and de-duplicate additional include headers."""
+    if include_headers is None:
+        return []
+    out: list[Path] = []
+    seen: set[Path] = {primary_header.resolve()}
+    for header in include_headers:
+        resolved = _resolve_header_path(header)
+        if resolved in seen:
+            continue
+        out.append(resolved)
+        seen.add(resolved)
+    return out
+
+
 __all__ = [
     "ClangParser",
     "FrontendDiagnostic",
     "ParseError",
     "_default_system_compile_args",
     "_resolve_header_path",
+    "_resolve_include_headers",
 ]

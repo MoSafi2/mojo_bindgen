@@ -48,12 +48,22 @@ def test_json_mode_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: P
     monkeypatch.setattr(cli, "BindgenOrchestrator", DummyOrchestrator)
 
     header = tmp_path / "demo.h"
-    rc = cli.main([str(header), "--json", "--compile-arg=-I./include"])
+    extra = tmp_path / "extra.h"
+    rc = cli.main(
+        [
+            str(header),
+            "--json",
+            "--include-header",
+            str(extra),
+            "--compile-arg=-I./include",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 0
     assert captured.out == '{"ok": true}\n'
     options = calls["options"]
     assert options.header == header
+    assert options.include_headers == [extra]
     assert options.library is None
     assert options.link_name is None
     assert options.compile_args == ["-I./include"]

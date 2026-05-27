@@ -8,7 +8,7 @@ only after this hand-off.
 
 ```mermaid
 flowchart TD
-    A[C header path + compile args] --> B[ClangParser]
+    A[C primary/include header paths + compile args] --> B[ClangParser]
     B --> C[_resolve_header_path]
     C --> D[ClangFrontendConfig]
     D --> E[ClangFrontend.parse_translation_unit]
@@ -47,9 +47,10 @@ flowchart TD
 ### 1. Frontend setup
 
 `ClangParser._build_parser_session()` creates the frontend boundary:
-- resolves the header path
+- resolves the primary header path and any additional include header paths
 - computes effective compile arguments
-- asks libclang to parse one translation unit
+- asks libclang to parse one translation unit, using a virtual umbrella header
+  when multiple include headers are configured
 - collects frontend diagnostics
 - builds a `RecordRegistry` for stable record identity and lookup
 
@@ -60,7 +61,7 @@ This stage is in:
 
 ### 2. Raw declaration lowering
 
-`DeclLowerer` walks top-level primary-file cursors and delegates by declaration
+`DeclLowerer` walks top-level cursors from configured include headers and delegates by declaration
 family:
 - functions, typedefs, enums, globals: lowered directly by `DeclLowerer`
 - structs/unions: delegated to `RecordLowerer`

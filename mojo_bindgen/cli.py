@@ -17,6 +17,17 @@ stderr_console = Console(stderr=True)
 
 def run(
     header: Annotated[Path, typer.Argument(help="Path to the primary C header file")],
+    include_header: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--include-header",
+            metavar="PATH",
+            help=(
+                "Additional C header to emit from (repeatable). "
+                "Private dependencies remain parsed but not emitted."
+            ),
+        ),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -102,12 +113,14 @@ def run(
     Examples:
       mojo-bindgen path/to/header.h -o bindings.mojo
       mojo-bindgen path/to/header.h --json -o unit.json
+      mojo-bindgen include/me.h --include-header include/me_extra.h -o out.mojo
       mojo-bindgen include/me.h --compile-arg=-I./include -o out.mojo
     """
     try:
         orchestrator = BindgenOrchestrator(
             BindgenOptions(
                 header=header,
+                include_headers=include_header,
                 library=library,
                 link_name=link_name,
                 compile_args=compile_arg,

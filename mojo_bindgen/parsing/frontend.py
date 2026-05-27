@@ -39,6 +39,7 @@ class ClangFrontendConfig:
 
     header: Path
     compile_args: tuple[str, ...]
+    include_headers: tuple[Path, ...] = ()
 
 
 _SEVERITY = {
@@ -98,10 +99,19 @@ class ClangFrontend:
 
     def __init__(self, config: ClangFrontendConfig) -> None:
         self.config = config
+        self._source_header_set = frozenset(header.resolve() for header in self.emittable_headers)
 
     @property
     def header(self) -> Path:
         return self.config.header
+
+    @property
+    def include_headers(self) -> tuple[Path, ...]:
+        return self.config.include_headers
+
+    @property
+    def emittable_headers(self) -> tuple[Path, ...]:
+        return (self.header, *self.include_headers)
 
     @property
     def compile_args(self) -> tuple[str, ...]:
@@ -111,6 +121,17 @@ class ClangFrontend:
         """Parse the configured header into a libclang translation unit."""
         index = cx.Index.create()
         args = build_c_parse_args(list(self.compile_args), default_std="-std=gnu11")
+        if self.include_headers:
+            umbrella_path = self._umbrella_header_path()
+            return index.parse(
+                str(umbrella_path),
+                args=args,
+                unsaved_files=[(str(umbrella_path), self._umbrella_header())],
+                options=(
+                    cx.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD
+                    | cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES
+                ),
+            )
         return index.parse(
             str(self.header),
             args=args,
@@ -137,16 +158,39 @@ class ClangFrontend:
             )
         return out
 
-    def is_primary_file_cursor(self, cursor: cx.Cursor) -> bool:
-        """Return whether a cursor originates from the configured header."""
+    def is_emittable_file_cursor(self, cursor: cx.Cursor) -> bool:
+        """Return whether a cursor originates from a configured include header."""
         loc = cursor.location
-        return bool(loc.file and Path(loc.file.name).resolve() == self.header)
+        return bool(loc.file and Path(loc.file.name).resolve() in self._source_header_set)
+
+    def iter_emittable_cursors(self, tu: cx.TranslationUnit) -> Iterator[cx.Cursor]:
+        """Yield top-level cursors from configured include headers in source order."""
+        for cursor in tu.cursor.get_children():
+            if self.is_emittable_file_cursor(cursor):
+                yield cursor
+
+    def is_primary_file_cursor(self, cursor: cx.Cursor) -> bool:
+        """Compatibility alias for the widened include-header source predicate."""
+        return self.is_emittable_file_cursor(cursor)
 
     def iter_primary_cursors(self, tu: cx.TranslationUnit) -> Iterator[cx.Cursor]:
-        """Yield top-level cursors from the primary file in source order."""
-        for cursor in tu.cursor.get_children():
-            if self.is_primary_file_cursor(cursor):
-                yield cursor
+        """Compatibility alias for iterating include-header top-level cursors."""
+        yield from self.iter_emittable_cursors(tu)
+
+    def _umbrella_header_path(self) -> Path:
+        """Return a stable virtual header path used for multi-header parsing."""
+        return self.header.parent / "__mojo_bindgen_include_headers__.h"
+
+    def _umbrella_header(self) -> str:
+        includes = "\n".join(
+            f'#include "{_escape_include_path(header)}"' for header in self.emittable_headers
+        )
+        return f"{includes}\n"
+
+
+def _escape_include_path(header: Path) -> str:
+    """Escape a header path for a C quoted include directive."""
+    return str(header).replace("\\", "\\\\").replace('"', '\\"')
 
 
 @dataclass

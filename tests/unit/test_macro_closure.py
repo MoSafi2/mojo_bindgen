@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.ir import BinaryExpr, IntLiteral, MacroDecl, UnaryExpr
+from mojo_bindgen.ir import BinaryExpr, Function, IntLiteral, MacroDecl, Struct, UnaryExpr
 from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr
 from mojo_bindgen.parsing.lowering.macro_env import (
     collect_object_like_macro_env,
@@ -106,6 +106,57 @@ def test_macro_closure_cross_include_header(tmp_path: Path) -> None:
     assert fmt.expr is not None
     assert isinstance(fmt.expr, IntLiteral)
     assert fmt.expr.value == 257
+
+
+def test_include_headers_emit_selected_extra_header_without_private_dependencies(
+    tmp_path: Path,
+) -> None:
+    private = tmp_path / "private_dep.h"
+    private.write_text(
+        textwrap.dedent(
+            """\
+            #define PRIVATE_VALUE 40
+            void private_fn(void);
+            """
+        ),
+        encoding="utf-8",
+    )
+    extra = tmp_path / "extra_public.h"
+    extra.write_text(
+        textwrap.dedent(
+            """\
+            #include "private_dep.h"
+            #define PUBLIC_VALUE (PRIVATE_VALUE + 2)
+            typedef struct extra_record {
+                int x;
+            } extra_record;
+            void extra_fn(extra_record value);
+            """
+        ),
+        encoding="utf-8",
+    )
+    primary = tmp_path / "primary.h"
+    primary.write_text("void primary_fn(void);\n", encoding="utf-8")
+
+    unit = ClangParser(
+        primary,
+        library="include_headers",
+        link_name="include_headers",
+        include_headers=[extra, primary, extra],
+        compile_args=["-I", str(tmp_path)],
+    ).run()
+
+    functions = [d.name for d in unit.decls if isinstance(d, Function)]
+    macros = {d.name: d for d in unit.decls if isinstance(d, MacroDecl)}
+    records = [d.name for d in unit.decls if isinstance(d, Struct)]
+
+    assert functions == ["primary_fn", "extra_fn"]
+    assert "extra_record" in records
+    assert "private_fn" not in functions
+    assert "PUBLIC_VALUE" in macros
+    assert "PRIVATE_VALUE" not in macros
+    assert isinstance(macros["PUBLIC_VALUE"].expr, IntLiteral)
+    assert macros["PUBLIC_VALUE"].expr.value == 42
 
 
 def test_collect_object_like_macro_env_last_wins(tmp_path: Path) -> None:

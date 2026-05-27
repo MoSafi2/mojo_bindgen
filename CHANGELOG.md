@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add repeatable `--include-header` support to emit declarations from selected
+  additional headers while still treating their other includes as non-emitted
+  dependencies.
 - Handle repeated field types in anonymous unions by still lowering them to
   `UnsafeUnion`,  (@WolfDan; PR #9).
 - Lower flexible array member declarations as `InlineArray[T, 0]` instead of

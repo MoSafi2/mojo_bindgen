@@ -23,6 +23,7 @@ class BindgenOptions:
     library: str | None = None
     link_name: str | None = None
     compile_args: list[str] | None = None
+    include_headers: list[Path] | None = None
     linking: LinkingMode = "external_call"
     library_path_hint: str | None = None
     strict_abi: bool = False
@@ -74,6 +75,7 @@ class BindgenOrchestrator:
             header,
             library=library_name,
             link_name=link_name,
+            include_headers=self._options.include_headers,
             compile_args=self._options.compile_args,
             raise_on_error=True,
         )

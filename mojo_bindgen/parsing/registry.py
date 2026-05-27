@@ -85,6 +85,7 @@ class RecordRegistry:
     """Record-scoped lookup, cache, and raw materialization service for one translation unit."""
 
     header: Path
+    source_headers: frozenset[Path]
     primary_cursors_in_order: tuple[cx.Cursor, ...]
     record_definition_by_decl_id: dict[str, cx.Cursor]
     anonymous_record_name_by_decl_id: dict[str, str]
@@ -97,17 +98,18 @@ class RecordRegistry:
         tu: cx.TranslationUnit,
         frontend: ClangFrontend,
     ) -> RecordRegistry:
-        """Index one translation unit for primary-file record declarations."""
-        primary = tuple(frontend.iter_primary_cursors(tu))
+        """Index one translation unit for include-header record declarations."""
+        primary = tuple(frontend.iter_emittable_cursors(tu))
         registry = cls(
             header=frontend.header.resolve(),
+            source_headers=frozenset(header.resolve() for header in frontend.emittable_headers),
             primary_cursors_in_order=primary,
             record_definition_by_decl_id={},
             anonymous_record_name_by_decl_id={},
         )
 
         for cursor in tu.cursor.walk_preorder():
-            if not frontend.is_primary_file_cursor(cursor):
+            if not frontend.is_emittable_file_cursor(cursor):
                 continue
             if cursor.kind in RECORD_KINDS and cursor.is_definition():
                 decl_id = registry.decl_id_for_cursor(cursor)
@@ -147,9 +149,9 @@ class RecordRegistry:
         return self.record_definition_for_decl(cursor) is not None
 
     def is_primary(self, cursor: cx.Cursor) -> bool:
-        """Return whether a cursor originates from the configured primary header."""
+        """Return whether a cursor originates from a configured include header."""
         loc = cursor.location
-        return bool(loc.file and Path(loc.file.name).resolve() == self.header)
+        return bool(loc.file and Path(loc.file.name).resolve() in self.source_headers)
 
     def record_naming(self, cursor: cx.Cursor) -> RecordNaming:
         """Return stable lowered naming metadata for a record declaration."""

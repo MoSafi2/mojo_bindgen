@@ -56,11 +56,19 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
 
     class DummyParser:
         def __init__(
-            self, header: Path, *, library: str, link_name: str, compile_args, raise_on_error
+            self,
+            header: Path,
+            *,
+            library: str,
+            link_name: str,
+            include_headers,
+            compile_args,
+            raise_on_error,
         ):
             calls["header"] = header
             calls["library"] = library
             calls["link_name"] = link_name
+            calls["include_headers"] = include_headers
             calls["compile_args"] = compile_args
             calls["raise_on_error"] = raise_on_error
 
@@ -80,6 +88,7 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
         "header": Path("demo.h"),
         "library": "demo",
         "link_name": "demo",
+        "include_headers": None,
         "compile_args": ["-I./include"],
         "raise_on_error": True,
     }

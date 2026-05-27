@@ -77,13 +77,13 @@ class DeclLowerer:
         return None
 
     def collect_macros(self) -> list[Decl]:
-        """Lower all primary-file macro definitions into preserved IR nodes."""
+        """Lower all include-header macro definitions into preserved IR nodes."""
         macro_env = collect_object_like_macro_env(self.tu)
         out: list[Decl] = []
         for cursor in self.tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
-            if not self.frontend.is_primary_file_cursor(cursor):
+            if not self.frontend.is_emittable_file_cursor(cursor):
                 continue
             parsed = self.const_expr_parser.parse_macro(cursor, macro_env)
             out.append(
