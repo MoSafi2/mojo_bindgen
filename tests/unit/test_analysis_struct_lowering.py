@@ -5,11 +5,15 @@ from __future__ import annotations
 from mojo_bindgen.analysis.struct_lowering import StructLoweringContext, lower_struct
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
+    Array,
     AtomicType,
     ByteOrder,
     Field,
     IntKind,
     IntType,
+    Pointer,
+    QualifiedType,
+    Qualifiers,
     Struct,
     StructRef,
     TargetABI,
@@ -25,6 +29,7 @@ from mojo_bindgen.mojo_ir import (
     InitializerParam,
     MojoBuiltin,
     NamedType,
+    OpaqueStorageMember,
     PaddingMember,
     ParametricBase,
     ParametricType,
@@ -212,6 +217,140 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
         StoredMember(index=2, name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
+    ]
+
+
+def test_lower_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None:
+    inner = Struct(
+        decl_id="struct:Inner",
+        name="Inner",
+        c_name="Inner",
+        fields=[],
+        size_bytes=0,
+        align_bytes=1,
+        is_complete=False,
+    )
+    outer = Struct(
+        decl_id="struct:Outer",
+        name="Outer",
+        c_name="Outer",
+        fields=[
+            _field(
+                name="inner",
+                source_name="inner",
+                type=StructRef(
+                    decl_id=inner.decl_id,
+                    name=inner.name,
+                    c_name=inner.c_name,
+                    size_bytes=16,
+                    align_bytes=8,
+                ),
+                byte_offset=0,
+                size_bytes=16,
+            ),
+            _field(name="tail", source_name="tail", type=_i32(), byte_offset=16),
+        ],
+        size_bytes=24,
+        align_bytes=8,
+        is_complete=True,
+    )
+
+    lowered = lower_struct(outer, context=_context_for(outer, inner))
+
+    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=24)]
+
+
+def test_lower_struct_uses_opaque_storage_for_array_of_embedded_empty_struct() -> None:
+    inner = Struct(
+        decl_id="struct:Inner",
+        name="Inner",
+        c_name="Inner",
+        fields=[],
+        size_bytes=0,
+        align_bytes=1,
+        is_complete=True,
+    )
+    outer = Struct(
+        decl_id="struct:Outer",
+        name="Outer",
+        c_name="Outer",
+        fields=[
+            _field(
+                name="items",
+                source_name="items",
+                type=Array(
+                    element=StructRef(
+                        decl_id=inner.decl_id,
+                        name=inner.name,
+                        c_name=inner.c_name,
+                        size_bytes=0,
+                        align_bytes=1,
+                    ),
+                    size=2,
+                    size_bytes=0,
+                    align_bytes=1,
+                ),
+                byte_offset=0,
+                size_bytes=0,
+            ),
+            _field(name="tail", source_name="tail", type=_i32(), byte_offset=0),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_complete=True,
+    )
+
+    lowered = lower_struct(outer, context=_context_for(outer, inner))
+
+    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=4)]
+
+
+def test_lower_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
+    inner = Struct(
+        decl_id="struct:Inner",
+        name="Inner",
+        c_name="Inner",
+        fields=[],
+        size_bytes=0,
+        align_bytes=1,
+        is_complete=False,
+    )
+    outer = Struct(
+        decl_id="struct:Outer",
+        name="Outer",
+        c_name="Outer",
+        fields=[
+            _field(
+                name="ptr",
+                source_name="ptr",
+                type=Pointer(
+                    pointee=QualifiedType(
+                        unqualified=StructRef(
+                            decl_id=inner.decl_id,
+                            name=inner.name,
+                            c_name=inner.c_name,
+                        ),
+                        qualifiers=Qualifiers(is_const=True),
+                    ),
+                    size_bytes=8,
+                    align_bytes=8,
+                ),
+                byte_offset=0,
+                size_bytes=8,
+            ),
+            _field(name="tail", source_name="tail", type=_i32(), byte_offset=8),
+        ],
+        size_bytes=16,
+        align_bytes=8,
+        is_complete=True,
+    )
+
+    lowered = lower_struct(outer, context=_context_for(outer, inner))
+
+    assert lowered.kind == StructKind.PLAIN
+    assert [member.name for member in lowered.members if isinstance(member, StoredMember)] == [
+        "ptr",
+        "tail",
     ]
 
 

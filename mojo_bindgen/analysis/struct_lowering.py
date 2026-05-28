@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
 from mojo_bindgen.analysis.lowering_support import (
@@ -14,7 +14,8 @@ from mojo_bindgen.analysis.lowering_support import (
 )
 from mojo_bindgen.analysis.record_layout import RecordLayoutFacts, analyze_record_layout
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
-from mojo_bindgen.ir import AtomicType, Struct, TargetABI
+from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
+from mojo_bindgen.ir import AtomicType, Struct, StructRef, TargetABI, Type
 from mojo_bindgen.mojo_ir import (
     BitfieldField,
     BitfieldGroupMember,
@@ -39,6 +40,9 @@ class StructLoweringContext:
     record_map: dict[str, Struct]
     target_abi: TargetABI
     type_lowerer: LowerTypePass
+    by_value_typed_eligibility_cache: dict[str, tuple[bool, tuple[str, ...]]] = field(
+        default_factory=dict
+    )
 
 
 def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
@@ -58,6 +62,17 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
         return _incomplete_struct_decl(decl)
     if facts.layout_problems:
         return _opaque_storage_struct_decl(decl, facts)
+    ineligible_embedded_reasons = _ineligible_embedded_record_reasons(
+        decl,
+        facts,
+        context=context,
+    )
+    if ineligible_embedded_reasons:
+        return _opaque_storage_struct_decl(
+            decl,
+            facts,
+            fallback_reasons=ineligible_embedded_reasons,
+        )
 
     plain_fields, lowered_bitfield_groups, diagnostic_notes, fallback_reasons = (
         _lower_typed_members(
@@ -194,6 +209,157 @@ def _lower_typed_members(
         lowered_bitfield_groups,
         tuple(diagnostic_notes),
         tuple(fallback_reasons),
+    )
+
+
+def _ineligible_embedded_record_reasons(
+    decl: Struct,
+    facts: RecordLayoutFacts,
+    *,
+    context: StructLoweringContext,
+) -> tuple[str, ...]:
+    reasons: list[str] = []
+    seen_targets: set[str] = set()
+
+    for field_fact in facts.plain_fields:
+        field = decl.fields[field_fact.index]
+        for ref in _embedded_struct_refs(field.type):
+            if ref.decl_id in seen_targets:
+                continue
+            seen_targets.add(ref.decl_id)
+            valid, detail = _record_is_typed_layout_eligible_by_value(
+                ref.decl_id,
+                context=context,
+                active={decl.decl_id},
+            )
+            if valid:
+                continue
+            display_name = field_display_name(field, field_fact.index)
+            target_name = ref.c_name or ref.name
+            suffix = detail[0] if detail else "embedded record is not layout-emittable by value"
+            reasons.append(
+                f"field `{display_name}` embeds struct `{target_name}` by value, but {suffix}; "
+                "opaque storage emitted"
+            )
+
+    return tuple(reasons)
+
+
+def _record_is_typed_layout_eligible_by_value(
+    decl_id: str,
+    *,
+    context: StructLoweringContext,
+    active: set[str],
+) -> tuple[bool, tuple[str, ...]]:
+    cached = context.by_value_typed_eligibility_cache.get(decl_id)
+    if cached is not None:
+        return cached
+
+    decl = context.record_map.get(decl_id)
+    if decl is None:
+        result = (False, ("referenced definition is unavailable",))
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+    if decl.is_union:
+        result = (True, ())
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+    if not decl.is_complete:
+        result = (False, ("referenced definition is incomplete",))
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+    if not decl.fields:
+        result = (False, ("referenced definition is empty",))
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+    if decl_id in active:
+        result = (True, ())
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+
+    facts = analyze_record_layout(
+        decl,
+        record_map=context.record_map,
+        target_abi=context.target_abi,
+    )
+    if not facts.is_complete:
+        result = (False, ("referenced definition is incomplete",))
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+    if facts.layout_problems:
+        result = (False, (facts.layout_problems[0],))
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+
+    active.add(decl_id)
+    try:
+        for field_fact in facts.plain_fields:
+            field = decl.fields[field_fact.index]
+            _, reason = try_lower_type(
+                context.type_lowerer,
+                field.type,
+                subject=f"field `{field_display_name(field, field_fact.index)}`",
+                failure_suffix="opaque storage emitted",
+            )
+            if reason is not None:
+                result = (False, (reason,))
+                context.by_value_typed_eligibility_cache[decl_id] = result
+                return result
+            for ref in _embedded_struct_refs(field.type):
+                valid, detail = _record_is_typed_layout_eligible_by_value(
+                    ref.decl_id,
+                    context=context,
+                    active=active,
+                )
+                if not valid:
+                    result = (False, detail)
+                    context.by_value_typed_eligibility_cache[decl_id] = result
+                    return result
+
+        for run_layout in facts.bitfield_runs:
+            _, reason = try_lower_type(
+                context.type_lowerer,
+                run_layout.unsigned_storage_type,
+                subject=f"bitfield storage `{run_layout.name}`",
+                failure_suffix="opaque storage emitted",
+            )
+            if reason is not None:
+                result = (False, (reason,))
+                context.by_value_typed_eligibility_cache[decl_id] = result
+                return result
+
+            for field_layout in run_layout.fields:
+                _, reason = try_lower_type(
+                    context.type_lowerer,
+                    field_layout.logical_type,
+                    subject=f"bitfield `{field_display_name(field_layout.field, field_layout.index)}`",
+                    failure_suffix="opaque storage emitted",
+                )
+                if reason is not None:
+                    result = (False, (reason,))
+                    context.by_value_typed_eligibility_cache[decl_id] = result
+                    return result
+    finally:
+        active.remove(decl_id)
+
+    result = (True, ())
+    context.by_value_typed_eligibility_cache[decl_id] = result
+    return result
+
+
+def _embedded_struct_refs(t: Type) -> tuple[StructRef, ...]:
+    return tuple(
+        node
+        for node in collect_type_nodes(
+            t,
+            lambda node: isinstance(node, StructRef) and not node.is_union,
+            options=TypeWalkOptions(
+                descend_pointer=False,
+                descend_function_ptr=False,
+                descend_vector_element=True,
+            ),
+        )
+        if isinstance(node, StructRef)
     )
 
 

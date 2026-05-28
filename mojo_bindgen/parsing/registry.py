@@ -98,7 +98,7 @@ class RecordRegistry:
         tu: cx.TranslationUnit,
         frontend: ClangFrontend,
     ) -> RecordRegistry:
-        """Index one translation unit for include-header record declarations."""
+        """Index one translation unit for record declarations addressable from this parse."""
         primary = tuple(frontend.iter_emittable_cursors(tu))
         registry = cls(
             header=frontend.header.resolve(),
@@ -109,8 +109,6 @@ class RecordRegistry:
         )
 
         for cursor in tu.cursor.walk_preorder():
-            if not frontend.is_emittable_file_cursor(cursor):
-                continue
             if cursor.kind in RECORD_KINDS and cursor.is_definition():
                 decl_id = registry.decl_id_for_cursor(cursor)
                 registry.record_definition_by_decl_id[decl_id] = cursor

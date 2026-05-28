@@ -23,6 +23,11 @@ All notable changes to this project are documented in this file.
 - Lower C enum enumerators as top-level typed MojoIR aliases, preserving C's
   ordinary identifier namespace while keeping enum tag names separate from
   typedef-backed public wrapper names.
+- Materialize transitive included-header record definitions when they are
+  embedded by value, and force containing structs back to opaque storage when
+  any embedded struct or array-of-struct still cannot be emitted as a complete,
+  layout-correct Mojo type.
+- Broaden local ignores for generated scratch headers and Mojo files.
 
 ### Removed
 

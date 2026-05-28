@@ -236,6 +236,35 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
     assert zero_width.size_bytes == zero_width.type.size_bytes
 
 
+def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_path: Path) -> None:
+    inner = tmp_path / "inner.h"
+    outer = tmp_path / "outer.h"
+    inner.write_text(
+        "struct inner_t { int x; int y; };\n",
+        encoding="utf-8",
+    )
+    outer.write_text(
+        '#include "inner.h"\nstruct outer_t {\n  struct inner_t inner;\n  int tag;\n};\n',
+        encoding="utf-8",
+    )
+
+    unit = ClangParser(
+        header=outer,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[f"-I{tmp_path}"],
+    ).run()
+
+    inner_decl = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_t")
+    outer_decl = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
+
+    assert inner_decl.is_complete is True
+    assert len(inner_decl.fields) == 2
+    inner_field = next(f for f in outer_decl.fields if f.name == "inner")
+    assert isinstance(inner_field.type, StructRef)
+    assert inner_field.type.decl_id == inner_decl.decl_id
+
+
 def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_direct_anon.h"
     header.write_text(
