@@ -14,7 +14,6 @@ from mojo_bindgen.mojo_ir import (
     OpaqueStorageMember,
     StoredMember,
     StructDecl,
-    StructKind,
 )
 
 
@@ -169,7 +168,7 @@ def test_collect_layout_record_checks_for_bitfield_storage_group_offset() -> Non
     assert all("enabled.offset" not in check.label for check in checks[0].checks)
 
 
-def test_collect_layout_record_checks_skips_incomplete_union_and_enum_structs() -> None:
+def test_collect_layout_record_checks_skips_incomplete_union_and_missing_record_decl() -> None:
     incomplete = Struct(
         decl_id="struct:Forward",
         name="Forward",
@@ -188,12 +187,10 @@ def test_collect_layout_record_checks_skips_incomplete_union_and_enum_structs() 
         align_bytes=4,
         is_union=True,
     )
-    enum_struct = StructDecl(name="Forward", kind=StructKind.ENUM)
-
     assert (
         collect_layout_record_checks(
             normalized_unit=_unit(incomplete, union),
-            mojo_module=_module(enum_struct),
+            mojo_module=_module(),
         )
         == ()
     )

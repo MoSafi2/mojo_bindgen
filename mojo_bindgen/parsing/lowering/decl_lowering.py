@@ -198,8 +198,6 @@ class DeclLowerer:
             c_name=c_name,
             underlying=underlying,
             enumerants=enumerants,
-            tag_name=(None if is_anonymous else c_name),
-            public_name=(c_name if is_anonymous else None),
             is_anonymous=is_anonymous,
             doc=cursor_doc_comment(cursor),
         )

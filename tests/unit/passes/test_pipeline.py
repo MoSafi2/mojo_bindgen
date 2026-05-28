@@ -33,8 +33,6 @@ from mojo_bindgen.mojo_ir import (
     MojoIntLiteral,
     MojoRefExpr,
     NamedType,
-    StructDecl,
-    StructKind,
 )
 
 
@@ -126,14 +124,13 @@ def test_run_ir_passes_and_lower_unit_preserve_typedef_surface_name() -> None:
     assert fn_decl.return_type == BuiltinType(MojoBuiltin.NONE)
 
 
-def test_run_ir_passes_uses_typedef_name_as_enum_public_wrapper() -> None:
+def test_run_ir_passes_prefers_typedef_name_for_named_enum_and_emits_tag_alias() -> None:
     enum_int = IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4)
     enum_ref = EnumRef(
         decl_id="enum:tag_name",
         name="tag_name",
         c_name="tag_name",
         underlying=enum_int,
-        tag_name="tag_name",
     )
     unit = Unit(
         source_header="t.h",
@@ -145,7 +142,6 @@ def test_run_ir_passes_uses_typedef_name_as_enum_public_wrapper() -> None:
                 decl_id="enum:tag_name",
                 name="tag_name",
                 c_name="tag_name",
-                tag_name="tag_name",
                 underlying=enum_int,
                 enumerants=[Enumerant(name="TAG_A", c_name="TAG_A", value=3)],
             ),
@@ -178,15 +174,22 @@ def test_run_ir_passes_uses_typedef_name_as_enum_public_wrapper() -> None:
     enum_decl = normalized.decls[0]
     assert isinstance(enum_decl, Enum)
     assert enum_decl.name == "typedef_name"
-    assert enum_decl.tag_name == "tag_name"
-    assert enum_decl.public_name == "typedef_name"
+    assert enum_decl.alias_names == ["tag_name"]
 
     lowered = lower_unit(normalized, options=MojoEmitOptions())
-    assert isinstance(lowered.decls[0], StructDecl)
-    assert lowered.decls[0].name == "typedef_name"
+    assert lowered.decls[0] == AliasDecl(
+        name="typedef_name",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=BuiltinType(MojoBuiltin.C_UINT),
+    )
     assert lowered.decls[1] == AliasDecl(
+        name="tag_name",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=NamedType("typedef_name"),
+    )
+    assert lowered.decls[2] == AliasDecl(
         name="TAG_A",
-        kind=AliasKind.ENUMERANT_VALUE,
+        kind=AliasKind.CONST_VALUE,
         const_type=NamedType("typedef_name"),
         const_value=MojoCallExpr(
             callee=MojoRefExpr("typedef_name"),
@@ -198,18 +201,17 @@ def test_run_ir_passes_uses_typedef_name_as_enum_public_wrapper() -> None:
             ],
         ),
     )
-    assert isinstance(lowered.decls[2], FunctionDecl)
-    assert lowered.decls[2].params[0].type == NamedType("typedef_name")
+    assert isinstance(lowered.decls[3], FunctionDecl)
+    assert lowered.decls[3].params[0].type == NamedType("typedef_name")
 
 
-def test_run_ir_passes_generates_wrapper_name_for_tag_only_enum() -> None:
+def test_run_ir_passes_uses_tag_name_for_tag_only_enum() -> None:
     enum_int = IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4)
     enum_ref = EnumRef(
         decl_id="enum:mode_tag",
         name="mode_tag",
         c_name="mode_tag",
         underlying=enum_int,
-        tag_name="mode_tag",
     )
     unit = Unit(
         source_header="t.h",
@@ -221,7 +223,6 @@ def test_run_ir_passes_generates_wrapper_name_for_tag_only_enum() -> None:
                 decl_id="enum:mode_tag",
                 name="mode_tag",
                 c_name="mode_tag",
-                tag_name="mode_tag",
                 underlying=enum_int,
                 enumerants=[Enumerant(name="MODE_A", c_name="MODE_A", value=1)],
             ),
@@ -238,20 +239,21 @@ def test_run_ir_passes_generates_wrapper_name_for_tag_only_enum() -> None:
     normalized = run_ir_passes(unit)
     enum_decl = normalized.decls[0]
     assert isinstance(enum_decl, Enum)
-    assert enum_decl.name == "enum_mode_tag"
-    assert enum_decl.tag_name == "mode_tag"
-    assert enum_decl.public_name is None
+    assert enum_decl.name == "mode_tag"
+    assert enum_decl.alias_names == []
 
     lowered = lower_unit(normalized, options=MojoEmitOptions())
-    assert isinstance(lowered.decls[0], StructDecl)
-    assert lowered.decls[0].name == "enum_mode_tag"
-    assert lowered.decls[0].kind == StructKind.ENUM
+    assert lowered.decls[0] == AliasDecl(
+        name="mode_tag",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=BuiltinType(MojoBuiltin.C_UINT),
+    )
     assert lowered.decls[1] == AliasDecl(
         name="MODE_A",
-        kind=AliasKind.ENUMERANT_VALUE,
-        const_type=NamedType("enum_mode_tag"),
+        kind=AliasKind.CONST_VALUE,
+        const_type=NamedType("mode_tag"),
         const_value=MojoCallExpr(
-            callee=MojoRefExpr("enum_mode_tag"),
+            callee=MojoRefExpr("mode_tag"),
             args=[
                 MojoCastExpr(
                     target=BuiltinType(MojoBuiltin.C_UINT),
@@ -261,4 +263,64 @@ def test_run_ir_passes_generates_wrapper_name_for_tag_only_enum() -> None:
         ),
     )
     assert isinstance(lowered.decls[2], FunctionDecl)
-    assert lowered.decls[2].return_type == NamedType("enum_mode_tag")
+    assert lowered.decls[2].return_type == NamedType("mode_tag")
+
+
+def test_run_ir_passes_drops_colliding_tag_alias_for_typedef_enum() -> None:
+    enum_int = IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4)
+    enum_ref = EnumRef(
+        decl_id="enum:mode_t",
+        name="mode_t",
+        c_name="mode_t",
+        underlying=enum_int,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        target_abi=_abi(),
+        decls=[
+            Enum(
+                decl_id="enum:mode_t",
+                name="mode_t",
+                c_name="mode_t",
+                underlying=enum_int,
+                enumerants=[Enumerant(name="MODE_A", c_name="MODE_A", value=1)],
+            ),
+            Typedef(
+                decl_id="typedef:mode_t",
+                name="mode_t",
+                aliased=enum_ref,
+                canonical=enum_ref,
+            ),
+        ],
+    )
+
+    normalized = run_ir_passes(unit)
+    enum_decl = normalized.decls[0]
+    assert isinstance(enum_decl, Enum)
+    assert enum_decl.name == "mode_t"
+    assert enum_decl.alias_names == []
+
+    lowered = lower_unit(normalized, options=MojoEmitOptions())
+    assert lowered.decls == [
+        AliasDecl(
+            name="mode_t",
+            kind=AliasKind.TYPE_ALIAS,
+            type_value=BuiltinType(MojoBuiltin.C_UINT),
+        ),
+        AliasDecl(
+            name="MODE_A",
+            kind=AliasKind.CONST_VALUE,
+            const_type=NamedType("mode_t"),
+            const_value=MojoCallExpr(
+                callee=MojoRefExpr("mode_t"),
+                args=[
+                    MojoCastExpr(
+                        target=BuiltinType(MojoBuiltin.C_UINT),
+                        expr=MojoIntLiteral(1),
+                    )
+                ],
+            ),
+        ),
+    ]

@@ -313,8 +313,6 @@ def test_mojo_module_roundtrip() -> None:
         MojoBuiltin,
         MojoModule,
         ParametricType,
-        StoredMember,
-        StructDecl,
         SupportDecl,
         SupportDeclKind,
     )
@@ -332,18 +330,10 @@ def test_mojo_module_roundtrip() -> None:
             support_decls=[SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS)],
         ),
         decls=[
-            StructDecl(
+            AliasDecl(
                 name="demo_mode",
-                kind="enum",
-                members=[
-                    StoredMember(
-                        index=0,
-                        name="value",
-                        type=BuiltinType(MojoBuiltin.C_UINT),
-                        byte_offset=0,
-                    )
-                ],
-                comptime_members=[],
+                kind="type_alias",
+                type_value=BuiltinType(MojoBuiltin.C_UINT),
             ),
             AliasDecl(
                 name="binary_op_t",

@@ -24,7 +24,6 @@ from mojo_bindgen.mojo_ir import (
     BitfieldGroupMember,
     BuiltinType,
     CallTarget,
-    ComptimeMember,
     ConstArg,
     DTypeArg,
     FlexibleTail,
@@ -54,7 +53,6 @@ from mojo_bindgen.mojo_ir import (
     PointerType,
     StoredMember,
     StructDecl,
-    StructKind,
     StructTraits,
     SupportDecl,
     SupportDeclKind,
@@ -77,43 +75,36 @@ def _abi() -> TargetABI:
     )
 
 
-def test_enum_struct_roundtrip_keeps_comptime_members() -> None:
-    decl = StructDecl(
+def test_alias_decl_roundtrip_keeps_typed_const_metadata() -> None:
+    decl = AliasDecl(
         name="Flags",
-        kind=StructKind.ENUM,
-        fieldwise_init=True,
-        traits=[StructTraits.COPYABLE, StructTraits.MOVABLE, StructTraits.REGISTER_PASSABLE],
-        members=[
-            StoredMember(
-                index=0,
-                name="value",
-                type=BuiltinType(MojoBuiltin.C_INT),
-                byte_offset=0,
-            )
-        ],
-        comptime_members=[
-            ComptimeMember(
-                name="READY",
-                const_value=MojoCallExpr(
-                    callee=MojoRefExpr("Self"),
-                    args=[
-                        MojoCastExpr(
-                            target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=MojoIntLiteral(1),
-                        )
-                    ],
-                ),
-            )
-        ],
+        kind=AliasKind.CONST_VALUE,
+        const_type=NamedType("flag_t"),
+        const_value=MojoCallExpr(
+            callee=MojoRefExpr("flag_t"),
+            args=[
+                MojoCastExpr(
+                    target=BuiltinType(MojoBuiltin.C_INT),
+                    expr=MojoIntLiteral(1),
+                )
+            ],
+        ),
     )
 
     raw = decl.to_json_dict()
-    restored = StructDecl.from_json_dict(raw)
+    restored = AliasDecl.from_json_dict(raw)
 
-    assert raw["struct_kind"] == "enum"
-    assert restored.members[0].type == BuiltinType(MojoBuiltin.C_INT)
-    assert restored.comptime_members[0].name == "READY"
-    assert restored.fieldwise_init is True
+    assert raw["alias_kind"] == "const_value"
+    assert restored.const_type == NamedType("flag_t")
+    assert restored.const_value == MojoCallExpr(
+        callee=MojoRefExpr("flag_t"),
+        args=[
+            MojoCastExpr(
+                target=BuiltinType(MojoBuiltin.C_INT),
+                expr=MojoIntLiteral(1),
+            )
+        ],
+    )
 
 
 def test_struct_decl_roundtrip_keeps_explicit_align_decorator() -> None:
@@ -140,49 +131,38 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
         decls=[
-            StructDecl(
+            AliasDecl(
                 name="Flags",
-                kind=StructKind.ENUM,
-                fieldwise_init=True,
-                traits=[
-                    StructTraits.COPYABLE,
-                    StructTraits.MOVABLE,
-                    StructTraits.REGISTER_PASSABLE,
-                ],
-                members=[
-                    StoredMember(
-                        index=0,
-                        name="value",
-                        type=BuiltinType(MojoBuiltin.C_INT),
-                        byte_offset=0,
-                    )
-                ],
-                comptime_members=[
-                    ComptimeMember(
-                        name="READY",
-                        const_value=MojoCallExpr(
-                            callee=MojoRefExpr("Self"),
-                            args=[
-                                MojoCastExpr(
-                                    target=BuiltinType(MojoBuiltin.C_INT),
-                                    expr=MojoIntLiteral(1),
-                                )
-                            ],
-                        ),
-                    ),
-                    ComptimeMember(
-                        name="ERROR",
-                        const_value=MojoCallExpr(
-                            callee=MojoRefExpr("Self"),
-                            args=[
-                                MojoCastExpr(
-                                    target=BuiltinType(MojoBuiltin.C_INT),
-                                    expr=MojoIntLiteral(2),
-                                )
-                            ],
-                        ),
-                    ),
-                ],
+                kind=AliasKind.TYPE_ALIAS,
+                type_value=BuiltinType(MojoBuiltin.C_INT),
+            ),
+            AliasDecl(
+                name="READY",
+                kind=AliasKind.CONST_VALUE,
+                const_type=NamedType("Flags"),
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Flags"),
+                    args=[
+                        MojoCastExpr(
+                            target=BuiltinType(MojoBuiltin.C_INT),
+                            expr=MojoIntLiteral(1),
+                        )
+                    ],
+                ),
+            ),
+            AliasDecl(
+                name="ERROR",
+                kind=AliasKind.CONST_VALUE,
+                const_type=NamedType("Flags"),
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Flags"),
+                    args=[
+                        MojoCastExpr(
+                            target=BuiltinType(MojoBuiltin.C_INT),
+                            expr=MojoIntLiteral(2),
+                        )
+                    ],
+                ),
             ),
             StructDecl(
                 name="Widget",
@@ -299,10 +279,9 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
 
     assert "from std.ffi import external_call, UnsafeUnion, c_int, c_uint" in out
     assert "@align(4)" in out
-    assert "@fieldwise_init\nstruct Flags(Copyable, Movable, RegisterPassable):" in out
-    assert "struct Flags(Copyable, Movable, RegisterPassable):" in out
-    assert "var value: c_int" in out
-    assert "comptime READY = Self(c_int(1))" in out
+    assert "comptime Flags = c_int" in out
+    assert "comptime READY = Flags(c_int(1))" in out
+    assert "comptime ERROR = Flags(c_int(2))" in out
     assert 'comptime Widget_handler_cb = def (arg0: c_int) thin abi("C") -> c_int' in out
     assert "var handler: Widget_handler_cb" in out
     assert "def enabled(self) -> Bool:" in out
@@ -837,37 +816,24 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                     ret=BuiltinType(MojoBuiltin.C_INT),
                 ),
             ),
-            StructDecl(
+            AliasDecl(
                 name="Flags",
-                kind=StructKind.ENUM,
-                fieldwise_init=True,
-                traits=[
-                    StructTraits.COPYABLE,
-                    StructTraits.MOVABLE,
-                    StructTraits.REGISTER_PASSABLE,
-                ],
-                members=[
-                    StoredMember(
-                        index=0,
-                        name="value",
-                        type=BuiltinType(MojoBuiltin.C_INT),
-                        byte_offset=0,
-                    )
-                ],
-                comptime_members=[
-                    ComptimeMember(
-                        name="READY",
-                        const_value=MojoCallExpr(
-                            callee=MojoRefExpr("Self"),
-                            args=[
-                                MojoCastExpr(
-                                    target=BuiltinType(MojoBuiltin.C_INT),
-                                    expr=MojoIntLiteral(1),
-                                )
-                            ],
-                        ),
-                    )
-                ],
+                kind=AliasKind.TYPE_ALIAS,
+                type_value=BuiltinType(MojoBuiltin.C_INT),
+            ),
+            AliasDecl(
+                name="READY",
+                kind=AliasKind.CONST_VALUE,
+                const_type=NamedType("Flags"),
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Flags"),
+                    args=[
+                        MojoCastExpr(
+                            target=BuiltinType(MojoBuiltin.C_INT),
+                            expr=MojoIntLiteral(1),
+                        )
+                    ],
+                ),
             ),
             StructDecl(
                 name="Widget",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
@@ -29,6 +30,8 @@ from mojo_bindgen.ir import (
     VectorType,
 )
 from mojo_bindgen.parsing.parser import Unit
+
+type EnumResolution = tuple[str, tuple[str, ...]]
 
 
 class CIRCanonicalizer:
@@ -69,31 +72,45 @@ def _compare(new: Struct, old: Struct) -> Struct:
     return old
 
 
-def _resolve_enum_names(decls: list[Decl]) -> dict[str, tuple[str, str | None, str | None]]:
+def _resolve_enum_names(decls: list[Decl]) -> dict[str, EnumResolution]:
     typedefs_by_enum: dict[str, list[str]] = {}
     enum_decls: dict[str, Enum] = {}
+    ordinary_mojo_names: set[str] = set()
     for decl in decls:
         if isinstance(decl, Enum):
             enum_decls[decl.decl_id] = decl
+            ordinary_mojo_names.update(mojo_ident(enumerant.name) for enumerant in decl.enumerants)
         elif isinstance(decl, Typedef):
+            ordinary_mojo_names.add(mojo_ident(decl.name))
             ref = _enum_ref_from_type(decl.aliased) or _enum_ref_from_type(decl.canonical)
             if ref is not None:
                 typedefs_by_enum.setdefault(ref.decl_id, []).append(decl.name)
+        elif isinstance(decl, (Struct, Function, GlobalVar, Const, MacroDecl)):
+            ordinary_mojo_names.add(mojo_ident(decl.name))
 
-    names: dict[str, tuple[str, str | None, str | None]] = {}
-    for decl_id, enum_decl in enum_decls.items():
+    names: dict[str, EnumResolution] = {}
+    claimed_enum_names: set[str] = set()
+    for decl in decls:
+        if not isinstance(decl, Enum):
+            continue
+        decl_id = decl.decl_id
+        enum_decl = enum_decls[decl_id]
         typedef_names = typedefs_by_enum.get(decl_id, [])
-        tag_name = enum_decl.tag_name
-        if tag_name is None and not enum_decl.is_anonymous and enum_decl.c_name:
-            tag_name = enum_decl.c_name
-        public_name = typedef_names[0] if typedef_names else enum_decl.public_name
-        if public_name:
-            mojo_name = public_name
-        elif tag_name:
-            mojo_name = f"enum_{tag_name}"
-        else:
-            mojo_name = enum_decl.name
-        names[decl_id] = (mojo_name, tag_name, public_name)
+        tag_name = enum_decl.c_name if not enum_decl.is_anonymous and enum_decl.c_name else None
+        primary_name = typedef_names[0] if typedef_names else (tag_name or enum_decl.name)
+        primary_ident = mojo_ident(primary_name)
+        alias_names: list[str] = []
+        if tag_name is not None:
+            tag_ident = mojo_ident(tag_name)
+            if (
+                tag_ident != primary_ident
+                and tag_ident not in ordinary_mojo_names
+                and tag_ident not in claimed_enum_names
+            ):
+                alias_names.append(tag_name)
+                claimed_enum_names.add(tag_ident)
+        claimed_enum_names.add(primary_ident)
+        names[decl_id] = (primary_name, tuple(alias_names))
     return names
 
 
@@ -107,18 +124,17 @@ def _enum_ref_from_type(t: Type) -> EnumRef | None:
 
 def _rewrite_decl(
     decl: Decl,
-    enum_names: dict[str, tuple[str, str | None, str | None]],
+    enum_names: dict[str, EnumResolution],
 ) -> Decl:
     if isinstance(decl, Enum):
         resolved = enum_names.get(decl.decl_id)
         if resolved is None:
             return decl
-        mojo_name, tag_name, public_name = resolved
+        primary_name, alias_names = resolved
         return replace(
             decl,
-            name=mojo_name,
-            tag_name=tag_name,
-            public_name=public_name,
+            name=primary_name,
+            alias_names=list(alias_names),
             enumerants=[
                 replace(enumerant, enum_decl_id=decl.decl_id) for enumerant in decl.enumerants
             ],
@@ -161,21 +177,21 @@ def _rewrite_decl(
 
 def _rewrite_field(
     field: Field,
-    enum_names: dict[str, tuple[str, str | None, str | None]],
+    enum_names: dict[str, EnumResolution],
 ) -> Field:
     return replace(field, type=_rewrite_type(field.type, enum_names))
 
 
 def _rewrite_type(
     t: Type,
-    enum_names: dict[str, tuple[str, str | None, str | None]],
+    enum_names: dict[str, EnumResolution],
 ) -> Type:
     if isinstance(t, EnumRef):
         resolved = enum_names.get(t.decl_id)
         if resolved is None:
             return t
-        mojo_name, tag_name, public_name = resolved
-        return replace(t, name=mojo_name, tag_name=tag_name, public_name=public_name)
+        primary_name, _alias_names = resolved
+        return replace(t, name=primary_name)
     if isinstance(t, TypeRef):
         return replace(t, canonical=_rewrite_type(t.canonical, enum_names))
     if isinstance(t, QualifiedType):
@@ -204,7 +220,7 @@ def _rewrite_type(
 
 def _rewrite_const_expr(
     expr: ConstExpr,
-    enum_names: dict[str, tuple[str, str | None, str | None]],
+    enum_names: dict[str, EnumResolution],
 ) -> ConstExpr:
     if isinstance(expr, CastExpr):
         return replace(

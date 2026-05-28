@@ -22,9 +22,10 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Lower C enum enumerators as top-level typed MojoIR aliases, preserving C's
-  ordinary identifier namespace while keeping enum tag names separate from
-  typedef-backed public wrapper names.
+- Lower named C enums to scalar Mojo type aliases plus typed top-level
+  enumerator constants, preferring typedef names as the primary emitted alias,
+  emitting collision-free tag aliases when possible, and keeping anonymous
+  enums on the existing constants-only path.
 - Materialize transitive included-header record definitions when they are
   embedded by value, and force containing structs back to opaque storage when
   any embedded struct or array-of-struct still cannot be emitted as a complete,

@@ -144,7 +144,7 @@ def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     assert lowered.library_path_hint is None
     assert [type(decl) for decl in lowered.decls] == [
         AliasDecl,
-        StructDecl,
+        AliasDecl,
         AliasDecl,
         FunctionDecl,
         GlobalDecl,
@@ -231,22 +231,14 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
         kind=AliasKind.TYPE_ALIAS,
         type_value=NamedType("Int"),
     )
-    assert isinstance(enum_decl, StructDecl)
-    assert enum_decl.name == "Flags"
-    assert enum_decl.kind == StructKind.ENUM
-    assert enum_decl.fieldwise_init is True
-    assert enum_decl.members == [
-        StoredMember(
-            index=0,
-            name="value",
-            type=BuiltinType(MojoBuiltin.C_INT),
-            byte_offset=0,
-        )
-    ]
-    assert enum_decl.comptime_members == []
+    assert enum_decl == AliasDecl(
+        name="Flags",
+        kind=AliasKind.TYPE_ALIAS,
+        type_value=BuiltinType(MojoBuiltin.C_INT),
+    )
     assert enumerant_decl == AliasDecl(
         name="needs_work",
-        kind=AliasKind.ENUMERANT_VALUE,
+        kind=AliasKind.CONST_VALUE,
         const_type=NamedType("Flags"),
         const_value=MojoCallExpr(
             callee=MojoRefExpr("Flags"),

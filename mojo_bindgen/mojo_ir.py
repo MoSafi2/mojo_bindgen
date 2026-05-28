@@ -435,7 +435,6 @@ class StructTraits(StrEnum):
 
 class StructKind(StrEnum):
     PLAIN = "plain"
-    ENUM = "enum"
     OPAQUE = "opaque"
 
 
@@ -450,7 +449,6 @@ class AliasKind(StrEnum):
     CALLBACK_SIGNATURE = "callback_signature"
     UNION_LAYOUT = "union_layout"
     CONST_VALUE = "const_value"
-    ENUMERANT_VALUE = "enumerant_value"
     MACRO_VALUE = "macro_value"
 
 

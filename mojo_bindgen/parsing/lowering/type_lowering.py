@@ -382,14 +382,11 @@ class TypeLowerer:
         underlying = self.primitive_resolver.resolve_primitive(decl.enum_type)
         if name and underlying is not None:
             decl_id = self.registry.decl_id_for_cursor(decl)
-            is_anonymous = "@EA@" in decl_id
             return EnumRef(
                 decl_id=decl_id,
                 name=name,
                 c_name=name,
                 underlying=underlying,
-                tag_name=(None if is_anonymous else name),
-                public_name=(name if is_anonymous else None),
             )
         if underlying is not None:
             return underlying

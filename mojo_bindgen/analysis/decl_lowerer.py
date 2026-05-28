@@ -55,10 +55,6 @@ from mojo_bindgen.mojo_ir import (
     Param,
     ParametricBase,
     ParametricType,
-    StoredMember,
-    StructDecl,
-    StructKind,
-    StructTraits,
 )
 
 
@@ -131,29 +127,24 @@ class UnitDeclLowerer:
     def _lower_enum(self, decl: Enum) -> list[MojoDecl]:
         underlying = self.session.type_lowerer.run(decl.underlying)
         enum_name = mojo_ident(decl.name)
-        enum_decl = StructDecl(
+        enum_decl = AliasDecl(
             name=enum_name,
-            traits=[
-                StructTraits.COPYABLE,
-                StructTraits.MOVABLE,
-                StructTraits.REGISTER_PASSABLE,
-            ],
-            fieldwise_init=True,
-            kind=StructKind.ENUM,
+            kind=AliasKind.TYPE_ALIAS,
+            type_value=underlying,
             doc=decl.doc,
-            members=[
-                StoredMember(
-                    index=0,
-                    name="value",
-                    type=underlying,
-                    byte_offset=0,
-                )
-            ],
         )
+        aliases = [
+            AliasDecl(
+                name=mojo_ident(alias_name),
+                kind=AliasKind.TYPE_ALIAS,
+                type_value=NamedType(enum_name),
+            )
+            for alias_name in decl.alias_names
+        ]
         enumerants = [
             AliasDecl(
                 name=mojo_ident(member.name),
-                kind=AliasKind.ENUMERANT_VALUE,
+                kind=AliasKind.CONST_VALUE,
                 const_type=NamedType(enum_name),
                 const_value=MojoCallExpr(
                     callee=MojoRefExpr(enum_name),
@@ -168,7 +159,7 @@ class UnitDeclLowerer:
             )
             for member in decl.enumerants
         ]
-        return [enum_decl, *enumerants]
+        return [enum_decl, *aliases, *enumerants]
 
     def _lower_function(self, decl: Function) -> FunctionDecl:
         return FunctionDecl(

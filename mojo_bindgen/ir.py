@@ -354,8 +354,6 @@ class EnumRef(SerDeMixin):
     name: str
     c_name: str
     underlying: IntType
-    tag_name: str | None = None
-    public_name: str | None = None
 
 
 @dataclass
@@ -568,12 +566,12 @@ class Enumerant(SerDeMixin):
 @dataclass
 class Enum(SerDeMixin):
     """
-    C enum.  Emitted as a thin struct:
-        @fieldwise_init
-        struct EnumName(Copyable, Movable, RegisterPassable):
-            var value: <underlying Mojo int>
-            comptime MEMBER = Self(<underlying>(value))
-    underlying is always IntType (C enum base type is integer).
+    C enum lowered to a scalar type alias plus typed enumerator constants.
+
+    ``name`` is the primary emitted alias chosen by CIR canonicalization.
+    ``alias_names`` are additional collision-free names that should alias the
+    primary name at Mojo lowering time.
+    ``underlying`` is always IntType (C enum base type is integer).
     """
 
     SERDE: ClassVar[SerdeSpec] = SerdeSpec(
@@ -588,8 +586,7 @@ class Enum(SerDeMixin):
     c_name: str
     underlying: IntType
     enumerants: list[Enumerant]
-    tag_name: str | None = None
-    public_name: str | None = None
+    alias_names: list[str] = field(default_factory=list)
     is_anonymous: bool = False
     doc: DocComment | None = None
 

@@ -5,20 +5,18 @@
 
 from std.ffi import external_call, c_uint
 
+comptime typedef_name = c_uint
+
+comptime tag_name = typedef_name
+
 comptime TAG_A = typedef_name(c_uint(3))
 
-comptime MODE_A = enum_mode_tag(c_uint(1))
+comptime mode_tag = c_uint
 
-@fieldwise_init
-struct typedef_name(Copyable, Movable, RegisterPassable):
-    var value: c_uint
-
-@fieldwise_init
-struct enum_mode_tag(Copyable, Movable, RegisterPassable):
-    var value: c_uint
+comptime MODE_A = mode_tag(c_uint(1))
 
 def take_typedef_name(mode: typedef_name) abi("C") -> typedef_name:
     return external_call["take_typedef_name", typedef_name, typedef_name](mode)
 
-def get_mode_tag() abi("C") -> enum_mode_tag:
-    return external_call["get_mode_tag", enum_mode_tag]()
+def get_mode_tag() abi("C") -> mode_tag:
+    return external_call["get_mode_tag", mode_tag]()
