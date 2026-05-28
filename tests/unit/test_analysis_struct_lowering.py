@@ -851,7 +851,7 @@ def test_lower_struct_tracks_flexible_tail_metadata() -> None:
     ]
 
 
-def test_lower_struct_falls_back_for_by_value_embedded_fam_struct() -> None:
+def test_lower_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
     packet = Struct(
         decl_id="struct:Packet",
         name="Packet",
@@ -903,7 +903,78 @@ def test_lower_struct_falls_back_for_by_value_embedded_fam_struct() -> None:
     lowered = lower_struct(wrapper, context=_context_for(packet, wrapper))
 
     assert lowered.fieldwise_init is False
+    assert lowered.diagnostics == []
+    assert lowered.flexible_tail is not None
+    assert lowered.flexible_tail.field_name == "payload"
+    assert lowered.flexible_tail.pattern == "c99_empty"
+    assert lowered.flexible_tail.byte_offset == 4
+    assert lowered.members == [
+        StoredMember(
+            index=0,
+            name="packet",
+            type=NamedType("Packet"),
+            byte_offset=0,
+        )
+    ]
+
+
+def test_lower_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() -> None:
+    packet = Struct(
+        decl_id="struct:Packet",
+        name="Packet",
+        c_name="Packet",
+        fields=[
+            _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
+            _field(
+                name="payload",
+                source_name="payload",
+                type=Array(
+                    element=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
+                    size=None,
+                    array_kind="flexible",
+                    size_bytes=0,
+                    align_bytes=1,
+                ),
+                byte_offset=4,
+                fam_pattern="c99_empty",
+            ),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_complete=True,
+    )
+    wrapper = Struct(
+        decl_id="struct:Wrapper",
+        name="Wrapper",
+        c_name="Wrapper",
+        fields=[
+            _field(
+                name="packet",
+                source_name="packet",
+                type=StructRef(
+                    decl_id=packet.decl_id,
+                    name=packet.name,
+                    c_name=packet.c_name,
+                    size_bytes=packet.size_bytes,
+                    align_bytes=packet.align_bytes,
+                ),
+                byte_offset=0,
+                size_bytes=packet.size_bytes,
+            ),
+            _field(name="trailer", source_name="trailer", type=_u32(), byte_offset=4),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+        is_complete=True,
+    )
+
+    lowered = lower_struct(wrapper, context=_context_for(packet, wrapper))
+
+    assert lowered.fieldwise_init is False
     assert lowered.flexible_tail is None
-    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=4)]
+    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=8)]
     assert lowered.diagnostics
-    assert "flexible tail array" in lowered.diagnostics[0].message
+    assert (
+        "embedded flexible tail is not terminal in the enclosing record"
+        in lowered.diagnostics[0].message
+    )

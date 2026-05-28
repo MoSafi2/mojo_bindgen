@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
 from mojo_bindgen.analysis.lowering_support import (
@@ -15,7 +15,16 @@ from mojo_bindgen.analysis.lowering_support import (
 from mojo_bindgen.analysis.record_layout import RecordLayoutFacts, analyze_record_layout
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
-from mojo_bindgen.ir import Array, AtomicType, Struct, StructRef, TargetABI, Type
+from mojo_bindgen.ir import (
+    Array,
+    AtomicType,
+    QualifiedType,
+    Struct,
+    StructRef,
+    TargetABI,
+    Type,
+    TypeRef,
+)
 from mojo_bindgen.mojo_ir import (
     ArrayType,
     BitfieldField,
@@ -42,9 +51,14 @@ class StructLoweringContext:
     record_map: dict[str, Struct]
     target_abi: TargetABI
     type_lowerer: LowerTypePass
-    by_value_typed_eligibility_cache: dict[str, tuple[bool, tuple[str, ...]]] = field(
-        default_factory=dict
-    )
+    by_value_typed_shape_cache: dict[str, _TypedRecordShape] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _TypedRecordShape:
+    valid: bool
+    detail: tuple[str, ...] = ()
+    flexible_tail: FlexibleTail | None = None
 
 
 def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
@@ -64,18 +78,6 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
         return _incomplete_struct_decl(decl)
     if facts.layout_problems:
         return _opaque_storage_struct_decl(decl, facts)
-    ineligible_embedded_reasons = _ineligible_embedded_record_reasons(
-        decl,
-        facts,
-        context=context,
-    )
-    if ineligible_embedded_reasons:
-        return _opaque_storage_struct_decl(
-            decl,
-            facts,
-            fallback_reasons=ineligible_embedded_reasons,
-        )
-
     plain_fields, lowered_bitfield_groups, flexible_tail, diagnostic_notes, fallback_reasons = (
         _lower_typed_members(
             decl,
@@ -174,6 +176,60 @@ def _lower_typed_members(
             if reason is not None:
                 fallback_reasons.append(reason)
                 flexible_tail = None
+            continue
+
+        refs = _embedded_struct_refs(field.type)
+        if not refs:
+            continue
+        direct_ref = _direct_embedded_struct_ref(field.type)
+        nested_tail_shapes: list[tuple[StructRef, _TypedRecordShape]] = []
+        for ref in refs:
+            shape = _record_typed_shape_by_value(
+                ref.decl_id,
+                context=context,
+                active={decl.decl_id},
+            )
+            if not shape.valid:
+                target_name = ref.c_name or ref.name
+                suffix = (
+                    shape.detail[0]
+                    if shape.detail
+                    else "embedded record is not layout-emittable by value"
+                )
+                fallback_reasons.append(
+                    f"field `{display_name}` embeds struct `{target_name}` by value, but {suffix}; "
+                    "opaque storage emitted"
+                )
+                break
+            if shape.flexible_tail is not None:
+                nested_tail_shapes.append((ref, shape))
+        else:
+            if not nested_tail_shapes:
+                continue
+            if len(nested_tail_shapes) > 1 or direct_ref is None:
+                fallback_reasons.append(
+                    f"field `{display_name}` embeds a flexible-tail record through a non-direct "
+                    "aggregate type; opaque storage emitted"
+                )
+                continue
+            nested_ref, nested_shape = nested_tail_shapes[0]
+            if nested_ref.decl_id != direct_ref.decl_id:
+                fallback_reasons.append(
+                    f"field `{display_name}` embeds a flexible-tail record through a non-direct "
+                    "aggregate type; opaque storage emitted"
+                )
+                continue
+            if not _field_is_terminal_in_enclosing_record(facts, field_fact):
+                target_name = nested_ref.c_name or nested_ref.name
+                fallback_reasons.append(
+                    f"field `{display_name}` embeds struct `{target_name}` by value, but embedded "
+                    "flexible tail is not terminal in the enclosing record; opaque storage emitted"
+                )
+                continue
+            flexible_tail = replace(
+                nested_shape.flexible_tail,  # type: ignore
+                byte_offset=field_fact.byte_offset + nested_shape.flexible_tail.byte_offset,  # type: ignore
+            )
 
     for run_layout in facts.bitfield_runs:
         lowered_storage_type, reason = try_lower_type(
@@ -258,69 +314,32 @@ def _lower_flexible_tail_metadata(
     )
 
 
-def _ineligible_embedded_record_reasons(
-    decl: Struct,
-    facts: RecordLayoutFacts,
-    *,
-    context: StructLoweringContext,
-) -> tuple[str, ...]:
-    reasons: list[str] = []
-    seen_targets: set[str] = set()
-
-    for field_fact in facts.plain_fields:
-        field = decl.fields[field_fact.index]
-        for ref in _embedded_struct_refs(field.type):
-            if ref.decl_id in seen_targets:
-                continue
-            seen_targets.add(ref.decl_id)
-            valid, detail = _record_is_typed_layout_eligible_by_value(
-                ref.decl_id,
-                context=context,
-                active={decl.decl_id},
-            )
-            if valid:
-                continue
-            display_name = field_display_name(field, field_fact.index)
-            target_name = ref.c_name or ref.name
-            suffix = detail[0] if detail else "embedded record is not layout-emittable by value"
-            reasons.append(
-                f"field `{display_name}` embeds struct `{target_name}` by value, but {suffix}; "
-                "opaque storage emitted"
-            )
-
-    return tuple(reasons)
-
-
-def _record_is_typed_layout_eligible_by_value(
+def _record_typed_shape_by_value(
     decl_id: str,
     *,
     context: StructLoweringContext,
     active: set[str],
-) -> tuple[bool, tuple[str, ...]]:
-    cached = context.by_value_typed_eligibility_cache.get(decl_id)
+) -> _TypedRecordShape:
+    cached = context.by_value_typed_shape_cache.get(decl_id)
     if cached is not None:
         return cached
 
     decl = context.record_map.get(decl_id)
     if decl is None:
-        result = (False, ("referenced definition is unavailable",))
-        context.by_value_typed_eligibility_cache[decl_id] = result
+        result = _TypedRecordShape(False, ("referenced definition is unavailable",))
+        context.by_value_typed_shape_cache[decl_id] = result
         return result
     if decl.is_union:
-        result = (True, ())
-        context.by_value_typed_eligibility_cache[decl_id] = result
-        return result
-    if any(field.fam_pattern is not None for field in decl.fields):
-        result = (False, ("referenced definition contains a flexible tail array",))
-        context.by_value_typed_eligibility_cache[decl_id] = result
+        result = _TypedRecordShape(True)
+        context.by_value_typed_shape_cache[decl_id] = result
         return result
     if not decl.is_complete:
-        result = (False, ("referenced definition is incomplete",))
-        context.by_value_typed_eligibility_cache[decl_id] = result
+        result = _TypedRecordShape(False, ("referenced definition is incomplete",))
+        context.by_value_typed_shape_cache[decl_id] = result
         return result
     if decl_id in active:
-        result = (True, ())
-        context.by_value_typed_eligibility_cache[decl_id] = result
+        result = _TypedRecordShape(True)
+        context.by_value_typed_shape_cache[decl_id] = result
         return result
 
     facts = analyze_record_layout(
@@ -329,38 +348,90 @@ def _record_is_typed_layout_eligible_by_value(
         target_abi=context.target_abi,
     )
     if not facts.is_complete:
-        result = (False, ("referenced definition is incomplete",))
-        context.by_value_typed_eligibility_cache[decl_id] = result
+        result = _TypedRecordShape(False, ("referenced definition is incomplete",))
+        context.by_value_typed_shape_cache[decl_id] = result
         return result
     if facts.layout_problems:
-        result = (False, (facts.layout_problems[0],))
-        context.by_value_typed_eligibility_cache[decl_id] = result
+        result = _TypedRecordShape(False, (facts.layout_problems[0],))
+        context.by_value_typed_shape_cache[decl_id] = result
         return result
 
     active.add(decl_id)
     try:
+        flexible_tail: FlexibleTail | None = None
         for field_fact in facts.plain_fields:
             field = decl.fields[field_fact.index]
-            _, reason = try_lower_type(
+            lowered_type, reason = try_lower_type(
                 context.type_lowerer,
                 field.type,
                 subject=f"field `{field_display_name(field, field_fact.index)}`",
                 failure_suffix="opaque storage emitted",
             )
-            if reason is not None:
-                result = (False, (reason,))
-                context.by_value_typed_eligibility_cache[decl_id] = result
+            if reason is not None or lowered_type is None:
+                result = _TypedRecordShape(False, ((reason or "field could not be lowered"),))
+                context.by_value_typed_shape_cache[decl_id] = result
                 return result
-            for ref in _embedded_struct_refs(field.type):
-                valid, detail = _record_is_typed_layout_eligible_by_value(
+            if field.fam_pattern is not None:
+                direct_tail, tail_reason = _lower_flexible_tail_metadata(
+                    field,
+                    field_fact.index,
+                    field_fact.byte_offset,
+                    lowered_type,
+                )
+                if tail_reason is not None or direct_tail is None:
+                    result = _TypedRecordShape(
+                        False, ((tail_reason or "flexible tail could not lower"),)
+                    )
+                    context.by_value_typed_shape_cache[decl_id] = result
+                    return result
+                flexible_tail = direct_tail
+                continue
+
+            refs = _embedded_struct_refs(field.type)
+            if not refs:
+                continue
+            direct_ref = _direct_embedded_struct_ref(field.type)
+            nested_tail_shapes: list[tuple[StructRef, _TypedRecordShape]] = []
+            for ref in refs:
+                shape = _record_typed_shape_by_value(
                     ref.decl_id,
                     context=context,
                     active=active,
                 )
-                if not valid:
-                    result = (False, detail)
-                    context.by_value_typed_eligibility_cache[decl_id] = result
+                if not shape.valid:
+                    result = _TypedRecordShape(False, shape.detail)
+                    context.by_value_typed_shape_cache[decl_id] = result
                     return result
+                if shape.flexible_tail is not None:
+                    nested_tail_shapes.append((ref, shape))
+            if not nested_tail_shapes:
+                continue
+            if len(nested_tail_shapes) > 1 or direct_ref is None:
+                result = _TypedRecordShape(
+                    False,
+                    ("embedded flexible tail is not a direct terminal by-value struct field",),
+                )
+                context.by_value_typed_shape_cache[decl_id] = result
+                return result
+            nested_ref, nested_shape = nested_tail_shapes[0]
+            if nested_ref.decl_id != direct_ref.decl_id:
+                result = _TypedRecordShape(
+                    False,
+                    ("embedded flexible tail is not a direct terminal by-value struct field",),
+                )
+                context.by_value_typed_shape_cache[decl_id] = result
+                return result
+            if not _field_is_terminal_in_enclosing_record(facts, field_fact):
+                result = _TypedRecordShape(
+                    False,
+                    ("embedded flexible tail is not terminal in the enclosing record",),
+                )
+                context.by_value_typed_shape_cache[decl_id] = result
+                return result
+            flexible_tail = replace(
+                nested_shape.flexible_tail,  # type: ignore
+                byte_offset=field_fact.byte_offset + nested_shape.flexible_tail.byte_offset,  # type: ignore
+            )
 
         for run_layout in facts.bitfield_runs:
             _, reason = try_lower_type(
@@ -370,8 +441,8 @@ def _record_is_typed_layout_eligible_by_value(
                 failure_suffix="opaque storage emitted",
             )
             if reason is not None:
-                result = (False, (reason,))
-                context.by_value_typed_eligibility_cache[decl_id] = result
+                result = _TypedRecordShape(False, (reason,))
+                context.by_value_typed_shape_cache[decl_id] = result
                 return result
 
             for field_layout in run_layout.fields:
@@ -382,15 +453,45 @@ def _record_is_typed_layout_eligible_by_value(
                     failure_suffix="opaque storage emitted",
                 )
                 if reason is not None:
-                    result = (False, (reason,))
-                    context.by_value_typed_eligibility_cache[decl_id] = result
+                    result = _TypedRecordShape(False, (reason,))
+                    context.by_value_typed_shape_cache[decl_id] = result
                     return result
     finally:
         active.remove(decl_id)
 
-    result = (True, ())
-    context.by_value_typed_eligibility_cache[decl_id] = result
+    result = _TypedRecordShape(True, flexible_tail=flexible_tail)
+    context.by_value_typed_shape_cache[decl_id] = result
     return result
+
+
+def _direct_embedded_struct_ref(t: Type) -> StructRef | None:
+    while True:
+        if isinstance(t, QualifiedType):
+            t = t.unqualified
+            continue
+        if isinstance(t, TypeRef):
+            t = t.canonical
+            continue
+        break
+    if isinstance(t, StructRef) and not t.is_union:
+        return t
+    return None
+
+
+def _field_is_terminal_in_enclosing_record(
+    facts: RecordLayoutFacts,
+    field_fact,
+) -> bool:
+    field_end = field_fact.byte_offset + field_fact.size_bytes
+    if any(
+        other.byte_offset >= field_end
+        for other in facts.plain_fields
+        if other.index != field_fact.index
+    ):
+        return False
+    if any(run.byte_offset >= field_end for run in facts.bitfield_runs):
+        return False
+    return True
 
 
 def _embedded_struct_refs(t: Type) -> tuple[StructRef, ...]:
