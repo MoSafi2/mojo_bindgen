@@ -260,7 +260,7 @@ def test_lower_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> No
     assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=24)]
 
 
-def test_lower_struct_uses_opaque_storage_for_array_of_embedded_empty_struct() -> None:
+def test_lower_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
     inner = Struct(
         decl_id="struct:Inner",
         name="Inner",
@@ -302,7 +302,11 @@ def test_lower_struct_uses_opaque_storage_for_array_of_embedded_empty_struct() -
 
     lowered = lower_struct(outer, context=_context_for(outer, inner))
 
-    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=4)]
+    assert lowered.kind == StructKind.PLAIN
+    assert [member.name for member in lowered.members if isinstance(member, StoredMember)] == [
+        "items",
+        "tail",
+    ]
 
 
 def test_lower_struct_keeps_pointer_to_incomplete_struct_typed() -> None:

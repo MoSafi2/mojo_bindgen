@@ -268,10 +268,6 @@ def _record_is_typed_layout_eligible_by_value(
         result = (False, ("referenced definition is incomplete",))
         context.by_value_typed_eligibility_cache[decl_id] = result
         return result
-    if not decl.fields:
-        result = (False, ("referenced definition is empty",))
-        context.by_value_typed_eligibility_cache[decl_id] = result
-        return result
     if decl_id in active:
         result = (True, ())
         context.by_value_typed_eligibility_cache[decl_id] = result

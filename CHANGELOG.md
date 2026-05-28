@@ -31,6 +31,9 @@ All notable changes to this project are documented in this file.
 - Retain documentation comments from system headers during parsing when
   doc-comment emission is enabled, while preserving the default probed include
   search path so header-heavy examples like SQLite continue to parse.
+- Relax opaque fallback for embedded by-value structs so complete zero-sized or
+  empty member structs no longer force opaque storage; only incomplete embedded
+  structs still do.
 
 ### Removed
 

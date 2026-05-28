@@ -16,3 +16,4 @@ todo.md
 *.h
 *.mojo
 io_uring.json
+io_uring.rs
