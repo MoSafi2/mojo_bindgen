@@ -18,6 +18,9 @@ hatchling = "==1.26.3"
 default = { features = ["dev"], solve-group = "main" }
 install = { features = [], solve-group = "main" }
 
+[activation.env]
+PATH = "$PIXI_PROJECT_ROOT/bin:$PATH"
+
 [tasks]
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
