@@ -11,8 +11,8 @@ comptime SCENE_H = 640
 
 
 def _ok(label: String, status: cairo_status_t) raises:
-    if status.value != OK.value:
-        raise Error(label + " -> cairo status " + String(status.value))
+    if status != OK:
+        raise Error(label + " -> cairo status " + String(status))
     print(label + "|ok")
 
 
@@ -85,48 +85,32 @@ def run_metadata_and_lifecycle_checks() raises:
 
     cairo_set_operator(cr, materialize[CAIRO_OPERATOR_XOR]())
     _assert(
-        "operator_roundtrip",
-        cairo_get_operator(cr).value
-        == CAIRO_OPERATOR_XOR.value,
+        "operator_roundtrip", cairo_get_operator(cr) == CAIRO_OPERATOR_XOR
     )
     cairo_set_operator(cr, materialize[CAIRO_OPERATOR_OVER]())
     cairo_set_tolerance(cr, 0.25)
     _assert("tolerance_roundtrip", _approx_eq(cairo_get_tolerance(cr), 0.25))
-    cairo_set_antialias(
-        cr, materialize[CAIRO_ANTIALIAS_NONE]()
-    )
+    cairo_set_antialias(cr, materialize[CAIRO_ANTIALIAS_NONE]())
     _assert(
         "antialias_roundtrip",
-        cairo_get_antialias(cr).value
-        == CAIRO_ANTIALIAS_NONE.value,
+        cairo_get_antialias(cr) == CAIRO_ANTIALIAS_NONE,
     )
-    cairo_set_antialias(
-        cr, materialize[CAIRO_ANTIALIAS_DEFAULT]()
-    )
-    cairo_set_fill_rule(
-        cr, materialize[CAIRO_FILL_RULE_EVEN_ODD]()
-    )
+    cairo_set_antialias(cr, materialize[CAIRO_ANTIALIAS_DEFAULT]())
+    cairo_set_fill_rule(cr, materialize[CAIRO_FILL_RULE_EVEN_ODD]())
     _assert(
         "fill_rule_roundtrip",
-        cairo_get_fill_rule(cr).value
-        == CAIRO_FILL_RULE_EVEN_ODD.value,
+        cairo_get_fill_rule(cr) == CAIRO_FILL_RULE_EVEN_ODD,
     )
-    cairo_set_fill_rule(
-        cr, materialize[CAIRO_FILL_RULE_WINDING]()
-    )
+    cairo_set_fill_rule(cr, materialize[CAIRO_FILL_RULE_WINDING]())
     cairo_set_line_cap(cr, materialize[CAIRO_LINE_CAP_ROUND]())
     _assert(
         "line_cap_roundtrip",
-        cairo_get_line_cap(cr).value
-        == CAIRO_LINE_CAP_ROUND.value,
+        cairo_get_line_cap(cr) == CAIRO_LINE_CAP_ROUND,
     )
-    cairo_set_line_join(
-        cr, materialize[CAIRO_LINE_JOIN_BEVEL]()
-    )
+    cairo_set_line_join(cr, materialize[CAIRO_LINE_JOIN_BEVEL]())
     _assert(
         "line_join_roundtrip",
-        cairo_get_line_join(cr).value
-        == CAIRO_LINE_JOIN_BEVEL.value,
+        cairo_get_line_join(cr) == CAIRO_LINE_JOIN_BEVEL,
     )
     cairo_set_miter_limit(cr, 5.5)
     _assert("miter_roundtrip", _approx_eq(cairo_get_miter_limit(cr), 5.5))
@@ -186,8 +170,7 @@ def draw_composite_scene(
     _ok("pattern_linear_create", cairo_pattern_status(lin))
     _assert(
         "pattern_linear_type",
-        cairo_pattern_get_type(lin).value
-        == CAIRO_PATTERN_TYPE_LINEAR.value,
+        cairo_pattern_get_type(lin) == CAIRO_PATTERN_TYPE_LINEAR,
     )
     cairo_pattern_add_color_stop_rgb(lin, 0.0, 1.0, 0.0, 0.0)
     cairo_pattern_add_color_stop_rgba(lin, 1.0, 0.0, 0.0, 1.0, 1.0)
@@ -239,21 +222,15 @@ def draw_composite_scene(
 
     var surface_pat = cairo_pattern_create_for_surface(tiny)
     _ok("pattern_surface_create", cairo_pattern_status(surface_pat))
-    cairo_pattern_set_extend(
-        surface_pat, materialize[CAIRO_EXTEND_REPEAT]()
-    )
+    cairo_pattern_set_extend(surface_pat, materialize[CAIRO_EXTEND_REPEAT]())
     _assert(
         "pattern_extend_roundtrip",
-        cairo_pattern_get_extend(surface_pat).value
-        == CAIRO_EXTEND_REPEAT.value,
+        cairo_pattern_get_extend(surface_pat) == CAIRO_EXTEND_REPEAT,
     )
-    cairo_pattern_set_filter(
-        surface_pat, materialize[CAIRO_FILTER_BILINEAR]()
-    )
+    cairo_pattern_set_filter(surface_pat, materialize[CAIRO_FILTER_BILINEAR]())
     _assert(
         "pattern_filter_roundtrip",
-        cairo_pattern_get_filter(surface_pat).value
-        == CAIRO_FILTER_BILINEAR.value,
+        cairo_pattern_get_filter(surface_pat) == CAIRO_FILTER_BILINEAR,
     )
 
     var p_ref = cairo_pattern_reference(surface_pat)
@@ -283,7 +260,9 @@ def draw_composite_scene(
             matrix
         ),
     )
-    var surf_ptr = alloc[Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]]](1)
+    var surf_ptr = alloc[
+        Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]]
+    ](1)
     _ok("pattern_get_surface", cairo_pattern_get_surface(surface_pat, surf_ptr))
     var x0 = alloc[Float64](1)
     var y0 = alloc[Float64](1)
@@ -361,9 +340,7 @@ def draw_composite_scene(
     cairo_paint(cr)
     cairo_pattern_destroy(group_pat)
 
-    cairo_push_group_with_content(
-        cr, materialize[CAIRO_CONTENT_COLOR]()
-    )
+    cairo_push_group_with_content(cr, materialize[CAIRO_CONTENT_COLOR]())
     cairo_set_source_rgb(cr, 0.1, 0.8, 0.2)
     cairo_rectangle(cr, 40.0, 30.0, 120.0, 100.0)
     cairo_fill(cr)
@@ -418,8 +395,7 @@ def draw_composite_scene(
     _ok("panel6_font_face_status", cairo_font_face_status(ff))
     _assert(
         "panel6_font_face_toy",
-        cairo_font_face_get_type(ff).value
-        == CAIRO_FONT_TYPE_TOY.value,
+        cairo_font_face_get_type(ff) == CAIRO_FONT_TYPE_TOY,
     )
     var ff2 = cairo_font_face_reference(ff)
     _assert(
@@ -435,13 +411,11 @@ def draw_composite_scene(
     _ok("panel6_toy_font_create", cairo_font_face_status(tf))
     _assert(
         "panel6_toy_slant",
-        cairo_toy_font_face_get_slant(tf).value
-        == CAIRO_FONT_SLANT_ITALIC.value,
+        cairo_toy_font_face_get_slant(tf) == CAIRO_FONT_SLANT_ITALIC,
     )
     _assert(
         "panel6_toy_weight",
-        cairo_toy_font_face_get_weight(tf).value
-        == CAIRO_FONT_WEIGHT_NORMAL.value,
+        cairo_toy_font_face_get_weight(tf) == CAIRO_FONT_WEIGHT_NORMAL,
     )
     _assert(
         "panel6_toy_family_nonnull",
@@ -526,17 +500,17 @@ def run_non_visual_object_checks() raises:
         )
         == 0,
     )
-    cairo_font_options_set_antialias(
-        opts, materialize[CAIRO_ANTIALIAS_GRAY]()
-    )
+    cairo_font_options_set_antialias(opts, materialize[CAIRO_ANTIALIAS_GRAY]())
     _assert(
         "font_options_antialias",
         cairo_font_options_get_antialias(
-            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
-                opts
-            )
-        ).value
-        == CAIRO_ANTIALIAS_GRAY.value,
+            rebind[
+                Optional[
+                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                ]
+            ](opts)
+        )
+        == CAIRO_ANTIALIAS_GRAY,
     )
     cairo_font_options_set_subpixel_order(
         opts, materialize[CAIRO_SUBPIXEL_ORDER_RGB]()
@@ -544,11 +518,13 @@ def run_non_visual_object_checks() raises:
     _assert(
         "font_options_subpixel",
         cairo_font_options_get_subpixel_order(
-            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
-                opts
-            )
-        ).value
-        == CAIRO_SUBPIXEL_ORDER_RGB.value,
+            rebind[
+                Optional[
+                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                ]
+            ](opts)
+        )
+        == CAIRO_SUBPIXEL_ORDER_RGB,
     )
     cairo_font_options_set_hint_style(
         opts, materialize[CAIRO_HINT_STYLE_FULL]()
@@ -556,11 +532,13 @@ def run_non_visual_object_checks() raises:
     _assert(
         "font_options_hint_style",
         cairo_font_options_get_hint_style(
-            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
-                opts
-            )
-        ).value
-        == CAIRO_HINT_STYLE_FULL.value,
+            rebind[
+                Optional[
+                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                ]
+            ](opts)
+        )
+        == CAIRO_HINT_STYLE_FULL,
     )
     cairo_font_options_set_hint_metrics(
         opts, materialize[CAIRO_HINT_METRICS_ON]()
@@ -568,11 +546,13 @@ def run_non_visual_object_checks() raises:
     _assert(
         "font_options_hint_metrics",
         cairo_font_options_get_hint_metrics(
-            rebind[Optional[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]]](
-                opts
-            )
-        ).value
-        == CAIRO_HINT_METRICS_ON.value,
+            rebind[
+                Optional[
+                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                ]
+            ](opts)
+        )
+        == CAIRO_HINT_METRICS_ON,
     )
     cairo_font_options_destroy(opts2)
     cairo_font_options_destroy(opts)
@@ -580,14 +560,14 @@ def run_non_visual_object_checks() raises:
     var rect_storage = alloc[cairo_rectangle_int_t](1)
     rect_storage[0] = cairo_rectangle_int_t(10, 10, 60, 60)
     var reg = cairo_region_create_rectangle(
-        rebind[Optional[UnsafePointer[cairo_rectangle_int_t, ImmutExternalOrigin]]](
-            rect_storage
-        )
+        rebind[
+            Optional[UnsafePointer[cairo_rectangle_int_t, ImmutExternalOrigin]]
+        ](rect_storage)
     )
     rect_storage.free()
-    var reg_const = rebind[Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]](
-        reg
-    )
+    var reg_const = rebind[
+        Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]
+    ](reg)
     _ok("region_create_rectangle", cairo_region_status(reg_const))
     _assert(
         "region_not_empty",
@@ -610,9 +590,9 @@ def run_non_visual_object_checks() raises:
     cairo_region_get_extents(reg_const, extents)
     extents.free()
     var reg2 = cairo_region_copy(reg_const)
-    var reg2_const = rebind[Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]](
-        reg2
-    )
+    var reg2_const = rebind[
+        Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]
+    ](reg2)
     _assert(
         "region_equal_after_copy",
         cairo_region_equal(reg_const, reg2_const) != 0,
@@ -627,9 +607,9 @@ def run_non_visual_object_checks() raises:
     cairo_region_destroy(reg_ref)
 
     var empty = cairo_region_create()
-    var empty_const = rebind[Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]](
-        empty
-    )
+    var empty_const = rebind[
+        Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]
+    ](empty)
     _ok("region_create_empty", cairo_region_status(empty_const))
     _assert(
         "region_empty_is_empty",
