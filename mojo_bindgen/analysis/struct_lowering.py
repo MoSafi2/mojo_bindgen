@@ -15,10 +15,12 @@ from mojo_bindgen.analysis.lowering_support import (
 from mojo_bindgen.analysis.record_layout import RecordLayoutFacts, analyze_record_layout
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
-from mojo_bindgen.ir import AtomicType, Struct, StructRef, TargetABI, Type
+from mojo_bindgen.ir import Array, AtomicType, Struct, StructRef, TargetABI, Type
 from mojo_bindgen.mojo_ir import (
+    ArrayType,
     BitfieldField,
     BitfieldGroupMember,
+    FlexibleTail,
     Initializer,
     InitializerParam,
     OpaqueStorageMember,
@@ -74,7 +76,7 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
             fallback_reasons=ineligible_embedded_reasons,
         )
 
-    plain_fields, lowered_bitfield_groups, diagnostic_notes, fallback_reasons = (
+    plain_fields, lowered_bitfield_groups, flexible_tail, diagnostic_notes, fallback_reasons = (
         _lower_typed_members(
             decl,
             facts,
@@ -103,6 +105,7 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
             lowered_bitfield_groups,
             uses_opaque_storage=False,
         ),
+        flexible_tail=flexible_tail,
         diagnostics=_build_diagnostics(
             facts.layout_problems,
             diagnostic_notes=diagnostic_notes,
@@ -117,9 +120,16 @@ def _lower_typed_members(
     facts: RecordLayoutFacts,
     *,
     context: StructLoweringContext,
-) -> tuple[list[StoredMember], list[BitfieldGroupMember], tuple[str, ...], tuple[str, ...]]:
+) -> tuple[
+    list[StoredMember],
+    list[BitfieldGroupMember],
+    FlexibleTail | None,
+    tuple[str, ...],
+    tuple[str, ...],
+]:
     plain_fields: list[StoredMember] = []
     lowered_bitfield_groups: list[BitfieldGroupMember] = []
+    flexible_tail: FlexibleTail | None = None
     diagnostic_notes: list[str] = []
     fallback_reasons: list[str] = []
 
@@ -154,6 +164,16 @@ def _lower_typed_members(
                 doc=field.doc,
             )
         )
+        if field.fam_pattern is not None:
+            flexible_tail, reason = _lower_flexible_tail_metadata(
+                field,
+                field_fact.index,
+                field_fact.byte_offset,
+                lowered_type,
+            )
+            if reason is not None:
+                fallback_reasons.append(reason)
+                flexible_tail = None
 
     for run_layout in facts.bitfield_runs:
         lowered_storage_type, reason = try_lower_type(
@@ -207,8 +227,34 @@ def _lower_typed_members(
     return (
         plain_fields,
         lowered_bitfield_groups,
+        flexible_tail,
         tuple(diagnostic_notes),
         tuple(fallback_reasons),
+    )
+
+
+def _lower_flexible_tail_metadata(
+    field,
+    index: int,
+    byte_offset: int,
+    lowered_type,
+) -> tuple[FlexibleTail | None, str | None]:
+    if not isinstance(field.type, Array):
+        return None, "flexible tail field did not lower from an array type; opaque storage emitted"
+    if not isinstance(lowered_type, ArrayType) or lowered_type.count != 0:
+        return (
+            None,
+            f"field `{field_display_name(field, index)}` did not lower to InlineArray[..., 0]; "
+            "opaque storage emitted",
+        )
+    return (
+        FlexibleTail(
+            field_name=field.name,
+            element_type=lowered_type.element,
+            pattern=field.fam_pattern,
+            byte_offset=byte_offset,
+        ),
+        None,
     )
 
 
@@ -262,6 +308,10 @@ def _record_is_typed_layout_eligible_by_value(
         return result
     if decl.is_union:
         result = (True, ())
+        context.by_value_typed_eligibility_cache[decl_id] = result
+        return result
+    if any(field.fam_pattern is not None for field in decl.fields):
+        result = (False, ("referenced definition contains a flexible tail array",))
         context.by_value_typed_eligibility_cache[decl_id] = result
         return result
     if not decl.is_complete:

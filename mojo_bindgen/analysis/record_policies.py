@@ -109,6 +109,8 @@ class PolicyInferencePass:
     def _is_fieldwise_init_eligible(self, decl: StructDecl) -> bool:
         if decl.kind != StructKind.PLAIN:
             return False
+        if decl.flexible_tail is not None:
+            return False
         if self._has_opaque_storage(decl):
             return False
         if self._has_representable_atomic_storage(decl):
@@ -125,6 +127,9 @@ class PolicyInferencePass:
 
         decl = self._structs.get(name)
         if decl is None or decl.kind != StructKind.PLAIN:
+            self._cache[name] = MojoPassability.MEMORY_ONLY
+            return MojoPassability.MEMORY_ONLY
+        if decl.flexible_tail is not None:
             self._cache[name] = MojoPassability.MEMORY_ONLY
             return MojoPassability.MEMORY_ONLY
         if self._has_representable_atomic_storage(decl):

@@ -25,6 +25,14 @@
         "kind": "Struct",
         "name": "payload"
       },
+      "path": "fields.1.fam_pattern",
+      "attrs": "c99_empty"
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "payload"
+      },
       "path": "fields.1.type",
       "attrs": {
         "kind": "Array",

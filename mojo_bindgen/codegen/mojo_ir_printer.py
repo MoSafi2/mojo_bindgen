@@ -16,6 +16,7 @@ from mojo_bindgen.mojo_ir import (
     BuiltinType,
     CallTarget,
     ComptimeMember,
+    FlexibleTail,
     FunctionDecl,
     FunctionKind,
     FunctionType,
@@ -359,6 +360,8 @@ class MojoIRPrinter:
         for member in decl.members:
             if isinstance(member, BitfieldGroupMember):
                 self._render_bitfield_group_accessors(b, member)
+        if decl.flexible_tail is not None:
+            self._render_flexible_tail_helpers(b, decl.name, decl.flexible_tail)
 
     def _render_initializer(
         self,
@@ -419,6 +422,35 @@ class MojoIRPrinter:
             b.indent()
             self._render_bitfield_accessor_write(b, group, bitfield, storage_type, mask_text)
             b.dedent()
+
+    def _render_flexible_tail_helpers(
+        self,
+        b: CodeBuilder,
+        struct_name: str,
+        tail: FlexibleTail,
+    ) -> None:
+        elem_type = self._render_type(tail.element_type)
+        b.add("@staticmethod")
+        b.add(f"def {tail.field_name}_offset() -> UInt:")
+        b.indent()
+        b.add(f"return {tail.byte_offset}")
+        b.dedent()
+        b.add("@staticmethod")
+        b.add(
+            f"def {tail.field_name}_ptr(base: UnsafePointer[{struct_name}, ImmutExternalOrigin]) -> UnsafePointer[{elem_type}, ImmutExternalOrigin]:"
+        )
+        b.indent()
+        b.add(f"var raw = rebind[UnsafePointer[{elem_type}, ImmutExternalOrigin]](base)")
+        b.add(f"return raw + {tail.byte_offset}")
+        b.dedent()
+        b.add("@staticmethod")
+        b.add(
+            f"def {tail.field_name}_mut_ptr(base: UnsafePointer[{struct_name}, MutExternalOrigin]) -> UnsafePointer[{elem_type}, MutExternalOrigin]:"
+        )
+        b.indent()
+        b.add(f"var raw = rebind[UnsafePointer[{elem_type}, MutExternalOrigin]](base)")
+        b.add(f"return raw + {tail.byte_offset}")
+        b.dedent()
 
     def _render_bitfield_accessor_read(
         self,

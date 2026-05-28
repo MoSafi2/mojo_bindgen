@@ -103,6 +103,9 @@ UnsupportedTypeCategory = Literal[
 ArrayKind = Literal["fixed", "incomplete", "flexible", "variable"]
 # Array-shape categories that matter for ABI-faithful lowering.
 
+FamPattern = Literal["c99_empty", "gnu_zero"]
+# Flexible-tail field patterns recognized by parser record lowering.
+
 
 MacroDeclKind = Literal[
     "object_like_supported",
@@ -390,6 +393,7 @@ class Field(SerDeMixin):
             "is_bitfield": SerdeFieldSpec(omit_if_default=True),
             "bit_offset": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
             "bit_width": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
+            "fam_pattern": SerdeFieldSpec(omit_if_default=True),
             "doc": SerdeFieldSpec(omit_if_default=True),
         }
     )
@@ -406,6 +410,8 @@ class Field(SerDeMixin):
     """Bit offset within the storage unit (from clang). Meaningful if ``is_bitfield``."""
     bit_width: int = 0
     """Width in bits. Meaningful if ``is_bitfield``."""
+    fam_pattern: FamPattern | None = None
+    """Flexible-tail pattern when this field is recognized as a FAM-style tail."""
     doc: DocComment | None = None
 
 

@@ -9,6 +9,7 @@ typedef struct iap_packet {
     uint8_t payload[];
 } iap_packet;
 
+const iap_packet *iap_fixture(void);
 size_t iap_header_size(void);
 int32_t iap_sanity(int32_t x);
 

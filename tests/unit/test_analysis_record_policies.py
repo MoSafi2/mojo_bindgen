@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis import assign_record_policies, lower_unit
 from mojo_bindgen.ir import (
+    Array,
     AtomicType,
     ByteOrder,
     Field,
@@ -128,6 +129,40 @@ def test_assign_record_policies_keeps_padding_struct_register_passable() -> None
     assert padded.fieldwise_init is True
     assert padded.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
     assert padded.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
+
+
+def test_assign_record_policies_marks_fam_struct_memory_only() -> None:
+    [packet] = _lowered_structs(
+        Struct(
+            decl_id="struct:Packet",
+            name="Packet",
+            c_name="Packet",
+            fields=[
+                _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
+                _field(
+                    name="payload",
+                    source_name="payload",
+                    type=Array(
+                        element=_u8(),
+                        size=None,
+                        array_kind="flexible",
+                        size_bytes=0,
+                        align_bytes=1,
+                    ),
+                    byte_offset=4,
+                    fam_pattern="c99_empty",
+                ),
+            ],
+            size_bytes=4,
+            align_bytes=4,
+            is_complete=True,
+        )
+    )
+
+    assert packet.flexible_tail is not None
+    assert packet.fieldwise_init is False
+    assert packet.passability == MojoPassability.MEMORY_ONLY
+    assert packet.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
 
 
 def test_assign_record_policies_keeps_incomplete_struct_copyable_only() -> None:

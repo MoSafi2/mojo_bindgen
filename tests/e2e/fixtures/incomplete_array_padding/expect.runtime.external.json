@@ -1,4 +1,5 @@
 {
   "iap_header_size": 4,
-  "iap_sanity": 42
+  "iap_sanity": 42,
+  "iap_payload_offset": 4
 }

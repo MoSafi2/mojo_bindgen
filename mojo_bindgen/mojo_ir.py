@@ -417,6 +417,14 @@ class Initializer(SerDeMixin):
     params: list[InitializerParam] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class FlexibleTail(SerDeMixin):
+    field_name: str
+    element_type: MojoType
+    pattern: str
+    byte_offset: int
+
+
 class StructTraits(StrEnum):
     COPYABLE = "Copyable"
     IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
@@ -453,6 +461,7 @@ class StructDecl(SerDeMixin):
             "kind": SerdeFieldSpec(json_key="struct_kind"),
             "align_decorator": SerdeFieldSpec(omit_if_default=True),
             "passability": SerdeFieldSpec(omit_if_default=True),
+            "flexible_tail": SerdeFieldSpec(omit_if_default=True),
             "doc": SerdeFieldSpec(omit_if_default=True),
         }
     )
@@ -467,6 +476,7 @@ class StructDecl(SerDeMixin):
     members: list[StructMember] = field(default_factory=list)
     comptime_members: list[ComptimeMember] = field(default_factory=list)
     initializers: list[Initializer] = field(default_factory=list)
+    flexible_tail: FlexibleTail | None = None
     diagnostics: list[LoweringNote] = field(default_factory=list)
     doc: DocComment | None = None
 

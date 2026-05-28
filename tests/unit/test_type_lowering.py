@@ -8,6 +8,7 @@ import pytest
 
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    Array,
     AtomicType,
     EnumRef,
     Function,
@@ -352,6 +353,78 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
     assert next_field.type.align_bytes == 8
     assert isinstance(next_field.type.pointee, StructRef)
     assert next_field.type.pointee.name == "node"
+
+
+def test_record_lowering_marks_trailing_empty_and_zero_length_fams(tmp_path: Path) -> None:
+    header = tmp_path / "fam_patterns.h"
+    header.write_text(
+        (
+            "struct c99_packet {\n"
+            "  unsigned tag;\n"
+            "  unsigned char payload[];\n"
+            "};\n"
+            "struct gnu_packet {\n"
+            "  unsigned tag;\n"
+            "  unsigned char payload[0];\n"
+            "};\n"
+            "struct one_packet {\n"
+            "  unsigned tag;\n"
+            "  unsigned char payload[1];\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    c99_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "c99_packet")
+    gnu_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "gnu_packet")
+    one_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "one_packet")
+
+    c99_payload = next(f for f in c99_packet.fields if f.name == "payload")
+    assert isinstance(c99_payload.type, Array)
+    assert c99_payload.type.array_kind == "flexible"
+    assert c99_payload.fam_pattern == "c99_empty"
+
+    gnu_payload = next(f for f in gnu_packet.fields if f.name == "payload")
+    assert isinstance(gnu_payload.type, Array)
+    assert gnu_payload.type.array_kind == "fixed"
+    assert gnu_payload.type.size == 0
+    assert gnu_payload.fam_pattern == "gnu_zero"
+
+    one_payload = next(f for f in one_packet.fields if f.name == "payload")
+    assert isinstance(one_payload.type, Array)
+    assert one_payload.type.array_kind == "fixed"
+    assert one_payload.type.size == 1
+    assert one_payload.fam_pattern is None
+
+
+def test_record_lowering_warns_for_non_trailing_fam_like_field(tmp_path: Path) -> None:
+    header = tmp_path / "fam_invalid.h"
+    header.write_text(
+        ("struct invalid_packet {\n  unsigned char payload[0];\n  unsigned tag;\n};\n"),
+        encoding="utf-8",
+    )
+
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "invalid_packet")
+    payload = next(f for f in packet.fields if f.name == "payload")
+    assert payload.fam_pattern is None
+    assert any(
+        "non-trailing flexible tail array is not modeled as a flexible array member" in diag.message
+        for diag in unit.diagnostics
+    )
 
 
 def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> None:

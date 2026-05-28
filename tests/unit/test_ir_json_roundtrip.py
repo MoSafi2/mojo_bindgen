@@ -168,4 +168,5 @@ def test_field_json_roundtrip_keeps_size_bytes_and_defaults_old_payloads() -> No
         type=IntType(int_kind=IntKind.INT, size_bytes=4),
         byte_offset=0,
         size_bytes=0,
+        fam_pattern=None,
     )

@@ -15,6 +15,10 @@ All notable changes to this project are documented in this file.
   `UnsafeUnion`,  (@WolfDan; PR #9).
 - Lower flexible array member declarations as `InlineArray[T, 0]` instead of
   deriving their size from the containing struct,  (@WolfDan; PR #9).
+- Detect trailing C99 flexible array members (`[]`) and GNU zero-length tail
+  arrays (`[0]`) explicitly during record lowering, carry their metadata
+  through CIR and MojoIR, and emit generated tail-access helpers plus runtime
+  coverage for both forms.
 
 ### Changed
 
@@ -28,6 +32,9 @@ All notable changes to this project are documented in this file.
 - Retain documentation comments from system headers during parsing when
   doc-comment emission is enabled, while preserving the default probed include
   search path so header-heavy examples like SQLite continue to parse.
+- Treat structs with flexible tail arrays as memory-only header-prefix types,
+  reject by-value embedding of such structs from typed layout lowering, and
+  keep one-element tail arrays (`[1]`) as ordinary fixed arrays.
 
 ### Removed
 

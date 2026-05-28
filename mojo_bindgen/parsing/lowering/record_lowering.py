@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import Field, IntType, Struct, StructRef, Type
+from mojo_bindgen.ir import Array, Field, IntType, Struct, StructRef, Type
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
@@ -281,10 +281,11 @@ class RecordLowerer:
         )
         self.registry.store(record)
 
+        sites = self._field_discovery.discover(cursor)
         record.fields = [
             field
             for field in (
-                self._lower_field_site(site) for site in self._field_discovery.discover(cursor)
+                self._lower_field_site(site, record, i, len(sites)) for i, site in enumerate(sites)
             )
             if field is not None
         ]
@@ -293,7 +294,13 @@ class RecordLowerer:
             self._completed_record_decl_ids.append(record.decl_id)
         return record
 
-    def _lower_field_site(self, site: FieldSite) -> Field | None:
+    def _lower_field_site(
+        self,
+        site: FieldSite,
+        record: Struct,
+        index: int,
+        field_count: int,
+    ) -> Field | None:
         """Lower one normalized field site into one IR field."""
         if site.is_bitfield:
             backing = self.type_lowerer.lower(site.field_type, TypeContext.FIELD)
@@ -319,6 +326,13 @@ class RecordLowerer:
             )
 
         field_type = self._lower_field_site_type(site)
+        fam_pattern = self._fam_pattern_for_site(
+            site,
+            field_type,
+            record=record,
+            index=index,
+            field_count=field_count,
+        )
         return Field(
             name=site.name,
             source_name=site.source_name,
@@ -326,6 +340,7 @@ class RecordLowerer:
             byte_offset=site.byte_offset,
             size_bytes=site.size_bytes,
             is_anonymous=site.is_anonymous,
+            fam_pattern=fam_pattern,
             doc=(
                 cursor_doc_comment(site.field_cursor)
                 if site.field_cursor is not None
@@ -346,6 +361,38 @@ class RecordLowerer:
             TypeContext.FIELD,
             source_cursor=site.field_cursor,
         )
+
+    def _fam_pattern_for_site(
+        self,
+        site: FieldSite,
+        field_type: Type,
+        *,
+        record: Struct,
+        index: int,
+        field_count: int,
+    ) -> str | None:
+        if record.is_union or site.field_cursor is None:
+            return None
+        if not isinstance(field_type, Array):
+            return None
+
+        pattern: str | None = None
+        if field_type.array_kind == "flexible" and field_type.size is None:
+            pattern = "c99_empty"
+        elif field_type.array_kind == "fixed" and field_type.size == 0:
+            pattern = "gnu_zero"
+        if pattern is None:
+            return None
+
+        if index == field_count - 1:
+            return pattern
+
+        self.diagnostics.add_cursor_diag(
+            "warning",
+            site.field_cursor,
+            "non-trailing flexible tail array is not modeled as a flexible array member",
+        )
+        return None
 
     @staticmethod
     def _apply_attributes(record: Struct, cursor: cx.Cursor) -> None:

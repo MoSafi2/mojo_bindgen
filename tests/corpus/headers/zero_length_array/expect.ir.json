@@ -17,6 +17,14 @@
         "kind": "Struct",
         "name": "zla_packet"
       },
+      "path": "fields.1.fam_pattern",
+      "attrs": "gnu_zero"
+    },
+    {
+      "selector": {
+        "kind": "Struct",
+        "name": "zla_packet"
+      },
       "path": "fields.1.type",
       "attrs": {
         "kind": "Array",

@@ -27,6 +27,7 @@ from mojo_bindgen.mojo_ir import (
     ComptimeMember,
     ConstArg,
     DTypeArg,
+    FlexibleTail,
     FunctionDecl,
     FunctionKind,
     FunctionType,
@@ -406,6 +407,58 @@ def test_render_callback_alias_uses_none_in_signature_position() -> None:
         'comptime log_callback_t = def (msg: UnsafePointer[c_char, ImmutExternalOrigin]) thin abi("C") -> None'
         in out
     )
+
+
+def test_render_struct_emits_flexible_tail_helpers() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            StructDecl(
+                name="Packet",
+                members=[
+                    StoredMember(
+                        index=0,
+                        name="tag",
+                        type=BuiltinType(MojoBuiltin.C_UINT),
+                        byte_offset=0,
+                    ),
+                    StoredMember(
+                        index=1,
+                        name="payload",
+                        type=ArrayType(BuiltinType(MojoBuiltin.C_UCHAR), 0),
+                        byte_offset=4,
+                    ),
+                ],
+                flexible_tail=FlexibleTail(
+                    field_name="payload",
+                    element_type=BuiltinType(MojoBuiltin.C_UCHAR),
+                    pattern="c99_empty",
+                    byte_offset=4,
+                ),
+            )
+        ],
+    )
+
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
+
+    assert "var payload: InlineArray[c_uchar, 0]" in rendered
+    assert "@staticmethod" in rendered
+    assert "def payload_offset() -> UInt:" in rendered
+    assert (
+        "def payload_ptr(base: UnsafePointer[Packet, ImmutExternalOrigin]) -> "
+        "UnsafePointer[c_uchar, ImmutExternalOrigin]:" in rendered
+    )
+    assert (
+        "def payload_mut_ptr(base: UnsafePointer[Packet, MutExternalOrigin]) -> "
+        "UnsafePointer[c_uchar, MutExternalOrigin]:" in rendered
+    )
+    assert "return raw + 4" in rendered
 
 
 def test_normalize_and_render_sizeof_imports_std_sys_info() -> None:
