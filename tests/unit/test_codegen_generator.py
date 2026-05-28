@@ -90,9 +90,98 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
         "library": "demo",
         "link_name": "demo",
         "include_headers": None,
-        "compile_args": ["-I./include"],
+        "compile_args": ["-I./include", "-fretain-comments-from-system-headers"],
         "raise_on_error": True,
     }
+
+
+def test_parse_adds_system_comment_retention_to_default_compile_args(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyParser:
+        def __init__(
+            self,
+            header: Path,
+            *,
+            library: str,
+            link_name: str,
+            include_headers,
+            compile_args,
+            raise_on_error,
+        ):
+            calls["compile_args"] = compile_args
+
+        def run(self) -> Unit:
+            return _demo_unit()
+
+    monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
+
+    BindgenOrchestrator(BindgenOptions(header=Path("demo.h"))).parse()
+
+    assert calls["compile_args"] is not None
+    assert "-I/usr/include" in calls["compile_args"]
+    assert "-fretain-comments-from-system-headers" in calls["compile_args"]
+
+
+def test_parse_omits_system_comment_retention_when_doc_comments_disabled(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyParser:
+        def __init__(
+            self,
+            header: Path,
+            *,
+            library: str,
+            link_name: str,
+            include_headers,
+            compile_args,
+            raise_on_error,
+        ):
+            calls["compile_args"] = compile_args
+
+        def run(self) -> Unit:
+            return _demo_unit()
+
+    monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
+
+    options = BindgenOptions(
+        header=Path("demo.h"),
+        compile_args=["-I./include"],
+        emit_doc_comments=False,
+    )
+    BindgenOrchestrator(options).parse()
+
+    assert calls["compile_args"] == ["-I./include"]
+
+
+def test_parse_does_not_duplicate_system_comment_retention_arg(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyParser:
+        def __init__(
+            self,
+            header: Path,
+            *,
+            library: str,
+            link_name: str,
+            include_headers,
+            compile_args,
+            raise_on_error,
+        ):
+            calls["compile_args"] = compile_args
+
+        def run(self) -> Unit:
+            return _demo_unit()
+
+    monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
+
+    options = BindgenOptions(
+        header=Path("demo.h"),
+        compile_args=["-I./include", "-fretain-comments-from-system-headers"],
+    )
+    BindgenOrchestrator(options).parse()
+
+    assert calls["compile_args"] == ["-I./include", "-fretain-comments-from-system-headers"]
 
 
 def test_analyze_uses_analysis_orchestrator(monkeypatch) -> None:

@@ -28,6 +28,9 @@ All notable changes to this project are documented in this file.
   any embedded struct or array-of-struct still cannot be emitted as a complete,
   layout-correct Mojo type.
 - Broaden local ignores for generated scratch headers and Mojo files.
+- Retain documentation comments from system headers during parsing when
+  doc-comment emission is enabled, while preserving the default probed include
+  search path so header-heavy examples like SQLite continue to parse.
 
 ### Removed
 

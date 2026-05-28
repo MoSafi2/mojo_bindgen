@@ -12,7 +12,7 @@ from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo
 from mojo_bindgen.ir import Unit
 from mojo_bindgen.layout_tests import render_layout_test_module
 from mojo_bindgen.mojo_ir import MojoModule
-from mojo_bindgen.parsing.parser import ClangParser
+from mojo_bindgen.parsing.parser import ClangParser, _default_system_compile_args
 
 LinkingMode = Literal["external_call", "owned_dl_handle"]
 
@@ -52,6 +52,8 @@ class BindgenResult:
 class BindgenOrchestrator:
     """Own the user-facing bindgen pipeline and output decisions."""
 
+    _RETAIN_SYSTEM_HEADER_COMMENTS_ARG = "-fretain-comments-from-system-headers"
+
     def __init__(self, options: BindgenOptions) -> None:
         self._options = options
 
@@ -78,7 +80,7 @@ class BindgenOrchestrator:
             library=library_name,
             link_name=link_name,
             include_headers=self._options.include_headers,
-            compile_args=self._options.compile_args,
+            compile_args=self._parse_compile_args(),
             raise_on_error=True,
         )
         return parser.run()
@@ -170,6 +172,18 @@ class BindgenOrchestrator:
 
     def _link_name(self, library_name: str) -> str:
         return self._options.link_name if self._options.link_name is not None else library_name
+
+    def _parse_compile_args(self) -> list[str] | None:
+        compile_args = (
+            _default_system_compile_args()
+            if self._options.compile_args is None
+            else list(self._options.compile_args)
+        )
+        if not self._options.emit_doc_comments:
+            return None if self._options.compile_args is None else compile_args
+        if self._RETAIN_SYSTEM_HEADER_COMMENTS_ARG in compile_args:
+            return compile_args
+        return [*compile_args, self._RETAIN_SYSTEM_HEADER_COMMENTS_ARG]
 
 
 def bindgen(options: BindgenOptions) -> BindgenResult:
