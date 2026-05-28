@@ -18,8 +18,6 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Revert the enum-comptime macro reference lowering from `8280b5c`; enum
-  references in macro expressions will get a more principled fix in a follow-up.
 - Lower C enum enumerators as top-level typed MojoIR aliases, preserving C's
   ordinary identifier namespace while keeping enum tag names separate from
   typedef-backed public wrapper names.
@@ -27,13 +25,9 @@ All notable changes to this project are documented in this file.
   embedded by value, and force containing structs back to opaque storage when
   any embedded struct or array-of-struct still cannot be emitted as a complete,
   layout-correct Mojo type.
-- Broaden local ignores for generated scratch headers and Mojo files.
 - Retain documentation comments from system headers during parsing when
   doc-comment emission is enabled, while preserving the default probed include
   search path so header-heavy examples like SQLite continue to parse.
-- Relax opaque fallback for embedded by-value structs so complete zero-sized or
-  empty member structs no longer force opaque storage; only incomplete embedded
-  structs still do.
 
 ### Removed
 
