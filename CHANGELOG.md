@@ -10,6 +10,10 @@ All notable changes to this project are documented in this file.
   Mojo bindings, with `--doc-comments` / `--no-doc-comments` control.
 - Add repeatable `--include-header` support for parsing multiple public entry
   headers through a virtual umbrella translation unit.
+- Add an opt-in Clang macro fallback for unsupported integer macro expressions,
+  broader macro constant folding for logical/comparison/ternary forms, string
+  literal concatenation and escape decoding, and regression coverage for macro
+  closure and canonicalization behavior.
 - Handle repeated field types in anonymous unions by still lowering them to
   `UnsafeUnion`,  (@WolfDan; PR #9).
 - Lower flexible array member declarations as `InlineArray[T, 0]` instead of
@@ -31,6 +35,9 @@ All notable changes to this project are documented in this file.
 - Keep source-backed macro folding aligned with emission: object-like macros
   from the emitted translation-unit macro set are available for expansion, while
   compiler/predefined no-file macros are neither emitted nor used for folding.
+- Treat integer macro literals as signed by default when no suffix, parsed cast,
+  or Clang-provided type information says otherwise, while preserving explicit
+  unsigned suffixes and Clang-resolved integer types.
 - Rename the orphan-record reachability repair to signature-only record stub
   materialization, and keep it only for references like
   `int f(struct opaque *p);` that have no standalone top-level record cursor.

@@ -21,6 +21,7 @@ from mojo_bindgen.ir import (
     MacroDecl,
     Pointer,
     QualifiedType,
+    RefExpr,
     SizeOfExpr,
     Struct,
     Type,
@@ -44,6 +45,9 @@ class CIRCanonicalizer:
 
     def canonicalize(self, unit: Unit) -> Unit:
         decls = self._dedupe_structs(unit)
+        decls = _dedupe_functions(decls)
+        decls = _dedupe_macros_last_wins(decls)
+        decls = _drop_constant_self_alias_macros(decls)
         enum_names = _resolve_enum_names(decls)
         unit.decls = [_rewrite_decl(decl, enum_names) for decl in decls]
         return unit
@@ -70,6 +74,69 @@ def _compare(new: Struct, old: Struct) -> Struct:
     if not old.is_complete:
         return new
     return old
+
+
+def _dedupe_functions(decls: list[Decl]) -> list[Decl]:
+    out: list[Decl] = []
+    seen: list[Function] = []
+    for decl in decls:
+        if not isinstance(decl, Function):
+            out.append(decl)
+            continue
+        if any(_same_function_identity(decl, prev) for prev in seen):
+            continue
+        seen.append(decl)
+        out.append(decl)
+    return out
+
+
+def _same_function_identity(a: Function, b: Function) -> bool:
+    return (
+        a.name == b.name
+        and a.link_name == b.link_name
+        and a.ret == b.ret
+        and [p.type for p in a.params] == [p.type for p in b.params]
+        and a.is_variadic == b.is_variadic
+        and a.calling_convention == b.calling_convention
+        and a.is_noreturn == b.is_noreturn
+    )
+
+
+def _dedupe_macros_last_wins(decls: list[Decl]) -> list[Decl]:
+    out_reversed: list[Decl] = []
+    seen_macro_names: set[str] = set()
+    for decl in reversed(decls):
+        if isinstance(decl, MacroDecl):
+            if decl.name in seen_macro_names:
+                continue
+            seen_macro_names.add(decl.name)
+        out_reversed.append(decl)
+    out_reversed.reverse()
+    return out_reversed
+
+
+def _drop_constant_self_alias_macros(decls: list[Decl]) -> list[Decl]:
+    claimed = _constant_like_names(decls)
+    return [
+        decl
+        for decl in decls
+        if not (
+            isinstance(decl, MacroDecl)
+            and isinstance(decl.expr, RefExpr)
+            and decl.expr.name == decl.name
+            and decl.name in claimed
+        )
+    ]
+
+
+def _constant_like_names(decls: list[Decl]) -> set[str]:
+    names: set[str] = set()
+    for decl in decls:
+        if isinstance(decl, Const):
+            names.add(decl.name)
+        elif isinstance(decl, Enum):
+            names.update(enumerant.name for enumerant in decl.enumerants)
+    return names
 
 
 def _resolve_enum_names(decls: list[Decl]) -> dict[str, EnumResolution]:

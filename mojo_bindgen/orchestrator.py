@@ -32,6 +32,8 @@ class BindgenOptions:
     json_output: bool = False
     output: Path | None = None
     layout_test_output: Path | None = None
+    clang_macro_fallback: bool = False
+    clang_macro_fallback_build_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,8 @@ class BindgenOrchestrator:
             include_headers=self._options.include_headers,
             compile_args=self._parse_compile_args(),
             raise_on_error=True,
+            clang_macro_fallback=self._options.clang_macro_fallback,
+            clang_macro_fallback_build_dir=self._options.clang_macro_fallback_build_dir,
         )
         return parser.run()
 

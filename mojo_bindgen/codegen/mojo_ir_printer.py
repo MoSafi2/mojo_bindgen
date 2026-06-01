@@ -67,6 +67,21 @@ class MojoIRPrintError(ValueError):
     """Raised when normalized MojoIR cannot be rendered as valid Mojo source."""
 
 
+def _escape_mojo_string(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace("\0", "\\0")
+    )
+
+
+def _escape_mojo_char(value: str) -> str:
+    return _escape_mojo_string(value).replace("'", "\\'")
+
+
 def _padding_scalar_chunks(byte_offset: int, size_bytes: int) -> list[str]:
     chunks: list[str] = []
     offset = byte_offset
@@ -761,9 +776,9 @@ class MojoIRPrinter:
         if isinstance(expr, FloatLiteral):
             return mojo_float_literal_text(str(expr.value))
         if isinstance(expr, StringLiteral):
-            return '"' + expr.value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+            return '"' + _escape_mojo_string(expr.value) + '"'
         if isinstance(expr, CharLiteral):
-            return "'" + expr.value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+            return "'" + _escape_mojo_char(expr.value) + "'"
         if isinstance(expr, RefExpr):
             return expr.name
         if isinstance(expr, UnaryExpr):

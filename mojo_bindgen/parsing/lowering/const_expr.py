@@ -8,7 +8,10 @@ for literal primitive typing rather than the full lowering pipeline.
 from __future__ import annotations
 
 import re
+import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 import clang.cindex as cx
 
@@ -65,6 +68,8 @@ _PREDEFINED_MACRO_NAMES = {
     "__STDC_ALLOC_LIB__",
     "__COUNTER__",
 }
+
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _match_int_literal(raw: str) -> tuple[int | None, str]:
@@ -134,16 +139,90 @@ def looks_function_like_macro_body(tokens: list[str]) -> bool:
     return True
 
 
+def _int_primitive(
+    literal_resolver: LiteralResolver,
+    suffix: str,
+) -> IntType:
+    if suffix:
+        return literal_resolver.int_type_for_integer_literal_suffix(suffix)
+    return literal_resolver.int_type_for_integer_literal_suffix("")
+
+
+def _clone_parsed_const_expr(parsed: ParsedConstExpr) -> ParsedConstExpr:
+    return ParsedConstExpr(
+        expr=parsed.expr,
+        primitive=parsed.primitive,
+        diagnostic=parsed.diagnostic,
+    )
+
+
+def _decode_c_escapes(raw: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch != "\\" or i + 1 >= len(raw):
+            out.append(ch)
+            i += 1
+            continue
+        i += 1
+        esc = raw[i]
+        simple = {
+            "a": "\a",
+            "b": "\b",
+            "f": "\f",
+            "n": "\n",
+            "r": "\r",
+            "t": "\t",
+            "v": "\v",
+            "\\": "\\",
+            "'": "'",
+            '"': '"',
+            "?": "?",
+        }
+        if esc in simple:
+            out.append(simple[esc])
+            i += 1
+            continue
+        if esc in "01234567":
+            start = i
+            i += 1
+            while i < len(raw) and i - start < 3 and raw[i] in "01234567":
+                i += 1
+            out.append(chr(int(raw[start:i], 8)))
+            continue
+        if esc == "x":
+            i += 1
+            start = i
+            while i < len(raw) and raw[i] in "0123456789abcdefABCDEF":
+                i += 1
+            out.append(chr(int(raw[start:i], 16)) if i > start else "\\x")
+            continue
+        out.append(esc)
+        i += 1
+    return "".join(out)
+
+
+def _string_token_value(raw: str) -> str | None:
+    if raw.startswith('"') and raw.endswith('"'):
+        return _decode_c_escapes(raw[1:-1])
+    return None
+
+
 def fold_const_expr(expr: ConstExpr) -> ConstExpr:
     """Constant-fold integer unary/binary expressions where operands are literals."""
     if isinstance(expr, UnaryExpr):
         inner = fold_const_expr(expr.operand)
         if isinstance(inner, IntLiteral):
             v = inner.value
+            if expr.op == "+":
+                return IntLiteral(v)
             if expr.op == "-":
                 return IntLiteral(-v)
             if expr.op == "~":
                 return IntLiteral(~v)
+            if expr.op == "!":
+                return IntLiteral(0 if v else 1)
         return UnaryExpr(op=expr.op, operand=inner)
     if isinstance(expr, BinaryExpr):
         lhs = fold_const_expr(expr.lhs)
@@ -189,6 +268,22 @@ def _eval_int_binary(op: str, a: int, b: int) -> int | None:
             if b == 0:
                 return None
             return a % b
+        if op == "<":
+            return int(a < b)
+        if op == "<=":
+            return int(a <= b)
+        if op == ">":
+            return int(a > b)
+        if op == ">=":
+            return int(a >= b)
+        if op == "==":
+            return int(a == b)
+        if op == "!=":
+            return int(a != b)
+        if op == "&&":
+            return int(bool(a) and bool(b))
+        if op == "||":
+            return int(bool(a) or bool(b))
     except (OverflowError, ValueError):
         return None
     return None
@@ -202,6 +297,23 @@ def fold_parsed_const_expr(parsed: ParsedConstExpr) -> ParsedConstExpr:
         primitive=parsed.primitive,
         diagnostic=parsed.diagnostic,
     )
+
+
+def const_expr_needs_clang_macro_fallback(expr: ConstExpr) -> bool:
+    """Return whether a parsed macro expression is structurally risky to emit."""
+    if isinstance(expr, RefExpr):
+        return True
+    if isinstance(expr, UnaryExpr):
+        return expr.op == "!" or const_expr_needs_clang_macro_fallback(expr.operand)
+    if isinstance(expr, BinaryExpr):
+        return (
+            expr.op in {"&&", "||"}
+            or const_expr_needs_clang_macro_fallback(expr.lhs)
+            or const_expr_needs_clang_macro_fallback(expr.rhs)
+        )
+    if isinstance(expr, CastExpr):
+        return const_expr_needs_clang_macro_fallback(expr.expr)
+    return False
 
 
 @dataclass(frozen=True)
@@ -227,8 +339,16 @@ class ParsedMacro:
 class ConstExprParser:
     """Parse the small constant-expression subset supported by the parser."""
 
-    def __init__(self, literal_resolver: LiteralResolver) -> None:
+    def __init__(
+        self,
+        literal_resolver: LiteralResolver,
+        *,
+        macro_values: Mapping[str, ParsedConstExpr] | None = None,
+        macro_defaults: bool = False,
+    ) -> None:
         self.literal_resolver = literal_resolver
+        self.macro_values = macro_values
+        self.macro_defaults = macro_defaults
 
     def parse_macro(
         self,
@@ -314,6 +434,7 @@ class ConstExprParser:
         """Parse a token stream into the supported expression subset."""
         if not tokens:
             return None
+        tokens = _merge_adjacent_string_literals(tokens)
         if self._is_null_pointer_tokens(tokens):
             return ParsedConstExpr(
                 expr=NullPtrLiteral(),
@@ -333,6 +454,19 @@ class ConstExprParser:
             op = stream.peek()
             if op is None:
                 break
+            if op == "?" and min_prec <= 0:
+                stream.pop()
+                truthy = self._parse_expr(stream, min_prec=0)
+                if truthy is None or stream.pop() != ":":
+                    return None
+                falsy = self._parse_expr(stream, min_prec=0)
+                if falsy is None:
+                    return None
+                condition = fold_const_expr(lhs.expr)
+                if not isinstance(condition, IntLiteral):
+                    return None
+                lhs = truthy if condition.value != 0 else falsy
+                continue
             prec = _BINARY_PRECEDENCE.get(op)
             if prec is None or prec < min_prec:
                 break
@@ -363,7 +497,7 @@ class ConstExprParser:
                 i + 2 < len(toks)
                 and _CAST_TYPE_IDENT_RE.match(toks[i] or "")
                 and toks[i + 1] == ")"
-                and toks[i + 2] in ("-", "+", "~", "(")
+                and toks[i + 2] in ("-", "+", "~", "!", "(")
             ):
                 it = self.literal_resolver.int_type_for_type_spelling(toks[i])
                 if it is not None:
@@ -378,12 +512,26 @@ class ConstExprParser:
             if inner is None or stream.pop() != ")":
                 return None
             return inner
-        if tok in {"-", "~"}:
+        if tok in {"+", "-", "~", "!"}:
+            direct_unsuffixed_int = False
+            if tok == "-":
+                next_tok = stream.peek()
+                if next_tok is not None:
+                    value, suffix = _match_int_literal(next_tok)
+                    direct_unsuffixed_int = value is not None and suffix == ""
             operand = self._parse_prefix(stream)
             if operand is None:
                 return None
+            primitive = operand.primitive
+            if (
+                tok == "-"
+                and direct_unsuffixed_int
+                and isinstance(operand.expr, IntLiteral)
+                and self.macro_defaults
+            ):
+                primitive = self.literal_resolver.int_type_for_integer_literal_suffix("")
             return ParsedConstExpr(
-                expr=UnaryExpr(op=tok, operand=operand.expr), primitive=operand.primitive
+                expr=UnaryExpr(op=tok, operand=operand.expr), primitive=primitive
             )
         return self._parse_leaf(tok)
 
@@ -425,7 +573,10 @@ class ConstExprParser:
         if value is not None:
             return ParsedConstExpr(
                 expr=IntLiteral(value),
-                primitive=self.literal_resolver.int_type_for_integer_literal_suffix(suffix),
+                primitive=_int_primitive(
+                    self.literal_resolver,
+                    suffix,
+                ),
             )
         float_value, float_suffix = _match_float_literal(raw)
         if float_value is not None:
@@ -433,14 +584,15 @@ class ConstExprParser:
                 expr=FloatLiteral(float_value),
                 primitive=self._primitive_for_float_literal_suffix(float_suffix),
             )
-        if raw.startswith('"') and raw.endswith('"'):
+        string_value = _string_token_value(raw)
+        if string_value is not None:
             return ParsedConstExpr(
-                expr=StringLiteral(raw[1:-1]),
+                expr=StringLiteral(string_value),
                 primitive=IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1),
             )
         if raw.startswith("'") and raw.endswith("'"):
             return ParsedConstExpr(
-                expr=CharLiteral(raw[1:-1]),
+                expr=CharLiteral(_decode_c_escapes(raw[1:-1])),
                 primitive=IntType(int_kind=IntKind.CHAR_S, size_bytes=1, align_bytes=1),
             )
         if raw == "NULL":
@@ -448,7 +600,9 @@ class ConstExprParser:
                 expr=NullPtrLiteral(),
                 primitive=VoidType(),
             )
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", raw):
+        if _IDENT_RE.match(raw):
+            if self.macro_values is not None and raw in self.macro_values:
+                return _clone_parsed_const_expr(self.macro_values[raw])
             return ParsedConstExpr(
                 expr=RefExpr(raw),
                 primitive=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
@@ -522,17 +676,106 @@ class ConstExprParser:
 
 
 _BINARY_PRECEDENCE = {
-    "|": 1,
-    "^": 2,
-    "&": 3,
-    "<<": 4,
-    ">>": 4,
-    "+": 5,
-    "-": 5,
-    "*": 6,
-    "/": 6,
-    "%": 6,
+    "||": 1,
+    "&&": 2,
+    "|": 3,
+    "^": 4,
+    "&": 5,
+    "==": 6,
+    "!=": 6,
+    "<": 7,
+    "<=": 7,
+    ">": 7,
+    ">=": 7,
+    "<<": 8,
+    ">>": 8,
+    "+": 9,
+    "-": 9,
+    "*": 10,
+    "/": 10,
+    "%": 10,
 }
+
+
+def _merge_adjacent_string_literals(tokens: list[str]) -> list[str]:
+    out: list[str] = []
+    i = 0
+    while i < len(tokens):
+        value = _string_token_value(tokens[i])
+        if value is None:
+            out.append(tokens[i])
+            i += 1
+            continue
+        parts = [value]
+        i += 1
+        while i < len(tokens):
+            next_value = _string_token_value(tokens[i])
+            if next_value is None:
+                break
+            parts.append(next_value)
+            i += 1
+        merged = "".join(parts).replace("\\", "\\\\").replace('"', '\\"')
+        out.append(f'"{merged}"')
+    return out
+
+
+class ClangMacroFallback:
+    """Opt-in integer fallback for macro expressions unsupported by the local parser."""
+
+    _PROBE_ENUM = "__mojo_bindgen_macro_value"
+    _PROBE_FILE = "__mojo_bindgen_macro_fallback.c"
+
+    def __init__(
+        self,
+        *,
+        headers: list[Path],
+        compile_args: list[str],
+        build_dir: Path | None = None,
+    ) -> None:
+        self.headers = headers
+        self.compile_args = compile_args
+        self.build_dir = build_dir
+
+    def evaluate_integer(self, macro_name: str) -> int | None:
+        filename = self._probe_filename()
+        source = self._source(macro_name)
+        idx = cx.Index.create()
+        try:
+            tu = idx.parse(
+                filename,
+                args=self.compile_args,
+                unsaved_files=[(filename, source)],
+                options=cx.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
+            )
+        except cx.TranslationUnitLoadError:
+            return None
+        for cursor in tu.cursor.walk_preorder():
+            if (
+                cursor.kind == cx.CursorKind.ENUM_CONSTANT_DECL
+                and cursor.spelling == self._PROBE_ENUM
+            ):
+                return cursor.enum_value
+        return None
+
+    def _probe_filename(self) -> str:
+        if self.build_dir is None:
+            return self._PROBE_FILE
+        self.build_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            prefix="macro_fallback_",
+            suffix=".c",
+            dir=self.build_dir,
+            delete=True,
+        ) as f:
+            return f.name
+
+    def _source(self, macro_name: str) -> str:
+        includes = "\n".join(f'#include "{_c_string(str(header))}"' for header in self.headers)
+        return f"{includes}\nenum {{ {self._PROBE_ENUM} = ({macro_name}) }};\n"
+
+
+def _c_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 class _TokenStream:

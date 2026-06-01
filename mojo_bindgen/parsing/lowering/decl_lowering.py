@@ -24,8 +24,13 @@ from mojo_bindgen.ir import (
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
 from mojo_bindgen.parsing.frontend import ClangCompat
-from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
-from mojo_bindgen.parsing.lowering.macro_env import collect_object_like_macro_env
+from mojo_bindgen.parsing.lowering.const_expr import (
+    ClangMacroFallback,
+    ConstExprParser,
+    ParsedConstExpr,
+    const_expr_needs_clang_macro_fallback,
+    fold_parsed_const_expr,
+)
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
 from mojo_bindgen.parsing.lowering.record_lowering import RecordLowerer
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
@@ -45,6 +50,7 @@ class DeclLowerer:
         type_lowerer: TypeLowerer,
         record_lowerer: RecordLowerer,
         const_expr_parser: ConstExprParser,
+        clang_macro_fallback: ClangMacroFallback | None,
         compat: ClangCompat,
     ) -> None:
         self.tu = tu
@@ -54,6 +60,7 @@ class DeclLowerer:
         self.type_lowerer = type_lowerer
         self.record_lowerer = record_lowerer
         self.const_expr_parser = const_expr_parser
+        self.clang_macro_fallback = clang_macro_fallback
         self.compat = compat
 
     def lower_top_level_decl(self, cursor: cx.Cursor) -> list[Decl] | Decl | None:
@@ -77,14 +84,51 @@ class DeclLowerer:
 
     def collect_macros(self) -> list[Decl]:
         """Lower all source-backed translation-unit macro definitions into IR nodes."""
-        macro_env = collect_object_like_macro_env(self.tu)
         out: list[Decl] = []
+        macro_values: dict[str, ParsedConstExpr] = {}
         for cursor in self.tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
             if cursor.location.file is None:
                 continue
-            parsed = self.const_expr_parser.parse_macro(cursor, macro_env)
+            parser = ConstExprParser(
+                self.const_expr_parser.literal_resolver,
+                macro_values=macro_values,
+                macro_defaults=True,
+            )
+            parsed = parser.parse_macro(cursor)
+            needs_fallback = parsed.expr is None or const_expr_needs_clang_macro_fallback(
+                parsed.expr
+            )
+            if (
+                parsed.kind in {"object_like_supported", "object_like_unsupported"}
+                and needs_fallback
+                and self.clang_macro_fallback is not None
+            ):
+                fallback_value = self.clang_macro_fallback.evaluate_integer(cursor.spelling)
+                if fallback_value is not None:
+                    fallback_parsed = ParsedConstExpr(
+                        expr=IntLiteral(fallback_value),
+                        primitive=parsed.primitive
+                        or self.const_expr_parser.literal_resolver.int_type_for_integer_literal_suffix(
+                            ""
+                        ),
+                    )
+                    parsed = parsed.__class__(
+                        tokens=parsed.tokens,
+                        kind="object_like_supported",
+                        expr=fallback_parsed.expr,
+                        primitive=fallback_parsed.primitive,
+                        diagnostic=None,
+                    )
+            if parsed.expr is not None:
+                macro_values[cursor.spelling] = fold_parsed_const_expr(
+                    ParsedConstExpr(
+                        expr=parsed.expr,
+                        primitive=parsed.primitive,
+                        diagnostic=parsed.diagnostic,
+                    )
+                )
             out.append(
                 MacroDecl(
                     name=cursor.spelling,
