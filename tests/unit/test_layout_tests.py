@@ -329,9 +329,12 @@ def test_render_layout_test_module_imports_records_and_calls_tests() -> None:
     )
 
     assert "from std.sys.info import align_of, size_of" in out
+    assert "from std.testing import TestSuite" in out
     assert "from std.reflection import reflect" in out
     assert "from bindings import Sample" in out
     assert "def test_layout_Sample() raises:" in out
     assert "comptime r = reflect[Sample]()" in out
     assert "r.field_offset[index=0]()" in out
-    assert "def main() raises:\n    test_layout_Sample()" in out
+    assert (
+        "def main() raises:\n    TestSuite.discover_tests[__functions_in_module()]().run()" in out
+    )
