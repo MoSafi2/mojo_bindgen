@@ -38,6 +38,9 @@ All notable changes to this project are documented in this file.
 - Treat integer macro literals as signed by default when no suffix, parsed cast,
   or Clang-provided type information says otherwise, while preserving explicit
   unsigned suffixes and Clang-resolved integer types.
+- Prune empty source macros from the parsed IR and suppress any empty macro
+  declarations that reach Mojo lowering, so they no longer emit placeholder
+  comments or aliases.
 - Rename the orphan-record reachability repair to signature-only record stub
   materialization, and keep it only for references like
   `int f(struct opaque *p);` that have no standalone top-level record cursor.

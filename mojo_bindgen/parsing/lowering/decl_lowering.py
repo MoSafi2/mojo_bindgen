@@ -97,6 +97,8 @@ class DeclLowerer:
                 macro_defaults=True,
             )
             parsed = parser.parse_macro(cursor)
+            if parsed.kind == "empty":
+                continue
             needs_fallback = parsed.expr is None or const_expr_needs_clang_macro_fallback(
                 parsed.expr
             )

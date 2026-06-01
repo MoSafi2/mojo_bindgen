@@ -169,6 +169,27 @@ def test_include_headers_emit_translation_unit_declarations_and_macros(
     assert macros["PUBLIC_VALUE"].expr.value == 42
 
 
+def test_empty_macros_are_pruned_from_translation_unit(tmp_path: Path) -> None:
+    header = tmp_path / "empty_macro.h"
+    header.write_text(
+        textwrap.dedent(
+            """\
+            #define EMPTY
+            #define VALUE 1
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    unit = ClangParser(header, library="empty_macro", link_name="empty_macro").run()
+    macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
+
+    assert "EMPTY" not in macros
+    assert macros["VALUE"].kind == "object_like_supported"
+    assert isinstance(macros["VALUE"].expr, IntLiteral)
+    assert macros["VALUE"].expr.value == 1
+
+
 def test_collect_object_like_macro_env_last_wins(tmp_path: Path) -> None:
     p = tmp_path / "dup.h"
     p.write_text(

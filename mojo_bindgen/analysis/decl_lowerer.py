@@ -220,6 +220,8 @@ class UnitDeclLowerer:
         )
 
     def _lower_macro(self, decl: MacroDecl) -> AliasDecl | None:
+        if decl.kind == "empty":
+            return None
         name = mojo_ident(decl.name)
         if name in self._emitted_const_names:
             if isinstance(decl.expr, RefExpr) and mojo_ident(decl.expr.name) == name:
