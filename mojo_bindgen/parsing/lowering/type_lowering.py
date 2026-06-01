@@ -14,6 +14,7 @@ from mojo_bindgen.ir import (
     EnumRef,
     FloatType,
     FunctionPtr,
+    Param,
     Pointer,
     QualifiedType,
     Qualifiers,
@@ -275,7 +276,7 @@ class TypeLowerer:
         if t.kind == cx.TypeKind.FUNCTIONPROTO:
             canon = _normalize(t.get_canonical())
             params = [
-                self._lower_fn_proto_parameter(s, c, ctx)
+                Param(name="", type=self._lower_fn_proto_parameter(s, c, ctx))
                 for s, c in zip(t.argument_types(), canon.argument_types(), strict=True)
             ]
             is_variadic = t.is_function_variadic()

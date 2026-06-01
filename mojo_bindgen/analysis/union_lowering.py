@@ -16,14 +16,14 @@ from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
+    Array,
     BuiltinType,
     MojoBuiltin,
-    MojoType,
     NamedType,
     ParametricBase,
     ParametricType,
     Struct,
+    Type,
     TypeArg,
 )
 
@@ -54,7 +54,7 @@ class LowerUnionPass:
 
         alias_name = record_name(decl)
         diagnostics = []
-        arms: list[MojoType] = []
+        arms: list[Type] = []
         seen_keys: dict[str, str] = {}
         eligible = True
 
@@ -117,9 +117,10 @@ class LowerUnionPass:
         return AliasDecl(
             name=alias_name,
             kind=AliasKind.UNION_LAYOUT,
-            type_value=ArrayType(
+            type_value=Array(
                 element=BuiltinType(MojoBuiltin.UINT8),
-                count=decl.size_bytes,
+                size=decl.size_bytes,
+                array_kind="fixed",
             ),
             diagnostics=[
                 *diagnostics,
@@ -131,7 +132,7 @@ class LowerUnionPass:
         )
 
     @staticmethod
-    def _type_key(t: MojoType) -> str:
+    def _type_key(t: Type) -> str:
         return json.dumps(t.to_json_dict(), sort_keys=True)
 
 

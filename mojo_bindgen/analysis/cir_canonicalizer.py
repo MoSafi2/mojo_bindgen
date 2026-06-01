@@ -209,7 +209,9 @@ def _rewrite_type(
         return replace(
             t,
             ret=_rewrite_type(t.ret, enum_names),
-            params=[_rewrite_type(param, enum_names) for param in t.params],
+            params=[
+                replace(param, type=_rewrite_type(param.type, enum_names)) for param in t.params
+            ],
         )
     if isinstance(t, ComplexType):
         return t

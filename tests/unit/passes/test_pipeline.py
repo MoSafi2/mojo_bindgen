@@ -10,6 +10,8 @@ from mojo_bindgen.ir import (
     AliasKind,
     BuiltinType,
     ByteOrder,
+    CallExpr,
+    CastExpr,
     Enum,
     Enumerant,
     EnumRef,
@@ -17,14 +19,12 @@ from mojo_bindgen.ir import (
     Function,
     FunctionDecl,
     IntKind,
+    IntLiteral,
     IntType,
     MojoBuiltin,
-    MojoCallExpr,
-    MojoCastExpr,
-    MojoIntLiteral,
-    MojoRefExpr,
     NamedType,
     Param,
+    RefExpr,
     Struct,
     TargetABI,
     Typedef,
@@ -189,12 +189,12 @@ def test_run_ir_passes_prefers_typedef_name_for_named_enum_and_emits_tag_alias()
         name="TAG_A",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("typedef_name"),
-        const_value=MojoCallExpr(
-            callee=MojoRefExpr("typedef_name"),
+        const_value=CallExpr(
+            callee=RefExpr("typedef_name"),
             args=[
-                MojoCastExpr(
+                CastExpr(
                     target=BuiltinType(MojoBuiltin.C_UINT),
-                    expr=MojoIntLiteral(3),
+                    expr=IntLiteral(3),
                 )
             ],
         ),
@@ -250,12 +250,12 @@ def test_run_ir_passes_uses_tag_name_for_tag_only_enum() -> None:
         name="MODE_A",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("mode_tag"),
-        const_value=MojoCallExpr(
-            callee=MojoRefExpr("mode_tag"),
+        const_value=CallExpr(
+            callee=RefExpr("mode_tag"),
             args=[
-                MojoCastExpr(
+                CastExpr(
                     target=BuiltinType(MojoBuiltin.C_UINT),
-                    expr=MojoIntLiteral(1),
+                    expr=IntLiteral(1),
                 )
             ],
         ),
@@ -311,12 +311,12 @@ def test_run_ir_passes_drops_colliding_tag_alias_for_typedef_enum() -> None:
             name="MODE_A",
             kind=AliasKind.CONST_VALUE,
             const_type=NamedType("mode_t"),
-            const_value=MojoCallExpr(
-                callee=MojoRefExpr("mode_t"),
+            const_value=CallExpr(
+                callee=RefExpr("mode_t"),
                 args=[
-                    MojoCastExpr(
+                    CastExpr(
                         target=BuiltinType(MojoBuiltin.C_UINT),
-                        expr=MojoIntLiteral(1),
+                        expr=IntLiteral(1),
                     )
                 ],
             ),

@@ -33,7 +33,7 @@ from mojo_bindgen.ir import (
     Const,
     ConstExpr,
     Function,
-    FunctionType,
+    FunctionPtr,
     GlobalVar,
     MacroDecl,
     MojoDecl,
@@ -102,7 +102,7 @@ class LowerUnitPass:
             lowered_type = exact_width_stdint_alias_type(ref.name)
             if lowered_type is None:
                 lowered_type = type_lowerer.run(ref.canonical)
-            if isinstance(lowered_type, FunctionType):
+            if isinstance(lowered_type, FunctionPtr):
                 lowered.append(
                     AliasDecl(
                         name=alias_name,

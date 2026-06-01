@@ -3,7 +3,6 @@ from __future__ import annotations
 from mojo_bindgen.analysis import assign_record_policies, lower_unit
 from mojo_bindgen.ir import (
     Array,
-    ArrayType,
     AtomicType,
     BuiltinType,
     ByteOrder,
@@ -16,8 +15,8 @@ from mojo_bindgen.ir import (
     MojoPassability,
     NamedType,
     OpaqueStorageMember,
+    Pointer,
     PointerMutability,
-    PointerType,
     StoredMember,
     Struct,
     StructDecl,
@@ -94,7 +93,7 @@ def test_assign_record_policies_marks_fieldwise_exact_struct_register_passable()
             name="Widget",
             c_name="Widget",
             fields=[
-                _field(name="count", source_name="count", type=_i32(), byte_offset=0),
+                _field(name="size", source_name="size", type=_i32(), byte_offset=0),
                 _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
             ],
             size_bytes=8,
@@ -263,7 +262,7 @@ def test_assign_record_policies_treats_pointer_value_as_trivial() -> None:
                         StoredMember(
                             index=0,
                             name="ptr",
-                            type=PointerType(
+                            type=Pointer(
                                 pointee=NamedType("Blob"),
                                 mutability=PointerMutability.MUT,
                             ),
@@ -297,9 +296,9 @@ def test_assign_record_policies_keeps_inline_array_backed_types_memory_only() ->
                             StoredMember(
                                 index=0,
                                 name="bytes",
-                                type=ArrayType(
+                                type=Array(
                                     element=BuiltinType(MojoBuiltin.UINT8),
-                                    count=4,
+                                    size=4,
                                 ),
                                 byte_offset=0,
                             )

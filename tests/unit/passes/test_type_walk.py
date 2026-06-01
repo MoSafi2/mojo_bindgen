@@ -9,6 +9,7 @@ from mojo_bindgen.ir import (
     FunctionPtr,
     IntKind,
     IntType,
+    Param,
     Pointer,
     QualifiedType,
     TypeRef,
@@ -47,7 +48,7 @@ def test_iter_type_nodes_peels_common_wrappers_by_default() -> None:
 
 
 def test_iter_type_nodes_can_skip_function_pointer_descent() -> None:
-    fp = FunctionPtr(ret=VoidType(), params=[_i32()], is_variadic=False)
+    fp = FunctionPtr(ret=VoidType(), params=[Param(name="", type=_i32())], is_variadic=False)
 
     shallow = tuple(
         type(node).__name__

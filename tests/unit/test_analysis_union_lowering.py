@@ -6,7 +6,7 @@ from mojo_bindgen.analysis.union_lowering import lower_union
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
+    Array,
     BuiltinType,
     Field,
     IntKind,
@@ -129,9 +129,9 @@ def test_lower_union_falls_back_for_unsupported_member_type() -> None:
         base=ParametricBase.UNSAFE_UNION,
         args=[
             TypeArg(
-                type=ArrayType(
+                type=Array(
                     element=BuiltinType(MojoBuiltin.UINT8),
-                    count=4,
+                    size=4,
                 )
             )
         ],
@@ -166,9 +166,9 @@ def test_lower_union_falls_back_for_self_referential_member_type() -> None:
 
     lowered = lower_union(decl)
 
-    assert lowered.type_value == ArrayType(
+    assert lowered.type_value == Array(
         element=BuiltinType(MojoBuiltin.UINT8),
-        count=8,
+        size=8,
     )
     assert lowered.diagnostics[0].category == "union_lowering"
     assert "self-referential type `Node`" in lowered.diagnostics[0].message

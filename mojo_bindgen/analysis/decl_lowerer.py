@@ -22,36 +22,35 @@ from mojo_bindgen.ir import (
     _MOJO_INT_TYPES,
     AliasDecl,
     AliasKind,
+    BinaryExpr,
     BuiltinType,
+    CallExpr,
     CallTarget,
+    CastExpr,
     Const,
+    ConstExpr,
     Decl,
     Enum,
     Function,
     FunctionDecl,
     FunctionKind,
-    FunctionType,
+    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     GlobalVar,
+    IntLiteral,
     LinkMode,
     MacroDecl,
-    MojoBinaryExpr,
-    MojoCallExpr,
-    MojoCastExpr,
-    MojoConstExpr,
     MojoDecl,
-    MojoIntLiteral,
-    MojoParam,
-    MojoRefExpr,
-    MojoUnaryExpr,
     NamedType,
     NullPtrLiteral,
+    Param,
     ParametricBase,
     ParametricType,
     RefExpr,
     Struct,
     Typedef,
+    UnaryExpr,
     Unit,
 )
 
@@ -106,7 +105,7 @@ class UnitDeclLowerer:
         lowered_type = exact_width_stdint_alias_type(decl.name)
         if lowered_type is None:
             lowered_type = self.session.type_lowerer.run(decl.aliased)
-        if isinstance(lowered_type, FunctionType):
+        if isinstance(lowered_type, FunctionPtr):
             return AliasDecl(
                 name=alias_name,
                 kind=AliasKind.CALLBACK_SIGNATURE,
@@ -144,12 +143,12 @@ class UnitDeclLowerer:
                 name=mojo_ident(member.name),
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType(enum_name),
-                const_value=MojoCallExpr(
-                    callee=MojoRefExpr(enum_name),
+                const_value=CallExpr(
+                    callee=RefExpr(enum_name),
                     args=[
-                        MojoCastExpr(
+                        CastExpr(
                             target=underlying,
-                            expr=MojoIntLiteral(member.value),
+                            expr=IntLiteral(member.value),
                         )
                     ],
                 ),
@@ -164,7 +163,7 @@ class UnitDeclLowerer:
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
             params=[
-                MojoParam(
+                Param(
                     name=(mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}"),
                     type=self.session.type_lowerer.run(param.type),
                     doc=param.doc,
@@ -255,7 +254,7 @@ class UnitDeclLowerer:
             return self._union_lowerer.run(decl)
         return lower_struct(decl, context=self.session.struct_context)
 
-    def _typed_const_value(self, value: MojoConstExpr, decl_type) -> MojoConstExpr:
+    def _typed_const_value(self, value: ConstExpr, decl_type) -> ConstExpr:
         lowered_type = self.session.type_lowerer.run(decl_type)
         if isinstance(lowered_type, BuiltinType) and lowered_type.name in _MOJO_INT_TYPES:
             return self._coerce_integral_const(value, lowered_type)
@@ -263,18 +262,18 @@ class UnitDeclLowerer:
 
     def _coerce_integral_const(
         self,
-        value: MojoConstExpr,
+        value: ConstExpr,
         lowered_type: BuiltinType,
-    ) -> MojoConstExpr:
-        if isinstance(value, MojoIntLiteral):
-            return MojoCastExpr(target=lowered_type, expr=value)
-        if isinstance(value, MojoUnaryExpr):
-            return MojoUnaryExpr(
+    ) -> ConstExpr:
+        if isinstance(value, IntLiteral):
+            return CastExpr(target=lowered_type, expr=value)
+        if isinstance(value, UnaryExpr):
+            return UnaryExpr(
                 op=value.op,
                 operand=self._coerce_integral_const(value.operand, lowered_type),
             )
-        if isinstance(value, MojoBinaryExpr):
-            return MojoBinaryExpr(
+        if isinstance(value, BinaryExpr):
+            return BinaryExpr(
                 op=value.op,
                 lhs=self._coerce_integral_const(value.lhs, lowered_type),
                 rhs=self._coerce_integral_const(value.rhs, lowered_type),

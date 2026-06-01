@@ -8,45 +8,45 @@ from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_ident
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
+    Array,
+    BinaryExpr,
     BitfieldGroupMember,
     BuiltinType,
+    CallExpr,
     CallTarget,
+    CastExpr,
+    CharLiteral,
     ComptimeMember,
+    ConstExpr,
+    FloatLiteral,
     FunctionDecl,
     FunctionKind,
-    FunctionType,
+    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     Initializer,
     InitializerParam,
+    IntLiteral,
     LinkMode,
     ModuleDependencies,
     ModuleImport,
-    MojoBinaryExpr,
-    MojoCallExpr,
-    MojoCastExpr,
-    MojoCharLiteral,
-    MojoConstExpr,
     MojoDecl,
-    MojoFloatLiteral,
-    MojoIntLiteral,
     MojoModule,
-    MojoParam,
-    MojoRefExpr,
-    MojoSizeOfExpr,
-    MojoStringLiteral,
-    MojoType,
-    MojoUnaryExpr,
     NamedType,
+    Param,
     ParametricType,
-    PointerType,
+    Pointer,
+    RefExpr,
+    SizeOfExpr,
     StoredMember,
+    StringLiteral,
     StructDecl,
     StructMember,
     SupportDecl,
     SupportDeclKind,
+    Type,
     TypeArg,
+    UnaryExpr,
 )
 
 
@@ -127,7 +127,7 @@ class NormalizeMojoModulePass:
             return replace(
                 decl,
                 params=[
-                    MojoParam(
+                    Param(
                         name=param.name,
                         type=self._normalize_type(
                             param.type, (decl.name, param.name or f"param{i}")
@@ -220,16 +220,16 @@ class NormalizeMojoModulePass:
 
     def _normalize_type(
         self,
-        t: MojoType,
+        t: Type,
         context: tuple[str, ...],
         *,
         allow_inline_function: bool = False,
-    ) -> MojoType:
+    ) -> Type:
         if isinstance(t, BuiltinType):
             return t
         if isinstance(t, NamedType):
             return t
-        if isinstance(t, PointerType):
+        if isinstance(t, Pointer):
             return replace(
                 t,
                 pointee=(
@@ -238,7 +238,7 @@ class NormalizeMojoModulePass:
                     else self._normalize_type(t.pointee, (*context, "pointee"))
                 ),
             )
-        if isinstance(t, ArrayType):
+        if isinstance(t, Array):
             return replace(t, element=self._normalize_type(t.element, (*context, "element")))
         if isinstance(t, ParametricType):
             return replace(
@@ -262,15 +262,15 @@ class NormalizeMojoModulePass:
                 return normalized
             alias_name = self._ensure_function_alias(context, normalized)
             return NamedType(alias_name)
-        raise NormalizeMojoModuleError(f"unsupported MojoType node: {type(t).__name__!r}")
+        raise NormalizeMojoModuleError(f"unsupported Type node: {type(t).__name__!r}")
 
     def _normalize_function_type(
-        self, function_type: FunctionType, context: tuple[str, ...]
-    ) -> FunctionType:
+        self, function_type: FunctionPtr, context: tuple[str, ...]
+    ) -> FunctionPtr:
         return replace(
             function_type,
             params=[
-                MojoParam(
+                Param(
                     name=param.name,
                     type=self._normalize_type(
                         param.type,
@@ -282,36 +282,36 @@ class NormalizeMojoModulePass:
             ret=self._normalize_type(function_type.ret, (*context, "return")),
         )
 
-    def _normalize_const_expr(self, expr: MojoConstExpr, context: tuple[str, ...]) -> MojoConstExpr:
+    def _normalize_const_expr(self, expr: ConstExpr, context: tuple[str, ...]) -> ConstExpr:
         if isinstance(
             expr,
             (
-                MojoIntLiteral,
-                MojoFloatLiteral,
-                MojoStringLiteral,
-                MojoCharLiteral,
-                MojoRefExpr,
+                IntLiteral,
+                FloatLiteral,
+                StringLiteral,
+                CharLiteral,
+                RefExpr,
             ),
         ):
             return expr
-        if isinstance(expr, MojoUnaryExpr):
+        if isinstance(expr, UnaryExpr):
             return replace(
                 expr,
                 operand=self._normalize_const_expr(expr.operand, (*context, "operand")),
             )
-        if isinstance(expr, MojoBinaryExpr):
+        if isinstance(expr, BinaryExpr):
             return replace(
                 expr,
                 lhs=self._normalize_const_expr(expr.lhs, (*context, "lhs")),
                 rhs=self._normalize_const_expr(expr.rhs, (*context, "rhs")),
             )
-        if isinstance(expr, MojoCastExpr):
+        if isinstance(expr, CastExpr):
             return replace(
                 expr,
                 target=self._normalize_type(expr.target, (*context, "cast_target")),
                 expr=self._normalize_const_expr(expr.expr, (*context, "cast_expr")),
             )
-        if isinstance(expr, MojoCallExpr):
+        if isinstance(expr, CallExpr):
             return replace(
                 expr,
                 callee=self._normalize_const_expr(expr.callee, (*context, "callee")),
@@ -320,17 +320,17 @@ class NormalizeMojoModulePass:
                     for i, arg in enumerate(expr.args)
                 ],
             )
-        if isinstance(expr, MojoSizeOfExpr):
+        if isinstance(expr, SizeOfExpr):
             return replace(
                 expr,
                 target=self._normalize_type(expr.target, (*context, "sizeof_target")),
             )
-        raise NormalizeMojoModuleError(f"unsupported MojoConstExpr node: {type(expr).__name__!r}")
+        raise NormalizeMojoModuleError(f"unsupported ConstExpr node: {type(expr).__name__!r}")
 
     def _ensure_function_alias(
         self,
         path: tuple[str, ...],
-        function_type: FunctionType,
+        function_type: FunctionPtr,
     ) -> str:
         existing = self._synth_aliases_by_path.get(path)
         if existing is not None:
@@ -485,54 +485,54 @@ class NormalizeMojoModulePass:
 
     def _collect_const_expr_imports(
         self,
-        expr: MojoConstExpr,
+        expr: ConstExpr,
     ) -> None:
         if isinstance(
             expr,
             (
-                MojoIntLiteral,
-                MojoFloatLiteral,
-                MojoStringLiteral,
-                MojoCharLiteral,
-                MojoRefExpr,
+                IntLiteral,
+                FloatLiteral,
+                StringLiteral,
+                CharLiteral,
+                RefExpr,
             ),
         ):
             return
-        if isinstance(expr, MojoUnaryExpr):
+        if isinstance(expr, UnaryExpr):
             self._collect_const_expr_imports(expr.operand)
             return
-        if isinstance(expr, MojoBinaryExpr):
+        if isinstance(expr, BinaryExpr):
             self._collect_const_expr_imports(expr.lhs)
             self._collect_const_expr_imports(expr.rhs)
             return
-        if isinstance(expr, MojoCastExpr):
+        if isinstance(expr, CastExpr):
             self._collect_type_imports(expr.target)
             self._collect_const_expr_imports(expr.expr)
             return
-        if isinstance(expr, MojoCallExpr):
+        if isinstance(expr, CallExpr):
             self._collect_const_expr_imports(expr.callee)
             for arg in expr.args:
                 self._collect_const_expr_imports(arg)
             return
-        if isinstance(expr, MojoSizeOfExpr):
+        if isinstance(expr, SizeOfExpr):
             self._record_import("std.sys.info", "size_of")
             self._collect_type_imports(expr.target)
             return
 
-    def _collect_type_imports(self, t: MojoType) -> None:
+    def _collect_type_imports(self, t: Type) -> None:
         if isinstance(t, BuiltinType):
             if t.name.value.startswith("c_"):
                 self._record_import("std.ffi", t.name.value)
             return
         if isinstance(t, NamedType):
             return
-        if isinstance(t, PointerType):
+        if isinstance(t, Pointer):
             if t.pointee is None:
                 self._record_import("std.memory", "ImmutOpaquePointer", "MutOpaquePointer")
             else:
                 self._collect_type_imports(t.pointee)
             return
-        if isinstance(t, ArrayType):
+        if isinstance(t, Array):
             self._collect_type_imports(t.element)
             return
         if isinstance(t, ParametricType):
@@ -548,12 +548,12 @@ class NormalizeMojoModulePass:
                 if isinstance(arg, TypeArg):
                     self._collect_type_imports(arg.type)
             return
-        if isinstance(t, FunctionType):
+        if isinstance(t, FunctionPtr):
             for param in t.params:
                 self._collect_type_imports(param.type)
             self._collect_type_imports(t.ret)
             return
-        raise NormalizeMojoModuleError(f"unsupported MojoType node: {type(t).__name__!r}")
+        raise NormalizeMojoModuleError(f"unsupported Type node: {type(t).__name__!r}")
 
     def _seed_dependencies(self, dependencies: ModuleDependencies) -> None:
         for imp in dependencies.imports:
@@ -579,10 +579,10 @@ class NormalizeMojoModulePass:
         return decl.call_target.link_mode
 
     @staticmethod
-    def _function_type_from_type(t: MojoType | None) -> FunctionType | None:
+    def _function_type_from_type(t: Type | None) -> FunctionPtr | None:
         if t is None:
             return None
-        if isinstance(t, FunctionType):
+        if isinstance(t, FunctionPtr):
             return t
         return None
 

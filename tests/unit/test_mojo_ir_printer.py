@@ -18,41 +18,41 @@ from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
+    Array,
+    BinaryExpr,
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
     ByteOrder,
+    CallExpr,
     CallTarget,
+    CastExpr,
     ConstArg,
     DTypeArg,
     Field,
     FlexibleTail,
     FunctionDecl,
     FunctionKind,
-    FunctionType,
+    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     Initializer,
     InitializerParam,
     IntKind,
+    IntLiteral,
     IntType,
     LinkMode,
     ModuleDependencies,
     ModuleImport,
-    MojoBinaryExpr,
     MojoBuiltin,
-    MojoCallExpr,
-    MojoCastExpr,
-    MojoIntLiteral,
     MojoModule,
-    MojoRefExpr,
-    MojoSizeOfExpr,
     NamedType,
     ParametricBase,
     ParametricType,
+    Pointer,
     PointerMutability,
-    PointerType,
+    RefExpr,
+    SizeOfExpr,
     StoredMember,
     Struct,
     StructDecl,
@@ -64,7 +64,7 @@ from mojo_bindgen.ir import (
     Unit,
 )
 from mojo_bindgen.ir import (
-    MojoParam as Param,
+    Param as Param,
 )
 from tests.bindgen_helpers import analyze_to_mojo_module
 
@@ -88,12 +88,12 @@ def test_alias_decl_roundtrip_keeps_typed_const_metadata() -> None:
         name="Flags",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("flag_t"),
-        const_value=MojoCallExpr(
-            callee=MojoRefExpr("flag_t"),
+        const_value=CallExpr(
+            callee=RefExpr("flag_t"),
             args=[
-                MojoCastExpr(
+                CastExpr(
                     target=BuiltinType(MojoBuiltin.C_INT),
-                    expr=MojoIntLiteral(1),
+                    expr=IntLiteral(1),
                 )
             ],
         ),
@@ -104,12 +104,12 @@ def test_alias_decl_roundtrip_keeps_typed_const_metadata() -> None:
 
     assert raw["alias_kind"] == "const_value"
     assert restored.const_type == NamedType("flag_t")
-    assert restored.const_value == MojoCallExpr(
-        callee=MojoRefExpr("flag_t"),
+    assert restored.const_value == CallExpr(
+        callee=RefExpr("flag_t"),
         args=[
-            MojoCastExpr(
+            CastExpr(
                 target=BuiltinType(MojoBuiltin.C_INT),
-                expr=MojoIntLiteral(1),
+                expr=IntLiteral(1),
             )
         ],
     )
@@ -148,12 +148,12 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 name="READY",
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType("Flags"),
-                const_value=MojoCallExpr(
-                    callee=MojoRefExpr("Flags"),
+                const_value=CallExpr(
+                    callee=RefExpr("Flags"),
                     args=[
-                        MojoCastExpr(
+                        CastExpr(
                             target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=MojoIntLiteral(1),
+                            expr=IntLiteral(1),
                         )
                     ],
                 ),
@@ -162,12 +162,12 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 name="ERROR",
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType("Flags"),
-                const_value=MojoCallExpr(
-                    callee=MojoRefExpr("Flags"),
+                const_value=CallExpr(
+                    callee=RefExpr("Flags"),
                     args=[
-                        MojoCastExpr(
+                        CastExpr(
                             target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=MojoIntLiteral(2),
+                            expr=IntLiteral(2),
                         )
                     ],
                 ),
@@ -179,14 +179,14 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 members=[
                     StoredMember(
                         index=0,
-                        name="count",
+                        name="size",
                         type=BuiltinType(MojoBuiltin.C_INT),
                         byte_offset=0,
                     ),
                     StoredMember(
                         index=1,
                         name="handler",
-                        type=FunctionType(
+                        type=FunctionPtr(
                             params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
@@ -223,7 +223,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                     Initializer(
                         params=[
                             InitializerParam(
-                                name="count",
+                                name="size",
                                 type=BuiltinType(MojoBuiltin.C_INT),
                             ),
                             InitializerParam(
@@ -248,10 +248,10 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
             AliasDecl(
                 name="LIMIT",
                 kind=AliasKind.CONST_VALUE,
-                const_value=MojoBinaryExpr(
+                const_value=BinaryExpr(
                     op="+",
-                    lhs=MojoIntLiteral(1),
-                    rhs=MojoIntLiteral(2),
+                    lhs=IntLiteral(1),
+                    rhs=IntLiteral(2),
                 ),
             ),
             FunctionDecl(
@@ -260,14 +260,14 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                 params=[
                     Param(
                         name="cb",
-                        type=FunctionType(
+                        type=FunctionPtr(
                             params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                     ),
                     Param(
                         name="widget",
-                        type=PointerType(
+                        type=Pointer(
                             pointee=NamedType("Widget"),
                             mutability=PointerMutability.IMMUT,
                         ),
@@ -370,11 +370,11 @@ def test_render_callback_alias_uses_none_in_signature_position() -> None:
             AliasDecl(
                 name="log_callback_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=FunctionType(
+                type_value=FunctionPtr(
                     params=[
                         Param(
                             name="msg",
-                            type=PointerType(
+                            type=Pointer(
                                 pointee=BuiltinType(MojoBuiltin.C_CHAR),
                                 mutability=PointerMutability.IMMUT,
                             ),
@@ -415,7 +415,7 @@ def test_render_struct_emits_flexible_tail_helpers() -> None:
                     StoredMember(
                         index=1,
                         name="payload",
-                        type=ArrayType(BuiltinType(MojoBuiltin.C_UCHAR), 0),
+                        type=Array(BuiltinType(MojoBuiltin.C_UCHAR), 0),
                         byte_offset=4,
                     ),
                 ],
@@ -458,7 +458,7 @@ def test_normalize_and_render_sizeof_imports_std_sys_info() -> None:
             AliasDecl(
                 name="SIZE",
                 kind=AliasKind.CONST_VALUE,
-                const_value=MojoSizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
+                const_value=SizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
             ),
         ],
     )
@@ -485,7 +485,7 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
                     StoredMember(
                         index=0,
                         name="handler",
-                        type=FunctionType(
+                        type=FunctionPtr(
                             params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
@@ -536,7 +536,7 @@ def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() ->
             AliasDecl(
                 name="SIZE",
                 kind=AliasKind.CONST_VALUE,
-                const_value=MojoSizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
+                const_value=SizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
             ),
             FunctionDecl(
                 name="install",
@@ -647,9 +647,9 @@ def test_normalize_and_printer_keep_union_byte_fallback_without_unsafe_union_imp
                 AliasDecl(
                     name="Dup",
                     kind=AliasKind.UNION_LAYOUT,
-                    type_value=ArrayType(
+                    type_value=Array(
                         element=BuiltinType(MojoBuiltin.UINT8),
-                        count=4,
+                        size=4,
                     ),
                 )
             ],
@@ -813,12 +813,12 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
             AliasDecl(
                 name="binary_cb_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=FunctionType(
+                type_value=FunctionPtr(
                     params=[
                         Param(name="arg0", type=BuiltinType(MojoBuiltin.C_INT)),
                         Param(
                             name="arg1",
-                            type=PointerType(pointee=None, mutability=PointerMutability.MUT),
+                            type=Pointer(pointee=None, mutability=PointerMutability.MUT),
                         ),
                     ],
                     ret=BuiltinType(MojoBuiltin.C_INT),
@@ -833,12 +833,12 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                 name="READY",
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType("Flags"),
-                const_value=MojoCallExpr(
-                    callee=MojoRefExpr("Flags"),
+                const_value=CallExpr(
+                    callee=RefExpr("Flags"),
                     args=[
-                        MojoCastExpr(
+                        CastExpr(
                             target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=MojoIntLiteral(1),
+                            expr=IntLiteral(1),
                         )
                     ],
                 ),
@@ -849,14 +849,14 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                 members=[
                     StoredMember(
                         index=0,
-                        name="count",
+                        name="size",
                         type=BuiltinType(MojoBuiltin.C_INT),
                         byte_offset=0,
                     ),
                     StoredMember(
                         index=1,
                         name="callback",
-                        type=FunctionType(
+                        type=FunctionPtr(
                             params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
@@ -865,7 +865,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                     StoredMember(
                         index=2,
                         name="buffer",
-                        type=ArrayType(element=BuiltinType(MojoBuiltin.C_UCHAR), count=16),
+                        type=Array(element=BuiltinType(MojoBuiltin.C_UCHAR), size=16),
                         byte_offset=16,
                     ),
                 ],
@@ -902,7 +902,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                 name="load_widget",
                 link_name="load_widget",
                 params=[],
-                return_type=PointerType(
+                return_type=Pointer(
                     pointee=NamedType("Widget"),
                     mutability=PointerMutability.MUT,
                 ),

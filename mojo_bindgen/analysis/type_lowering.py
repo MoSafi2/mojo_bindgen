@@ -12,7 +12,6 @@ from mojo_bindgen.ir import (
     _UNSIGNED_INT_KINDS,
     PRIMITIVE_BUILTINS,
     Array,
-    ArrayType,
     AtomicType,
     BuiltinType,
     ComplexType,
@@ -22,20 +21,17 @@ from mojo_bindgen.ir import (
     FloatKind,
     FloatType,
     FunctionPtr,
-    FunctionType,
     IntKind,
     IntType,
     MojoBuiltin,
-    MojoParam,
-    MojoType,
     NamedType,
     OpaqueRecordRef,
+    Param,
     ParametricBase,
     ParametricType,
     Pointer,
     PointerMutability,
     PointerOrigin,
-    PointerType,
     QualifiedType,
     StructRef,
     Type,
@@ -150,13 +146,13 @@ def exact_width_stdint_alias_type(name: str) -> NamedType | None:
 class LowerTypePass:
     """Lower CIR types into surface-oriented MojoIR type nodes."""
 
-    _cache: dict[int, MojoType] = field(default_factory=dict, init=False, repr=False)
+    _cache: dict[int, Type] = field(default_factory=dict, init=False, repr=False)
     _active: set[int] = field(default_factory=set, init=False, repr=False)
     # ------------------------
     # Entry point
     # ------------------------
 
-    def run(self, t: Type) -> MojoType:
+    def run(self, t: Type) -> Type:
         key = id(t)
         if key in self._cache:
             return self._cache[key]
@@ -176,7 +172,7 @@ class LowerTypePass:
     # Core lowering dispatcher
     # ------------------------
 
-    def _lower(self, t: Type) -> MojoType:
+    def _lower(self, t: Type) -> Type:
         if isinstance(t, (VoidType, IntType, FloatType)):
             return self._lower_primitive(t)
         if isinstance(t, AtomicType):
@@ -184,7 +180,7 @@ class LowerTypePass:
         if isinstance(t, (TypeRef, EnumRef, StructRef)):
             return self._named(t.name)
         if isinstance(t, OpaqueRecordRef):
-            return PointerType(
+            return Pointer(
                 pointee=None,
                 mutability=PointerMutability.MUT,
                 origin=PointerOrigin.EXTERNAL,
@@ -206,7 +202,7 @@ class LowerTypePass:
     # ------------------------
     # Named types
     # ------------------------
-    def _lower_primitive(self, t: PrimitiveCIRType) -> MojoType:
+    def _lower_primitive(self, t: PrimitiveCIRType) -> Type:
         if isinstance(t, VoidType):
             key = "void"
         elif isinstance(t, IntType):
@@ -233,7 +229,7 @@ class LowerTypePass:
             ) from exc
         return BuiltinType(name=builtin)
 
-    def _lower_atomic(self, t: AtomicType) -> MojoType:
+    def _lower_atomic(self, t: AtomicType) -> Type:
         dtype = self._dtype_arg(t.value_type)
         if dtype is not None:
             return ParametricType(
@@ -248,16 +244,16 @@ class LowerTypePass:
     # ------------------------
     # Pointer lowering
     # ------------------------
-    def _lower_pointer(self, t: Pointer) -> PointerType:
+    def _lower_pointer(self, t: Pointer) -> Pointer:
         pointee, mutability = _unwrap_pointer_pointee(t.pointee)
         if pointee is None or isinstance(pointee, VoidType):
-            return PointerType(
+            return Pointer(
                 pointee=None,
                 mutability=mutability,
                 origin=PointerOrigin.EXTERNAL,
                 nullable=True,
             )
-        return PointerType(
+        return Pointer(
             pointee=self.run(pointee),
             mutability=mutability,
             origin=PointerOrigin.EXTERNAL,
@@ -267,15 +263,15 @@ class LowerTypePass:
     # ------------------------
     # Arrays
     # ------------------------
-    def _lower_array(self, t: Array) -> MojoType:
+    def _lower_array(self, t: Array) -> Type:
         if t.array_kind == "fixed" and t.size is not None:
-            return ArrayType(element=self.run(t.element), count=t.size)
+            return Array(element=self.run(t.element), size=t.size, array_kind="fixed")
 
         if t.array_kind == "flexible" and t.size is None:
             # Flexible array members mapped as InlineArray[T, 0]
-            return ArrayType(element=self.run(t.element), count=0)
+            return Array(element=self.run(t.element), size=0, array_kind="fixed")
         # fallback: pointer
-        return PointerType(
+        return Pointer(
             pointee=self.run(t.element),
             mutability=PointerMutability.MUT,
             origin=PointerOrigin.EXTERNAL,
@@ -284,16 +280,16 @@ class LowerTypePass:
     # ------------------------
     # Function pointers
     # ------------------------
-    def _lower_function_ptr(self, t: FunctionPtr) -> FunctionType:
+    def _lower_function_ptr(self, t: FunctionPtr) -> FunctionPtr:
         param_names = t.param_names or []
         params = [
-            MojoParam(
+            Param(
                 name=param_names[i] if i < len(param_names) else "",
-                type=self.run(param),
+                type=self.run(param.type),
             )
             for i, param in enumerate(t.params)
         ]
-        return FunctionType(
+        return FunctionPtr(
             params=params,
             ret=self.run(t.ret),
             abi="C" if t.calling_convention in (None, "", "c") else t.calling_convention,
@@ -305,7 +301,7 @@ class LowerTypePass:
     # Vector & complex
     # ------------------------
 
-    def _lower_vector(self, t: VectorType) -> MojoType:
+    def _lower_vector(self, t: VectorType) -> Type:
         if t.count is None:
             return self._opaque_bytes(t.size_bytes)
         dtype = self._dtype_arg(t.element)
@@ -314,9 +310,9 @@ class LowerTypePass:
                 base=ParametricBase.SIMD,
                 args=[DTypeArg(dtype), ConstArg(t.count)],
             )
-        return ArrayType(element=self.run(t.element), count=t.count)
+        return Array(element=self.run(t.element), size=t.count, array_kind="fixed")
 
-    def _lower_complex(self, t: ComplexType) -> MojoType:
+    def _lower_complex(self, t: ComplexType) -> Type:
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
             return ParametricType(
@@ -324,19 +320,21 @@ class LowerTypePass:
                 args=[DTypeArg(dtype), ConstArg(1)],
             )
 
-        return ArrayType(element=self.run(t.element), count=2)
+        return Array(element=self.run(t.element), size=2, array_kind="fixed")
 
-    def _unsupported_type(self, t: UnsupportedType) -> MojoType:
+    def _unsupported_type(self, t: UnsupportedType) -> Type:
         if t.size_bytes is not None and t.size_bytes > 0:
             return self._opaque_bytes(t.size_bytes)
-        return PointerType(
+        return Pointer(
             pointee=None,
             mutability=PointerMutability.MUT,
             origin=PointerOrigin.EXTERNAL,
         )
 
-    def _opaque_bytes(self, size_bytes: int) -> ArrayType:
-        return ArrayType(element=BuiltinType(name=MojoBuiltin.UINT8), count=size_bytes)
+    def _opaque_bytes(self, size_bytes: int) -> Array:
+        return Array(
+            element=BuiltinType(name=MojoBuiltin.UINT8), size=size_bytes, array_kind="fixed"
+        )
 
     # ------------------------
     # DType resolution
@@ -364,7 +362,7 @@ class LowerTypePass:
 # ------------------------
 
 
-def lower_type(t: Type) -> MojoType:
+def lower_type(t: Type) -> Type:
     """Lower a CIR type to MojoIR."""
     return LowerTypePass().run(t)
 

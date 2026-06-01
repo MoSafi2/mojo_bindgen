@@ -9,17 +9,17 @@ pytestmark = pytest.mark.skip(reason="MojoIR schema is under active iteration")
 
 def test_mojo_type_json_roundtrip() -> None:
     from mojo_bindgen.ir import (
-        ArrayType,
+        Array,
         BuiltinType,
-        FunctionType,
+        FunctionPtr,
         MojoBuiltin,
         NamedType,
         ParametricType,
-        PointerType,
-        mojo_type_from_json,
+        Pointer,
+        type_from_json,
     )
     from mojo_bindgen.ir import (
-        MojoParam as Param,
+        Param as Param,
     )
 
     builtin = BuiltinType.from_json_dict({"kind": "BuiltinType", "name": "c_int"})
@@ -29,24 +29,24 @@ def test_mojo_type_json_roundtrip() -> None:
     named = NamedType.from_json_dict({"kind": "NamedType", "name": "point_t"})
     assert isinstance(named, NamedType)
 
-    ptr = PointerType.from_json_dict(
+    ptr = Pointer.from_json_dict(
         {
-            "kind": "PointerType",
+            "kind": "Pointer",
             "pointee": {"kind": "BuiltinType", "name": "c_uchar"},
             "mutability": "mut",
             "origin": "external",
         }
     )
-    assert isinstance(ptr, PointerType)
+    assert isinstance(ptr, Pointer)
 
-    array = ArrayType.from_json_dict(
+    array = Array.from_json_dict(
         {
-            "kind": "ArrayType",
+            "kind": "Array",
             "element": {"kind": "BuiltinType", "name": "c_uchar"},
-            "count": 16,
+            "size": 16,
         }
     )
-    assert isinstance(array, ArrayType)
+    assert isinstance(array, Array)
 
     generic = ParametricType.from_json_dict(
         {
@@ -57,9 +57,9 @@ def test_mojo_type_json_roundtrip() -> None:
     )
     assert isinstance(generic, ParametricType)
 
-    fn = mojo_type_from_json(
+    fn = type_from_json(
         {
-            "kind": "FunctionType",
+            "kind": "FunctionPtr",
             "params": [
                 {
                     "name": "lhs",
@@ -75,7 +75,7 @@ def test_mojo_type_json_roundtrip() -> None:
             "thin": True,
         }
     )
-    assert isinstance(fn, FunctionType)
+    assert isinstance(fn, FunctionPtr)
     assert fn.params[1] == Param(name="rhs", type=NamedType(name="binary_op_t"))
     assert fn.ret == BuiltinType(MojoBuiltin.C_INT)
 
@@ -162,16 +162,15 @@ def test_mojo_decl_json_roundtrip() -> None:
         AliasDecl,
         BinaryExpr,
         BuiltinType,
+        CallExpr,
         CallTarget,
+        CastExpr,
         ComptimeMember,
         FunctionDecl,
         GlobalDecl,
         IntLiteral,
         MojoBuiltin,
-        MojoCallExpr,
-        MojoCastExpr,
-        MojoIntLiteral,
-        MojoRefExpr,
+        RefExpr,
         StructDecl,
         mojo_decl_from_json,
     )
@@ -205,13 +204,13 @@ def test_mojo_decl_json_roundtrip() -> None:
                     "kind": "ComptimeMember",
                     "name": "ORIGIN",
                     "const_value": {
-                        "kind": "MojoCallExpr",
-                        "callee": {"kind": "MojoRefExpr", "name": "Self"},
+                        "kind": "CallExpr",
+                        "callee": {"kind": "RefExpr", "name": "Self"},
                         "args": [
                             {
-                                "kind": "MojoCastExpr",
+                                "kind": "CastExpr",
                                 "target": {"kind": "BuiltinType", "name": "c_int"},
-                                "expr": {"kind": "MojoIntLiteral", "value": 0},
+                                "expr": {"kind": "IntLiteral", "value": 0},
                             }
                         ],
                     },
@@ -225,12 +224,12 @@ def test_mojo_decl_json_roundtrip() -> None:
     assert struct_decl.comptime_members == [
         ComptimeMember(
             name="ORIGIN",
-            const_value=MojoCallExpr(
-                callee=MojoRefExpr("Self"),
+            const_value=CallExpr(
+                callee=RefExpr("Self"),
                 args=[
-                    MojoCastExpr(
+                    CastExpr(
                         target=BuiltinType(MojoBuiltin.C_INT),
-                        expr=MojoIntLiteral(0),
+                        expr=IntLiteral(0),
                     )
                 ],
             ),
@@ -309,7 +308,7 @@ def test_mojo_module_roundtrip() -> None:
         BinaryExpr,
         BuiltinType,
         FunctionDecl,
-        FunctionType,
+        FunctionPtr,
         GlobalDecl,
         IntLiteral,
         ModuleDependencies,
@@ -342,7 +341,7 @@ def test_mojo_module_roundtrip() -> None:
             AliasDecl(
                 name="binary_op_t",
                 kind="callback_signature",
-                type_value=FunctionType(
+                type_value=FunctionPtr(
                     params=[
                         BuiltinType(MojoBuiltin.C_INT),
                         BuiltinType(MojoBuiltin.C_INT),
@@ -379,11 +378,11 @@ def test_mojo_module_roundtrip() -> None:
 
 
 def test_unknown_mojo_type_kind_raises() -> None:
-    from mojo_bindgen.ir import mojo_type_from_json
+    from mojo_bindgen.ir import type_from_json
 
     with pytest.raises(ValueError) as exc_info:
-        mojo_type_from_json({"kind": "NoSuchMojoType"})
-    assert "NoSuchMojoType" in str(exc_info.value)
+        type_from_json({"kind": "NoSuchType"})
+    assert "NoSuchType" in str(exc_info.value)
 
 
 def test_builtin_lookup_tables_cover_expected_scalars() -> None:

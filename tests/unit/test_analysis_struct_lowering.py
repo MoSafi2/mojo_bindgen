@@ -6,7 +6,6 @@ from mojo_bindgen.analysis.struct_lowering import StructLoweringContext, lower_s
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     Array,
-    ArrayType,
     AtomicType,
     BitfieldField,
     BitfieldGroupMember,
@@ -116,7 +115,7 @@ def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
         name="Widget",
         c_name="Widget",
         fields=[
-            _field(name="count", source_name="count", type=_i32(), byte_offset=0),
+            _field(name="size", source_name="size", type=_i32(), byte_offset=0),
             _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
         ],
         size_bytes=8,
@@ -132,7 +131,7 @@ def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
     assert lowered.fieldwise_init is False
     assert lowered.traits == []
     assert lowered.members == [
-        StoredMember(index=0, name="count", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
+        StoredMember(index=0, name="size", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
         StoredMember(index=1, name="flags", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=4),
     ]
 
@@ -799,7 +798,7 @@ def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None
         StoredMember(
             index=0,
             name="mystery",
-            type=ArrayType(element=BuiltinType(MojoBuiltin.UINT8), count=4),
+            type=Array(element=BuiltinType(MojoBuiltin.UINT8), size=4),
             byte_offset=0,
         )
     ]
@@ -843,7 +842,7 @@ def test_lower_struct_tracks_flexible_tail_metadata() -> None:
         StoredMember(
             index=1,
             name="payload",
-            type=ArrayType(element=BuiltinType(MojoBuiltin.C_UCHAR), count=0),
+            type=Array(element=BuiltinType(MojoBuiltin.C_UCHAR), size=0),
             byte_offset=4,
         ),
     ]

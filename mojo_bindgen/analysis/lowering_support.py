@@ -10,7 +10,6 @@ from mojo_bindgen.ir import (
     LoweringNote,
     LoweringSeverity,
     MojoBuiltin,
-    MojoType,
     Struct,
     Type,
     Unit,
@@ -81,7 +80,7 @@ def try_lower_type(
     *,
     subject: str,
     failure_suffix: str,
-) -> tuple[MojoType | None, str | None]:
+) -> tuple[Type | None, str | None]:
     """Lower one CIR type and turn lowering failure into a diagnostic reason."""
 
     try:
