@@ -28,6 +28,8 @@ from mojo_bindgen.ir import (
     RefExpr,
     StringLiteral,
     Struct,
+    StructDecl,
+    StructKind,
     StructRef,
     TargetABI,
     Typedef,
@@ -36,7 +38,6 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.mojo_ir import StructDecl, StructKind
 from tests.bindgen_helpers import MojoGenerator
 
 
@@ -101,7 +102,9 @@ def _fnptr(
 ) -> FunctionPtr:
     return FunctionPtr(
         ret=ret,
-        params=params,
+        params=[
+            param if isinstance(param, Param) else Param(name="", type=param) for param in params
+        ],
         param_names=param_names,
         is_variadic=is_variadic,
         calling_convention=calling_convention,
@@ -1084,13 +1087,19 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
     opaque = Pointer(pointee=None)
     cmp_cb = FunctionPtr(
         ret=i32,
-        params=[opaque, i32, Pointer(pointee=None), i32, Pointer(pointee=None)],
+        params=[
+            Param(name="", type=opaque),
+            Param(name="", type=i32),
+            Param(name="", type=Pointer(pointee=None)),
+            Param(name="", type=i32),
+            Param(name="", type=Pointer(pointee=None)),
+        ],
         param_names=["ctx", "lhs_len", "lhs", "rhs_len", "rhs"],
         is_variadic=False,
     )
     destroy_cb = FunctionPtr(
         ret=VoidType(),
-        params=[opaque],
+        params=[Param(name="", type=opaque)],
         param_names=["ctx"],
         is_variadic=False,
     )
@@ -1162,7 +1171,7 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
 def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
     cb_sig = FunctionPtr(
         ret=Pointer(pointee=None),
-        params=[Pointer(pointee=None), _i32()],
+        params=[Param(name="", type=Pointer(pointee=None)), Param(name="", type=_i32())],
         param_names=["ctx", "value"],
         is_variadic=False,
     )
@@ -1248,7 +1257,7 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
     i32 = _i32()
     fp = FunctionPtr(
         ret=i32,
-        params=[i32, i32],
+        params=[Param(name="", type=i32), Param(name="", type=i32)],
         param_names=["a", "b"],
         is_variadic=False,
     )

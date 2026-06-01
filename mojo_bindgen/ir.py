@@ -1,3 +1,4 @@
+# pyright: reportUnsupportedDunderAll=false
 """
 mojo-bindgen IR (intermediate representation) node definitions.
 
@@ -118,6 +119,16 @@ MacroDeclKind = Literal[
 # Classification of preserved preprocessor macro declarations.
 
 
+class PointerMutability(StrEnum):
+    MUT = "mut"
+    IMMUT = "immut"
+
+
+class PointerOrigin(StrEnum):
+    EXTERNAL = "external"
+    ANY = "any"
+
+
 @dataclass(frozen=True)
 class DocComment(SerDeMixin):
     """Source documentation associated with a C declaration cursor."""
@@ -201,9 +212,22 @@ class Pointer(SerDeMixin):
     pointee=None means unqualified ``void*`` → emit OpaquePointer directly.
     """
 
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "size_bytes": SerdeFieldSpec(omit_if_default=True),
+            "align_bytes": SerdeFieldSpec(omit_if_default=True),
+            "mutability": SerdeFieldSpec(omit_if_default=True),
+            "origin": SerdeFieldSpec(omit_if_default=True),
+            "nullable": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
     pointee: Type | None  # None == void*
     size_bytes: int = 0
     align_bytes: int | None = None
+    mutability: PointerMutability = PointerMutability.MUT
+    origin: PointerOrigin = PointerOrigin.EXTERNAL
+    nullable: bool = False
 
 
 @dataclass
@@ -223,6 +247,20 @@ class Array(SerDeMixin):
     align_bytes: int | None = None
 
 
+def _decode_function_ptr_params(raw: Any) -> list[Param]:
+    if not isinstance(raw, list):
+        raise TypeError(f"expected list, got {type(raw).__name__}")
+    params: list[Param] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise TypeError(f"expected FunctionPtr parameter object, got {type(item).__name__}")
+        if "type" in item:
+            params.append(Param.from_json_dict({"kind": "Param", **item}))
+        else:
+            params.append(Param(name=f"arg{index}", type=type_from_json(item)))
+    return params
+
+
 @dataclass
 class FunctionPtr(SerDeMixin):
     """
@@ -230,14 +268,32 @@ class FunctionPtr(SerDeMixin):
     Full ret/params are retained for documentation and future tooling.
     """
 
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "params": SerdeFieldSpec(decoder=_decode_function_ptr_params),
+            "param_names": SerdeFieldSpec(omit_if_default=True),
+            "is_variadic": SerdeFieldSpec(omit_if_default=True),
+            "calling_convention": SerdeFieldSpec(omit_if_default=True),
+            "is_noreturn": SerdeFieldSpec(omit_if_default=True),
+            "size_bytes": SerdeFieldSpec(omit_if_default=True),
+            "align_bytes": SerdeFieldSpec(omit_if_default=True),
+            "thin": SerdeFieldSpec(omit_if_default=True),
+            "raises": SerdeFieldSpec(omit_if_default=True),
+            "abi": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
     ret: Type
-    params: list[Type]
+    params: list[Param]
     param_names: list[str] | None = None
     is_variadic: bool = False
     calling_convention: str | None = None
     is_noreturn: bool = False
     size_bytes: int = 0
     align_bytes: int | None = None
+    abi: str = "C"
+    thin: bool = True
+    raises: bool = False
 
 
 @dataclass
@@ -444,25 +500,6 @@ class Struct(SerDeMixin):
 
 PRIMITIVES_KINDS = Union[IntKind, FloatKind, VoidType]
 
-# Recursive type nodes (no inline Struct/Bitfield — layouts are Struct decls + Field metadata)
-Type = Union[
-    VoidType,
-    IntType,
-    FloatType,
-    QualifiedType,
-    AtomicType,
-    Pointer,
-    Array,
-    FunctionPtr,
-    OpaqueRecordRef,
-    UnsupportedType,
-    ComplexType,
-    VectorType,
-    StructRef,
-    EnumRef,
-    TypeRef,
-]
-
 
 @dataclass(frozen=True)
 class IntLiteral(SerDeMixin):
@@ -475,7 +512,7 @@ class IntLiteral(SerDeMixin):
 class FloatLiteral(SerDeMixin):
     """Floating-point constant expression leaf, preserved as source text."""
 
-    value: str
+    value: str | float
 
 
 @dataclass(frozen=True)
@@ -536,7 +573,15 @@ class SizeOfExpr(SerDeMixin):
     target: Type
 
 
-ConstExpr = Union[
+@dataclass(frozen=True)
+class CallExpr(SerDeMixin):
+    """Function-style constant expression such as enum constructor calls."""
+
+    callee: ConstExpr
+    args: list[ConstExpr] = field(default_factory=list)
+
+
+type ConstExpr = Union[
     IntLiteral,
     FloatLiteral,
     StringLiteral,
@@ -547,6 +592,7 @@ ConstExpr = Union[
     BinaryExpr,
     CastExpr,
     SizeOfExpr,
+    CallExpr,
 ]
 # Structured constant-expression subset used by macros, enums, and globals.
 
@@ -756,7 +802,7 @@ class TargetABI(SerDeMixin):
     byte_order: ByteOrder
 
 
-Decl = Union[
+type Decl = Union[
     Function,
     Struct,
     Enum,
@@ -825,6 +871,7 @@ _CONST_EXPR_FROM_JSON: dict[str, Callable[[dict[str, Any]], ConstExpr]] = {
     "BinaryExpr": BinaryExpr.from_json_dict,
     "CastExpr": CastExpr.from_json_dict,
     "SizeOfExpr": SizeOfExpr.from_json_dict,
+    "CallExpr": CallExpr.from_json_dict,
 }
 
 
@@ -861,3 +908,658 @@ def decl_from_json(d: dict[str, Any]) -> Decl:
     except KeyError:
         raise ValueError(f"unknown Decl kind: {kind!r}") from None
     return deser(d)
+
+
+# ─────────────────────────────────────────────
+#  Mojo-specific IR nodes
+# ─────────────────────────────────────────────
+
+
+class MojoBuiltin(StrEnum):
+    NONE = "NoneType"
+    BOOL = "Bool"
+    UINT8 = "UInt8"
+    INT128 = "Int128"
+    UINT128 = "UInt128"
+    FLOAT16 = "Float16"
+    C_CHAR = "c_char"
+    C_UCHAR = "c_uchar"
+    C_SHORT = "c_short"
+    C_USHORT = "c_ushort"
+    C_INT = "c_int"
+    C_UINT = "c_uint"
+    C_LONG = "c_long"
+    C_ULONG = "c_ulong"
+    C_LONG_LONG = "c_long_long"
+    C_ULONG_LONG = "c_ulong_long"
+    C_FLOAT = "c_float"
+    C_DOUBLE = "c_double"
+    UNSUPPORTED = "unsupported"
+
+
+PRIMITIVE_BUILTINS: dict[IntKind | FloatKind | str, MojoBuiltin] = {
+    "void": MojoBuiltin.NONE,
+    IntKind.BOOL: MojoBuiltin.BOOL,
+    IntKind.CHAR_S: MojoBuiltin.C_CHAR,
+    IntKind.SCHAR: MojoBuiltin.C_CHAR,
+    IntKind.CHAR_U: MojoBuiltin.C_UCHAR,
+    IntKind.UCHAR: MojoBuiltin.C_UCHAR,
+    IntKind.SHORT: MojoBuiltin.C_SHORT,
+    IntKind.USHORT: MojoBuiltin.C_USHORT,
+    IntKind.INT: MojoBuiltin.C_INT,
+    IntKind.UINT: MojoBuiltin.C_UINT,
+    IntKind.LONG: MojoBuiltin.C_LONG,
+    IntKind.ULONG: MojoBuiltin.C_ULONG,
+    IntKind.LONGLONG: MojoBuiltin.C_LONG_LONG,
+    IntKind.ULONGLONG: MojoBuiltin.C_ULONG_LONG,
+    FloatKind.FLOAT16: MojoBuiltin.FLOAT16,
+    FloatKind.FLOAT: MojoBuiltin.C_FLOAT,
+    FloatKind.DOUBLE: MojoBuiltin.C_DOUBLE,
+    FloatKind.LONG_DOUBLE: MojoBuiltin.C_DOUBLE,
+    FloatKind.FLOAT128: MojoBuiltin.UNSUPPORTED,
+}
+
+
+_INT_DTYPE_TABLE: dict[tuple[bool, int], str] = {
+    (True, 1): "DType.int8",
+    (False, 1): "DType.uint8",
+    (True, 2): "DType.int16",
+    (False, 2): "DType.uint16",
+    (True, 4): "DType.int32",
+    (False, 4): "DType.uint32",
+    (True, 8): "DType.int64",
+    (False, 8): "DType.uint64",
+    (True, 16): "DType.int128",
+    (False, 16): "DType.uint128",
+}
+
+
+_FLOAT_DTYPE_TABLE: dict[FloatKind, str] = {
+    FloatKind.FLOAT16: "DType.float16",
+    FloatKind.FLOAT: "DType.float32",
+    FloatKind.DOUBLE: "DType.float64",
+}
+
+
+_MOJO_INT_TYPES = (
+    MojoBuiltin.C_CHAR,
+    MojoBuiltin.C_UCHAR,
+    MojoBuiltin.C_SHORT,
+    MojoBuiltin.C_USHORT,
+    MojoBuiltin.C_INT,
+    MojoBuiltin.C_UINT,
+    MojoBuiltin.C_LONG,
+    MojoBuiltin.C_ULONG,
+    MojoBuiltin.C_LONG_LONG,
+    MojoBuiltin.C_ULONG_LONG,
+    MojoBuiltin.INT128,
+    MojoBuiltin.UINT128,
+)
+
+
+@dataclass(frozen=True)
+class PrimitiveDType(SerDeMixin):
+    kind: IntKind | FloatKind
+    signed: bool
+    dtype: str
+    width_bytes: int
+
+
+class GlobalKind(StrEnum):
+    WRAPPER = "wrapper"
+    STUB = "stub"
+
+
+class FunctionKind(StrEnum):
+    WRAPPER = "wrapper"
+    VARIADIC_STUB = "variadic_stub"
+    NON_REGISTER_RETURN_STUB = "non_register_return_stub"
+
+
+class LinkMode(StrEnum):
+    EXTERNAL_CALL = "external_call"
+    OWNED_DL_HANDLE = "owned_dl_handle"
+
+
+class LoweringSeverity(StrEnum):
+    NOTE = "note"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+@dataclass(frozen=True)
+class LoweringNote(SerDeMixin):
+    severity: LoweringSeverity
+    message: str
+    category: str
+
+
+@dataclass(frozen=True)
+class ModuleImport(SerDeMixin):
+    module: str
+    names: list[str]
+
+
+class SupportDeclKind(StrEnum):
+    DL_HANDLE_HELPERS = "dl_handle_helpers"
+    GLOBAL_SYMBOL_HELPERS = "global_symbol_helpers"
+
+
+@dataclass(frozen=True)
+class SupportDecl(SerDeMixin):
+    kind: SupportDeclKind
+
+
+@dataclass
+class ModuleDependencies(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "imports": SerdeFieldSpec(omit_if_default=True),
+            "support_decls": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    imports: list[ModuleImport] = field(default_factory=list)
+    support_decls: list[SupportDecl] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class BuiltinType(SerDeMixin):
+    name: MojoBuiltin
+
+    @property
+    def text(self) -> str:
+        return self.name.value
+
+
+@dataclass(frozen=True)
+class NamedType(SerDeMixin):
+    name: str
+
+
+class ParametricBase(StrEnum):
+    SIMD = "SIMD"
+    COMPLEX_SIMD = "ComplexSIMD"
+    ATOMIC = "Atomic"
+    UNSAFE_UNION = "UnsafeUnion"
+
+
+@dataclass(frozen=True)
+class DTypeArg(SerDeMixin):
+    value: str
+
+
+@dataclass(frozen=True)
+class ConstArg(SerDeMixin):
+    value: int
+
+
+@dataclass(frozen=True)
+class NameArg(SerDeMixin):
+    value: str
+
+
+@dataclass(frozen=True)
+class TypeArg(SerDeMixin):
+    type: Type
+
+
+type ParametricArg = Union[DTypeArg, ConstArg, NameArg, TypeArg]
+
+
+@dataclass
+class ParametricType(SerDeMixin):
+    base: ParametricBase
+    args: list[ParametricArg] = field(default_factory=list)
+
+
+type Type = Union[
+    VoidType,
+    IntType,
+    FloatType,
+    QualifiedType,
+    AtomicType,
+    Pointer,
+    Array,
+    FunctionPtr,
+    OpaqueRecordRef,
+    UnsupportedType,
+    ComplexType,
+    VectorType,
+    StructRef,
+    EnumRef,
+    TypeRef,
+    BuiltinType,
+    NamedType,
+    ParametricType,
+]
+
+
+# TODO: check if size is needed here
+@dataclass(frozen=True)
+class StoredMember(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
+    index: int
+    name: str
+    type: Type
+    byte_offset: int
+    doc: DocComment | None = None
+
+
+@dataclass(frozen=True)
+class PaddingMember(SerDeMixin):
+    name: str
+    size_bytes: int
+    byte_offset: int
+
+
+@dataclass(frozen=True)
+class OpaqueStorageMember(SerDeMixin):
+    name: str
+    size_bytes: int
+
+
+@dataclass(frozen=True)
+class BitfieldField(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
+
+    index: int
+    name: str
+    logical_type: Type
+    bit_offset: int
+    bit_width: int
+    signed: bool
+    bool_semantics: bool = False
+    doc: DocComment | None = None
+
+
+@dataclass
+class BitfieldGroupMember(SerDeMixin):
+    storage_name: str
+    storage_type: Type
+    byte_offset: int
+    first_index: int
+    storage_width_bits: int
+    fields: list[BitfieldField] = field(default_factory=list)
+
+
+type StructMember = Union[
+    StoredMember,
+    PaddingMember,
+    OpaqueStorageMember,
+    BitfieldGroupMember,
+]
+
+
+@dataclass(frozen=True)
+class ComptimeMember(SerDeMixin):
+    name: str
+    type_value: Type | None = None
+    const_value: ConstExpr | None = None
+
+
+@dataclass(frozen=True)
+class InitializerParam(SerDeMixin):
+    name: str
+    type: Type
+
+
+@dataclass
+class Initializer(SerDeMixin):
+    params: list[InitializerParam] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class FlexibleTail(SerDeMixin):
+    field_name: str
+    element_type: Type
+    pattern: str
+    byte_offset: int
+
+
+class StructTraits(StrEnum):
+    COPYABLE = "Copyable"
+    IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
+    MOVABLE = "Movable"
+    REGISTER_PASSABLE = "RegisterPassable"
+    TRIVIAL_REGISTER_PASSABLE = "TrivialRegisterPassable"
+
+
+class StructKind(StrEnum):
+    PLAIN = "plain"
+    OPAQUE = "opaque"
+
+
+class MojoPassability(StrEnum):
+    MEMORY_ONLY = "memory_only"
+    REGISTER_PASSABLE = "register_passable"
+    TRIVIAL_REGISTER_PASSABLE = "trivial_register_passable"
+
+
+class AliasKind(StrEnum):
+    TYPE_ALIAS = "type_alias"
+    CALLBACK_SIGNATURE = "callback_signature"
+    UNION_LAYOUT = "union_layout"
+    CONST_VALUE = "const_value"
+    MACRO_VALUE = "macro_value"
+
+
+@dataclass
+class StructDecl(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="struct_kind"),
+            "align_decorator": SerdeFieldSpec(omit_if_default=True),
+            "passability": SerdeFieldSpec(omit_if_default=True),
+            "flexible_tail": SerdeFieldSpec(omit_if_default=True),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    name: str
+    traits: list[StructTraits] = field(default_factory=list)
+    passability: MojoPassability = MojoPassability.MEMORY_ONLY
+    align: int | None = None
+    align_decorator: int | None = None
+    fieldwise_init: bool = False
+    kind: StructKind = StructKind.PLAIN
+    members: list[StructMember] = field(default_factory=list)
+    comptime_members: list[ComptimeMember] = field(default_factory=list)
+    initializers: list[Initializer] = field(default_factory=list)
+    flexible_tail: FlexibleTail | None = None
+    diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
+
+
+@dataclass
+class AliasDecl(SerDeMixin):
+    SERDE = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="alias_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    name: str
+    kind: AliasKind
+    type_value: Type | None = None
+    const_type: Type | None = None
+    const_value: ConstExpr | None = None
+    diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
+
+    def has_payload(self) -> bool:
+        return self.type_value is not None or self.const_value is not None
+
+    def has_type_payload(self) -> bool:
+        return self.type_value is not None and self.const_value is None
+
+    def has_const_payload(self) -> bool:
+        return self.const_value is not None and self.type_value is None
+
+
+@dataclass(frozen=True)
+class CallTarget(SerDeMixin):
+    link_mode: LinkMode
+    symbol: str
+
+
+@dataclass
+class FunctionDecl(SerDeMixin):
+    SERDE = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="function_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    name: str
+    link_name: str
+    params: list[Param] = field(default_factory=list)
+    return_type: Type = field(default_factory=lambda: BuiltinType(MojoBuiltin.NONE))
+    kind: FunctionKind = FunctionKind.WRAPPER
+    call_target: CallTarget = field(
+        default_factory=lambda: CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="")
+    )
+    diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
+
+
+@dataclass
+class GlobalDecl(SerDeMixin):
+    SERDE = SerdeSpec(
+        fields={
+            "kind": SerdeFieldSpec(json_key="global_kind"),
+            "doc": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    name: str
+    link_name: str
+    value_type: Type
+    is_const: bool = False
+    kind: GlobalKind = GlobalKind.WRAPPER
+    diagnostics: list[LoweringNote] = field(default_factory=list)
+    doc: DocComment | None = None
+
+
+type MojoDecl = Union[
+    StructDecl,
+    AliasDecl,
+    FunctionDecl,
+    GlobalDecl,
+]
+
+
+@dataclass
+class MojoModule(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "library_path_hint": SerdeFieldSpec(omit_if_default=True),
+            "dependencies": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    source_header: str
+    library: str
+    link_name: str
+    link_mode: LinkMode
+    library_path_hint: str | None = None
+    dependencies: ModuleDependencies = field(default_factory=ModuleDependencies)
+    decls: list[MojoDecl] = field(default_factory=list)
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        return json.dumps(self.to_json_dict(), indent=indent)
+
+
+_PARAMETRIC_ARG_FROM_JSON: dict[str, Callable[[dict[str, object]], ParametricArg]] = {
+    "DTypeArg": DTypeArg.from_json_dict,
+    "ConstArg": ConstArg.from_json_dict,
+    "NameArg": NameArg.from_json_dict,
+    "TypeArg": TypeArg.from_json_dict,
+}
+
+
+def parametric_arg_from_json(d: dict[str, object]) -> ParametricArg:
+    kind = d.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"unknown ParametricArg kind: {kind!r}")
+    try:
+        deser = _PARAMETRIC_ARG_FROM_JSON[kind]
+    except KeyError:
+        raise ValueError(f"unknown ParametricArg kind: {kind!r}") from None
+    return deser(d)
+
+
+_TYPE_FROM_JSON.update(
+    {
+        "BuiltinType": BuiltinType.from_json_dict,
+        "NamedType": NamedType.from_json_dict,
+        "ParametricType": ParametricType.from_json_dict,
+    }
+)
+
+
+_COMPTIME_MEMBER_FROM_JSON: dict[str, Callable[[dict[str, object]], ComptimeMember]] = {
+    "ComptimeMember": ComptimeMember.from_json_dict,
+}
+
+
+def comptime_member_from_json(d: dict[str, object]) -> ComptimeMember:
+    kind = d.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"unknown ComptimeMember kind: {kind!r}")
+    try:
+        deser = _COMPTIME_MEMBER_FROM_JSON[kind]
+    except KeyError:
+        raise ValueError(f"unknown ComptimeMember kind: {kind!r}") from None
+    return deser(d)
+
+
+_STRUCT_MEMBER_FROM_JSON: dict[str, Callable[[dict[str, object]], StructMember]] = {
+    "StoredMember": StoredMember.from_json_dict,
+    "PaddingMember": PaddingMember.from_json_dict,
+    "OpaqueStorageMember": OpaqueStorageMember.from_json_dict,
+    "BitfieldGroupMember": BitfieldGroupMember.from_json_dict,
+}
+
+
+def struct_member_from_json(d: dict[str, object]) -> StructMember:
+    kind = d.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"unknown StructMember kind: {kind!r}")
+    try:
+        deser = _STRUCT_MEMBER_FROM_JSON[kind]
+    except KeyError:
+        raise ValueError(f"unknown StructMember kind: {kind!r}") from None
+    return deser(d)
+
+
+_MOJO_DECL_FROM_JSON: dict[str, Callable[[dict[str, object]], MojoDecl]] = {
+    "StructDecl": StructDecl.from_json_dict,
+    "AliasDecl": AliasDecl.from_json_dict,
+    "FunctionDecl": FunctionDecl.from_json_dict,
+    "GlobalDecl": GlobalDecl.from_json_dict,
+}
+
+
+def mojo_decl_from_json(d: dict[str, object]) -> MojoDecl:
+    kind = d.get("kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"unknown MojoDecl kind: {kind!r}")
+    try:
+        deser = _MOJO_DECL_FROM_JSON[kind]
+    except KeyError:
+        raise ValueError(f"unknown MojoDecl kind: {kind!r}") from None
+    return deser(d)
+
+
+type IRDecl = Union[Decl, MojoDecl]
+
+__all__ = [
+    "AliasDecl",
+    "AliasKind",
+    "Array",
+    "ArrayKind",
+    "AtomicType",
+    "BinaryExpr",
+    "BitfieldField",
+    "BitfieldGroupMember",
+    "BuiltinType",
+    "ByteOrder",
+    "CallExpr",
+    "CallTarget",
+    "CastExpr",
+    "CharLiteral",
+    "ComplexType",
+    "ComptimeMember",
+    "Const",
+    "ConstArg",
+    "ConstExpr",
+    "DTypeArg",
+    "Decl",
+    "DocComment",
+    "Enum",
+    "EnumRef",
+    "Enumerant",
+    "FamPattern",
+    "Field",
+    "FlexibleTail",
+    "FloatKind",
+    "FloatLiteral",
+    "FloatType",
+    "Function",
+    "FunctionDecl",
+    "FunctionKind",
+    "FunctionPtr",
+    "GlobalDecl",
+    "GlobalKind",
+    "GlobalVar",
+    "IRDecl",
+    "IRDiagnostic",
+    "Initializer",
+    "InitializerParam",
+    "IntKind",
+    "IntLiteral",
+    "IntType",
+    "LinkMode",
+    "LoweringNote",
+    "LoweringSeverity",
+    "MacroDecl",
+    "MacroDeclKind",
+    "ModuleDependencies",
+    "ModuleImport",
+    "MojoBuiltin",
+    "MojoDecl",
+    "MojoModule",
+    "MojoPassability",
+    "NameArg",
+    "NamedType",
+    "NullPtrLiteral",
+    "OpaqueRecordRef",
+    "OpaqueStorageMember",
+    "PRIMITIVE_BUILTINS",
+    "PRIMITIVES_KINDS",
+    "PaddingMember",
+    "Param",
+    "ParametricArg",
+    "ParametricBase",
+    "ParametricType",
+    "Pointer",
+    "PointerMutability",
+    "PointerOrigin",
+    "PrimitiveDType",
+    "QualifiedType",
+    "Qualifiers",
+    "RefExpr",
+    "SizeOfExpr",
+    "StoredMember",
+    "StringLiteral",
+    "Struct",
+    "StructDecl",
+    "StructKind",
+    "StructMember",
+    "StructRef",
+    "StructTraits",
+    "SupportDecl",
+    "SupportDeclKind",
+    "TargetABI",
+    "Type",
+    "TypeArg",
+    "TypeRef",
+    "Typedef",
+    "UnaryExpr",
+    "Unit",
+    "UnsupportedType",
+    "UnsupportedTypeCategory",
+    "VectorType",
+    "VoidType",
+    "comptime_member_from_json",
+    "const_expr_from_json",
+    "decl_from_json",
+    "mojo_decl_from_json",
+    "parametric_arg_from_json",
+    "struct_member_from_json",
+    "type_from_json",
+]

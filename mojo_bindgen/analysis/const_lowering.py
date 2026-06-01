@@ -8,6 +8,7 @@ from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     BinaryExpr,
+    CallExpr,
     CastExpr,
     CharLiteral,
     ConstExpr,
@@ -18,18 +19,6 @@ from mojo_bindgen.ir import (
     SizeOfExpr,
     StringLiteral,
     UnaryExpr,
-)
-from mojo_bindgen.mojo_ir import (
-    MojoBinaryExpr,
-    MojoCastExpr,
-    MojoCharLiteral,
-    MojoConstExpr,
-    MojoFloatLiteral,
-    MojoIntLiteral,
-    MojoRefExpr,
-    MojoSizeOfExpr,
-    MojoStringLiteral,
-    MojoUnaryExpr,
 )
 
 
@@ -44,35 +33,40 @@ class LowerConstExprPass:
     type_lowering: LowerTypePass
 
     @staticmethod
-    def _parse_float_literal(value: str) -> float:
-        text = mojo_float_literal_text(value)
+    def _parse_float_literal(value: str | float) -> float:
+        text = mojo_float_literal_text(str(value))
         lowered = text.lower()
         if lowered.startswith(("0x", "+0x", "-0x")):
             return float.fromhex(text)
         return float(text)
 
-    def run(self, expr: ConstExpr) -> MojoConstExpr:
+    def run(self, expr: ConstExpr) -> ConstExpr:
         if isinstance(expr, IntLiteral):
-            return MojoIntLiteral(expr.value)
+            return expr
         if isinstance(expr, FloatLiteral):
-            return MojoFloatLiteral(self._parse_float_literal(expr.value))
+            return FloatLiteral(self._parse_float_literal(expr.value))
         if isinstance(expr, StringLiteral):
-            return MojoStringLiteral(expr.value)
+            return expr
         if isinstance(expr, CharLiteral):
-            return MojoCharLiteral(expr.value)
+            return expr
         if isinstance(expr, RefExpr):
-            return MojoRefExpr(mojo_ident(expr.name))
+            return RefExpr(mojo_ident(expr.name))
         if isinstance(expr, UnaryExpr):
-            return MojoUnaryExpr(op=expr.op, operand=self.run(expr.operand))
+            return UnaryExpr(op=expr.op, operand=self.run(expr.operand))
         if isinstance(expr, BinaryExpr):
-            return MojoBinaryExpr(op=expr.op, lhs=self.run(expr.lhs), rhs=self.run(expr.rhs))
+            return BinaryExpr(op=expr.op, lhs=self.run(expr.lhs), rhs=self.run(expr.rhs))
         if isinstance(expr, CastExpr):
-            return MojoCastExpr(
+            return CastExpr(
                 target=self.type_lowering.run(expr.target),
                 expr=self.run(expr.expr),
             )
         if isinstance(expr, SizeOfExpr):
-            return MojoSizeOfExpr(target=self.type_lowering.run(expr.target))
+            return SizeOfExpr(target=self.type_lowering.run(expr.target))
+        if isinstance(expr, CallExpr):
+            return CallExpr(
+                callee=self.run(expr.callee),
+                args=[self.run(arg) for arg in expr.args],
+            )
         if isinstance(expr, NullPtrLiteral):
             raise ConstExprLoweringError(
                 "nullptr constants do not have a valid MojoIR literal form"
@@ -82,7 +76,7 @@ class LowerConstExprPass:
         )
 
 
-def lower_const_expr(expr: ConstExpr) -> MojoConstExpr:
+def lower_const_expr(expr: ConstExpr) -> ConstExpr:
     """Lower one CIR constant expression to MojoIR."""
 
     return LowerConstExprPass(type_lowering=LowerTypePass()).run(expr)

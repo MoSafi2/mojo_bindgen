@@ -106,7 +106,7 @@ def test_function_ptr_traversal_finds_nested_orphan() -> None:
     )
     fp = FunctionPtr(
         ret=VoidType(),
-        params=[Pointer(pointee=inner)],
+        params=[Param(name="", type=Pointer(pointee=inner))],
     )
     fn = Function(
         name="register_cb",

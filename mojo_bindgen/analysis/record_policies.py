@@ -4,29 +4,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    ArrayType,
+    Array,
     BitfieldGroupMember,
     BuiltinType,
-    FunctionType,
+    FunctionPtr,
     MojoBuiltin,
     MojoDecl,
     MojoModule,
     MojoPassability,
-    MojoType,
     NamedType,
     OpaqueStorageMember,
     PaddingMember,
     ParametricBase,
     ParametricType,
-    PointerType,
+    Pointer,
     StoredMember,
     StructDecl,
     StructKind,
     StructMember,
     StructTraits,
+    Type,
 )
 
 
@@ -164,18 +164,18 @@ class PolicyInferencePass:
             f"unsupported StructMember for passability: {type(member).__name__!r}"
         )
 
-    def _type_passability(self, t: MojoType) -> MojoPassability:
+    def _type_passability(self, t: Type) -> MojoPassability:
         if isinstance(t, BuiltinType):
             if t.name in _TRIVIAL_BUILTINS:
                 return MojoPassability.TRIVIAL_REGISTER_PASSABLE
             return MojoPassability.MEMORY_ONLY
-        if isinstance(t, FunctionType):
+        if isinstance(t, FunctionPtr):
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
-        if isinstance(t, PointerType):
+        if isinstance(t, Pointer):
             if t.nullable:
                 return MojoPassability.REGISTER_PASSABLE
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
-        if isinstance(t, ArrayType):
+        if isinstance(t, Array):
             return MojoPassability.MEMORY_ONLY
         if isinstance(t, ParametricType):
             if t.base in (ParametricBase.SIMD, ParametricBase.COMPLEX_SIMD):
@@ -199,9 +199,7 @@ class PolicyInferencePass:
             if alias_decl.kind != AliasKind.TYPE_ALIAS or alias_decl.type_value is None:
                 return MojoPassability.MEMORY_ONLY
             return self._type_passability(alias_decl.type_value)
-        raise AssignRecordPoliciesError(
-            f"unsupported MojoType for passability: {type(t).__name__!r}"
-        )
+        raise AssignRecordPoliciesError(f"unsupported Type for passability: {type(t).__name__!r}")
 
     @staticmethod
     def _traits_for_passability(passability: MojoPassability) -> list[StructTraits]:

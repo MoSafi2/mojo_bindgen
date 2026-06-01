@@ -18,15 +18,6 @@ from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
-    QualifiedType,
-    Struct,
-    StructRef,
-    TargetABI,
-    Type,
-    TypeRef,
-)
-from mojo_bindgen.mojo_ir import (
-    ArrayType,
     BitfieldField,
     BitfieldGroupMember,
     FlexibleTail,
@@ -36,9 +27,15 @@ from mojo_bindgen.mojo_ir import (
     PaddingMember,
     ParametricBase,
     ParametricType,
+    QualifiedType,
     StoredMember,
+    Struct,
     StructDecl,
     StructKind,
+    StructRef,
+    TargetABI,
+    Type,
+    TypeRef,
 )
 
 
@@ -297,7 +294,7 @@ def _lower_flexible_tail_metadata(
 ) -> tuple[FlexibleTail | None, str | None]:
     if not isinstance(field.type, Array):
         return None, "flexible tail field did not lower from an array type; opaque storage emitted"
-    if not isinstance(lowered_type, ArrayType) or lowered_type.count != 0:
+    if not isinstance(lowered_type, Array) or lowered_type.size != 0:
         return (
             None,
             f"field `{field_display_name(field, index)}` did not lower to InlineArray[..., 0]; "

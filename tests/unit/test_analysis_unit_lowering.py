@@ -5,23 +5,43 @@ from __future__ import annotations
 from mojo_bindgen.analysis import lower_unit
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
+    AliasDecl,
+    AliasKind,
+    BuiltinType,
     ByteOrder,
+    CallExpr,
+    CastExpr,
     Const,
     Enum,
     Enumerant,
     Field,
     Function,
+    FunctionDecl,
+    FunctionKind,
     FunctionPtr,
+    GlobalDecl,
     GlobalVar,
     IntKind,
     IntLiteral,
     IntType,
+    LinkMode,
     MacroDecl,
+    MojoBuiltin,
+    NamedType,
     NullPtrLiteral,
+    PaddingMember,
+    ParametricBase,
+    ParametricType,
     Pointer,
+    PointerMutability,
+    RefExpr,
+    StoredMember,
     Struct,
+    StructDecl,
+    StructKind,
     StructRef,
     TargetABI,
+    TypeArg,
     Typedef,
     TypeRef,
     Unit,
@@ -29,31 +49,6 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.ir import (
     Param as CIRParam,
-)
-from mojo_bindgen.mojo_ir import (
-    AliasDecl,
-    AliasKind,
-    BuiltinType,
-    FunctionDecl,
-    FunctionKind,
-    FunctionType,
-    GlobalDecl,
-    LinkMode,
-    MojoBuiltin,
-    MojoCallExpr,
-    MojoCastExpr,
-    MojoIntLiteral,
-    MojoRefExpr,
-    NamedType,
-    PaddingMember,
-    ParametricBase,
-    ParametricType,
-    PointerMutability,
-    PointerType,
-    StoredMember,
-    StructDecl,
-    StructKind,
-    TypeArg,
 )
 
 
@@ -240,12 +235,12 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
         name="needs_work",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("Flags"),
-        const_value=MojoCallExpr(
-            callee=MojoRefExpr("Flags"),
+        const_value=CallExpr(
+            callee=RefExpr("Flags"),
             args=[
-                MojoCastExpr(
+                CastExpr(
                     target=BuiltinType(MojoBuiltin.C_INT),
-                    expr=MojoIntLiteral(7),
+                    expr=IntLiteral(7),
                 )
             ],
         ),
@@ -573,7 +568,7 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
 def test_lower_unit_keeps_raw_callback_types_inline() -> None:
     callback = FunctionPtr(
         ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-        params=[Pointer(pointee=None)],
+        params=[CIRParam(name="", type=Pointer(pointee=None))],
     )
     unit = Unit(
         source_header="demo.h",
@@ -603,10 +598,10 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
     fn_decl = lowered.decls[1]
 
     assert isinstance(typedef_decl, AliasDecl)
-    assert isinstance(typedef_decl.type_value, FunctionType)
+    assert isinstance(typedef_decl.type_value, FunctionPtr)
     assert isinstance(fn_decl, FunctionDecl)
-    assert isinstance(fn_decl.params[0].type, FunctionType)
-    assert fn_decl.params[0].type.params[0].type == PointerType(
+    assert isinstance(fn_decl.params[0].type, FunctionPtr)
+    assert fn_decl.params[0].type.params[0].type == Pointer(
         pointee=None,
         mutability=PointerMutability.MUT,
         nullable=True,

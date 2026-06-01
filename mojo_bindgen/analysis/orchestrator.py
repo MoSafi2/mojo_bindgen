@@ -11,8 +11,7 @@ from mojo_bindgen.analysis.record_policies import assign_record_policies
 from mojo_bindgen.analysis.unit_lowering import lower_unit
 from mojo_bindgen.analysis.validate_ir import ValidateIRPass
 from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
-from mojo_bindgen.ir import Unit
-from mojo_bindgen.mojo_ir import MojoModule
+from mojo_bindgen.ir import MojoModule, Unit
 
 
 @dataclass(frozen=True)

@@ -6,14 +6,22 @@ from mojo_bindgen.analysis.type_lowering import LowerTypePass, lower_type
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
+    BuiltinType,
     ComplexType,
+    ConstArg,
+    DTypeArg,
     EnumRef,
     FloatKind,
     FloatType,
     FunctionPtr,
     IntKind,
     IntType,
+    MojoBuiltin,
+    NamedType,
+    ParametricBase,
+    ParametricType,
     Pointer,
+    PointerMutability,
     QualifiedType,
     Qualifiers,
     StructRef,
@@ -22,19 +30,8 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.mojo_ir import (
-    ArrayType,
-    BuiltinType,
-    ConstArg,
-    DTypeArg,
-    FunctionType,
-    MojoBuiltin,
-    NamedType,
-    Param,
-    ParametricBase,
-    ParametricType,
-    PointerMutability,
-    PointerType,
+from mojo_bindgen.ir import (
+    Param as Param,
 )
 
 
@@ -83,12 +80,12 @@ def test_lower_type_uses_pointer_pointee_constness_for_mutability() -> None:
     )
     void_ptr = Pointer(pointee=None)
 
-    assert lower_type(const_int_ptr) == PointerType(
+    assert lower_type(const_int_ptr) == Pointer(
         pointee=BuiltinType(name=MojoBuiltin.C_INT),
         mutability=PointerMutability.IMMUT,
         nullable=True,
     )
-    assert lower_type(void_ptr) == PointerType(
+    assert lower_type(void_ptr) == Pointer(
         pointee=None,
         mutability=PointerMutability.MUT,
         nullable=True,
@@ -98,17 +95,17 @@ def test_lower_type_uses_pointer_pointee_constness_for_mutability() -> None:
 def test_lower_type_maps_fixed_arrays_and_pointer_falls_back_for_flexible_arrays() -> None:
     element = IntType(int_kind=IntKind.SHORT, size_bytes=2, align_bytes=2)
 
-    assert lower_type(Array(element=element, size=4, array_kind="fixed")) == ArrayType(
+    assert lower_type(Array(element=element, size=4, array_kind="fixed")) == Array(
         element=BuiltinType(name=MojoBuiltin.C_SHORT),
-        count=4,
+        size=4,
     )
-    assert lower_type(Array(element=element, size=4, array_kind="flexible")) == PointerType(
+    assert lower_type(Array(element=element, size=4, array_kind="flexible")) == Pointer(
         pointee=BuiltinType(name=MojoBuiltin.C_SHORT),
         mutability=PointerMutability.MUT,
     )
-    assert lower_type(Array(element=element, size=None, array_kind="flexible")) == ArrayType(
+    assert lower_type(Array(element=element, size=None, array_kind="flexible")) == Array(
         element=BuiltinType(name=MojoBuiltin.C_SHORT),
-        count=0,
+        size=0,
     )
 
 
@@ -116,22 +113,25 @@ def test_lower_type_keeps_raw_function_pointer_signature_shape() -> None:
     fn_ptr = FunctionPtr(
         ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
         params=[
-            Pointer(pointee=None),
-            TypeRef(
-                decl_id="typedef:my_uint",
-                name="my_uint",
-                canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
+            Param(name="", type=Pointer(pointee=None)),
+            Param(
+                name="",
+                type=TypeRef(
+                    decl_id="typedef:my_uint",
+                    name="my_uint",
+                    canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
+                ),
             ),
         ],
         is_variadic=False,
         calling_convention="c",
     )
 
-    assert lower_type(fn_ptr) == FunctionType(
+    assert lower_type(fn_ptr) == FunctionPtr(
         params=[
             Param(
                 name="",
-                type=PointerType(pointee=None, mutability=PointerMutability.MUT, nullable=True),
+                type=Pointer(pointee=None, mutability=PointerMutability.MUT, nullable=True),
             ),
             Param(name="", type=NamedType(name="my_uint")),
         ],
@@ -159,21 +159,21 @@ def test_lower_type_maps_complex_and_vector_surface_forms_and_fallbacks() -> Non
         base=ParametricBase.COMPLEX_SIMD,
         args=[DTypeArg("DType.float32"), ConstArg(1)],
     )
-    assert lower_type(ComplexType(element=long_double, size_bytes=32)) == ArrayType(
+    assert lower_type(ComplexType(element=long_double, size_bytes=32)) == Array(
         element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
-        count=2,
+        size=2,
     )
     assert lower_type(VectorType(element=f32, count=4, size_bytes=16)) == ParametricType(
         base=ParametricBase.SIMD,
         args=[DTypeArg("DType.float32"), ConstArg(4)],
     )
-    assert lower_type(VectorType(element=long_double, count=2, size_bytes=32)) == ArrayType(
+    assert lower_type(VectorType(element=long_double, count=2, size_bytes=32)) == Array(
         element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
-        count=2,
+        size=2,
     )
-    assert lower_type(VectorType(element=f32, count=None, size_bytes=16)) == ArrayType(
+    assert lower_type(VectorType(element=f32, count=None, size_bytes=16)) == Array(
         element=BuiltinType(name=MojoBuiltin.UINT8),
-        count=16,
+        size=16,
     )
 
 
@@ -186,9 +186,9 @@ def test_lower_type_maps_unsupported_type_to_inline_bytes_when_sized() -> None:
         align_bytes=8,
     )
 
-    assert lower_type(unsupported) == ArrayType(
+    assert lower_type(unsupported) == Array(
         element=BuiltinType(name=MojoBuiltin.UINT8),
-        count=16,
+        size=16,
     )
 
 
@@ -199,7 +199,7 @@ def test_lower_type_maps_unsized_unsupported_type_to_opaque_pointer() -> None:
         reason="not modeled",
     )
 
-    assert lower_type(unsupported) == PointerType(
+    assert lower_type(unsupported) == Pointer(
         pointee=None,
         mutability=PointerMutability.MUT,
     )
@@ -229,9 +229,9 @@ def test_lower_type_maps_missing_primitive_kinds_to_valid_surface_types() -> Non
 def test_lower_type_maps_float128_to_inline_bytes() -> None:
     assert lower_type(
         FloatType(float_kind=FloatKind.FLOAT128, size_bytes=16, align_bytes=16)
-    ) == ArrayType(
+    ) == Array(
         element=BuiltinType(name=MojoBuiltin.UINT8),
-        count=16,
+        size=16,
     )
 
 

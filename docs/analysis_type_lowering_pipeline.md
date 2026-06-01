@@ -64,14 +64,14 @@ Source:
 
 ### `LowerTypePass`
 
-`LowerTypePass` converts one CIR `Type` into one valid `MojoType`.
+`LowerTypePass` converts one parser-facing `Type` into one valid Mojo-facing `Type`.
 
 Important rules:
 - primitive C scalars lower to `BuiltinType` or fixed-width `NamedType`
 - exact-width aliases such as `int32_t` and `uint64_t` lower to Mojo fixed-width names
 - `size_t` and `ssize_t` lower to `UInt` and `Int`
 - representable atomics lower to `Atomic[...]`
-- data pointers lower to nullable `PointerType`
+- data pointers lower to nullable `Pointer`
 - vectors lower to `SIMD[...]` when lane metadata is usable
 - complex values lower to `ComplexSIMD[...]`
 - unsupported fixed-size types fall back to byte arrays
@@ -127,10 +127,10 @@ These are the current "always lower to valid MojoIR" escape hatches:
 
 | CIR type shape | MojoIR fallback |
 | --- | --- |
-| `UnsupportedType` with size | `ArrayType(UInt8, size)` |
-| `UnsupportedType` without size | opaque external `PointerType` |
-| `VectorType` with unknown lane count | `ArrayType(UInt8, size_bytes)` |
-| `FloatKind.FLOAT128` | `ArrayType(UInt8, size_bytes)` |
+| `UnsupportedType` with size | `Array(UInt8, size)` |
+| `UnsupportedType` without size | opaque external `Pointer` |
+| `VectorType` with unknown lane count | `Array(UInt8, size_bytes)` |
+| `FloatKind.FLOAT128` | `Array(UInt8, size_bytes)` |
 | `WCHAR` / `CHAR16` / `CHAR32` / `EXT_INT` | fixed-width `NamedType` |
 
 These rules keep lowering printable and prevent unsupported placeholders from

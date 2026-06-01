@@ -182,7 +182,7 @@ def test_fnptr_typedef_params_keep_typedef_names(tmp_path: Path) -> None:
     )
     lowered = type_lowerer.lower(xfer.underlying_typedef_type, TypeContext.TYPEDEF)
     assert isinstance(lowered, FunctionPtr)
-    assert isinstance(lowered.params[1], TypeRef)
-    assert lowered.params[1].name == "my_off_t"
-    assert isinstance(lowered.params[2], TypeRef)
-    assert lowered.params[2].name == "my_off_t"
+    assert isinstance(lowered.params[1].type, TypeRef)
+    assert lowered.params[1].type.name == "my_off_t"
+    assert isinstance(lowered.params[2].type, TypeRef)
+    assert lowered.params[2].type.name == "my_off_t"

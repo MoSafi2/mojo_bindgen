@@ -26,26 +26,24 @@ from mojo_bindgen.analysis.struct_lowering import (
 from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
 from mojo_bindgen.analysis.type_walk import _walk_typeref_nodes
 from mojo_bindgen.ir import (
+    AliasDecl,
+    AliasKind,
     BinaryExpr,
     CastExpr,
     Const,
     ConstExpr,
     Function,
+    FunctionPtr,
     GlobalVar,
     MacroDecl,
+    MojoDecl,
+    MojoModule,
     SizeOfExpr,
     Struct,
     Typedef,
     TypeRef,
     UnaryExpr,
     Unit,
-)
-from mojo_bindgen.mojo_ir import (
-    AliasDecl,
-    AliasKind,
-    FunctionType,
-    MojoDecl,
-    MojoModule,
 )
 
 
@@ -104,7 +102,7 @@ class LowerUnitPass:
             lowered_type = exact_width_stdint_alias_type(ref.name)
             if lowered_type is None:
                 lowered_type = type_lowerer.run(ref.canonical)
-            if isinstance(lowered_type, FunctionType):
+            if isinstance(lowered_type, FunctionPtr):
                 lowered.append(
                     AliasDecl(
                         name=alias_name,

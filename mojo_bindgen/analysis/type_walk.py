@@ -60,7 +60,7 @@ def iter_type_nodes(t: Type, *, options: TypeWalkOptions | None = None) -> Itera
             if cfg.descend_function_ptr:
                 yield from walk(node.ret)
                 for param in node.params:
-                    yield from walk(param)
+                    yield from walk(param.type)
             return
         if isinstance(node, VectorType):
             if cfg.descend_vector_element:
