@@ -8,16 +8,18 @@ pytestmark = pytest.mark.skip(reason="MojoIR schema is under active iteration")
 
 
 def test_mojo_type_json_roundtrip() -> None:
-    from mojo_bindgen.mojo_ir import (
+    from mojo_bindgen.ir import (
         ArrayType,
         BuiltinType,
         FunctionType,
         MojoBuiltin,
         NamedType,
-        Param,
         ParametricType,
         PointerType,
         mojo_type_from_json,
+    )
+    from mojo_bindgen.ir import (
+        MojoParam as Param,
     )
 
     builtin = BuiltinType.from_json_dict({"kind": "BuiltinType", "name": "c_int"})
@@ -79,7 +81,7 @@ def test_mojo_type_json_roundtrip() -> None:
 
 
 def test_struct_member_json_roundtrip() -> None:
-    from mojo_bindgen.mojo_ir import (
+    from mojo_bindgen.ir import (
         BitfieldGroupMember,
         BuiltinType,
         MojoBuiltin,
@@ -156,14 +158,15 @@ def test_struct_member_json_roundtrip() -> None:
 
 
 def test_mojo_decl_json_roundtrip() -> None:
-    from mojo_bindgen.ir import BinaryExpr, IntLiteral
-    from mojo_bindgen.mojo_ir import (
+    from mojo_bindgen.ir import (
         AliasDecl,
+        BinaryExpr,
         BuiltinType,
         CallTarget,
         ComptimeMember,
         FunctionDecl,
         GlobalDecl,
+        IntLiteral,
         MojoBuiltin,
         MojoCallExpr,
         MojoCastExpr,
@@ -301,13 +304,14 @@ def test_mojo_decl_json_roundtrip() -> None:
 
 
 def test_mojo_module_roundtrip() -> None:
-    from mojo_bindgen.ir import BinaryExpr, IntLiteral
-    from mojo_bindgen.mojo_ir import (
+    from mojo_bindgen.ir import (
         AliasDecl,
+        BinaryExpr,
         BuiltinType,
         FunctionDecl,
         FunctionType,
         GlobalDecl,
+        IntLiteral,
         ModuleDependencies,
         ModuleImport,
         MojoBuiltin,
@@ -375,7 +379,7 @@ def test_mojo_module_roundtrip() -> None:
 
 
 def test_unknown_mojo_type_kind_raises() -> None:
-    from mojo_bindgen.mojo_ir import mojo_type_from_json
+    from mojo_bindgen.ir import mojo_type_from_json
 
     with pytest.raises(ValueError) as exc_info:
         mojo_type_from_json({"kind": "NoSuchMojoType"})
@@ -383,8 +387,7 @@ def test_unknown_mojo_type_kind_raises() -> None:
 
 
 def test_builtin_lookup_tables_cover_expected_scalars() -> None:
-    from mojo_bindgen.ir import FloatKind, IntKind
-    from mojo_bindgen.mojo_ir import PRIMITIVE_BUILTINS, MojoBuiltin
+    from mojo_bindgen.ir import PRIMITIVE_BUILTINS, FloatKind, IntKind, MojoBuiltin
 
     assert PRIMITIVE_BUILTINS["void"] == MojoBuiltin.NONE
     assert PRIMITIVE_BUILTINS[IntKind.BOOL] == MojoBuiltin.BOOL
@@ -395,7 +398,7 @@ def test_builtin_lookup_tables_cover_expected_scalars() -> None:
 
 
 def test_unknown_struct_member_kind_raises() -> None:
-    from mojo_bindgen.mojo_ir import struct_member_from_json
+    from mojo_bindgen.ir import struct_member_from_json
 
     with pytest.raises(ValueError) as exc_info:
         struct_member_from_json({"kind": "NoSuchStructMember"})
@@ -403,7 +406,7 @@ def test_unknown_struct_member_kind_raises() -> None:
 
 
 def test_unknown_mojo_decl_kind_raises() -> None:
-    from mojo_bindgen.mojo_ir import mojo_decl_from_json
+    from mojo_bindgen.ir import mojo_decl_from_json
 
     with pytest.raises(ValueError) as exc_info:
         mojo_decl_from_json({"kind": "NoSuchMojoDecl"})

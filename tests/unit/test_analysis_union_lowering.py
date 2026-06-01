@@ -4,23 +4,21 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.union_lowering import lower_union
 from mojo_bindgen.ir import (
-    Field,
-    IntKind,
-    IntType,
-    Struct,
-    StructRef,
-    UnsupportedType,
-)
-from mojo_bindgen.mojo_ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
     BuiltinType,
+    Field,
+    IntKind,
+    IntType,
     MojoBuiltin,
     NamedType,
     ParametricBase,
     ParametricType,
+    Struct,
+    StructRef,
     TypeArg,
+    UnsupportedType,
 )
 
 

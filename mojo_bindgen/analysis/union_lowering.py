@@ -13,8 +13,7 @@ from mojo_bindgen.analysis.lowering_support import (
     union_note,
 )
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
-from mojo_bindgen.ir import Struct
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
@@ -24,6 +23,7 @@ from mojo_bindgen.mojo_ir import (
     NamedType,
     ParametricBase,
     ParametricType,
+    Struct,
     TypeArg,
 )
 

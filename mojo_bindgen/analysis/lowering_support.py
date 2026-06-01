@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.type_lowering import LowerTypePass, TypeLoweringError
-from mojo_bindgen.ir import Field, Struct, Type, Unit
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     BuiltinType,
+    Field,
     LoweringNote,
     LoweringSeverity,
     MojoBuiltin,
     MojoType,
+    Struct,
+    Type,
+    Unit,
 )
 
 

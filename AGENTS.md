@@ -7,7 +7,7 @@ Core source lives in `mojo_bindgen/`.
 - `mojo_bindgen/parsing/`: libclang-driven parsing and C-to-IR lowering
 - `mojo_bindgen/analysis/`: IR validation, reachability, and Mojo-facing analysis
 - `mojo_bindgen/codegen/`: Mojo emission and generator orchestration
-- `mojo_bindgen/ir.py` and `mojo_bindgen/mojo_ir.py`: C-facing IR and Mojo-facing IR schemas
+- `mojo_bindgen/ir.py`: unified C-facing and Mojo-facing IR schemas
 
 Tests live under `tests/`:
 

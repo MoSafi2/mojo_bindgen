@@ -5,16 +5,12 @@ from __future__ import annotations
 from mojo_bindgen.analysis.const_lowering import lower_const_expr
 from mojo_bindgen.ir import (
     BinaryExpr,
+    BuiltinType,
     CastExpr,
     FloatLiteral,
     IntKind,
     IntLiteral,
     IntType,
-    RefExpr,
-    SizeOfExpr,
-)
-from mojo_bindgen.mojo_ir import (
-    BuiltinType,
     MojoBinaryExpr,
     MojoBuiltin,
     MojoCastExpr,
@@ -22,6 +18,8 @@ from mojo_bindgen.mojo_ir import (
     MojoIntLiteral,
     MojoRefExpr,
     MojoSizeOfExpr,
+    RefExpr,
+    SizeOfExpr,
 )
 
 

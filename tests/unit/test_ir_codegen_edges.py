@@ -28,6 +28,8 @@ from mojo_bindgen.ir import (
     RefExpr,
     StringLiteral,
     Struct,
+    StructDecl,
+    StructKind,
     StructRef,
     TargetABI,
     Typedef,
@@ -36,7 +38,6 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.mojo_ir import StructDecl, StructKind
 from tests.bindgen_helpers import MojoGenerator
 
 

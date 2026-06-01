@@ -15,17 +15,18 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
     render_mojo_module,
 )
 from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
-from mojo_bindgen.ir import ByteOrder, Field, IntKind, IntType, Struct, TargetABI, Unit
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
+    ByteOrder,
     CallTarget,
     ConstArg,
     DTypeArg,
+    Field,
     FlexibleTail,
     FunctionDecl,
     FunctionKind,
@@ -34,6 +35,8 @@ from mojo_bindgen.mojo_ir import (
     GlobalKind,
     Initializer,
     InitializerParam,
+    IntKind,
+    IntType,
     LinkMode,
     ModuleDependencies,
     ModuleImport,
@@ -46,17 +49,22 @@ from mojo_bindgen.mojo_ir import (
     MojoRefExpr,
     MojoSizeOfExpr,
     NamedType,
-    Param,
     ParametricBase,
     ParametricType,
     PointerMutability,
     PointerType,
     StoredMember,
+    Struct,
     StructDecl,
     StructTraits,
     SupportDecl,
     SupportDeclKind,
+    TargetABI,
     TypeArg,
+    Unit,
+)
+from mojo_bindgen.ir import (
+    MojoParam as Param,
 )
 from tests.bindgen_helpers import analyze_to_mojo_module
 

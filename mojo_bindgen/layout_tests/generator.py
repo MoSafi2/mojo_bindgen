@@ -6,14 +6,15 @@ from dataclasses import dataclass
 
 from mojo_bindgen.analysis.lowering_support import field_mojo_name, record_by_decl_id, record_name
 from mojo_bindgen.analysis.record_layout import analyze_record_layout
-from mojo_bindgen.ir import Struct, Unit
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     BitfieldGroupMember,
     MojoModule,
     OpaqueStorageMember,
     StoredMember,
+    Struct,
     StructDecl,
     StructKind,
+    Unit,
 )
 
 

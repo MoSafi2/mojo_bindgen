@@ -7,8 +7,7 @@ from pathlib import Path
 from mojo_bindgen import BindgenOptions, BindgenOrchestrator
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
-from mojo_bindgen.ir import Unit
-from mojo_bindgen.mojo_ir import MojoModule
+from mojo_bindgen.ir import MojoModule, Unit
 
 
 def _bindgen_options_from_emit_options(unit: Unit, options: MojoEmitOptions) -> BindgenOptions:

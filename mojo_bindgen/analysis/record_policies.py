@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
     ArrayType,

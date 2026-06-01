@@ -6,19 +6,36 @@ from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.ir import (
+    _FLOAT_DTYPE_TABLE,
+    _INT_DTYPE_TABLE,
     _SIGNED_INT_KINDS,
     _UNSIGNED_INT_KINDS,
+    PRIMITIVE_BUILTINS,
     Array,
+    ArrayType,
     AtomicType,
+    BuiltinType,
     ComplexType,
+    ConstArg,
+    DTypeArg,
     EnumRef,
     FloatKind,
     FloatType,
     FunctionPtr,
+    FunctionType,
     IntKind,
     IntType,
+    MojoBuiltin,
+    MojoParam,
+    MojoType,
+    NamedType,
     OpaqueRecordRef,
+    ParametricBase,
+    ParametricType,
     Pointer,
+    PointerMutability,
+    PointerOrigin,
+    PointerType,
     QualifiedType,
     StructRef,
     Type,
@@ -26,25 +43,6 @@ from mojo_bindgen.ir import (
     UnsupportedType,
     VectorType,
     VoidType,
-)
-from mojo_bindgen.mojo_ir import (
-    _FLOAT_DTYPE_TABLE,
-    _INT_DTYPE_TABLE,
-    PRIMITIVE_BUILTINS,
-    ArrayType,
-    BuiltinType,
-    ConstArg,
-    DTypeArg,
-    FunctionType,
-    MojoBuiltin,
-    MojoType,
-    NamedType,
-    Param,
-    ParametricBase,
-    ParametricType,
-    PointerMutability,
-    PointerOrigin,
-    PointerType,
 )
 
 
@@ -289,7 +287,7 @@ class LowerTypePass:
     def _lower_function_ptr(self, t: FunctionPtr) -> FunctionType:
         param_names = t.param_names or []
         params = [
-            Param(
+            MojoParam(
                 name=param_names[i] if i < len(param_names) else "",
                 type=self.run(param),
             )

@@ -17,16 +17,8 @@ from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     Array,
-    AtomicType,
-    QualifiedType,
-    Struct,
-    StructRef,
-    TargetABI,
-    Type,
-    TypeRef,
-)
-from mojo_bindgen.mojo_ir import (
     ArrayType,
+    AtomicType,
     BitfieldField,
     BitfieldGroupMember,
     FlexibleTail,
@@ -36,9 +28,15 @@ from mojo_bindgen.mojo_ir import (
     PaddingMember,
     ParametricBase,
     ParametricType,
+    QualifiedType,
     StoredMember,
+    Struct,
     StructDecl,
     StructKind,
+    StructRef,
+    TargetABI,
+    Type,
+    TypeRef,
 )
 
 

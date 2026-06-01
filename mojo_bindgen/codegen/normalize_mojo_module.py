@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_ident
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
@@ -32,13 +32,13 @@ from mojo_bindgen.mojo_ir import (
     MojoFloatLiteral,
     MojoIntLiteral,
     MojoModule,
+    MojoParam,
     MojoRefExpr,
     MojoSizeOfExpr,
     MojoStringLiteral,
     MojoType,
     MojoUnaryExpr,
     NamedType,
-    Param,
     ParametricType,
     PointerType,
     StoredMember,
@@ -127,7 +127,7 @@ class NormalizeMojoModulePass:
             return replace(
                 decl,
                 params=[
-                    Param(
+                    MojoParam(
                         name=param.name,
                         type=self._normalize_type(
                             param.type, (decl.name, param.name or f"param{i}")
@@ -270,7 +270,7 @@ class NormalizeMojoModulePass:
         return replace(
             function_type,
             params=[
-                Param(
+                MojoParam(
                     name=param.name,
                     type=self._normalize_type(
                         param.type,

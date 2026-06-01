@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.ir import ByteOrder, Field, IntKind, IntType, Struct, TargetABI, Unit
-from mojo_bindgen.layout_tests import collect_layout_record_checks, render_layout_test_module
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
+    ByteOrder,
+    Field,
+    IntKind,
+    IntType,
     LinkMode,
     MojoBuiltin,
     MojoModule,
     OpaqueStorageMember,
     StoredMember,
+    Struct,
     StructDecl,
+    TargetABI,
+    Unit,
 )
+from mojo_bindgen.layout_tests import collect_layout_record_checks, render_layout_test_module
 
 
 def _abi() -> TargetABI:

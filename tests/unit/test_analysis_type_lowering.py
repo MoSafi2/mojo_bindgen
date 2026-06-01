@@ -5,15 +5,26 @@ from __future__ import annotations
 from mojo_bindgen.analysis.type_lowering import LowerTypePass, lower_type
 from mojo_bindgen.ir import (
     Array,
+    ArrayType,
     AtomicType,
+    BuiltinType,
     ComplexType,
+    ConstArg,
+    DTypeArg,
     EnumRef,
     FloatKind,
     FloatType,
     FunctionPtr,
+    FunctionType,
     IntKind,
     IntType,
+    MojoBuiltin,
+    NamedType,
+    ParametricBase,
+    ParametricType,
     Pointer,
+    PointerMutability,
+    PointerType,
     QualifiedType,
     Qualifiers,
     StructRef,
@@ -22,19 +33,8 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.mojo_ir import (
-    ArrayType,
-    BuiltinType,
-    ConstArg,
-    DTypeArg,
-    FunctionType,
-    MojoBuiltin,
-    NamedType,
-    Param,
-    ParametricBase,
-    ParametricType,
-    PointerMutability,
-    PointerType,
+from mojo_bindgen.ir import (
+    MojoParam as Param,
 )
 
 

@@ -13,13 +13,6 @@ from mojo_bindgen.ir import (
     ConstExpr,
     FloatLiteral,
     IntLiteral,
-    NullPtrLiteral,
-    RefExpr,
-    SizeOfExpr,
-    StringLiteral,
-    UnaryExpr,
-)
-from mojo_bindgen.mojo_ir import (
     MojoBinaryExpr,
     MojoCastExpr,
     MojoCharLiteral,
@@ -30,6 +23,11 @@ from mojo_bindgen.mojo_ir import (
     MojoSizeOfExpr,
     MojoStringLiteral,
     MojoUnaryExpr,
+    NullPtrLiteral,
+    RefExpr,
+    SizeOfExpr,
+    StringLiteral,
+    UnaryExpr,
 )
 
 

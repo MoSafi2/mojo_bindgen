@@ -6,14 +6,24 @@ from mojo_bindgen.analysis import lower_unit, run_ir_passes
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 from mojo_bindgen.ir import (
+    AliasDecl,
+    AliasKind,
+    BuiltinType,
     ByteOrder,
     Enum,
     Enumerant,
     EnumRef,
     Field,
     Function,
+    FunctionDecl,
     IntKind,
     IntType,
+    MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoIntLiteral,
+    MojoRefExpr,
+    NamedType,
     Param,
     Struct,
     TargetABI,
@@ -21,18 +31,6 @@ from mojo_bindgen.ir import (
     TypeRef,
     Unit,
     VoidType,
-)
-from mojo_bindgen.mojo_ir import (
-    AliasDecl,
-    AliasKind,
-    BuiltinType,
-    FunctionDecl,
-    MojoBuiltin,
-    MojoCallExpr,
-    MojoCastExpr,
-    MojoIntLiteral,
-    MojoRefExpr,
-    NamedType,
 )
 
 

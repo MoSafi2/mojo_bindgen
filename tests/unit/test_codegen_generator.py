@@ -8,8 +8,7 @@ from pathlib import Path
 import mojo_bindgen.orchestrator as orchestrator_mod
 from mojo_bindgen import BindgenOptions, BindgenOrchestrator, bindgen
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.ir import ByteOrder, Function, TargetABI, Unit, VoidType
-from mojo_bindgen.mojo_ir import LinkMode, MojoModule
+from mojo_bindgen.ir import ByteOrder, Function, LinkMode, MojoModule, TargetABI, Unit, VoidType
 
 
 def _abi() -> TargetABI:

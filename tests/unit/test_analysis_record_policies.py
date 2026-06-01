@@ -3,19 +3,13 @@ from __future__ import annotations
 from mojo_bindgen.analysis import assign_record_policies, lower_unit
 from mojo_bindgen.ir import (
     Array,
+    ArrayType,
     AtomicType,
+    BuiltinType,
     ByteOrder,
     Field,
     IntKind,
     IntType,
-    Struct,
-    StructRef,
-    TargetABI,
-    Unit,
-)
-from mojo_bindgen.mojo_ir import (
-    ArrayType,
-    BuiltinType,
     LinkMode,
     MojoBuiltin,
     MojoModule,
@@ -25,8 +19,12 @@ from mojo_bindgen.mojo_ir import (
     PointerMutability,
     PointerType,
     StoredMember,
+    Struct,
     StructDecl,
+    StructRef,
     StructTraits,
+    TargetABI,
+    Unit,
 )
 
 

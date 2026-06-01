@@ -19,42 +19,40 @@ from mojo_bindgen.analysis.struct_lowering import (
 from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
 from mojo_bindgen.analysis.union_lowering import LowerUnionPass
 from mojo_bindgen.ir import (
-    Const,
-    Decl,
-    Enum,
-    Function,
-    GlobalVar,
-    MacroDecl,
-    NullPtrLiteral,
-    RefExpr,
-    Struct,
-    Typedef,
-    Unit,
-)
-from mojo_bindgen.mojo_ir import (
     _MOJO_INT_TYPES,
     AliasDecl,
     AliasKind,
     BuiltinType,
     CallTarget,
+    Const,
+    Decl,
+    Enum,
+    Function,
     FunctionDecl,
     FunctionKind,
     FunctionType,
     GlobalDecl,
     GlobalKind,
+    GlobalVar,
     LinkMode,
+    MacroDecl,
     MojoBinaryExpr,
     MojoCallExpr,
     MojoCastExpr,
     MojoConstExpr,
     MojoDecl,
     MojoIntLiteral,
+    MojoParam,
     MojoRefExpr,
     MojoUnaryExpr,
     NamedType,
-    Param,
+    NullPtrLiteral,
     ParametricBase,
     ParametricType,
+    RefExpr,
+    Struct,
+    Typedef,
+    Unit,
 )
 
 
@@ -166,7 +164,7 @@ class UnitDeclLowerer:
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
             params=[
-                Param(
+                MojoParam(
                     name=(mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}"),
                     type=self.session.type_lowerer.run(param.type),
                     doc=param.doc,

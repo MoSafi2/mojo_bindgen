@@ -9,9 +9,8 @@ from typing import Literal
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.orchestrator import AnalysisOrchestrator
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
-from mojo_bindgen.ir import Unit
+from mojo_bindgen.ir import MojoModule, Unit
 from mojo_bindgen.layout_tests import render_layout_test_module
-from mojo_bindgen.mojo_ir import MojoModule
 from mojo_bindgen.parsing.parser import ClangParser, _default_system_compile_args
 
 LinkingMode = Literal["external_call", "owned_dl_handle"]

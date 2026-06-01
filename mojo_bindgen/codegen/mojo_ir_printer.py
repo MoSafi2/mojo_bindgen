@@ -6,8 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
-from mojo_bindgen.ir import DocComment
-from mojo_bindgen.mojo_ir import (
+from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
     ArrayType,
@@ -16,6 +15,7 @@ from mojo_bindgen.mojo_ir import (
     BuiltinType,
     CallTarget,
     ComptimeMember,
+    DocComment,
     FlexibleTail,
     FunctionDecl,
     FunctionKind,
@@ -36,6 +36,7 @@ from mojo_bindgen.mojo_ir import (
     MojoFloatLiteral,
     MojoIntLiteral,
     MojoModule,
+    MojoParam,
     MojoRefExpr,
     MojoSizeOfExpr,
     MojoStringLiteral,
@@ -44,7 +45,6 @@ from mojo_bindgen.mojo_ir import (
     NamedType,
     OpaqueStorageMember,
     PaddingMember,
-    Param,
     ParametricBase,
     ParametricType,
     PointerMutability,
@@ -185,7 +185,7 @@ class CodeBuilder:
 
 
 class MojoIRPrinter:
-    """Render finalized printer-ready :class:`~mojo_bindgen.mojo_ir.MojoModule` to source text."""
+    """Render finalized printer-ready :class:`~mojo_bindgen.ir.MojoModule` to source text."""
 
     def __init__(self, options: MojoIRPrintOptions | None = None) -> None:
         self._options = options or MojoIRPrintOptions()
@@ -721,7 +721,7 @@ class MojoIRPrinter:
         return f"Optional[{rendered}]" if t.nullable else rendered
 
     def _render_parametric_arg(self, arg: object) -> str:
-        from mojo_bindgen.mojo_ir import ConstArg, DTypeArg, NameArg, TypeArg
+        from mojo_bindgen.ir import ConstArg, DTypeArg, NameArg, TypeArg
 
         if isinstance(arg, DTypeArg):
             return arg.value
@@ -811,7 +811,7 @@ class MojoIRPrinter:
         return f"a{index}"
 
     @staticmethod
-    def _render_function_param_name(param: Param, index: int) -> str:
+    def _render_function_param_name(param: MojoParam, index: int) -> str:
         if param.name.strip():
             return mojo_ident(param.name, fallback=f"arg{index}")
         return f"arg{index}"
