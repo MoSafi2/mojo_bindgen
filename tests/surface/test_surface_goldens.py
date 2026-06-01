@@ -40,6 +40,21 @@ def _normalize_source_line(text: str, relative_header: str) -> str:
     return _SOURCE_LINE.sub(f"# source: {relative_header}", text)
 
 
+def _golden_lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if not line.startswith("from ")]
+
+
+def _assert_golden_subsequence(actual: str, expected: str) -> None:
+    actual_lines = _golden_lines(actual)
+    start = 0
+    for expected_line in _golden_lines(expected):
+        try:
+            index = actual_lines.index(expected_line, start)
+        except ValueError:
+            pytest.fail(f"missing expected golden line: {expected_line!r}")
+        start = index + 1
+
+
 @pytest.mark.parametrize("case_dir", _case_dirs(), ids=lambda p: p.name)
 def test_surface_fixture_external(case_dir: Path) -> None:
     header = case_dir / "input.h"
@@ -47,4 +62,4 @@ def test_surface_fixture_external(case_dir: Path) -> None:
     out = MojoGenerator(_GOLDEN_EMIT_OPTIONS).generate(unit)
     expected = (case_dir / "expect.external.mojo").read_text(encoding="utf-8")
     relative_header = str(header.relative_to(_REPO_ROOT))
-    assert _normalize_source_line(out, relative_header) == expected
+    _assert_golden_subsequence(_normalize_source_line(out, relative_header), expected)

@@ -26,18 +26,15 @@ flowchart TD
     L --> M
     F --> M
 
-    M --> N[top-level decl lowering]
-    M --> O[macro collection]
-    N --> P[embedded record materialization pass]
-    O --> Q[macro and const decls]
-
-    P --> R[raw lowered decls]
+    M --> N[top-level translation-unit decl lowering]
+    M --> O[source-backed translation-unit macro collection]
+    N --> P[raw lowered decls]
+    O --> P
+    H --> Q[IR diagnostics]
+    P --> R[Unit assembly]
     Q --> R
-    H --> S[IR diagnostics]
-    R --> T[Unit assembly]
-    S --> T
 
-    T --> U[raw CIR Unit]
+    R --> S[raw CIR Unit]
 ```
 
 ## Stage Boundaries
@@ -45,7 +42,7 @@ flowchart TD
 ### 1. Frontend setup
 
 `ClangParser._build_parser_session()` creates the frontend boundary:
-- resolves the primary header path and any additional include header paths
+- resolves the root header path and any additional include header paths
 - computes effective compile arguments
 - asks libclang to parse one translation unit, using a virtual umbrella header
   when multiple include headers are configured
@@ -61,11 +58,11 @@ This stage is in:
 
 ### 2. Raw declaration lowering
 
-`DeclLowerer` walks top-level cursors from the configured emission headers and
+`DeclLowerer` walks top-level cursors from the translation unit and
 delegates by declaration family:
 - functions, typedefs, enums, globals: lowered directly by `DeclLowerer`
 - structs and unions: delegated to `RecordLowerer`
-- macros: collected after cursor traversal
+- macros: source-backed definitions collected from the translation unit after cursor traversal
 
 This stage is intentionally source-faithful. It does not do post-parse semantic
 repair.
@@ -85,16 +82,7 @@ Key modules:
 
 The output here is still raw CIR `Struct` data, not a Mojo-facing layout plan.
 
-### 4. Embedded record materialization
-
-After the first top-level sweep, `ClangParser` does a follow-up pass that
-materializes complete named record definitions required by embedded-by-value
-fields, even when those definitions came from transitively included headers.
-
-This keeps the raw CIR self-contained enough for later layout-sensitive
-analysis.
-
-### 5. Unit assembly
+### 4. Unit assembly
 
 `ClangParser.run()` and `ClangParser.run_raw()` both assemble:
 - `source_header`
@@ -106,14 +94,14 @@ analysis.
 
 This produces a source-faithful but not yet normalized `Unit`.
 
-### 6. Hand-off boundary
+### 5. Hand-off boundary
 
 `ClangParser.run()` stops at raw CIR. Any later CIR normalization or lowering
 belongs to the analysis layer, not the parser. In the current code shape that
 means `AnalysisOrchestrator` owns:
 
 - CIR validation
-- reachability materialization
+- signature-only record stub materialization
 - CIR canonicalization
 - CIR -> MojoIR lowering
 - late record policy assignment

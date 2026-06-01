@@ -1,10 +1,9 @@
 """Translation-unit macro environment for resolving object-like ``#define`` chains.
 
-Primary-header bindings only *emit* macros from the main file, but replacement
-lists may reference names defined in included headers. We index object-like
-macros from the entire TU (last definition wins) and expand primary macros
-against that environment before parsing, matching a small subset of CPP
-behavior without emitting every intermediate ``comptime``.
+All source-backed translation-unit macros are emitted. We also index object-like
+macros from the source-backed TU macro set (last definition wins) and expand
+macro replacement lists against that environment before parsing, matching a
+small subset of CPP behavior.
 """
 
 from __future__ import annotations
@@ -20,15 +19,18 @@ from mojo_bindgen.parsing.lowering.const_expr import (
 
 
 def collect_object_like_macro_env(tu: cx.TranslationUnit) -> dict[str, list[str]]:
-    """Build a name → replacement token list map for all object-like macros in the TU.
+    """Build a name → replacement token list map for source-backed object-like macros.
 
-    Walks the whole translation unit (including system and nested includes).
-    Function-like macros are skipped. Duplicate names use **last wins** (later
-    ``#define`` in translation unit order overwrites earlier).
+    Walks the translation unit preprocessing record, including nested includes.
+    Compiler/predefined macros without a source file are skipped. Function-like
+    macros are skipped. Duplicate names use **last wins** (later ``#define`` in
+    translation unit order overwrites earlier).
     """
     env: dict[str, list[str]] = {}
     for cursor in tu.cursor.walk_preorder():
         if cursor.kind != cx.CursorKind.MACRO_DEFINITION:  # type: ignore[attr-defined]
+            continue
+        if cursor.location.file is None:
             continue
         name = cursor.spelling
         if not name:

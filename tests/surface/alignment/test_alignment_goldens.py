@@ -38,6 +38,21 @@ def _normalize_source_line(text: str, relative_header: str) -> str:
     return _SOURCE_LINE.sub(f"# source: {relative_header}", text)
 
 
+def _golden_lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if not line.startswith("from ")]
+
+
+def _assert_golden_subsequence(actual: str, expected: str) -> None:
+    actual_lines = _golden_lines(actual)
+    start = 0
+    for expected_line in _golden_lines(expected):
+        try:
+            index = actual_lines.index(expected_line, start)
+        except ValueError:
+            pytest.fail(f"missing expected golden line: {expected_line!r}")
+        start = index + 1
+
+
 @pytest.mark.parametrize("case_dir", _case_dirs(), ids=lambda path: path.name)
 def test_alignment_fixture_external_goldens(case_dir: Path) -> None:
     header = case_dir / "input.h"
@@ -46,12 +61,14 @@ def test_alignment_fixture_external_goldens(case_dir: Path) -> None:
 
     strict_out = MojoGenerator(MojoEmitOptions(strict_abi=True)).generate(unit)
     strict_expected = (case_dir / "expect.strict.external.mojo").read_text(encoding="utf-8")
-    assert _normalize_source_line(strict_out, relative_header) == _normalize_source_line(
-        strict_expected, relative_header
+    _assert_golden_subsequence(
+        _normalize_source_line(strict_out, relative_header),
+        _normalize_source_line(strict_expected, relative_header),
     )
 
     portable_out = MojoGenerator(MojoEmitOptions()).generate(unit)
     portable_expected = (case_dir / "expect.portable.external.mojo").read_text(encoding="utf-8")
-    assert _normalize_source_line(portable_out, relative_header) == _normalize_source_line(
-        portable_expected, relative_header
+    _assert_golden_subsequence(
+        _normalize_source_line(portable_out, relative_header),
+        _normalize_source_line(portable_expected, relative_header),
     )

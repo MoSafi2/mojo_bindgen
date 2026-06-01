@@ -108,12 +108,15 @@ Each case under `tests/surface/fixtures/<case>/` contains:
 - `input.h`
 - `expect.external.mojo`
 
-These are parser-driven goldens for exact emitted bindings.
+These are parser-driven goldens for fixture-owned emitted bindings. The
+translation-unit parser may also emit declarations from transitive/system
+headers, so the tests require the checked-in golden body to appear in order
+rather than requiring no additional output.
 
 Golden policy:
 
-- Surface goldens intentionally run with `MojoEmitOptions(strict_abi=True)` so
-  the checked-in expected output stays pinned to the ABI-strict emission shape.
+- Surface goldens intentionally pin the relevant fixture output shape while
+  allowing extra translation-unit declarations introduced by included headers.
 - Alignment-policy matrix cases live under `tests/surface/alignment/fixtures/`
   and are emitted twice: once in strict ABI mode and once in portable mode.
 

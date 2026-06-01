@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.ir import BinaryExpr, Function, IntLiteral, MacroDecl, Struct, UnaryExpr
+from mojo_bindgen.ir import BinaryExpr, Function, IntLiteral, MacroDecl, RefExpr, Struct, UnaryExpr
 from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr
 from mojo_bindgen.parsing.lowering.macro_env import (
     collect_object_like_macro_env,
@@ -108,7 +108,7 @@ def test_macro_closure_cross_include_header(tmp_path: Path) -> None:
     assert fmt.expr.value == 257
 
 
-def test_include_headers_emit_selected_extra_header_without_private_dependencies(
+def test_include_headers_emit_translation_unit_declarations_and_macros(
     tmp_path: Path,
 ) -> None:
     private = tmp_path / "private_dep.h"
@@ -150,11 +150,12 @@ def test_include_headers_emit_selected_extra_header_without_private_dependencies
     macros = {d.name: d for d in unit.decls if isinstance(d, MacroDecl)}
     records = [d.name for d in unit.decls if isinstance(d, Struct)]
 
-    assert functions == ["primary_fn", "extra_fn"]
+    assert functions == ["primary_fn", "private_fn", "extra_fn"]
     assert "extra_record" in records
-    assert "private_fn" not in functions
     assert "PUBLIC_VALUE" in macros
-    assert "PRIVATE_VALUE" not in macros
+    assert "PRIVATE_VALUE" in macros
+    assert isinstance(macros["PRIVATE_VALUE"].expr, IntLiteral)
+    assert macros["PRIVATE_VALUE"].expr.value == 40
     assert isinstance(macros["PUBLIC_VALUE"].expr, IntLiteral)
     assert macros["PUBLIC_VALUE"].expr.value == 42
 
@@ -174,3 +175,24 @@ def test_collect_object_like_macro_env_last_wins(tmp_path: Path) -> None:
     session = parser._build_parser_session()  # noqa: SLF001
     env = collect_object_like_macro_env(session.tu)
     assert env.get("DUP") == ["2"]
+
+
+def test_macro_env_does_not_fold_through_unemitted_compiler_macros(tmp_path: Path) -> None:
+    header = tmp_path / "compiler_macro_ref.h"
+    header.write_text(
+        "#define LOCAL_GNUC __GNUC__\n#define LOCAL_NUM 7\n",
+        encoding="utf-8",
+    )
+
+    parser = ClangParser(header, library="compiler_macro_ref", link_name="compiler_macro_ref")
+    session = parser._build_parser_session()  # noqa: SLF001
+    env = collect_object_like_macro_env(session.tu)
+    unit = parser.run()
+    macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
+
+    assert "__GNUC__" not in macros
+    assert "__GNUC__" not in env
+    assert isinstance(macros["LOCAL_GNUC"].expr, RefExpr)
+    assert macros["LOCAL_GNUC"].expr.name == "__GNUC__"
+    assert isinstance(macros["LOCAL_NUM"].expr, IntLiteral)
+    assert macros["LOCAL_NUM"].expr.value == 7

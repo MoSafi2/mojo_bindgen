@@ -13,8 +13,7 @@ from pathlib import Path
 
 from clang import cindex as cx
 
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
-from mojo_bindgen.ir import Decl, Struct, StructRef, TargetABI, Type, Unit
+from mojo_bindgen.ir import Decl, TargetABI, Unit
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import (
     ClangCompat,
@@ -141,7 +140,6 @@ class ClangParser:
         )
         session.registry.bind_definition_lowerer(record_lowerer.lower_record_definition)
         return DeclLowerer(
-            frontend=session.frontend,
             tu=session.tu,
             registry=session.registry,
             diagnostics=self.diagnostics,
@@ -156,7 +154,7 @@ class ClangParser:
         """Lower top-level cursors and append macro declarations."""
         decls: list[Decl] = []
         completed_marker = 0
-        for cursor in session.frontend.iter_emittable_cursors(session.tu):
+        for cursor in session.frontend.iter_translation_unit_cursors(session.tu):
             lowered = decl_lowerer.lower_top_level_decl(cursor)
             if lowered is None:
                 continue
@@ -174,86 +172,8 @@ class ClangParser:
             else:
                 decls.append(lowered)
         decls.extend(decl_lowerer.collect_macros())
-        completed_marker, materialized_records = self._materialize_embedded_record_decls(
-            session,
-            decls,
-            decl_lowerer,
-            completed_marker,
-        )
-        decls.extend(materialized_records)
 
         return decls
-
-    def _materialize_embedded_record_decls(
-        self,
-        session: ParseSession,
-        decls: list[Decl],
-        decl_lowerer: DeclLowerer,
-        completed_marker: int,
-    ) -> tuple[int, list[Struct]]:
-        """Materialize complete named record definitions required by embedded-by-value fields."""
-
-        emitted_decl_ids = {decl.decl_id for decl in decls if isinstance(decl, Struct)}
-        materialized: list[Struct] = []
-        cursor_by_decl_id = session.registry.record_definition_by_decl_id
-
-        while True:
-            needed_decl_ids: list[str] = []
-            for decl in [decl for decl in decls if isinstance(decl, Struct)] + materialized:
-                for ref in _embedded_struct_refs_for_struct(decl):
-                    if ref.decl_id in emitted_decl_ids:
-                        continue
-                    if ref.decl_id not in cursor_by_decl_id:
-                        continue
-                    if ref.decl_id in needed_decl_ids:
-                        continue
-                    needed_decl_ids.append(ref.decl_id)
-
-            if not needed_decl_ids:
-                break
-
-            for decl_id in needed_decl_ids:
-                session.registry.materialize_record_definition(cursor_by_decl_id[decl_id])
-
-            new_marker, new_records = decl_lowerer.record_lowerer.completed_records_since(
-                completed_marker
-            )
-            completed_marker = new_marker
-            fresh_records = [
-                record
-                for record in new_records
-                if record is not None and record.decl_id not in emitted_decl_ids
-            ]
-            if not fresh_records:
-                break
-            materialized.extend(fresh_records)
-            emitted_decl_ids.update(record.decl_id for record in fresh_records)
-
-        return completed_marker, materialized
-
-
-def _embedded_struct_refs_for_struct(decl: Struct) -> tuple[StructRef, ...]:
-    refs: list[StructRef] = []
-    for field in decl.fields:
-        refs.extend(_embedded_struct_refs(field.type))
-    return tuple(refs)
-
-
-def _embedded_struct_refs(t: Type) -> tuple[StructRef, ...]:
-    out = [
-        node
-        for node in collect_type_nodes(
-            t,
-            lambda node: isinstance(node, StructRef) and not node.is_union,
-            options=TypeWalkOptions(
-                descend_pointer=False,
-                descend_function_ptr=False,
-                descend_vector_element=True,
-            ),
-        )
-        if isinstance(node, StructRef)
-    ]
-    return tuple(out)
 
 
 def _handle_frontend_errors(

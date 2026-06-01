@@ -1,7 +1,7 @@
 """Frontend services for libclang parsing.
 
 This module owns the translation-unit setup boundary for the parser package:
-path resolution, compile-argument normalization, primary-file filtering, and
+path resolution, compile-argument normalization, translation-unit parsing, and
 frontend diagnostic collection.
 """
 
@@ -100,7 +100,6 @@ class ClangFrontend:
 
     def __init__(self, config: ClangFrontendConfig) -> None:
         self.config = config
-        self._source_header_set = frozenset(header.resolve() for header in self.emittable_headers)
 
     @property
     def header(self) -> Path:
@@ -111,7 +110,7 @@ class ClangFrontend:
         return self.config.include_headers
 
     @property
-    def emittable_headers(self) -> tuple[Path, ...]:
+    def configured_headers(self) -> tuple[Path, ...]:
         return (self.header, *self.include_headers)
 
     @property
@@ -154,24 +153,9 @@ class ClangFrontend:
             )
         return out
 
-    def is_emittable_file_cursor(self, cursor: cx.Cursor) -> bool:
-        """Return whether a cursor originates from a configured include header."""
-        loc = cursor.location
-        return bool(loc.file and Path(loc.file.name).resolve() in self._source_header_set)
-
-    def iter_emittable_cursors(self, tu: cx.TranslationUnit) -> Iterator[cx.Cursor]:
-        """Yield top-level cursors from configured include headers in source order."""
+    def iter_translation_unit_cursors(self, tu: cx.TranslationUnit) -> Iterator[cx.Cursor]:
+        """Yield top-level translation-unit cursors in source order."""
         yield from tu.cursor.get_children()
-        # if self.is_emittable_file_cursor(cursor):
-        # yield cursor
-
-    def is_primary_file_cursor(self, cursor: cx.Cursor) -> bool:
-        """Compatibility alias for the widened include-header source predicate."""
-        return self.is_emittable_file_cursor(cursor)
-
-    def iter_primary_cursors(self, tu: cx.TranslationUnit) -> Iterator[cx.Cursor]:
-        """Compatibility alias for iterating include-header top-level cursors."""
-        yield from self.iter_emittable_cursors(tu)
 
     def _umbrella_header_path(self) -> Path:
         """Return a stable virtual header path used for multi-header parsing."""
@@ -179,7 +163,7 @@ class ClangFrontend:
 
     def _umbrella_header(self) -> str:
         includes = "\n".join(
-            f'#include "{_escape_include_path(header)}"' for header in self.emittable_headers
+            f'#include "{_escape_include_path(header)}"' for header in self.configured_headers
         )
         return f"{includes}\n"
 

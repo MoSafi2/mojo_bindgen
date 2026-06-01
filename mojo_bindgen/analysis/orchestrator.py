@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from mojo_bindgen.analysis.cir_canonicalizer import CIRCanonicalizer
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.reachability import ReachabilityMaterializePass
+from mojo_bindgen.analysis.reachability import SignatureRecordStubPass
 from mojo_bindgen.analysis.record_policies import assign_record_policies
 from mojo_bindgen.analysis.unit_lowering import lower_unit
 from mojo_bindgen.analysis.validate_ir import ValidateIRPass
@@ -34,7 +34,7 @@ class AnalysisOrchestrator:
     def normalize_cir(self, unit: Unit) -> Unit:
         """Run the CIR repair sequence before MojoIR lowering."""
         current = ValidateIRPass().run(unit)
-        current = ReachabilityMaterializePass().run(current).unit
+        current = SignatureRecordStubPass().run(current).unit
         current = CIRCanonicalizer().canonicalize(current)
         return current
 
