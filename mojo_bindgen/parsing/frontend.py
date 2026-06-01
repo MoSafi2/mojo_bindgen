@@ -72,6 +72,7 @@ def _probe_compiler_include(driver: str) -> str | None:
     return None
 
 
+# Make the compiler include parametric, using gcc, cc, and clang as probes, allow multiple values.
 def _default_system_compile_args() -> list[str]:
     """Return default include flags for libclang parsing."""
     args = ["-I/usr/include"]
@@ -160,9 +161,9 @@ class ClangFrontend:
 
     def iter_emittable_cursors(self, tu: cx.TranslationUnit) -> Iterator[cx.Cursor]:
         """Yield top-level cursors from configured include headers in source order."""
-        for cursor in tu.cursor.get_children():
-            if self.is_emittable_file_cursor(cursor):
-                yield cursor
+        yield from tu.cursor.get_children()
+        # if self.is_emittable_file_cursor(cursor):
+        # yield cursor
 
     def is_primary_file_cursor(self, cursor: cx.Cursor) -> bool:
         """Compatibility alias for the widened include-header source predicate."""
