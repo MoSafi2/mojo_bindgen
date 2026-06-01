@@ -47,7 +47,7 @@ def _errmsg(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) -> String:
 def _check_db_rc(
     label: String, db: UnsafePointer[sql.sqlite3, MutExternalOrigin], rc: Int32
 ) raises:
-    if rc != sql.SQLITE_OK:
+    if rc != Int32(sql.SQLITE_OK):
         raise Error(label + " rc=" + String(rc) + " err=" + _errmsg(db))
     print(label + "|ok")
 
@@ -62,10 +62,10 @@ def _open_memory() raises -> UnsafePointer[sql.sqlite3, MutExternalOrigin]:
     var rc = sql.sqlite3_open_v2(
         _cstr(":memory:\0"),
         ppDb,
-        sql.SQLITE_OPEN_READWRITE | sql.SQLITE_OPEN_CREATE,
+        Int32(sql.SQLITE_OPEN_READWRITE | sql.SQLITE_OPEN_CREATE),
         Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
     )
-    _assert("open.rc", rc == sql.SQLITE_OK)
+    _assert("open.rc", rc == Int32(sql.SQLITE_OK))
     _assert(
         "open.nonnull",
         ppDb[0] != Optional[UnsafePointer[sql.sqlite3, MutExternalOrigin]](),
@@ -109,7 +109,7 @@ def _finalize(
     stmt: UnsafePointer[sql.sqlite3_stmt, MutExternalOrigin], label: String
 ) raises:
     var rc = sql.sqlite3_finalize(stmt)
-    _assert(label, rc == sql.SQLITE_OK)
+    _assert(label, rc == Int32(sql.SQLITE_OK))
 
 
 # ---------------------------
@@ -147,17 +147,17 @@ def run_prepare_reuse(db: UnsafePointer[sql.sqlite3, MutExternalOrigin]) raises:
     var stmt = _prepare(db, "INSERT INTO t2(v) VALUES (?);\0", "prep.insert")
 
     var rc = sql.sqlite3_bind_int(stmt, 1, 7)
-    _assert("bind.int", rc == sql.SQLITE_OK)
+    _assert("bind.int", rc == Int32(sql.SQLITE_OK))
 
-    _assert("step.done", sql.sqlite3_step(stmt) == sql.SQLITE_DONE)
+    _assert("step.done", sql.sqlite3_step(stmt) == Int32(sql.SQLITE_DONE))
 
     # reuse
-    _assert("reset", sql.sqlite3_reset(stmt) == sql.SQLITE_OK)
+    _assert("reset", sql.sqlite3_reset(stmt) == Int32(sql.SQLITE_OK))
 
     rc = sql.sqlite3_bind_int(stmt, 1, 9)
-    _assert("bind.int2", rc == sql.SQLITE_OK)
+    _assert("bind.int2", rc == Int32(sql.SQLITE_OK))
 
-    _assert("step.done2", sql.sqlite3_step(stmt) == sql.SQLITE_DONE)
+    _assert("step.done2", sql.sqlite3_step(stmt) == Int32(sql.SQLITE_DONE))
 
     _finalize(stmt, "finalize.reuse")
 
@@ -179,18 +179,18 @@ def run_text_roundtrip(
         -1,
         _ignore_bound_value,
     )
-    _assert("bind.text", rc == sql.SQLITE_OK)
+    _assert("bind.text", rc == Int32(sql.SQLITE_OK))
 
-    _assert("step.text.insert", sql.sqlite3_step(stmt) == sql.SQLITE_DONE)
+    _assert("step.text.insert", sql.sqlite3_step(stmt) == Int32(sql.SQLITE_DONE))
     _finalize(stmt, "finalize.text.insert")
 
     stmt = _prepare(db, "SELECT v FROM txt;\0", "text.select")
 
-    _assert("step.text.row", sql.sqlite3_step(stmt) == sql.SQLITE_ROW)
+    _assert("step.text.row", sql.sqlite3_step(stmt) == Int32(sql.SQLITE_ROW))
 
     _assert(
         "col.type.text",
-        sql.sqlite3_column_type(stmt, 0) == sql.SQLITE_TEXT,
+        sql.sqlite3_column_type(stmt, 0) == Int32(sql.SQLITE_TEXT),
     )
 
     var p = sql.sqlite3_column_text(stmt, 0)
@@ -221,18 +221,18 @@ def run_blob_roundtrip(
         4,
         _ignore_bound_value,
     )
-    _assert("bind.blob", rc == sql.SQLITE_OK)
+    _assert("bind.blob", rc == Int32(sql.SQLITE_OK))
 
-    _assert("step.blob.insert", sql.sqlite3_step(stmt) == sql.SQLITE_DONE)
+    _assert("step.blob.insert", sql.sqlite3_step(stmt) == Int32(sql.SQLITE_DONE))
     _finalize(stmt, "finalize.blob.insert")
 
     stmt = _prepare(db, "SELECT v FROM b;\0", "blob.select")
 
-    _assert("step.blob.row", sql.sqlite3_step(stmt) == sql.SQLITE_ROW)
+    _assert("step.blob.row", sql.sqlite3_step(stmt) == Int32(sql.SQLITE_ROW))
 
     _assert(
         "col.type.blob",
-        sql.sqlite3_column_type(stmt, 0) == sql.SQLITE_BLOB,
+        sql.sqlite3_column_type(stmt, 0) == Int32(sql.SQLITE_BLOB),
     )
 
     var size = sql.sqlite3_column_bytes(stmt, 0)
@@ -263,7 +263,7 @@ def main() raises:
     run_text_roundtrip(db)
     run_blob_roundtrip(db)
 
-    _assert("close", sql.sqlite3_close(db) == sql.SQLITE_OK)
+    _assert("close", sql.sqlite3_close(db) == Int32(sql.SQLITE_OK))
 
     print("")
     print("=== ALL TESTS PASSED ===")

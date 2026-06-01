@@ -45,7 +45,7 @@ def main() raises:
             _ = gzclose(writer)
             raise Error("gzputc failed")
 
-    if gzclose(writer) != Z_OK:
+    if gzclose(writer) != Int32(Z_OK):
         raise Error("gzclose(writer) failed")
 
     var reader = gzopen(_cstr("/tmp/mojo_bindgen_zlib_smoke.gz"), _cstr("rb"))
@@ -65,7 +65,7 @@ def main() raises:
         _ = gzclose(reader)
         raise Error("gzip stream longer than expected")
 
-    if gzclose(reader) != Z_OK:
+    if gzclose(reader) != Int32(Z_OK):
         raise Error("gzclose(reader) failed")
 
     print("zlib.file_roundtrip_ok|", 1)

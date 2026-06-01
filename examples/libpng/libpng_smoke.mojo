@@ -33,7 +33,7 @@ def run_version_checks() raises:
     _assert("libpng.version_positive", access_version > 0)
     _assert(
         "libpng.version_matches_header",
-        Int32(access_version) == png.PNG_LIBPNG_VER,
+        access_version == UInt32(png.PNG_LIBPNG_VER),
     )
     print("libpng.version_number|", access_version)
 
@@ -292,10 +292,10 @@ def run_transform_and_options_checks() raises:
 
     # Configure representative writer-side options.
     png.png_set_crc_action(
-        png_ptr, png.PNG_CRC_WARN_USE, png.PNG_CRC_WARN_DISCARD
+        png_ptr, Int32(png.PNG_CRC_WARN_USE), Int32(png.PNG_CRC_WARN_DISCARD)
     )
     png.png_set_filter(
-        png_ptr, png.PNG_FILTER_TYPE_BASE, png.PNG_ALL_FILTERS
+        png_ptr, Int32(png.PNG_FILTER_TYPE_BASE), Int32(png.PNG_ALL_FILTERS)
     )
     png.png_set_compression_level(png_ptr, 6)
     png.png_set_compression_strategy(png_ptr, 0)
@@ -308,22 +308,22 @@ def run_transform_and_options_checks() raises:
         UInt32(IMAGE_W),
         UInt32(IMAGE_H),
         8,
-        png.PNG_COLOR_TYPE_RGB_ALPHA,
-        png.PNG_INTERLACE_NONE,
-        png.PNG_COMPRESSION_TYPE_BASE,
-        png.PNG_FILTER_TYPE_BASE,
+        Int32(png.PNG_COLOR_TYPE_RGB_ALPHA),
+        Int32(png.PNG_INTERLACE_NONE),
+        Int32(png.PNG_COMPRESSION_TYPE_BASE),
+        Int32(png.PNG_FILTER_TYPE_BASE),
     )
     png.png_set_pHYs(
         png_const_ptr,
         info_ptr,
         3780,
         3780,
-        png.PNG_RESOLUTION_METER,
+        Int32(png.PNG_RESOLUTION_METER),
     )
 
     var text_entry = alloc[png.png_text_struct](1)
     text_entry[0] = png.png_text_struct(
-        compression=png.PNG_TEXT_COMPRESSION_NONE,
+        compression=Int32(png.PNG_TEXT_COMPRESSION_NONE),
         key=_cstr_mut("Comment"),
         text=_cstr_mut("mojo-bindgen-smoke"),
         text_length=18,
@@ -361,7 +361,10 @@ def run_transform_and_options_checks() raises:
     _assert("libpng.ihdr_width", get_w[0] == UInt32(IMAGE_W))
     _assert("libpng.ihdr_height", get_h[0] == UInt32(IMAGE_H))
     _assert("libpng.ihdr_bit_depth", get_bd[0] == 8)
-    _assert("libpng.ihdr_color_type", get_ct[0] == png.PNG_COLOR_TYPE_RGB_ALPHA)
+    _assert(
+        "libpng.ihdr_color_type",
+        get_ct[0] == Int32(png.PNG_COLOR_TYPE_RGB_ALPHA),
+    )
 
     var res_x = alloc[UInt32](1)
     var res_y = alloc[UInt32](1)
@@ -372,7 +375,7 @@ def run_transform_and_options_checks() raises:
     _assert("libpng.get_phys_valid", phys_valid != 0)
     _assert("libpng.get_phys_x", res_x[0] == 3780)
     _assert("libpng.get_phys_y", res_y[0] == 3780)
-    _assert("libpng.get_phys_unit", unit_type[0] == png.PNG_RESOLUTION_METER)
+    _assert("libpng.get_phys_unit", unit_type[0] == Int32(png.PNG_RESOLUTION_METER))
 
     var out_text = alloc[png.png_textp](1)
     var out_count = alloc[Int32](1)

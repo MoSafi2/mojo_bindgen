@@ -464,6 +464,12 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
                 diagnostic="predefined macro preserved without evaluation",
             ),
             MacroDecl(
+                name="MACRO_EMPTY",
+                tokens=[],
+                kind="empty",
+                diagnostic="empty macro body",
+            ),
+            MacroDecl(
                 name="MACRO_NULL",
                 tokens=["(", "void", "*", ")", "0"],
                 kind="object_like_supported",
@@ -515,14 +521,11 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert "comptime MACRO_OK = c_int(1)" in out
     assert "# macro MACRO_FILE: predefined macro preserved without evaluation" in out
     assert "# define MACRO_FILE __FILE__" in out
+    assert "MACRO_EMPTY" not in out
     assert "# macro MACRO_NULL: null pointer macro is not emitted directly" in out
     assert "# define MACRO_NULL ( void * ) 0" in out
     assert "# macro MACRO_GENERIC: unsupported macro replacement list" in out
-    assert (
-        "# macro MACRO_REF: identifier reference macro is not emitted directly; "
-        "only literal macros are currently supported"
-    ) in out
-    assert "# define MACRO_REF MACRO_OK" in out
+    assert "comptime MACRO_REF = MACRO_OK" in out
 
 
 def test_generator_emits_macro_and_const_before_global_and_function_sections() -> None:

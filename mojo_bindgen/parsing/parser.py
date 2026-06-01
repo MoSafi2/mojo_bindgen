@@ -24,6 +24,7 @@ from mojo_bindgen.parsing.frontend import (
     _resolve_header_path,
 )
 from mojo_bindgen.parsing.lowering import (
+    ClangMacroFallback,
     ConstExprParser,
     DeclLowerer,
     LiteralResolver,
@@ -63,6 +64,8 @@ class ClangParser:
         compile_args: list[str] | None = None,
         raise_on_error: bool = True,
         include_headers: Sequence[Path | str] | None = None,
+        clang_macro_fallback: bool = False,
+        clang_macro_fallback_build_dir: Path | str | None = None,
     ) -> None:
         self.header = _resolve_header_path(header)
         self.include_headers = _resolve_include_headers(self.header, include_headers)
@@ -72,6 +75,10 @@ class ClangParser:
             _default_system_compile_args() if compile_args is None else list(compile_args)
         )
         self.raise_on_error = raise_on_error
+        self.clang_macro_fallback = clang_macro_fallback
+        self.clang_macro_fallback_build_dir = (
+            None if clang_macro_fallback_build_dir is None else Path(clang_macro_fallback_build_dir)
+        )
         self.diagnostics: ParserDiagnosticSink = ParserDiagnosticSink()
 
     def run(self) -> Unit:
@@ -147,6 +154,15 @@ class ClangParser:
             type_lowerer=type_lowerer,
             record_lowerer=record_lowerer,
             const_expr_parser=ConstExprParser(literal_resolver),
+            clang_macro_fallback=(
+                ClangMacroFallback(
+                    headers=[self.header, *self.include_headers],
+                    compile_args=self.compile_args,
+                    build_dir=self.clang_macro_fallback_build_dir,
+                )
+                if self.clang_macro_fallback
+                else None
+            ),
             compat=compat,
         )
 

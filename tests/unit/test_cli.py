@@ -70,6 +70,41 @@ def test_json_mode_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: P
     assert options.json_output is True
 
 
+def test_cli_passes_clang_macro_fallback_options(monkeypatch, capsys, tmp_path: Path) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyResult:
+        unit = _DummyUnit()
+        bindings_source = "generated"
+        layout_test_source = None
+
+    class DummyOrchestrator:
+        def __init__(self, options) -> None:
+            calls["options"] = options
+
+        def run(self) -> DummyResult:
+            return DummyResult()
+
+    monkeypatch.setattr(cli, "BindgenOrchestrator", DummyOrchestrator)
+
+    build_dir = tmp_path / "macro-build"
+    rc = cli.main(
+        [
+            str(tmp_path / "demo.h"),
+            "--clang-macro-fallback",
+            "--clang-macro-fallback-build-dir",
+            str(build_dir),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert captured.out == "generated\n"
+    options = calls["options"]
+    assert options.clang_macro_fallback is True
+    assert options.clang_macro_fallback_build_dir == build_dir
+
+
 def test_non_json_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) -> None:
     calls: dict[str, object] = {}
 

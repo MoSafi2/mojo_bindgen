@@ -64,6 +64,8 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
             include_headers,
             compile_args,
             raise_on_error,
+            clang_macro_fallback,
+            clang_macro_fallback_build_dir,
         ):
             calls["header"] = header
             calls["library"] = library
@@ -71,6 +73,8 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
             calls["include_headers"] = include_headers
             calls["compile_args"] = compile_args
             calls["raise_on_error"] = raise_on_error
+            calls["clang_macro_fallback"] = clang_macro_fallback
+            calls["clang_macro_fallback_build_dir"] = clang_macro_fallback_build_dir
 
         def run(self) -> Unit:
             return _demo_unit()
@@ -91,6 +95,8 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
         "include_headers": None,
         "compile_args": ["-I./include", "-fretain-comments-from-system-headers"],
         "raise_on_error": True,
+        "clang_macro_fallback": False,
+        "clang_macro_fallback_build_dir": None,
     }
 
 
@@ -107,6 +113,7 @@ def test_parse_adds_system_comment_retention_to_default_compile_args(monkeypatch
             include_headers,
             compile_args,
             raise_on_error,
+            **_kwargs,
         ):
             calls["compile_args"] = compile_args
 
@@ -135,6 +142,7 @@ def test_parse_omits_system_comment_retention_when_doc_comments_disabled(monkeyp
             include_headers,
             compile_args,
             raise_on_error,
+            **_kwargs,
         ):
             calls["compile_args"] = compile_args
 
@@ -166,6 +174,7 @@ def test_parse_does_not_duplicate_system_comment_retention_arg(monkeypatch) -> N
             include_headers,
             compile_args,
             raise_on_error,
+            **_kwargs,
         ):
             calls["compile_args"] = compile_args
 

@@ -7,6 +7,7 @@ import pytest
 from mojo_bindgen.ir import (
     BinaryExpr,
     CastExpr,
+    CharLiteral,
     FloatLiteral,
     FloatType,
     IntLiteral,
@@ -17,7 +18,7 @@ from mojo_bindgen.ir import (
     StringLiteral,
 )
 from mojo_bindgen.parsing.lowering import ConstExprParser, LiteralResolver
-from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr
+from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr, fold_parsed_const_expr
 
 
 def _has_libclang() -> bool:
@@ -63,6 +64,51 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
     assert combined_expr.primitive.int_kind.value == "UINT"
 
 
+def test_const_expr_parser_types_unsuffixed_negative_macro_literals_as_signed() -> None:
+    parser = ConstExprParser(LiteralResolver([]), macro_defaults=True)
+
+    positive = parser.parse_tokens(["1"])
+    assert positive is not None
+    assert isinstance(positive.primitive, IntType)
+    assert positive.primitive.int_kind.value == "INT"
+
+    out = parser.parse_tokens(["-", "1"])
+    assert out is not None
+    assert isinstance(out.primitive, IntType)
+    assert out.primitive.int_kind.value == "INT"
+
+    folded = fold_parsed_const_expr(out)
+    assert isinstance(folded.expr, IntLiteral)
+    assert folded.expr.value == -1
+    assert isinstance(folded.primitive, IntType)
+    assert folded.primitive.int_kind.value == "INT"
+
+
+def test_const_expr_parser_preserves_explicit_unsigned_macro_literal_type() -> None:
+    parser = ConstExprParser(LiteralResolver([]), macro_defaults=True)
+
+    out = parser.parse_tokens(["-", "1u"])
+    assert out is not None
+    assert isinstance(out.primitive, IntType)
+    assert out.primitive.int_kind.value == "UINT"
+
+    folded = fold_parsed_const_expr(out)
+    assert isinstance(folded.expr, IntLiteral)
+    assert folded.expr.value == -1
+    assert isinstance(folded.primitive, IntType)
+    assert folded.primitive.int_kind.value == "UINT"
+
+
+def test_const_expr_parser_preserves_clang_resolved_cast_integer_type() -> None:
+    parser = ConstExprParser(LiteralResolver([]), macro_defaults=True)
+
+    out = parser.parse_tokens(["(", "__SIZE_TYPE__", ")", "-", "1"])
+    assert out is not None
+    assert isinstance(out.expr, CastExpr)
+    assert isinstance(out.primitive, IntType)
+    assert out.primitive.int_kind.name.startswith("U")
+
+
 def test_const_expr_parser_cast_size_t_minus_one() -> None:
     """``(size_t)-1`` is a cast of ``-1``, not ``size_t`` minus ``1`` (see ``CURL_ZERO_TERMINATED``)."""
     parser = ConstExprParser(LiteralResolver([]))
@@ -82,6 +128,50 @@ def test_const_expr_parser_parses_sizeof_type_expressions() -> None:
     assert out is not None
     assert isinstance(out.expr, SizeOfExpr)
     assert isinstance(out.expr.target, IntType)
+
+
+def test_const_expr_parser_folds_logical_comparison_and_ternary_ops() -> None:
+    parser = ConstExprParser(LiteralResolver([]))
+
+    logical = parser.parse_tokens(["!", "0", "&&", "(", "4", ">=", "3", ")"])
+    ternary = parser.parse_tokens(["(", "1", "<", "2", ")", "?", "40", "+", "2", ":", "0"])
+
+    assert logical is not None
+    logical_folded = fold_const_expr(logical.expr)
+    assert isinstance(logical_folded, IntLiteral)
+    assert logical_folded.value == 1
+
+    assert ternary is not None
+    ternary_folded = fold_const_expr(ternary.expr)
+    assert isinstance(ternary_folded, IntLiteral)
+    assert ternary_folded.value == 42
+
+
+def test_const_expr_parser_decodes_string_concat_and_char_escapes() -> None:
+    parser = ConstExprParser(LiteralResolver([]))
+
+    string_expr = parser.parse_tokens(['"a\\n"', '"b"'])
+    char_expr = parser.parse_tokens(["'\\x41'"])
+
+    assert string_expr is not None
+    assert isinstance(string_expr.expr, StringLiteral)
+    assert string_expr.expr.value == "a\nb"
+    assert char_expr is not None
+    assert isinstance(char_expr.expr, CharLiteral)
+    assert char_expr.expr.value == "A"
+
+
+def test_const_expr_parser_resolves_nested_macro_values() -> None:
+    parser_value = ConstExprParser(LiteralResolver([])).parse_tokens(["40"])
+    assert parser_value is not None
+    values = {"A": parser_value}
+    parser = ConstExprParser(LiteralResolver([]), macro_values=values)
+
+    out = parser.parse_tokens(["A", "+", "2"])
+    assert out is not None
+    folded = fold_const_expr(out.expr)
+    assert isinstance(folded, IntLiteral)
+    assert folded.value == 42
 
 
 def test_const_expr_parser_classifies_broader_predefined_and_function_like_macros() -> None:

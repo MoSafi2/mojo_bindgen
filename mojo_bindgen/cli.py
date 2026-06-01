@@ -114,6 +114,22 @@ def run(
             show_default=False,
         ),
     ] = None,
+    clang_macro_fallback: Annotated[
+        bool,
+        typer.Option(
+            "--clang-macro-fallback",
+            help="Evaluate unsupported object-like integer macros through a temporary Clang translation unit.",
+        ),
+    ] = False,
+    clang_macro_fallback_build_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--clang-macro-fallback-build-dir",
+            metavar="PATH",
+            help="Directory for temporary Clang macro fallback probe files.",
+            show_default=False,
+        ),
+    ] = None,
 ) -> int:
     """Generate Mojo FFI from a C header using libclang.
 
@@ -140,6 +156,8 @@ def run(
                 json_output=json_output,
                 output=output,
                 layout_test_output=layout_test_output,
+                clang_macro_fallback=clang_macro_fallback,
+                clang_macro_fallback_build_dir=clang_macro_fallback_build_dir,
             )
         )
         result = orchestrator.run()

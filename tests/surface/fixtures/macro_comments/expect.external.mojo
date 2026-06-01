@@ -9,7 +9,8 @@ from std.sys.info import size_of
 # macro MCC_FILE: predefined macro preserved without evaluation
 # define MCC_FILE __FILE__
 
-comptime MCC_REF = c_int(9)
+# macro MCC_REF: macro expression references a non-emitted or later macro constant 'MCC_TARGET'
+# define MCC_REF MCC_TARGET
 
 comptime MCC_TARGET = c_int(9)
 

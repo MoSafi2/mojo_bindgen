@@ -48,6 +48,7 @@ from mojo_bindgen.ir import (
     ParametricBase,
     ParametricType,
     RefExpr,
+    SizeOfExpr,
     Struct,
     Typedef,
     UnaryExpr,
@@ -82,6 +83,7 @@ class UnitDeclLowerer:
     def __init__(self, session: LoweringSession) -> None:
         self.session = session
         self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
+        self._emitted_const_names: set[str] = set()
 
     def lower_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
         if isinstance(decl, Typedef):
@@ -156,6 +158,9 @@ class UnitDeclLowerer:
             )
             for member in decl.enumerants
         ]
+        self._emitted_const_names.add(enum_name)
+        self._emitted_const_names.update(mojo_ident(member.name) for member in decl.enumerants)
+        self._emitted_const_names.update(mojo_ident(alias_name) for alias_name in decl.alias_names)
         return [enum_decl, *aliases, *enumerants]
 
     def _lower_function(self, decl: Function) -> FunctionDecl:
@@ -205,19 +210,32 @@ class UnitDeclLowerer:
                 ],
                 doc=decl.doc,
             )
+        name = mojo_ident(decl.name)
+        self._emitted_const_names.add(name)
         return AliasDecl(
-            name=mojo_ident(decl.name),
+            name=name,
             kind=AliasKind.CONST_VALUE,
             const_value=self._typed_const_value(value, decl.type),
             doc=decl.doc,
         )
 
-    def _lower_macro(self, decl: MacroDecl) -> AliasDecl:
+    def _lower_macro(self, decl: MacroDecl) -> AliasDecl | None:
+        if decl.kind == "empty":
+            return None
+        name = mojo_ident(decl.name)
+        if name in self._emitted_const_names:
+            if isinstance(decl.expr, RefExpr) and mojo_ident(decl.expr.name) == name:
+                return None
+            return self._macro_comment_alias(
+                decl,
+                f"macro {decl.name}: macro name conflicts with an emitted constant",
+            )
         if decl.expr is not None and decl.type is not None:
-            if isinstance(decl.expr, RefExpr):
+            blocker = self._macro_emit_blocker(decl.expr)
+            if blocker is not None:
                 return self._macro_comment_alias(
                     decl,
-                    f"macro {decl.name}: identifier reference macro is not emitted directly; only literal macros are currently supported",
+                    f"macro {decl.name}: {blocker}",
                 )
             try:
                 value = self.session.const_lowerer.run(decl.expr)
@@ -229,8 +247,9 @@ class UnitDeclLowerer:
                     )
                 value = None
             else:
+                self._emitted_const_names.add(name)
                 return AliasDecl(
-                    name=mojo_ident(decl.name),
+                    name=name,
                     kind=AliasKind.MACRO_VALUE,
                     const_value=self._typed_const_value(value, decl.type),
                     doc=decl.doc,
@@ -248,6 +267,31 @@ class UnitDeclLowerer:
             ),
             doc=decl.doc,
         )
+
+    def _macro_emit_blocker(self, expr: ConstExpr) -> str | None:
+        if isinstance(expr, NullPtrLiteral):
+            return "null pointer macro is not emitted directly"
+        if isinstance(expr, RefExpr):
+            name = mojo_ident(expr.name)
+            if name not in self._emitted_const_names:
+                return (
+                    "macro expression references a non-emitted or later macro constant "
+                    f"{expr.name!r}"
+                )
+            return None
+        if isinstance(expr, UnaryExpr):
+            if expr.op == "!":
+                return "C logical operator '!' is not emitted directly"
+            return self._macro_emit_blocker(expr.operand)
+        if isinstance(expr, BinaryExpr):
+            if expr.op in {"&&", "||"}:
+                return f"C logical operator {expr.op!r} is not emitted directly"
+            return self._macro_emit_blocker(expr.lhs) or self._macro_emit_blocker(expr.rhs)
+        if isinstance(expr, CastExpr):
+            return self._macro_emit_blocker(expr.expr)
+        if isinstance(expr, (SizeOfExpr, CallExpr)):
+            return None
+        return None
 
     def _lower_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:

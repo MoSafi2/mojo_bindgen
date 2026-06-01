@@ -7,6 +7,7 @@ from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
+    BinaryExpr,
     BuiltinType,
     ByteOrder,
     CallExpr,
@@ -44,6 +45,7 @@ from mojo_bindgen.ir import (
     TypeArg,
     Typedef,
     TypeRef,
+    UnaryExpr,
     Unit,
     VoidType,
 )
@@ -347,6 +349,59 @@ def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
     assert [note.category for note in decl.diagnostics] == ["macro_comment", "macro_comment"]
     assert decl.diagnostics[0].message == "macro BROKEN: unsupported macro body"
     assert decl.diagnostics[1].message == "define BROKEN foo ( )"
+
+
+def test_lower_unit_preserves_macro_with_unemitted_reference() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            MacroDecl(
+                name="DEPENDS_ON_UNEMITTED",
+                tokens=["UNEMITTED", "+", "1"],
+                kind="object_like_supported",
+                expr=BinaryExpr(op="+", lhs=RefExpr("UNEMITTED"), rhs=IntLiteral(1)),
+                type=_i32(),
+            )
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    decl = lowered.decls[0]
+
+    assert isinstance(decl, AliasDecl)
+    assert decl.kind == AliasKind.MACRO_VALUE
+    assert decl.const_value is None
+    assert decl.diagnostics
+    assert "non-emitted" in decl.diagnostics[0].message
+
+
+def test_lower_unit_preserves_macro_with_unfolded_c_logical_operator() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            MacroDecl(
+                name="LOGICAL",
+                tokens=["!", "FLAG"],
+                kind="object_like_supported",
+                expr=UnaryExpr(op="!", operand=RefExpr("FLAG")),
+                type=_i32(),
+            )
+        ],
+    )
+
+    lowered = lower_unit(unit)
+    decl = lowered.decls[0]
+
+    assert isinstance(decl, AliasDecl)
+    assert decl.kind == AliasKind.MACRO_VALUE
+    assert decl.const_value is None
+    assert "logical operator" in decl.diagnostics[0].message
 
 
 def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None:

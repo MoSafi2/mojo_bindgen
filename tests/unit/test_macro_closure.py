@@ -7,7 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.ir import BinaryExpr, Function, IntLiteral, MacroDecl, RefExpr, Struct, UnaryExpr
+from mojo_bindgen.ir import (
+    BinaryExpr,
+    Function,
+    IntLiteral,
+    IntType,
+    MacroDecl,
+    RefExpr,
+    Struct,
+    UnaryExpr,
+)
 from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr
 from mojo_bindgen.parsing.lowering.macro_env import (
     collect_object_like_macro_env,
@@ -160,6 +169,27 @@ def test_include_headers_emit_translation_unit_declarations_and_macros(
     assert macros["PUBLIC_VALUE"].expr.value == 42
 
 
+def test_empty_macros_are_pruned_from_translation_unit(tmp_path: Path) -> None:
+    header = tmp_path / "empty_macro.h"
+    header.write_text(
+        textwrap.dedent(
+            """\
+            #define EMPTY
+            #define VALUE 1
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    unit = ClangParser(header, library="empty_macro", link_name="empty_macro").run()
+    macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
+
+    assert "EMPTY" not in macros
+    assert macros["VALUE"].kind == "object_like_supported"
+    assert isinstance(macros["VALUE"].expr, IntLiteral)
+    assert macros["VALUE"].expr.value == 1
+
+
 def test_collect_object_like_macro_env_last_wins(tmp_path: Path) -> None:
     p = tmp_path / "dup.h"
     p.write_text(
@@ -175,6 +205,101 @@ def test_collect_object_like_macro_env_last_wins(tmp_path: Path) -> None:
     session = parser._build_parser_session()  # noqa: SLF001
     env = collect_object_like_macro_env(session.tu)
     assert env.get("DUP") == ["2"]
+
+
+def test_ordered_macro_values_do_not_fold_through_later_definitions(tmp_path: Path) -> None:
+    header = tmp_path / "ordered.h"
+    header.write_text(
+        textwrap.dedent(
+            """\
+            #define BEFORE AFTER
+            #define AFTER 42
+            #define AGAIN AFTER
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    unit = ClangParser(header, library="ordered", link_name="ordered").run()
+    macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
+
+    assert isinstance(macros["BEFORE"].expr, RefExpr)
+    assert macros["BEFORE"].expr.name == "AFTER"
+    assert isinstance(macros["AGAIN"].expr, IntLiteral)
+    assert macros["AGAIN"].expr.value == 42
+
+
+def test_clang_macro_fallback_evaluates_unsupported_integer_macro(tmp_path: Path) -> None:
+    header = tmp_path / "fallback.h"
+    header.write_text("#define FALLBACK_VALUE ((int)sizeof(long))\n", encoding="utf-8")
+
+    without_fallback = ClangParser(
+        header,
+        library="fallback",
+        link_name="fallback",
+    ).run()
+    with_fallback = ClangParser(
+        header,
+        library="fallback",
+        link_name="fallback",
+        clang_macro_fallback=True,
+        clang_macro_fallback_build_dir=tmp_path / "fallback-build",
+    ).run()
+
+    without_macros = {
+        decl.name: decl for decl in without_fallback.decls if isinstance(decl, MacroDecl)
+    }
+    with_macros = {decl.name: decl for decl in with_fallback.decls if isinstance(decl, MacroDecl)}
+
+    assert without_macros["FALLBACK_VALUE"].kind == "object_like_unsupported"
+    assert isinstance(with_macros["FALLBACK_VALUE"].expr, IntLiteral)
+    assert with_macros["FALLBACK_VALUE"].expr.value > 0
+
+
+def test_clang_macro_fallback_evaluates_parsed_but_unclean_macro(tmp_path: Path) -> None:
+    header = tmp_path / "fallback_ref.h"
+    header.write_text("#define FROM_COMPILER_MAX (__INT_MAX__ - 1)\n", encoding="utf-8")
+
+    without_fallback = ClangParser(
+        header,
+        library="fallback_ref",
+        link_name="fallback_ref",
+    ).run()
+    with_fallback = ClangParser(
+        header,
+        library="fallback_ref",
+        link_name="fallback_ref",
+        clang_macro_fallback=True,
+    ).run()
+
+    without_macros = {
+        decl.name: decl for decl in without_fallback.decls if isinstance(decl, MacroDecl)
+    }
+    with_macros = {decl.name: decl for decl in with_fallback.decls if isinstance(decl, MacroDecl)}
+
+    assert isinstance(without_macros["FROM_COMPILER_MAX"].expr, BinaryExpr)
+    assert isinstance(with_macros["FROM_COMPILER_MAX"].expr, IntLiteral)
+    assert with_macros["FROM_COMPILER_MAX"].expr.value == 2147483646
+
+
+def test_clang_macro_fallback_preserves_parsed_unsigned_macro_type(tmp_path: Path) -> None:
+    header = tmp_path / "fallback_unsigned.h"
+    header.write_text("#define FALLBACK_UNSIGNED (1u || 0u)\n", encoding="utf-8")
+
+    unit = ClangParser(
+        header,
+        library="fallback_unsigned",
+        link_name="fallback_unsigned",
+        clang_macro_fallback=True,
+    ).run()
+
+    macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
+    macro = macros["FALLBACK_UNSIGNED"]
+
+    assert isinstance(macro.expr, IntLiteral)
+    assert macro.expr.value == 1
+    assert isinstance(macro.type, IntType)
+    assert macro.type.int_kind.value == "UINT"
 
 
 def test_macro_env_does_not_fold_through_unemitted_compiler_macros(tmp_path: Path) -> None:
