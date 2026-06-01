@@ -25,6 +25,12 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Generate layout-test sidecars with `TestSuite.discover_tests[__functions_in_module()]().run()`
+  in `main` and import `TestSuite` from `std.testing` so the generated module
+  runs its own discovered tests directly.
+- Resolve layout-test reflection offsets from emitted Mojo member order instead
+  of CIR field indices, so generated checks stay aligned when padding members
+  are inserted before named fields or bitfield groups.
 - Lower named C enums to scalar Mojo type aliases plus typed top-level
   enumerator constants, preferring typedef names as the primary emitted alias,
   emitting collision-free tag aliases when possible, and keeping anonymous
