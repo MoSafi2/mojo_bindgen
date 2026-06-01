@@ -8,9 +8,8 @@ All notable changes to this project are documented in this file.
 
 - Capture C documentation comments from libclang and emit them into generated
   Mojo bindings, with `--doc-comments` / `--no-doc-comments` control.
-- Add repeatable `--include-header` support to emit declarations from selected
-  additional headers while still treating their other includes as non-emitted
-  dependencies.
+- Add repeatable `--include-header` support for parsing multiple public entry
+  headers through a virtual umbrella translation unit.
 - Handle repeated field types in anonymous unions by still lowering them to
   `UnsafeUnion`,  (@WolfDan; PR #9).
 - Lower flexible array member declarations as `InlineArray[T, 0]` instead of
@@ -26,10 +25,15 @@ All notable changes to this project are documented in this file.
   enumerator constants, preferring typedef names as the primary emitted alias,
   emitting collision-free tag aliases when possible, and keeping anonymous
   enums on the existing constants-only path.
-- Materialize transitive included-header record definitions when they are
-  embedded by value, and force containing structs back to opaque storage when
-  any embedded struct or array-of-struct still cannot be emitted as a complete,
-  layout-correct Mojo type.
+- Emit top-level declarations and source-backed macros from the parsed
+  translation unit instead of filtering to configured header paths, including
+  transitive include declarations and macros.
+- Keep source-backed macro folding aligned with emission: object-like macros
+  from the emitted translation-unit macro set are available for expansion, while
+  compiler/predefined no-file macros are neither emitted nor used for folding.
+- Rename the orphan-record reachability repair to signature-only record stub
+  materialization, and keep it only for references like
+  `int f(struct opaque *p);` that have no standalone top-level record cursor.
 - Retain documentation comments from system headers during parsing when
   doc-comment emission is enabled, while preserving the default probed include
   search path so header-heavy examples like SQLite continue to parse.
@@ -38,6 +42,10 @@ All notable changes to this project are documented in this file.
   keep one-element tail arrays (`[1]`) as ordinary fixed arrays.
 
 ### Removed
+
+- Remove parser-side embedded-record materialization and primary-header cursor
+  compatibility aliases now that the parser lowers translation-unit cursors
+  directly.
 
 ## [0.2.1] - 2026-05-01
 

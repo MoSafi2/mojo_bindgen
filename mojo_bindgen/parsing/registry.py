@@ -23,7 +23,6 @@ import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import clang.cindex as cx
 
@@ -84,9 +83,7 @@ class RecordNaming:
 class RecordRegistry:
     """Record-scoped lookup, cache, and raw materialization service for one translation unit."""
 
-    header: Path
-    source_headers: frozenset[Path]
-    primary_cursors_in_order: tuple[cx.Cursor, ...]
+    top_level_cursors_in_order: tuple[cx.Cursor, ...]
     record_definition_by_decl_id: dict[str, cx.Cursor]
     anonymous_record_name_by_decl_id: dict[str, str]
     _records_by_decl_id: dict[str, Struct] = field(default_factory=dict)
@@ -99,11 +96,9 @@ class RecordRegistry:
         frontend: ClangFrontend,
     ) -> RecordRegistry:
         """Index one translation unit for record declarations addressable from this parse."""
-        primary = tuple(frontend.iter_emittable_cursors(tu))
+        top_level = tuple(frontend.iter_translation_unit_cursors(tu))
         registry = cls(
-            header=frontend.header.resolve(),
-            source_headers=frozenset(header.resolve() for header in frontend.emittable_headers),
-            primary_cursors_in_order=primary,
+            top_level_cursors_in_order=top_level,
             record_definition_by_decl_id={},
             anonymous_record_name_by_decl_id={},
         )
@@ -145,11 +140,6 @@ class RecordRegistry:
         if cursor.kind not in RECORD_KINDS:
             return False
         return self.record_definition_for_decl(cursor) is not None
-
-    def is_primary(self, cursor: cx.Cursor) -> bool:
-        """Return whether a cursor originates from a configured include header."""
-        loc = cursor.location
-        return bool(loc.file and Path(loc.file.name).resolve() in self.source_headers)
 
     def record_naming(self, cursor: cx.Cursor) -> RecordNaming:
         """Return stable lowered naming metadata for a record declaration."""
@@ -238,13 +228,13 @@ class RecordRegistry:
             return None
         if parent.kind == cx.CursorKind.TRANSLATION_UNIT:
             return None
-        if not self.is_primary(parent):
-            return None
         return parent
 
     def _anonymous_record_ordinal(self, cursor: cx.Cursor, parent: cx.Cursor | None) -> int:
         """Compute a stable ordinal among sibling anonymous record definitions."""
-        siblings = self.primary_cursors_in_order if parent is None else tuple(parent.get_children())
+        siblings = (
+            self.top_level_cursors_in_order if parent is None else tuple(parent.get_children())
+        )
         target_loc = _location_key(cursor)
         ordinal = 0
         for sibling in siblings:

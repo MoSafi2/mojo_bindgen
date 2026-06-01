@@ -1,11 +1,11 @@
-"""Tests for orphan :class:`StructRef` reachability materialization."""
+"""Tests for signature-only record stub materialization."""
 
 from __future__ import annotations
 
 from mojo_bindgen.analysis.reachability import (
-    ReachabilityMaterializePass,
-    ReachabilityOptions,
-    materialize_reachable_struct_refs,
+    SignatureRecordStubOptions,
+    SignatureRecordStubPass,
+    materialize_signature_record_stubs,
 )
 from mojo_bindgen.ir import (
     ByteOrder,
@@ -51,7 +51,7 @@ def test_materializes_orphan_struct_ref_from_parameter() -> None:
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
 
-    result = ReachabilityMaterializePass().run(unit)
+    result = SignatureRecordStubPass().run(unit)
     assert len(result.unit.decls) == 2
     synth = result.unit.decls[0]
     assert isinstance(synth, Struct)
@@ -92,7 +92,7 @@ def test_skips_when_struct_already_declared() -> None:
         target_abi=_abi(),
         decls=[existing, fn],
     )
-    result = ReachabilityMaterializePass().run(unit)
+    result = SignatureRecordStubPass().run(unit)
     assert result.unit.decls == unit.decls
     assert result.synthesized_structs == ()
     assert result.reachable_orphan_decl_ids == frozenset()
@@ -117,14 +117,14 @@ def test_function_ptr_traversal_finds_nested_orphan() -> None:
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
 
-    result = ReachabilityMaterializePass().run(
-        unit, ReachabilityOptions(traverse_function_ptrs=True)
+    result = SignatureRecordStubPass().run(
+        unit, SignatureRecordStubOptions(traverse_function_ptrs=True)
     )
     assert any(isinstance(d, Struct) and d.decl_id == inner.decl_id for d in result.unit.decls)
     assert inner.decl_id in result.reachable_orphan_decl_ids
 
-    no_fp = ReachabilityMaterializePass().run(
-        unit, ReachabilityOptions(traverse_function_ptrs=False)
+    no_fp = SignatureRecordStubPass().run(
+        unit, SignatureRecordStubOptions(traverse_function_ptrs=False)
     )
     assert no_fp.synthesized_structs == ()
 
@@ -144,17 +144,17 @@ def test_union_ref_skipped_by_default() -> None:
         decl_id="c:@F@f",
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
-    result = ReachabilityMaterializePass().run(unit)
+    result = SignatureRecordStubPass().run(unit)
     assert result.synthesized_structs == ()
 
-    with_union = ReachabilityMaterializePass().run(
-        unit, ReachabilityOptions(synthesize_union_refs=True)
+    with_union = SignatureRecordStubPass().run(
+        unit, SignatureRecordStubOptions(synthesize_union_refs=True)
     )
     assert len(with_union.synthesized_structs) == 1
     assert with_union.synthesized_structs[0].is_union is True
 
 
-def test_materialize_reachable_struct_refs_wrapper_returns_unit_only() -> None:
+def test_materialize_signature_record_stubs_wrapper_returns_unit_only() -> None:
     orphan = StructRef(
         decl_id="c:@S@only",
         name="only",
@@ -168,12 +168,12 @@ def test_materialize_reachable_struct_refs_wrapper_returns_unit_only() -> None:
         decl_id="c:@F@g",
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[fn])
-    out = materialize_reachable_struct_refs(unit)
+    out = materialize_signature_record_stubs(unit)
     assert isinstance(out.decls[0], Struct)
     assert out.decls[0].decl_id == orphan.decl_id
 
 
-def test_run_ir_passes_includes_reachability() -> None:
+def test_run_ir_passes_includes_signature_record_stubs() -> None:
     from mojo_bindgen.analysis.orchestrator import run_ir_passes
 
     orphan = StructRef(

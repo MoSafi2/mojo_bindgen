@@ -23,7 +23,7 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
-from mojo_bindgen.parsing.frontend import ClangCompat, ClangFrontend
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.const_expr import ConstExprParser
 from mojo_bindgen.parsing.lowering.macro_env import collect_object_like_macro_env
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver, default_signed_int_primitive
@@ -38,7 +38,6 @@ class DeclLowerer:
     def __init__(
         self,
         *,
-        frontend: ClangFrontend,
         tu: cx.TranslationUnit,
         registry: RecordRegistry,
         diagnostics: ParserDiagnosticSink,
@@ -48,7 +47,6 @@ class DeclLowerer:
         const_expr_parser: ConstExprParser,
         compat: ClangCompat,
     ) -> None:
-        self.frontend = frontend
         self.tu = tu
         self.registry = registry
         self.diagnostics = diagnostics
@@ -59,7 +57,7 @@ class DeclLowerer:
         self.compat = compat
 
     def lower_top_level_decl(self, cursor: cx.Cursor) -> list[Decl] | Decl | None:
-        """Lower one primary-file top-level cursor."""
+        """Lower one top-level translation-unit cursor."""
         k = cursor.kind
         if k == cx.CursorKind.FUNCTION_DECL:
             return self._build_function(cursor)
@@ -78,13 +76,13 @@ class DeclLowerer:
         return None
 
     def collect_macros(self) -> list[Decl]:
-        """Lower all include-header macro definitions into preserved IR nodes."""
+        """Lower all source-backed translation-unit macro definitions into IR nodes."""
         macro_env = collect_object_like_macro_env(self.tu)
         out: list[Decl] = []
         for cursor in self.tu.cursor.walk_preorder():
             if cursor.kind != cx.CursorKind.MACRO_DEFINITION:
                 continue
-            if not self.frontend.is_emittable_file_cursor(cursor):
+            if cursor.location.file is None:
                 continue
             parsed = self.const_expr_parser.parse_macro(cursor, macro_env)
             out.append(

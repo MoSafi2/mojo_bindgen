@@ -1,37 +1,33 @@
 # CIR Pass Workflow
 
-This document shows the current CIR-to-CIR pass pipeline and where it sits
-between parsing and later Mojo-facing lowering.
+This document shows the current CIR-to-CIR normalization pipeline and where it
+fits between parsing and Mojo-facing lowering.
 
 ## Overview
 
 ```mermaid
 flowchart TD
-    A[raw parser Unit] --> B[analysis.AnalysisOrchestrator]
-    B --> C[run_ir_passes]
-    C --> D[ValidateIRPass]
-    D --> E{IR invariants hold?}
-    E -->|no| F[IRValidationError]
-    E -->|yes| G[ReachabilityMaterializePass]
-    G --> H[prepend synthesized incomplete Structs for orphan StructRefs]
-    H --> I[analysis.lower_unit]
-    I --> J[MojoModule]
-    J --> K[assign_record_policies]
-    K --> L[normalize_mojo_module]
-    L --> M[printer-ready MojoModule]
+    A[raw parser Unit] --> B[AnalysisOrchestrator.normalize_cir]
+    B --> C[ValidateIRPass]
+    C --> D{IR invariants hold?}
+    D -->|no| E[IRValidationError]
+    D -->|yes| F[SignatureRecordStubPass]
+    F --> G[CIRCanonicalizer]
+    G --> H[normalized CIR Unit]
+    H --> I[LowerUnitPass]
 ```
 
 ## Active Passes
 
-The current `run_ir_passes()` implementation is short and explicit, but it now
-belongs to the analysis orchestrator boundary rather than a standalone
-integration module:
+The current CIR normalization sequence is owned by
+`AnalysisOrchestrator.normalize_cir()`:
 
 1. `ValidateIRPass`
-2. `ReachabilityMaterializePass`
+2. `SignatureRecordStubPass`
+3. `CIRCanonicalizer`
 
 Source:
-- [orchestrator.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/orchestrator.py:15)
+- [orchestrator.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/orchestrator.py:26)
 
 ## Pass Details
 
@@ -39,48 +35,60 @@ Source:
 
 Purpose:
 - verify `decl_id` uniqueness across the `Unit`
-- require `decl_id` on typedefs and structs
-- verify nested type references are structurally valid
-- reject malformed `TypeRef`, `StructRef`, and `OpaqueRecordRef` nodes that
-  lack identity
+- require stable identity on declarations and nested reference nodes that need it
+- reject malformed `TypeRef`, `StructRef`, and `OpaqueRecordRef` structures early
 
 This is a fail-fast structural correctness gate. It does not rewrite the IR.
 
 Source:
 - [validate_ir.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/validate_ir.py:17)
 
-### `ReachabilityMaterializePass`
+### `SignatureRecordStubPass`
 
 Purpose:
-- walk all reachable CIR types and selected const-expression type positions
-- collect orphan `StructRef` uses that have no top-level `Struct` declaration
-- prepend synthesized incomplete `Struct` declarations for those refs
+- walk reachable CIR type positions and selected const-expression type positions
+- find `StructRef` uses that lack a top-level `Struct` declaration
+- prepend synthesized incomplete `Struct` declarations for those reachable refs
 
-This ensures downstream consumers can emit opaque struct stubs for external or
-indirectly referenced record types.
+This ensures later lowering can still emit opaque record stubs for signature-only
+record references such as `int f(struct opaque *p);`.
 
 Source:
 - [reachability.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/reachability.py:153)
 
+### `CIRCanonicalizer`
+
+Purpose:
+- apply analysis-owned CIR cleanup before MojoIR lowering
+- canonicalize declaration ordering/details that should not remain parser-local
+- deduplicate IR nodes where the parser may have produced equivalent duplicates
+
+This keeps downstream lowering working from one normalized CIR shape rather than
+raw parser output quirks.
+
+Source:
+- [cir_canonicalizer.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/cir_canonicalizer.py:1)
+
 ## Why These Passes Exist
 
-The parser is intentionally source-driven and local. That means it can produce
-valid-looking references to records that never appeared as top-level
-declarations in the primary header. `ReachabilityMaterializePass` repairs that
-for global downstream consistency.
+The parser intentionally stays source-driven and conservative. That means it can
+return structurally faithful CIR that still needs:
 
-`ValidateIRPass` comes first so the reachability walk only runs over structurally
-sound CIR.
+- validation before deeper analysis
+- synthesized incomplete record declarations for signature-only refs
+- minor canonical cleanup before module lowering
+
+Analysis owns that repair boundary so parsing can stay focused on faithful C ->
+CIR lowering.
 
 ## What Comes Next
 
-After the CIR pass sequence, analysis continues with Mojo-facing lowering and
+After CIR normalization, analysis continues with Mojo-facing lowering and
 finalization:
 
-- `analysis.lower_unit`: CIR -> MojoIR
-- `assign_record_policies`: derive struct traits and fieldwise-init eligibility
-- `normalize_mojo_module`: MojoIR -> printer-ready MojoIR
+1. `LowerUnitPass.run(unit)` lowers normalized CIR into a policy-light `MojoModule`
+2. `assign_record_policies(module)` derives struct passability, traits, and fieldwise-init policy
+3. `normalize_mojo_module(module)` makes printer-facing facts explicit
 
-So the CIR pass layer is intentionally narrow inside a broader orchestrated
-analysis flow: validate first, then materialize reachable opaque records, then
-hand off to MojoIR lowering.
+So the CIR pass layer is intentionally narrow: validate, materialize
+signature-only record stubs, canonicalize, then hand off to MojoIR lowering.

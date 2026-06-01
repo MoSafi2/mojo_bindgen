@@ -40,7 +40,9 @@ def test_registry_unifies_forward_decl_and_definition(tmp_path: Path) -> None:
     tu = frontend.parse_translation_unit()
     registry = RecordRegistry.build_from_translation_unit(tu, frontend)
 
-    records = [cursor for cursor in frontend.iter_primary_cursors(tu) if cursor.spelling == "node"]
+    records = [
+        cursor for cursor in frontend.iter_translation_unit_cursors(tu) if cursor.spelling == "node"
+    ]
     assert len(records) == 2
     assert registry.decl_id_for_cursor(records[0]) == registry.decl_id_for_cursor(records[1])
     assert registry.is_complete_record_decl(records[0]) is True
@@ -59,7 +61,7 @@ def test_registry_synthesizes_anonymous_record_identity(tmp_path: Path) -> None:
 
     outer = next(
         cursor
-        for cursor in frontend.iter_primary_cursors(tu)
+        for cursor in frontend.iter_translation_unit_cursors(tu)
         if cursor.kind == cx.CursorKind.STRUCT_DECL and cursor.spelling == "outer"
     )
     inner_field = next(
@@ -98,7 +100,7 @@ def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: P
 
     outer = next(
         cursor
-        for cursor in frontend.iter_primary_cursors(tu)
+        for cursor in frontend.iter_translation_unit_cursors(tu)
         if cursor.kind == cx.CursorKind.STRUCT_DECL and cursor.spelling == "outer"
     )
     anon_union = next(
@@ -132,7 +134,7 @@ def test_type_lowerer_prefers_cached_lowered_record_over_nominal_resolution(tmp_
 
     node = next(
         cursor
-        for cursor in frontend.iter_primary_cursors(tu)
+        for cursor in frontend.iter_translation_unit_cursors(tu)
         if cursor.kind == cx.CursorKind.STRUCT_DECL and cursor.spelling == "node"
     )
     cached = Struct(
@@ -170,7 +172,7 @@ def test_fnptr_typedef_params_keep_typedef_names(tmp_path: Path) -> None:
 
     xfer = next(
         c
-        for c in frontend.iter_primary_cursors(tu)
+        for c in frontend.iter_translation_unit_cursors(tu)
         if c.kind == cx.CursorKind.TYPEDEF_DECL and c.spelling == "xfer_cb"
     )
     type_lowerer = TypeLowerer(

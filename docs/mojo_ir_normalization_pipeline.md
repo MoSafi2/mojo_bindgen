@@ -1,45 +1,44 @@
 # MojoIR Normalization Workflow
 
 This document shows how `normalize_mojo_module()` turns lowered MojoIR into the
-printer-ready form consumed by the final rendering step inside the
-analysis-owned orchestration boundary.
+printer-ready form consumed by the final rendering step.
 
 ## Overview
 
 ```mermaid
 flowchart TD
-    A[MojoModule from LowerUnitPass] --> B[NormalizeMojoModulePass.run]
+    A[policy-light MojoModule] --> B[NormalizeMojoModulePass.run]
 
     B --> C[normalize each top-level decl]
     C --> D[StructDecl normalization]
-    C --> E[EnumDecl normalization]
-    C --> F[AliasDecl normalization]
-    C --> G[FunctionDecl normalization]
-    C --> H[GlobalDecl normalization]
+    C --> E[AliasDecl normalization]
+    C --> F[FunctionDecl normalization]
+    C --> G[GlobalDecl normalization]
 
-    D --> I[resolve align_decorator]
-    D --> J[normalize members]
+    D --> H[resolve align_decorator]
+    D --> I[normalize members]
+    D --> J[normalize comptime members]
     D --> K[normalize initializers]
 
-    J --> L[normalize StoredMember types]
-    J --> M[normalize BitfieldGroupMember storage + logical field types]
+    I --> L[normalize StoredMember types]
+    I --> M[normalize BitfieldGroupMember storage and logical field types]
 
-    F --> N[normalize alias type_value / const_value]
-    F --> O[synthesize callback signature aliases when needed]
+    E --> N[normalize alias type_value / const_type / const_value]
+    E --> O[synthesize named function signature aliases when needed]
 
-    G --> P[normalize param and return types]
-    G --> Q[resolve effective link_mode]
+    F --> P[normalize params and return type]
+    F --> Q[resolve effective call link mode]
 
     B --> R[prepend synthesized callback aliases]
     R --> S[collect support decls]
     S --> T[collect imports]
     T --> U[printer-ready MojoModule]
-    U --> V[MojoIRPrinter.render]
+    U --> V[render_mojo_module]
 ```
 
 ## Main Responsibilities
 
-### 1. Make all printer-facing facts explicit
+### 1. Make printer-facing facts explicit
 
 Normalization removes printer guesswork by rewriting declarations into a form
 the printer can emit directly.
@@ -49,21 +48,23 @@ Examples:
 - normalize every nested type position
 - normalize every initializer parameter type
 - normalize constant-expression cast and `sizeof` targets
+- resolve effective per-function link mode into explicit call targets
 
 Primary implementation:
-- [normalize_mojo_module.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/normalize_mojo_module.py:49)
+- [normalize_mojo_module.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/codegen/normalize_mojo_module.py:49)
 
-### 2. Lift callback types into named aliases when needed
+### 2. Lift function-signature types into named aliases when needed
 
-Inline callback-like types are normalized and, when necessary, replaced with a
-synthetic named alias such as `foo_cb`.
+`FunctionType` may appear nested inside pointers, aliases, or other type
+positions. Normalization gives those signatures stable names when they should
+not remain inline.
 
-This gives the printer a stable named surface instead of having to emit nested
-callback signatures inline in arbitrary positions.
+That rewrite typically turns a nested function signature into a synthesized
+alias name that other declarations can reference directly.
 
 Relevant logic:
-- `_callback_type_from_type(...)`
-- `_ensure_callback_alias(...)`
+- `_function_type_from_type(...)`
+- `_ensure_function_alias(...)`
 
 ### 3. Compute support declarations
 
@@ -71,20 +72,18 @@ After declaration normalization, the pass scans the module and adds helper
 support blocks when required.
 
 Examples:
-- DL handle helpers
+- owned-DL handle helpers
 - global symbol helpers
 
-This is derived from both module capabilities and normalized declaration kinds.
+This is derived from the normalized declarations and the module link mode.
 
 ### 4. Compute final imports
 
 Normalization also determines imports implied by the final IR:
 - `std.ffi` names such as `external_call`, `OwnedDLHandle`, `UnsafeUnion`, and
-  `c_*` builtins
-- `std.memory` opaque pointer imports
-- `std.builtin.simd` for `SIMD`
-- `std.complex` for `ComplexSIMD`
-- `std.atomic` for `Atomic`
+  C ABI scalar names
+- pointer and optional support types
+- `SIMD`, `ComplexSIMD`, and `Atomic` support imports
 
 The printer consumes these imports as already-decided facts.
 
@@ -96,30 +95,23 @@ The printer consumes these imports as already-decided facts.
 - `PointerType`
 - `ArrayType`
 - `ParametricType`
-- `CallbackType`
 - `FunctionType`
 
-If a callback shape appears in a non-inline position, normalization can rewrite
-it to:
-
-```text
-PointerType(pointee=NamedType("<synthesized_callback_alias>"))
-```
-
-That rewrite is part of the normalization contract, not the printer.
+If a function-signature shape appears in a non-inline position, normalization
+can rewrite it to a synthesized named alias instead of leaving it inline. That
+rewrite is part of the normalization contract, not printer logic.
 
 ## End-to-End Placement
 
-The current public printer path is:
+The current public render path is:
 
 1. `AnalysisOrchestrator.run_ir_passes(unit)` repairs raw CIR
-2. `LowerUnitPass.run(unit)` produces a policy-free `MojoModule`
-3. `assign_record_policies(module)` derives late record traits and fieldwise-init policy
+2. `LowerUnitPass.run(unit)` produces a policy-light `MojoModule`
+3. `assign_record_policies(module)` derives late record passability, traits, and fieldwise-init policy
 4. `normalize_mojo_module(module)` makes printer-facing facts explicit
-5. `MojoIRPrinter.render(module)` emits Mojo source
+5. `render_mojo_module(module, options)` emits Mojo source
 
 Source:
-- [mojo_ir_printer.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/codegen/mojo_ir_printer.py:528)
+- [orchestrator.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/orchestrator.py:79)
 
-So normalization is the last analysis rewrite stage before codegen text
-emission.
+So normalization is the last structural rewrite stage before text emission.

@@ -685,7 +685,7 @@ class Const(SerDeMixin):
 
 @dataclass
 class MacroDecl(SerDeMixin):
-    """Top-level preprocessor macro preserved from the primary header.
+    """Source-backed preprocessor macro preserved from the parsed translation unit.
 
     Macros are preserved even when their replacement list cannot be lowered to
     the supported :class:`ConstExpr` subset. ``tokens`` keeps the original

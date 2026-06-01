@@ -13,10 +13,10 @@ from mojo_bindgen.analysis.orchestrator import (
     run_ir_passes,
 )
 from mojo_bindgen.analysis.reachability import (
-    ReachabilityMaterializePass,
-    ReachabilityMaterializeResult,
-    ReachabilityOptions,
-    materialize_reachable_struct_refs,
+    SignatureRecordStubOptions,
+    SignatureRecordStubPass,
+    SignatureRecordStubResult,
+    materialize_signature_record_stubs,
 )
 from mojo_bindgen.analysis.record_policies import (
     AssignRecordPoliciesError,
@@ -59,9 +59,9 @@ __all__ = [
     "LowerUnitPass",
     "MojoEmitOptions",
     "PolicyInferencePass",
-    "ReachabilityMaterializePass",
-    "ReachabilityMaterializeResult",
-    "ReachabilityOptions",
+    "SignatureRecordStubOptions",
+    "SignatureRecordStubPass",
+    "SignatureRecordStubResult",
     "StructLoweringContext",
     "StructLoweringError",
     "TypeLoweringError",
@@ -76,6 +76,6 @@ __all__ = [
     "lower_type",
     "lower_union",
     "lower_unit",
-    "materialize_reachable_struct_refs",
+    "materialize_signature_record_stubs",
     "run_ir_passes",
 ]

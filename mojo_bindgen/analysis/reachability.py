@@ -1,11 +1,11 @@
-"""Reachability pass: materialize incomplete Struct rows for orphan StructRefs.
+"""Signature-record stub pass: materialize incomplete Struct rows for orphan StructRefs.
 
 When the parser emits a :class:`~mojo_bindgen.ir.StructRef` for a tagged record
-that never appears as a top-level :class:`~mojo_bindgen.ir.Struct` in the primary
-header (e.g. libc types only referenced in signatures), downstream codegen has
-no opaque stub to emit. This pass walks all reachable types in a :class:`Unit`,
-collects such references, and prepends synthesized incomplete :class:`Struct`
-declarations so analysis and rendering can emit Mojo opaque structs.
+that never appears as a top-level :class:`~mojo_bindgen.ir.Struct` declaration
+(e.g. ``int f(struct opaque *p);``), downstream codegen has no opaque stub to
+emit. This pass walks all reachable types in a :class:`Unit`, collects such
+references, and prepends synthesized incomplete :class:`Struct` declarations so
+analysis and rendering can emit Mojo opaque structs.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from mojo_bindgen.ir import (
 
 
 @dataclass(frozen=True)
-class ReachabilityOptions:
+class SignatureRecordStubOptions:
     """Configure type reachability for orphan :class:`StructRef` collection."""
 
     traverse_function_ptrs: bool = True
@@ -42,8 +42,8 @@ class ReachabilityOptions:
 
 
 @dataclass(frozen=True)
-class ReachabilityMaterializeResult:
-    """Output of :class:`ReachabilityMaterializePass`."""
+class SignatureRecordStubResult:
+    """Output of :class:`SignatureRecordStubPass`."""
 
     unit: Unit
     synthesized_structs: tuple[Struct, ...]
@@ -95,7 +95,7 @@ def _collect_from_decl(
     decl: Decl,
     out: list[StructRef],
     *,
-    options: ReachabilityOptions,
+    options: SignatureRecordStubOptions,
 ) -> None:
     traverse_fp = options.traverse_function_ptrs
     if isinstance(decl, Function):
@@ -143,22 +143,22 @@ def _struct_from_ref(ref: StructRef) -> Struct:
     )
 
 
-def materialize_reachable_struct_refs(
-    unit: Unit, options: ReachabilityOptions | None = None
+def materialize_signature_record_stubs(
+    unit: Unit, options: SignatureRecordStubOptions | None = None
 ) -> Unit:
     """Return a new Unit with synthesized incomplete Structs prepended."""
-    return ReachabilityMaterializePass().run(unit, options).unit
+    return SignatureRecordStubPass().run(unit, options).unit
 
 
-class ReachabilityMaterializePass:
+class SignatureRecordStubPass:
     """Insert incomplete :class:`Struct` declarations for orphan :class:`StructRef` uses."""
 
     def run(
         self,
         unit: Unit,
-        options: ReachabilityOptions | None = None,
-    ) -> ReachabilityMaterializeResult:
-        opts = options or ReachabilityOptions()
+        options: SignatureRecordStubOptions | None = None,
+    ) -> SignatureRecordStubResult:
+        opts = options or SignatureRecordStubOptions()
         collected: list[StructRef] = []
         for decl in unit.decls:
             _collect_from_decl(decl, collected, options=opts)
@@ -181,7 +181,7 @@ class ReachabilityMaterializePass:
         orphan_ids = frozenset(s.decl_id for s in synthesized)
 
         if not synthesized:
-            return ReachabilityMaterializeResult(
+            return SignatureRecordStubResult(
                 unit=unit,
                 synthesized_structs=(),
                 reachable_orphan_decl_ids=frozenset(),
@@ -190,7 +190,7 @@ class ReachabilityMaterializePass:
         new_decls: list[Decl] = list(synthesized)
         new_decls.extend(unit.decls)
         new_unit = replace(unit, decls=new_decls)
-        return ReachabilityMaterializeResult(
+        return SignatureRecordStubResult(
             unit=new_unit,
             synthesized_structs=synthesized,
             reachable_orphan_decl_ids=orphan_ids,
@@ -198,8 +198,8 @@ class ReachabilityMaterializePass:
 
 
 __all__ = [
-    "ReachabilityMaterializePass",
-    "ReachabilityMaterializeResult",
-    "ReachabilityOptions",
-    "materialize_reachable_struct_refs",
+    "SignatureRecordStubOptions",
+    "SignatureRecordStubPass",
+    "SignatureRecordStubResult",
+    "materialize_signature_record_stubs",
 ]
