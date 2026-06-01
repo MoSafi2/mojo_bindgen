@@ -10,6 +10,7 @@ from mojo_bindgen.ir import (
     BitfieldGroupMember,
     MojoModule,
     OpaqueStorageMember,
+    PaddingMember,
     StoredMember,
     Struct,
     StructDecl,
@@ -92,27 +93,29 @@ def _layout_record_check(
     if _is_opaque_storage_decl(mojo_decl):
         return LayoutRecordCheck(record_name=mojo_name, checks=tuple(checks))
 
-    member_names = _member_names(mojo_decl)
+    member_indices = _member_indices(mojo_decl)
     for field_fact in facts.plain_fields:
         field = decl.fields[field_fact.index]
         member_name = field_mojo_name(field, field_fact.index)
-        if member_name not in member_names:
+        mojo_index = member_indices.get(member_name)
+        if mojo_index is None:
             continue
         checks.append(
             LayoutCheck(
                 label=f"{mojo_name}.{member_name}.offset",
-                expression=f"r.field_offset[index={field_fact.index}]()",
+                expression=f"r.field_offset[index={mojo_index}]()",
                 expected=field_fact.byte_offset,
             )
         )
 
     for run in facts.bitfield_runs:
-        if run.name not in member_names:
+        mojo_index = member_indices.get(run.name)
+        if mojo_index is None:
             continue
         checks.append(
             LayoutCheck(
                 label=f"{mojo_name}.{run.name}.offset",
-                expression=f"r.field_offset[index={run.first_index}]()",
+                expression=f"r.field_offset[index={mojo_index}]()",
                 expected=run.byte_offset,
             )
         )
@@ -124,18 +127,18 @@ def _is_opaque_storage_decl(decl: StructDecl) -> bool:
     return len(decl.members) == 1 and isinstance(decl.members[0], OpaqueStorageMember)
 
 
-def _member_names(decl: StructDecl) -> set[str]:
-    names: set[str] = set()
-    for member in decl.members:
+def _member_indices(decl: StructDecl) -> dict[str, int]:
+    indices: dict[str, int] = {}
+    for index, member in enumerate(decl.members):
         if isinstance(member, StoredMember):
-            names.add(member.name)
+            indices[member.name] = index
         elif isinstance(member, BitfieldGroupMember):
-            names.add(member.storage_name)
+            indices[member.storage_name] = index
         elif isinstance(member, OpaqueStorageMember):
-            names.add(member.name)
-        else:
-            names.add(member.name)
-    return names
+            indices[member.name] = index
+        elif isinstance(member, PaddingMember):
+            indices[member.name] = index
+    return indices
 
 
 def render_layout_test_module(

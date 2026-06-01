@@ -14,6 +14,7 @@ from mojo_bindgen.ir import (
     MojoBuiltin,
     MojoModule,
     OpaqueStorageMember,
+    PaddingMember,
     StoredMember,
     Struct,
     StructDecl,
@@ -91,6 +92,55 @@ def test_collect_layout_record_checks_for_plain_struct_with_padding() -> None:
         ("Sample.align", 4),
         ("Sample.a.offset", 0),
         ("Sample.b.offset", 4),
+    ]
+    assert [check.expression for check in checks[0].checks] == [
+        "size_of[Sample]()",
+        "align_of[Sample]()",
+        "r.field_offset[index=0]()",
+        "r.field_offset[index=2]()",
+    ]
+
+
+def test_collect_layout_record_checks_uses_emitted_indices_after_bitfield_padding() -> None:
+    decl = Struct(
+        decl_id="struct:Instance",
+        name="Instance",
+        c_name="Instance",
+        fields=[
+            Field(
+                name="transform", source_name="transform", type=_i32(), byte_offset=0, size_bytes=4
+            ),
+            Field(
+                name="flags",
+                source_name="flags",
+                type=_i32(),
+                byte_offset=4,
+                size_bytes=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=8,
+            ),
+            Field(name="address", source_name="address", type=_i32(), byte_offset=8, size_bytes=4),
+        ],
+        size_bytes=12,
+        align_bytes=4,
+    )
+    mojo_decl = StructDecl(
+        name="Instance",
+        members=[
+            StoredMember(0, "transform", BuiltinType(MojoBuiltin.C_INT), 0),
+            PaddingMember("__pad0", 4, 4),
+            StoredMember(2, "address", BuiltinType(MojoBuiltin.C_INT), 8),
+        ],
+    )
+
+    checks = collect_layout_record_checks(
+        normalized_unit=_unit(decl),
+        mojo_module=_module(mojo_decl),
+    )
+
+    assert ("Instance.address.offset", "r.field_offset[index=2]()", 8) in [
+        (check.label, check.expression, check.expected) for check in checks[0].checks
     ]
 
 
@@ -172,6 +222,62 @@ def test_collect_layout_record_checks_for_bitfield_storage_group_offset() -> Non
         (check.label, check.expected) for check in checks[0].checks
     ]
     assert all("enabled.offset" not in check.label for check in checks[0].checks)
+
+
+def test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups() -> None:
+    decl = Struct(
+        decl_id="struct:MixedFlags",
+        name="MixedFlags",
+        c_name="MixedFlags",
+        fields=[
+            Field(name="prefix", source_name="prefix", type=_i32(), byte_offset=0, size_bytes=4),
+            Field(
+                name="enabled",
+                source_name="enabled",
+                type=_i32(),
+                byte_offset=4,
+                size_bytes=4,
+                is_bitfield=True,
+                bit_offset=32,
+                bit_width=1,
+            ),
+        ],
+        size_bytes=8,
+        align_bytes=4,
+    )
+    mojo_decl = StructDecl(
+        name="MixedFlags",
+        members=[
+            StoredMember(0, "prefix", BuiltinType(MojoBuiltin.C_INT), 0),
+            PaddingMember("__pad0", 0, 4),
+            BitfieldGroupMember(
+                storage_name="__bf0",
+                storage_type=BuiltinType(MojoBuiltin.C_UINT),
+                byte_offset=4,
+                first_index=1,
+                storage_width_bits=32,
+                fields=[
+                    BitfieldField(
+                        index=1,
+                        name="enabled",
+                        logical_type=BuiltinType(MojoBuiltin.C_INT),
+                        bit_offset=32,
+                        bit_width=1,
+                        signed=True,
+                    )
+                ],
+            ),
+        ],
+    )
+
+    checks = collect_layout_record_checks(
+        normalized_unit=_unit(decl),
+        mojo_module=_module(mojo_decl),
+    )
+
+    assert ("MixedFlags.__bf0.offset", "r.field_offset[index=2]()", 4) in [
+        (check.label, check.expression, check.expected) for check in checks[0].checks
+    ]
 
 
 def test_collect_layout_record_checks_skips_incomplete_union_and_missing_record_decl() -> None:
