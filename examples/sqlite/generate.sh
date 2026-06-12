@@ -20,14 +20,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 cd "$HERE"
 
-if command -v mojo-bindgen >/dev/null 2>&1; then
-  BG=(mojo-bindgen)
-else
-  BG=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
-fi
-
+source "$REPO_ROOT/examples/common.sh"
+set_mojo_bindgen_cmd BG "$REPO_ROOT"
 # Use the repository Pixi environment so Mojo resolves `std` consistently.
-MOJO=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo)
+set_repo_mojo_cmd MOJO "$REPO_ROOT"
 
 find_sqlite3_h() {
   if [[ -f "$HERE/sqlite3.h" ]]; then
@@ -88,12 +84,12 @@ SQLITE_H="$(find_sqlite3_h)" || {
   exit 1
 }
 
-"${BG[@]}" "$SQLITE_H" --library sqlite3 --link-name sqlite3 -o sqlite3_bindings.mojo
+generate_bindings "$SQLITE_H" sqlite3 sqlite3 sqlite3_bindings.mojo
 
 LINK_EXTRA="$(sqlite_link_extra || true)"
 OBJ="$(mktemp "${TMPDIR:-/tmp}/sqlite-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT
-"${MOJO[@]}" build sqlite3_bindings.mojo --emit object -o "$OBJ"
+build_bindings_object sqlite3_bindings.mojo "$OBJ"
 if [[ -n "$LINK_EXTRA" ]]; then
   # shellcheck disable=SC2206
   EXTRA=(-Xlinker "$LINK_EXTRA")
@@ -102,6 +98,6 @@ else
 fi
 "${MOJO[@]}" build sqlite_smoke.mojo -I "$HERE" "${EXTRA[@]}" -Xlinker -lsqlite3 -o sqlite_smoke
 
-echo "Wrote $HERE/sqlite3_bindings.mojo (from $SQLITE_H)"
+echo "Wrote $HERE/sqlite3_bindings.mojo and sqlite3_bindings_layout_tests.mojo (from $SQLITE_H)"
 echo "Running sqlite_smoke (composite runtime proof)"
 "$HERE/sqlite_smoke"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mojo_bindgen.analysis import lower_unit, run_ir_passes
+from mojo_bindgen.analysis import AnalysisOrchestrator, lower_unit, run_ir_passes
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.validate_ir import IRValidationError, ValidateIRPass
 from mojo_bindgen.ir import (
@@ -69,11 +69,13 @@ def test_run_ir_passes_validates_already_normalized_ir() -> None:
     )
 
     normalized = run_ir_passes(unit)
-    assert normalized is unit
     field_type = normalized.decls[1].fields[0].type
     assert isinstance(field_type, TypeRef)
     assert field_type.name == "my_int"
     assert isinstance(field_type.canonical, IntType)
+    original_field_type = unit.decls[1].fields[0].type
+    assert isinstance(original_field_type, TypeRef)
+    assert original_field_type.name == "my_int"
 
 
 def test_validate_ir_pass_rejects_duplicate_decl_ids() -> None:
@@ -92,6 +94,77 @@ def test_validate_ir_pass_rejects_duplicate_decl_ids() -> None:
     with pytest.raises(IRValidationError) as exc_info:
         ValidateIRPass().run(unit)
     assert "duplicate decl_id" in str(exc_info.value)
+
+
+def test_run_ir_passes_returns_fresh_unit_without_mutating_raw_unit() -> None:
+    i32 = _i32()
+    enum_ref = EnumRef(
+        decl_id="enum:mode",
+        name="mode",
+        c_name="mode",
+        underlying=i32,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        target_abi=_abi(),
+        decls=[
+            Enum(
+                decl_id="enum:mode",
+                name="mode",
+                c_name="mode",
+                underlying=i32,
+                enumerants=[],
+            ),
+            Typedef(
+                decl_id="typedef:mode_t",
+                name="mode_t",
+                aliased=enum_ref,
+                canonical=enum_ref,
+            ),
+        ],
+    )
+
+    normalized = run_ir_passes(unit)
+
+    assert normalized is not unit
+    raw_enum = unit.decls[0]
+    normalized_enum = normalized.decls[0]
+    assert isinstance(raw_enum, Enum)
+    assert isinstance(normalized_enum, Enum)
+    assert raw_enum.name == "mode"
+    assert normalized_enum.name == "mode_t"
+
+
+def test_analysis_pipeline_exposes_context_and_policy_light_module() -> None:
+    i32 = _i32()
+    struct = Struct(
+        decl_id="struct:holder",
+        name="holder",
+        c_name="holder",
+        fields=[Field(name="x", source_name="x", type=i32, byte_offset=0, size_bytes=4)],
+        size_bytes=4,
+        align_bytes=4,
+        is_complete=True,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        target_abi=_abi(),
+        decls=[struct],
+    )
+
+    artifacts = AnalysisOrchestrator(MojoEmitOptions()).analyze_pipeline(unit)
+
+    assert artifacts.raw_unit is unit
+    assert artifacts.normalized_unit is not unit
+    assert artifacts.context.unit is artifacts.normalized_unit
+    assert struct.decl_id in artifacts.context.records_by_decl_id
+    assert struct.decl_id in artifacts.context.record_layouts
+    assert artifacts.policy_light_module.decls
+    assert artifacts.mojo_module.decls
 
 
 def test_run_ir_passes_and_lower_unit_preserve_typedef_surface_name() -> None:

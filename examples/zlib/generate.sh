@@ -21,17 +21,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 cd "$HERE"
 
-if command -v mojo-bindgen >/dev/null 2>&1; then
-  BG=(mojo-bindgen)
-else
-  BG=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
-fi
-
-if command -v mojo >/dev/null 2>&1; then
-  MOJO=(mojo)
-else
-  MOJO=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo)
-fi
+source "$REPO_ROOT/examples/common.sh"
+set_mojo_bindgen_cmd BG "$REPO_ROOT"
+set_mojo_cmd MOJO "$REPO_ROOT"
 
 find_zlib_h() {
   local d
@@ -100,15 +92,15 @@ ZLIB_H="$(find_zlib_h)" || {
 }
 
 
-"${BG[@]}" "$ZLIB_H" --library z --link-name z -o zlib_bindings.mojo
-"${MOJO[@]}" build zlib_bindings.mojo -Xlinker -lz --emit object -o zlib_bindings.o
+generate_bindings "$ZLIB_H" z z zlib_bindings.mojo
+build_bindings_object zlib_bindings.mojo zlib_bindings.o -Xlinker -lz
 
-echo "Wrote $HERE/zlib_bindings.mojo and zlib_bindings.o (from $ZLIB_H)"
+echo "Wrote $HERE/zlib_bindings.mojo, zlib_bindings_layout_tests.mojo, and zlib_bindings.o (from $ZLIB_H)"
 
 LIBZ_SO="$(find_libz_so)" || true
 if [[ -n "${LIBZ_SO:-}" ]]; then
-  "${BG[@]}" "$ZLIB_H" --library z --link-name z \
-    --linking owned_dl_handle --library-path-hint "$LIBZ_SO" -o zlib_bindings_dl.mojo
+  generate_bindings "$ZLIB_H" z z zlib_bindings_dl.mojo \
+    --linking owned_dl_handle --library-path-hint "$LIBZ_SO"
   "${MOJO[@]}" build zlib_dl_smoke.mojo -I "$HERE" -o zlib_dl_smoke
   echo "Wrote $HERE/zlib_bindings_dl.mojo (dlopen: $LIBZ_SO) and built zlib_dl_smoke"
   echo "Running zlib_dl_smoke (owned_dl_handle runtime proof)"

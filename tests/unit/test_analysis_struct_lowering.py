@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.record_layout import PlainFieldFact, RecordLayoutFacts
 from mojo_bindgen.analysis.struct_lowering import StructLoweringContext, lower_struct
 from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
@@ -83,6 +84,46 @@ def _context_for(*decls: Struct) -> StructLoweringContext:
         target_abi=_abi(),
         type_lowerer=LowerTypePass(),
     )
+
+
+def test_lower_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
+    decl = Struct(
+        decl_id="struct:Widget",
+        name="Widget",
+        c_name="Widget",
+        fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        size_bytes=4,
+        align_bytes=4,
+        is_complete=True,
+    )
+
+    def fail_if_recomputed(*args, **kwargs):
+        raise AssertionError("record layout should come from StructLoweringContext")
+
+    monkeypatch.setattr(
+        "mojo_bindgen.analysis.struct_lowering.analyze_record_layout",
+        fail_if_recomputed,
+    )
+    context = StructLoweringContext(
+        record_map={decl.decl_id: decl},
+        record_layouts={
+            decl.decl_id: RecordLayoutFacts(
+                is_complete=True,
+                size_bytes=4,
+                align_bytes=4,
+                natural_typed_align_bytes=4,
+                plain_fields=(PlainFieldFact(index=0, byte_offset=0, size_bytes=4, align_bytes=4),),
+            )
+        },
+        target_abi=_abi(),
+        type_lowerer=LowerTypePass(),
+    )
+
+    lowered = lower_struct(decl, context=context)
+
+    assert lowered.members == [
+        StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0)
+    ]
 
 
 def test_lower_struct_keeps_incomplete_records_opaque_with_explicit_align_none() -> None:

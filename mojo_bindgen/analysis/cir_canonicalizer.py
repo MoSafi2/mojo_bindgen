@@ -36,7 +36,17 @@ type EnumResolution = tuple[str, tuple[str, ...]]
 
 
 class CIRCanonicalizer:
-    """Canonicalize cross-declaration CIR facts before Mojo lowering."""
+    """Canonicalize cross-declaration CIR facts before Mojo lowering.
+
+    This pass repairs parser-local declaration quirks without changing the
+    caller-owned ``Unit``. Its ordered steps are:
+
+    1. keep one record row per ``decl_id``, preferring complete definitions
+    2. remove duplicate equivalent function declarations
+    3. keep the last macro definition for repeated macro names
+    4. drop self-alias macros already represented by constants/enumerants
+    5. choose enum primary names and rewrite enum references to those names
+    """
 
     def __init__(
         self,
@@ -49,8 +59,7 @@ class CIRCanonicalizer:
         decls = _dedupe_macros_last_wins(decls)
         decls = _drop_constant_self_alias_macros(decls)
         enum_names = _resolve_enum_names(decls)
-        unit.decls = [_rewrite_decl(decl, enum_names) for decl in decls]
-        return unit
+        return replace(unit, decls=[_rewrite_decl(decl, enum_names) for decl in decls])
 
     def _dedupe_structs(self, unit: Unit) -> list[Decl]:
         out = list[Decl]()

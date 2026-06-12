@@ -196,9 +196,12 @@ The repository includes worked examples and smoke programs for:
 - Cairo: [examples/cairo](examples/cairo)
 - libpng: [examples/libpng](examples/libpng)
 - zlib: [examples/zlib](examples/zlib)
+- globals/constants: [examples/global_consts](examples/global_consts)
 
 These examples do more than generate bindings: their `generate.sh` scripts also
-build and run small functional tests to check the usability of the generated bindings.
+build smoke artifacts or run small functional tests to check the usability of
+the generated bindings. They also emit layout-test sidecars when file output is
+generated.
 
 The test suite also has end-to-end runtime coverage for:
 

@@ -6,6 +6,7 @@ from mojo_bindgen.analysis.cir_canonicalizer import CIRCanonicalizer
 from mojo_bindgen.ir import (
     ByteOrder,
     Const,
+    Field,
     Function,
     IntKind,
     IntLiteral,
@@ -13,6 +14,7 @@ from mojo_bindgen.ir import (
     MacroDecl,
     Param,
     RefExpr,
+    Struct,
     TargetABI,
     Unit,
     VoidType,
@@ -118,3 +120,35 @@ def test_canonicalizer_drops_self_alias_macro_when_const_claims_name() -> None:
     out = CIRCanonicalizer().canonicalize(unit)
 
     assert [type(decl).__name__ for decl in out.decls] == ["Const"]
+
+
+def test_canonicalizer_prefers_complete_record_without_mutating_input_unit() -> None:
+    incomplete = Struct(
+        decl_id="struct:Widget",
+        name="Widget",
+        c_name="Widget",
+        fields=[],
+        size_bytes=0,
+        align_bytes=1,
+        is_complete=False,
+    )
+    complete = Struct(
+        decl_id="struct:Widget",
+        name="Widget",
+        c_name="Widget",
+        fields=[Field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        size_bytes=4,
+        align_bytes=4,
+        is_complete=True,
+    )
+    unit = _unit([incomplete, complete])
+
+    out = CIRCanonicalizer().canonicalize(unit)
+
+    assert out is not unit
+    assert unit.decls == [incomplete, complete]
+    assert len(out.decls) == 1
+    record = out.decls[0]
+    assert isinstance(record, Struct)
+    assert record.is_complete is True
+    assert record.fields == complete.fields

@@ -1,13 +1,25 @@
 """Public analysis API for CIR passes and CIR -> MojoIR lowering."""
 
+from mojo_bindgen.analysis.alias_classification import (
+    AliasClass,
+    AliasClassification,
+    AliasInfo,
+    classify_aliases,
+)
 from mojo_bindgen.analysis.const_lowering import (
     ConstExprLoweringError,
     LowerConstExprPass,
     lower_const_expr,
 )
+from mojo_bindgen.analysis.context import AnalysisContext, build_analysis_context
 from mojo_bindgen.analysis.decl_lowerer import UnitLoweringError
+from mojo_bindgen.analysis.dependency_graph import (
+    DeclDependencyGraph,
+    build_decl_dependency_graph,
+)
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.orchestrator import (
+    AnalysisArtifacts,
     AnalysisOrchestrator,
     AnalysisResult,
     run_ir_passes,
@@ -23,6 +35,18 @@ from mojo_bindgen.analysis.record_policies import (
     AssignRecordPoliciesPass,
     PolicyInferencePass,
     assign_record_policies,
+)
+from mojo_bindgen.analysis.record_shape import (
+    ByValueRecordShape,
+    RecordAnalysisFacts,
+    RecordShapeFacts,
+    RecordStorageKind,
+    analyze_record_shape,
+    analyze_record_shapes,
+)
+from mojo_bindgen.analysis.reference_validation import (
+    ReferenceValidationError,
+    ValidateReferencesPass,
 )
 from mojo_bindgen.analysis.struct_lowering import (
     StructLoweringContext,
@@ -50,7 +74,12 @@ __all__ = [
     "AssignRecordPoliciesError",
     "AssignRecordPoliciesPass",
     "AnalysisResult",
+    "AnalysisArtifacts",
+    "AnalysisContext",
     "AnalysisOrchestrator",
+    "AliasClass",
+    "AliasClassification",
+    "AliasInfo",
     "ConstExprLoweringError",
     "IRValidationError",
     "LowerConstExprPass",
@@ -59,6 +88,12 @@ __all__ = [
     "LowerUnitPass",
     "MojoEmitOptions",
     "PolicyInferencePass",
+    "DeclDependencyGraph",
+    "ReferenceValidationError",
+    "ByValueRecordShape",
+    "RecordAnalysisFacts",
+    "RecordShapeFacts",
+    "RecordStorageKind",
     "SignatureRecordStubOptions",
     "SignatureRecordStubPass",
     "SignatureRecordStubResult",
@@ -66,10 +101,16 @@ __all__ = [
     "StructLoweringError",
     "TypeLoweringError",
     "ValidateIRPass",
+    "ValidateReferencesPass",
     "UnionLoweringError",
     "UnitLoweringError",
     "TypeWalkOptions",
     "assign_record_policies",
+    "analyze_record_shape",
+    "analyze_record_shapes",
+    "build_analysis_context",
+    "build_decl_dependency_graph",
+    "classify_aliases",
     "iter_type_nodes",
     "lower_const_expr",
     "lower_struct",

@@ -105,11 +105,12 @@ rewrite is part of the normalization contract, not printer logic.
 
 The current public render path is:
 
-1. `AnalysisOrchestrator.run_ir_passes(unit)` repairs raw CIR
-2. `LowerUnitPass.run(unit)` produces a policy-light `MojoModule`
-3. `assign_record_policies(module)` derives late record passability, traits, and fieldwise-init policy
-4. `normalize_mojo_module(module)` makes printer-facing facts explicit
-5. `render_mojo_module(module, options)` emits Mojo source
+1. `AnalysisOrchestrator.run_ir_passes(unit)` validates and normalizes raw CIR
+2. `build_analysis_context(unit)` computes shared declaration and layout facts
+3. `LowerUnitPass.run(unit)` produces a policy-light `MojoModule`
+4. `PolicyInferencePass` derives late record passability, traits, and fieldwise-init policy
+5. `normalize_mojo_module(module)` makes printer-facing facts explicit
+6. `render_mojo_module(module, options)` emits Mojo source
 
 Source:
 - [orchestrator.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/orchestrator.py:79)
