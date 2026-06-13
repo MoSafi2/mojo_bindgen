@@ -9,6 +9,7 @@ import mojo_bindgen.orchestrator as orchestrator_mod
 from mojo_bindgen import BindgenOptions, BindgenOrchestrator, bindgen
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import ByteOrder, Function, LinkMode, MojoModule, TargetABI, Unit, VoidType
+from mojo_bindgen.parsing.frontend import ClangOptions
 
 
 def _abi() -> TargetABI:
@@ -125,6 +126,40 @@ def test_parse_adds_system_comment_retention_to_default_compile_args(monkeypatch
     BindgenOrchestrator(BindgenOptions(header=Path("demo.h"))).parse()
 
     assert calls["compile_args"] is not None
+    assert "-I/usr/include" in calls["compile_args"]
+    assert "-fretain-comments-from-system-headers" in calls["compile_args"]
+
+
+def test_parse_adds_system_includes_to_structured_clang_options(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class DummyParser:
+        def __init__(
+            self,
+            header: Path,
+            *,
+            library: str,
+            link_name: str,
+            include_headers,
+            compile_args,
+            raise_on_error,
+            **_kwargs,
+        ):
+            calls["compile_args"] = compile_args
+
+        def run(self) -> Unit:
+            return _demo_unit()
+
+    monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
+
+    options = BindgenOptions(
+        header=Path("demo.h"),
+        clang_options=ClangOptions(std="c11", include_dirs=(Path("./include"),)),
+    )
+    BindgenOrchestrator(options).parse()
+
+    assert calls["compile_args"] is not None
+    assert calls["compile_args"][:4] == ["-x", "c", "-std=c11", "-Iinclude"]
     assert "-I/usr/include" in calls["compile_args"]
     assert "-fretain-comments-from-system-headers" in calls["compile_args"]
 

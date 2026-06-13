@@ -49,7 +49,7 @@ find_zlib_h() {
   return 1
 }
 
-# Path to the zlib shared library used as `--library-path-hint`.
+# Path to the zlib shared library used as `--library-path`.
 find_libz_so() {
   local p
   if command -v gcc >/dev/null 2>&1; then
@@ -100,7 +100,7 @@ echo "Wrote $HERE/zlib_bindings.mojo, zlib_bindings_layout_tests.mojo, and zlib_
 LIBZ_SO="$(find_libz_so)" || true
 if [[ -n "${LIBZ_SO:-}" ]]; then
   generate_bindings "$ZLIB_H" z z zlib_bindings_dl.mojo \
-    --linking owned_dl_handle --library-path-hint "$LIBZ_SO"
+    --link-mode owned-dl-handle --library-path "$LIBZ_SO"
   "${MOJO[@]}" build zlib_dl_smoke.mojo -I "$HERE" -o zlib_dl_smoke
   echo "Wrote $HERE/zlib_bindings_dl.mojo (dlopen: $LIBZ_SO) and built zlib_dl_smoke"
   echo "Running zlib_dl_smoke (owned_dl_handle runtime proof)"

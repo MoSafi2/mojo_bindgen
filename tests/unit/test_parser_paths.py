@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from mojo_bindgen.parsing.frontend import ClangOptions
 from mojo_bindgen.parsing.parser import _default_system_compile_args, _resolve_header_path
 from mojo_bindgen.utils import build_c_parse_args, normalize_std_flag
 
@@ -91,3 +92,43 @@ def test_build_c_parse_args_accepts_bare_std_equals() -> None:
         default_std="-std=gnu11",
     )
     assert args == ["-x", "c", "-std=c17", "-DVALUE=1"]
+
+
+def test_build_c_parse_args_does_not_duplicate_normalized_language_and_std() -> None:
+    args = build_c_parse_args(
+        ["-x", "c", "-std=c11", "-I./include"],
+        default_std="-std=gnu11",
+    )
+    assert args == ["-x", "c", "-std=c11", "-I./include"]
+
+
+def test_clang_options_normalizes_structured_flags_in_deterministic_order() -> None:
+    options = ClangOptions(
+        std="c23",
+        target="wasm32-unknown-unknown",
+        sysroot=Path("/sdk"),
+        include_dirs=(Path("include"), Path("vendor/include")),
+        defines=("FEATURE=1", "NAME"),
+        undefines=("OLD",),
+        raw_args=("-Wno-unused",),
+    )
+
+    assert options.to_args() == [
+        "-x",
+        "c",
+        "-std=c23",
+        "--target=wasm32-unknown-unknown",
+        "--sysroot=/sdk",
+        "-Iinclude",
+        "-Ivendor/include",
+        "-DFEATURE=1",
+        "-DNAME",
+        "-UOLD",
+        "-Wno-unused",
+    ]
+
+
+def test_clang_options_raw_std_suppresses_default_gnu11() -> None:
+    options = ClangOptions(raw_args=("--std=c99", "-DVALUE=1"))
+
+    assert options.to_args() == ["-x", "c", "-std=c99", "-DVALUE=1"]

@@ -63,34 +63,41 @@ For development setup, checks, and Pixi workflows, see
 Generate bindings from a primary header:
 
 ```bash
-mojo-bindgen path/to/header.h -o bindings.mojo --linking external_call|owned_dl_handle
+mojo-bindgen path/to/header.h --output bindings.mojo --link-mode external-call
 ```
 
-Pass include paths and other Clang flags with repeated `--compile-arg`:
+Pass common Clang inputs with structured flags:
 
 ```bash
 mojo-bindgen include/mylib.h \
-  --compile-arg=-I./include \
-  --compile-arg=-DMYLIB_FEATURE=1 \
-  -o mylib_bindings.mojo
+  --include-dir ./include \
+  --define MYLIB_FEATURE=1 \
+  --std c11 \
+  --output mylib_bindings.mojo
 ```
 
 Emit declarations from additional include headers with repeated
-`--include-header`. Dependency headers are still parsed for type information
+`--emit-header`. Dependency headers are still parsed for type information
 and macro expansion, but are not emitted unless listed:
 
 ```bash
 mojo-bindgen include/mylib.h \
-  --include-header include/mylib_extra.h \
-  --compile-arg=-I./include \
-  -o mylib_bindings.mojo
+  --emit-header include/mylib_extra.h \
+  --include-dir ./include \
+  --output mylib_bindings.mojo
 ```
 
 By default the parser uses `-std=gnu11` when no C standard is provided. Pin a
 standard explicitly if your header requires one:
 
 ```bash
-mojo-bindgen include/mylib.h --compile-arg=-std=c99 -o mylib_bindings.mojo
+mojo-bindgen include/mylib.h --std c99 --output mylib_bindings.mojo
+```
+
+Use `--clang-arg` for raw Clang flags that do not have a structured option:
+
+```bash
+mojo-bindgen include/mylib.h --clang-arg=-fms-extensions --output mylib_bindings.mojo
 ```
 
 ## Linking modes
@@ -108,13 +115,13 @@ Examples:
 
 ```bash
 # default
-mojo-bindgen include/mylib.h --linking external_call -o mylib_bindings.mojo
+mojo-bindgen include/mylib.h --link-mode external-call --output mylib_bindings.mojo
 
 # runtime-loaded shared library
 mojo-bindgen include/mylib.h \
-  --linking owned_dl_handle \
-  --library-path-hint /usr/lib/libmylib.so \
-  -o mylib_bindings_dl.mojo
+  --link-mode owned-dl-handle \
+  --library-path /usr/lib/libmylib.so \
+  --output mylib_bindings_dl.mojo
 ```
 
 ## What works today?
@@ -125,7 +132,7 @@ generating bindings.
 
 Current support includes:
 
-- **Parsing and lowering:** real C parsing through `libclang`, repeatable `--compile-arg`
+- **Parsing and lowering:** real C parsing through `libclang`, repeatable `--clang-arg`
   support, and a structured IR pipeline rather than text-only generation.
 - **Primitive types:** scalar types, typedef chains, pointers with const-aware
   mutability, fixed arrays, incomplete-array decay cases, complex values,
@@ -184,8 +191,8 @@ verify emitted layouts and symbols against your target toolchain.
 - **Linkage and compiler edge cases:** `inline`, compiler-specific linkage
   hints, and other extension-heavy cases can still require manual review and
   may lead to symbol mismatches at runtime.
-- **Include-header model:** declarations are emitted from the primary header
-  you pass to the tool plus any headers named with `--include-header`. Other
+- **Emit-header model:** declarations are emitted from the primary header
+  you pass to the tool plus any headers named with `--emit-header`. Other
   headers included by those files are parsed as dependencies but not emitted.
 
 ## Real-world examples
@@ -222,14 +229,41 @@ matrix.
 ### The generated module is empty or missing declarations
 
 `mojo-bindgen` emits declarations from the primary header you pass in and any
-headers listed with `--include-header`. If a thin wrapper only includes another
+headers listed with `--emit-header`. If a thin wrapper only includes another
 header whose declarations should be emitted, pass that included header with
-`--include-header` or use it as the primary header directly.
+`--emit-header` or use it as the primary header directly.
 
 ### Parsing fails on project headers
 
 Most parser failures are missing include paths, target flags, or defines. Add
-the same flags your C build uses via repeated `--compile-arg`.
+the same flags your C build uses with `--include-dir`, `--define`,
+`--undefine`, `--target`, `--sysroot`, `--std`, or repeated `--clang-arg`.
+
+### Debugging parser failures
+
+Print the normalized Clang arguments that `mojo-bindgen` will use:
+
+```bash
+mojo-bindgen include/mylib.h --include-dir ./include --dump-clang-args
+```
+
+Write diagnostics as JSON while still generating normal output:
+
+```bash
+mojo-bindgen include/mylib.h \
+  --diagnostics json \
+  --diagnostics-output diagnostics.json \
+  --output mylib_bindings.mojo
+```
+
+Dump the preprocessed input that Clang sees:
+
+```bash
+mojo-bindgen include/mylib.h \
+  --include-dir ./include \
+  --dump-preprocessed mylib.preprocessed.c \
+  --output mylib_bindings.mojo
+```
 
 ### Build succeeds but symbols are missing at runtime
 
@@ -237,7 +271,7 @@ Double-check:
 
 - `--library` and `--link-name`
 - your Mojo link flags for `external_call`
-- your `--library-path-hint` for `owned_dl_handle`
+- your `--library-path` for `owned_dl_handle`
 - whether the original C declaration involved tricky `inline` or exotic layout that needs manual review.
 
 ## License

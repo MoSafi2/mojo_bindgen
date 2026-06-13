@@ -32,7 +32,8 @@ def build_c_parse_args(
     """
     normalized_args = [normalize_std_flag(arg) for arg in compile_args]
     has_std = any(arg.startswith("-std=") for arg in normalized_args)
-    prefix = ["-x", "c"]
+    has_language = "-x" in normalized_args or any(arg.startswith("-x") for arg in normalized_args)
+    prefix = [] if has_language else ["-x", "c"]
     if not has_std:
         prefix.append(default_std)
     return prefix + normalized_args

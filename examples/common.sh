@@ -44,10 +44,10 @@ generate_bindings() {
   "${BG[@]}" "$header" \
     --library "$library" \
     --link-name "$link_name" \
-    --layout-tests \
+    --emit-layout-tests \
     --layout-test-output "${output%.mojo}_layout_tests.mojo" \
     "$@" \
-    -o "$output"
+    --output "$output"
 }
 
 build_bindings_object() {

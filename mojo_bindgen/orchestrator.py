@@ -11,7 +11,13 @@ from mojo_bindgen.analysis.orchestrator import AnalysisOrchestrator
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
 from mojo_bindgen.ir import MojoModule, Unit
 from mojo_bindgen.layout_tests import render_layout_test_module
-from mojo_bindgen.parsing.parser import ClangParser, _default_system_compile_args
+from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig, ClangOptions
+from mojo_bindgen.parsing.parser import (
+    ClangParser,
+    _default_system_compile_args,
+    _resolve_header_path,
+    _resolve_include_headers,
+)
 
 LinkingMode = Literal["external_call", "owned_dl_handle"]
 
@@ -22,6 +28,7 @@ class BindgenOptions:
     library: str | None = None
     link_name: str | None = None
     compile_args: list[str] | None = None
+    clang_options: ClangOptions | None = None
     include_headers: list[Path] | None = None
     linking: LinkingMode = "external_call"
     library_path_hint: str | None = None
@@ -34,6 +41,7 @@ class BindgenOptions:
     layout_test_output: Path | None = None
     clang_macro_fallback: bool = False
     clang_macro_fallback_build_dir: Path | None = None
+    keep_going: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,11 +90,28 @@ class BindgenOrchestrator:
             link_name=link_name,
             include_headers=self._options.include_headers,
             compile_args=self._parse_compile_args(),
-            raise_on_error=True,
+            raise_on_error=not self._options.keep_going,
             clang_macro_fallback=self._options.clang_macro_fallback,
             clang_macro_fallback_build_dir=self._options.clang_macro_fallback_build_dir,
         )
         return parser.run()
+
+    def normalized_clang_args(self) -> list[str]:
+        """Return exact normalized Clang args used for parser setup."""
+        return self._parse_compile_args()
+
+    def dump_preprocessed(self) -> str:
+        """Return preprocessed source using the same frontend header setup."""
+        header = _resolve_header_path(self._options.header)
+        include_headers = _resolve_include_headers(header, self._options.include_headers)
+        frontend = ClangFrontend(
+            ClangFrontendConfig(
+                header=header,
+                compile_args=tuple(self._parse_compile_args()),
+                include_headers=tuple(include_headers),
+            )
+        )
+        return frontend.dump_preprocessed()
 
     def analyze(self, unit: Unit) -> MojoModule:
         return AnalysisOrchestrator(self.emit_options).analyze(unit)
@@ -176,17 +201,20 @@ class BindgenOrchestrator:
     def _link_name(self, library_name: str) -> str:
         return self._options.link_name if self._options.link_name is not None else library_name
 
-    def _parse_compile_args(self) -> list[str] | None:
-        compile_args = (
-            _default_system_compile_args()
-            if self._options.compile_args is None
-            else list(self._options.compile_args)
-        )
+    def _parse_compile_args(self) -> list[str]:
+        compile_args = self._base_compile_args()
         if not self._options.emit_doc_comments:
-            return None if self._options.compile_args is None else compile_args
+            return compile_args
         if self._RETAIN_SYSTEM_HEADER_COMMENTS_ARG in compile_args:
             return compile_args
         return [*compile_args, self._RETAIN_SYSTEM_HEADER_COMMENTS_ARG]
+
+    def _base_compile_args(self) -> list[str]:
+        if self._options.clang_options is not None:
+            return [*self._options.clang_options.to_args(), *_default_system_compile_args()]
+        if self._options.compile_args is not None:
+            return list(self._options.compile_args)
+        return _default_system_compile_args()
 
 
 def bindgen(options: BindgenOptions) -> BindgenResult:
