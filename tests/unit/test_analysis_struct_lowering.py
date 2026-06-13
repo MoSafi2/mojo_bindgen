@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.record_layout import PlainFieldFact, RecordLayoutFacts
-from mojo_bindgen.analysis.struct_lowering import StructLoweringContext, lower_struct
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.facts.record_layout import PlainFieldFact, RecordLayoutFacts
+from mojo_bindgen.analysis.mojo.struct_lowering import StructLoweringContext, lower_struct
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
@@ -101,7 +101,7 @@ def test_lower_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
         raise AssertionError("record layout should come from StructLoweringContext")
 
     monkeypatch.setattr(
-        "mojo_bindgen.analysis.struct_lowering.analyze_record_layout",
+        "mojo_bindgen.analysis.mojo.struct_lowering.analyze_record_layout",
         fail_if_recomputed,
     )
     context = StructLoweringContext(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.const_lowering import lower_const_expr
+from mojo_bindgen.analysis.mojo.const_lowering import lower_const_expr
 from mojo_bindgen.ir import (
     BinaryExpr,
     BuiltinType,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.cir_canonicalizer import CIRCanonicalizer
+from mojo_bindgen.analysis.cir.cir_canonicalizer import CIRCanonicalizer
 from mojo_bindgen.ir import (
     ByteOrder,
     Const,

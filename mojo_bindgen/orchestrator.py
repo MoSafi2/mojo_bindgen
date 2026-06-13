@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.orchestrator import AnalysisOrchestrator
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.pipeline import AnalysisOrchestrator
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
 from mojo_bindgen.ir import MojoModule, Unit
 from mojo_bindgen.layout_tests import render_layout_test_module

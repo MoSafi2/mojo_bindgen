@@ -120,7 +120,7 @@ would otherwise be repeated inside lowerers.
 
 ### Declaration Indexes
 
-`analysis.indexes` owns declaration lookup construction. `AnalysisContext`
+`analysis.facts.indexes` owns declaration lookup construction. `AnalysisContext`
 stores the resulting normalized declarations by stable keys:
 
 - records by `decl_id`

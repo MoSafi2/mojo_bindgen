@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.const_lowering import ConstExprLoweringError, LowerConstExprPass
-from mojo_bindgen.analysis.const_value_lowering import typed_const_value
-from mojo_bindgen.analysis.lowering_support import lowering_note, stub_note
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.const_lowering import ConstExprLoweringError, LowerConstExprPass
+from mojo_bindgen.analysis.mojo.const_value_lowering import typed_const_value
+from mojo_bindgen.analysis.mojo.lowering_support import lowering_note, stub_note
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,

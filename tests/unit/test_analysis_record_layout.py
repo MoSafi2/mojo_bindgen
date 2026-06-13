@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.record_layout import analyze_record_layout
-from mojo_bindgen.analysis.type_layout import type_layout
+from mojo_bindgen.analysis.facts.record_layout import analyze_record_layout
+from mojo_bindgen.analysis.facts.type_layout import type_layout
 from mojo_bindgen.ir import (
     Array,
     ByteOrder,

@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.lowering_support import (
+from mojo_bindgen.analysis.mojo.lowering_support import (
     field_display_name,
     record_name,
     stub_note,
     try_lower_type,
     union_note,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,

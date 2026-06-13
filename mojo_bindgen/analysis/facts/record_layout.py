@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.bitfield_layout import BitfieldRunLayout, analyze_bitfield_layout
-from mojo_bindgen.analysis.indexes import struct_by_decl_id
-from mojo_bindgen.analysis.lowering_support import field_display_name
-from mojo_bindgen.analysis.type_layout import type_align
+from mojo_bindgen.analysis.facts.bitfield_layout import BitfieldRunLayout, analyze_bitfield_layout
+from mojo_bindgen.analysis.facts.indexes import struct_by_decl_id
+from mojo_bindgen.analysis.facts.type_layout import type_align
+from mojo_bindgen.analysis.mojo.lowering_support import field_display_name
 from mojo_bindgen.ir import Array, Struct, StructRef, TargetABI
 
 

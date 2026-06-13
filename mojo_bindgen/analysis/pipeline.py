@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.cir_canonicalizer import CIRCanonicalizer
-from mojo_bindgen.analysis.context import AnalysisContext, build_analysis_context
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.reachability import SignatureRecordStubPass
-from mojo_bindgen.analysis.record_policies import assign_record_policies
-from mojo_bindgen.analysis.reference_validation import ValidateReferencesPass
-from mojo_bindgen.analysis.unit_lowering import lower_unit
-from mojo_bindgen.analysis.validate_ir import ValidateIRPass
+from mojo_bindgen.analysis.cir.cir_canonicalizer import CIRCanonicalizer
+from mojo_bindgen.analysis.cir.reachability import SignatureRecordStubPass
+from mojo_bindgen.analysis.cir.reference_validation import ValidateReferencesPass
+from mojo_bindgen.analysis.cir.validate_ir import ValidateIRPass
+from mojo_bindgen.analysis.facts.context import AnalysisContext, build_analysis_context
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.record_policies import assign_record_policies
+from mojo_bindgen.analysis.mojo.unit_lowering import lower_unit
 from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.ir import MojoModule, Unit
 

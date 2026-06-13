@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.indexes import record_by_decl_id
-from mojo_bindgen.analysis.type_lowering import LowerTypePass, TypeLoweringError
+from mojo_bindgen.analysis.facts.indexes import record_by_decl_id
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass, TypeLoweringError
 from mojo_bindgen.ir import (
     BuiltinType,
     Field,

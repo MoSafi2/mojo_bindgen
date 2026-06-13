@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.union_lowering import lower_union
+from mojo_bindgen.analysis.mojo.union_lowering import lower_union
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,

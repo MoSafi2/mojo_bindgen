@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass, exact_width_stdint_alias_type
 from mojo_bindgen.ir import AliasDecl, AliasKind, DocComment, FunctionPtr, NamedType, Type
 
 

@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.alias_lowering import lower_typedef_alias
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.const_lowering import (
+from mojo_bindgen.analysis.mojo.alias_lowering import lower_typedef_alias
+from mojo_bindgen.analysis.mojo.const_lowering import (
     ConstExprLoweringError,
     LowerConstExprPass,
 )
-from mojo_bindgen.analysis.const_value_lowering import typed_const_value
-from mojo_bindgen.analysis.lowering_support import stub_note
-from mojo_bindgen.analysis.macro_lowering import MacroLowerer
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.struct_lowering import (
+from mojo_bindgen.analysis.mojo.const_value_lowering import typed_const_value
+from mojo_bindgen.analysis.mojo.lowering_support import stub_note
+from mojo_bindgen.analysis.mojo.macro_lowering import MacroLowerer
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.struct_lowering import (
     StructLoweringContext,
     lower_struct,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
-from mojo_bindgen.analysis.union_lowering import LowerUnionPass
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.union_lowering import LowerUnionPass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,

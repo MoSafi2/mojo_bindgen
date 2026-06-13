@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-from mojo_bindgen.analysis.lowering_support import field_display_name, try_lower_type
-from mojo_bindgen.analysis.record_layout import RecordLayoutFacts
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts
+from mojo_bindgen.analysis.mojo.lowering_support import field_display_name, try_lower_type
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     Array,

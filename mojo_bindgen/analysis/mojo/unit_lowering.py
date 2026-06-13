@@ -7,21 +7,21 @@ declaration-family lowering to narrower helpers.
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.alias_lowering import lower_typedef_alias
-from mojo_bindgen.analysis.const_lowering import (
+from mojo_bindgen.analysis.facts.context import AnalysisContext, build_analysis_context
+from mojo_bindgen.analysis.mojo.alias_lowering import lower_typedef_alias
+from mojo_bindgen.analysis.mojo.const_lowering import (
     LowerConstExprPass,
 )
-from mojo_bindgen.analysis.context import AnalysisContext, build_analysis_context
-from mojo_bindgen.analysis.decl_lowerer import (
+from mojo_bindgen.analysis.mojo.decl_lowerer import (
     LoweringSession,
     UnitDeclLowerer,
     _link_mode_for_options,
 )
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.struct_lowering import (
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.struct_lowering import (
     StructLoweringContext,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     MojoDecl,
     MojoModule,

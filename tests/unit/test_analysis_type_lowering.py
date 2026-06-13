@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.type_lowering import LowerTypePass, lower_type
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass, lower_type
 from mojo_bindgen.ir import (
     Array,
     AtomicType,

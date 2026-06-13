@@ -5,20 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
-from mojo_bindgen.analysis.lowering_support import (
+from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts, analyze_record_layout
+from mojo_bindgen.analysis.facts.record_shape import (
+    RecordAnalysisFacts,
+    RecordStorageKind,
+    analyze_record_shapes,
+)
+from mojo_bindgen.analysis.mojo.lowering_support import (
     field_display_name,
     field_mojo_name,
     record_name,
     struct_note,
     try_lower_type,
 )
-from mojo_bindgen.analysis.record_layout import RecordLayoutFacts, analyze_record_layout
-from mojo_bindgen.analysis.record_shape import (
-    RecordAnalysisFacts,
-    RecordStorageKind,
-    analyze_record_shapes,
-)
-from mojo_bindgen.analysis.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
     AtomicType,
     BitfieldField,

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.alias_classification import AliasClassification, classify_aliases
-from mojo_bindgen.analysis.dependency_graph import DeclDependencyGraph, build_decl_dependency_graph
-from mojo_bindgen.analysis.indexes import DeclIndexes, build_decl_indexes
-from mojo_bindgen.analysis.record_layout import RecordLayoutFacts, analyze_record_layout
-from mojo_bindgen.analysis.record_shape import RecordAnalysisFacts, analyze_record_shapes
+from mojo_bindgen.analysis.facts.alias_classification import AliasClassification, classify_aliases
+from mojo_bindgen.analysis.facts.dependency_graph import (
+    DeclDependencyGraph,
+    build_decl_dependency_graph,
+)
+from mojo_bindgen.analysis.facts.indexes import DeclIndexes, build_decl_indexes
+from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts, analyze_record_layout
+from mojo_bindgen.analysis.facts.record_shape import RecordAnalysisFacts, analyze_record_shapes
 from mojo_bindgen.ir import Const, Enum, Function, GlobalVar, MacroDecl, Struct, Typedef, Unit
 
 

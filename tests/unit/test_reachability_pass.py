@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.reachability import (
+from mojo_bindgen.analysis.cir.reachability import (
     SignatureRecordStubOptions,
     SignatureRecordStubPass,
     materialize_signature_record_stubs,
@@ -174,7 +174,7 @@ def test_materialize_signature_record_stubs_wrapper_returns_unit_only() -> None:
 
 
 def test_run_ir_passes_includes_signature_record_stubs() -> None:
-    from mojo_bindgen.analysis.orchestrator import run_ir_passes
+    from mojo_bindgen.analysis.pipeline import run_ir_passes
 
     orphan = StructRef(
         decl_id="c:@S@pipe",

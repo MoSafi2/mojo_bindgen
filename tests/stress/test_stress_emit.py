@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from tests.bindgen_helpers import MojoGenerator
 from tests.stress._helpers import case_dirs, has_libclang, parse_case
 

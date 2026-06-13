@@ -60,7 +60,7 @@ Responsibilities:
 - delegate each top-level declaration to `UnitDeclLowerer`
 
 Source:
-- [unit_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/unit_lowering.py:45)
+- [unit_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/unit_lowering.py:45)
 
 ### `LowerTypePass`
 
@@ -78,7 +78,7 @@ Important rules:
 - unsupported unsized types fall back to opaque external pointers
 
 Source:
-- [type_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/type_lowering.py:132)
+- [type_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/type_lowering.py:132)
 
 ### `UnitDeclLowerer`
 
@@ -94,7 +94,7 @@ Responsibilities:
 - lower CIR constant expressions and macro expressions through `LowerConstExprPass`
 
 Source:
-- [decl_lowerer.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/decl_lowerer.py:93)
+- [decl_lowerer.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/decl_lowerer.py:93)
 
 ### `lower_struct(...)`
 
@@ -110,8 +110,8 @@ Responsibilities:
 - attach fallback diagnostics when a record must collapse to opaque storage
 
 Source:
-- [struct_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/struct_lowering.py:56)
-- [record_layout.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/record_layout.py:48)
+- [struct_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/struct_lowering.py:56)
+- [record_layout.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/facts/record_layout.py:48)
 
 ### `lower_union(...)`
 
@@ -119,7 +119,7 @@ Union lowering decides whether a union can stay as a typed `UnsafeUnion[...]`
 surface or must fall back to a conservative layout alias.
 
 Source:
-- [union_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/union_lowering.py:25)
+- [union_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/union_lowering.py:25)
 
 ## Type-Level Fallback Rules
 

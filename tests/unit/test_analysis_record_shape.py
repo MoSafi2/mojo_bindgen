@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from mojo_bindgen.analysis.record_layout import analyze_record_layout
-from mojo_bindgen.analysis.record_shape import (
+from mojo_bindgen.analysis.facts.record_layout import analyze_record_layout
+from mojo_bindgen.analysis.facts.record_shape import (
     RecordStorageKind,
     analyze_record_shape,
     analyze_record_shapes,
