@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.parsing.parser import ClangParser
 from tests.bindgen_helpers import MojoGenerator
 

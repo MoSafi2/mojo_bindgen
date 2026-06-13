@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from mojo_bindgen.analysis.lowering_support import field_display_name
-from mojo_bindgen.analysis.type_layout import peel_layout_wrappers
+from mojo_bindgen.analysis.facts.type_layout import peel_layout_wrappers
+from mojo_bindgen.analysis.mojo.mapping_support import field_display_name
 from mojo_bindgen.ir import Field, IntKind, IntType, Struct, Type
 
 
@@ -39,6 +39,12 @@ class BitfieldRunLayout:
         return self.unsigned_storage_type.align_bytes or self.unsigned_storage_type.size_bytes
 
 
+@dataclass(frozen=True)
+class _BitfieldStorage:
+    width_bits: int
+    unsigned_type: IntType
+
+
 def analyze_bitfield_layout(
     decl: Struct,
 ) -> tuple[tuple[BitfieldRunLayout, ...], tuple[str, ...]]:
@@ -54,9 +60,8 @@ def analyze_bitfield_layout(
             continue
 
         field_name = field_display_name(_field, index)
-        width_bits = bitfield_storage_width_bits(_field)
-        unsigned_storage_type = bitfield_unsigned_storage_type(_field)
-        if width_bits is None or unsigned_storage_type is None:
+        storage = _bitfield_storage(_field)
+        if storage is None:
             problems.append(f"bitfield `{field_name}` has unsupported backing storage")
             current = None
             continue
@@ -65,47 +70,86 @@ def analyze_bitfield_layout(
             current = None
             continue
 
-        field_end_bit = _field.bit_offset + _field.bit_width
-        needs_new_storage = True
-        if current is not None:
-            widened_width_bits = max(current.storage_width_bits, width_bits)
-            needs_new_storage = (
-                _field.bit_offset < current.start_bit
-                or field_end_bit > current.start_bit + widened_width_bits
-            )
-
-        if needs_new_storage:
-            storage_start_bit = (_field.bit_offset // width_bits) * width_bits
-            current = BitfieldRunLayout(
-                name=f"__bf{len(runs)}",
-                first_index=index,
-                byte_offset=storage_start_bit // 8,
-                start_bit=storage_start_bit,
-                storage_width_bits=width_bits,
-                unsigned_storage_type=unsigned_storage_type,
-            )
-            runs.append(current)
-        elif current is not None:
-            if width_bits > current.storage_width_bits:
-                current.storage_width_bits = width_bits
-                current.unsigned_storage_type = unsigned_storage_type
-        else:
-            continue
-
-        if not _field.is_anonymous:
-            current.fields.append(
-                BitfieldFieldLayout(
-                    index=index,
-                    field=_field,
-                    logical_type=_field.type,
-                    bit_offset=_field.bit_offset,
-                    bit_width=_field.bit_width,
-                    signed=bitfield_field_is_signed(_field),
-                    bool_semantics=bitfield_field_is_bool(_field),
-                )
-            )
+        current = _select_bitfield_run(
+            runs,
+            current=current,
+            field=_field,
+            index=index,
+            storage=storage,
+        )
+        _append_named_bitfield(current, field=_field, index=index)
 
     return tuple(runs), tuple(problems)
+
+
+def _bitfield_storage(field: Field) -> _BitfieldStorage | None:
+    width_bits = bitfield_storage_width_bits(field)
+    unsigned_storage_type = bitfield_unsigned_storage_type(field)
+    if width_bits is None or unsigned_storage_type is None:
+        return None
+    return _BitfieldStorage(width_bits=width_bits, unsigned_type=unsigned_storage_type)
+
+
+def _select_bitfield_run(
+    runs: list[BitfieldRunLayout],
+    *,
+    current: BitfieldRunLayout | None,
+    field: Field,
+    index: int,
+    storage: _BitfieldStorage,
+) -> BitfieldRunLayout:
+    if current is None or _needs_new_storage_run(current, field=field, storage=storage):
+        storage_start_bit = (field.bit_offset // storage.width_bits) * storage.width_bits
+        current = BitfieldRunLayout(
+            name=f"__bf{len(runs)}",
+            first_index=index,
+            byte_offset=storage_start_bit // 8,
+            start_bit=storage_start_bit,
+            storage_width_bits=storage.width_bits,
+            unsigned_storage_type=storage.unsigned_type,
+        )
+        runs.append(current)
+        return current
+
+    if storage.width_bits > current.storage_width_bits:
+        current.storage_width_bits = storage.width_bits
+        current.unsigned_storage_type = storage.unsigned_type
+    return current
+
+
+def _needs_new_storage_run(
+    current: BitfieldRunLayout,
+    *,
+    field: Field,
+    storage: _BitfieldStorage,
+) -> bool:
+    field_end_bit = field.bit_offset + field.bit_width
+    widened_width_bits = max(current.storage_width_bits, storage.width_bits)
+    return (
+        field.bit_offset < current.start_bit
+        or field_end_bit > current.start_bit + widened_width_bits
+    )
+
+
+def _append_named_bitfield(
+    current: BitfieldRunLayout,
+    *,
+    field: Field,
+    index: int,
+) -> None:
+    if field.is_anonymous:
+        return
+    current.fields.append(
+        BitfieldFieldLayout(
+            index=index,
+            field=field,
+            logical_type=field.type,
+            bit_offset=field.bit_offset,
+            bit_width=field.bit_width,
+            signed=bitfield_field_is_signed(field),
+            bool_semantics=bitfield_field_is_bool(field),
+        )
+    )
 
 
 def bitfield_storage_width_bits(field: Field) -> int | None:

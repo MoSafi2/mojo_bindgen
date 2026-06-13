@@ -18,11 +18,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 cd "$HERE"
 
-if command -v mojo-bindgen >/dev/null 2>&1; then
-  BG=(mojo-bindgen)
-else
-  BG=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
-fi
+source "$REPO_ROOT/examples/common.sh"
+set_mojo_bindgen_cmd BG "$REPO_ROOT"
+set_mojo_cmd MOJO "$REPO_ROOT"
 
 find_cairo_h() {
   local d
@@ -57,18 +55,13 @@ CAIRO_H="$(find_cairo_h)" || {
   exit 1
 }
 
-"${BG[@]}" "$CAIRO_H" --library cairo --link-name cairo -o cairo_bindings.mojo
+generate_bindings "$CAIRO_H" cairo cairo cairo_bindings.mojo
 
-if command -v mojo >/dev/null 2>&1; then
-  MJ=(mojo)
-else
-  MJ=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo)
-fi
 OBJ="$(mktemp "${TMPDIR:-/tmp}/cairo-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT
-"${MJ[@]}" build --emit object cairo_bindings.mojo -o "$OBJ"
-"${MJ[@]}" build cairo_smoke.mojo -I "$HERE" -Xlinker -lcairo -o cairo_smoke
+build_bindings_object cairo_bindings.mojo "$OBJ"
+"${MOJO[@]}" build cairo_smoke.mojo -I "$HERE" -Xlinker -lcairo -o cairo_smoke
 
-echo "Wrote $HERE/cairo_bindings.mojo (from $CAIRO_H)"
+echo "Wrote $HERE/cairo_bindings.mojo and cairo_bindings_layout_tests.mojo (from $CAIRO_H)"
 echo "Running cairo_smoke (runtime render + file round-trip proof)"
 "$HERE/cairo_smoke"

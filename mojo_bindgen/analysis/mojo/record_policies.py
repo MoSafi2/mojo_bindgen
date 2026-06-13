@@ -1,4 +1,4 @@
-"""Late record-policy assignment on lowered MojoIR."""
+"""Late record-policy assignment on mapped MojoIR."""
 
 from __future__ import annotations
 
@@ -229,7 +229,7 @@ class PolicyInferencePass:
 
 
 def assign_record_policies(module: MojoModule) -> MojoModule:
-    """Assign final record policy bits to a fully lowered ``MojoModule``."""
+    """Assign final record policy bits to a fully mapped ``MojoModule``."""
 
     return PolicyInferencePass().run(module)
 

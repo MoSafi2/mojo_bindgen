@@ -16,7 +16,7 @@ from typing import ClassVar
 
 import clang.cindex as cx
 
-from mojo_bindgen.utils import build_c_parse_args
+from mojo_bindgen.utils import build_c_parse_args, normalize_std_flag
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,38 @@ class FrontendDiagnostic:
 
     def __str__(self) -> str:
         return f"{self.file}:{self.line}:{self.col}: {self.severity}: {self.message}"
+
+
+@dataclass(frozen=True)
+class ClangOptions:
+    """Structured Clang argument options accepted by the public CLI."""
+
+    std: str | None = None
+    target: str | None = None
+    sysroot: Path | None = None
+    include_dirs: tuple[Path, ...] = ()
+    defines: tuple[str, ...] = ()
+    undefines: tuple[str, ...] = ()
+    raw_args: tuple[str, ...] = ()
+
+    def to_args(self) -> list[str]:
+        """Return deterministic final Clang argv for parsing."""
+        args = ["-x", "c"]
+        raw_args = [normalize_std_flag(arg) for arg in self.raw_args]
+        has_raw_std = any(arg.startswith("-std=") for arg in raw_args)
+        if self.std is not None:
+            args.append(f"-std={self.std}")
+        elif not has_raw_std:
+            args.append("-std=gnu11")
+        if self.target is not None:
+            args.append(f"--target={self.target}")
+        if self.sysroot is not None:
+            args.append(f"--sysroot={self.sysroot}")
+        args.extend(f"-I{path}" for path in self.include_dirs)
+        args.extend(f"-D{define}" for define in self.defines)
+        args.extend(f"-U{undefine}" for undefine in self.undefines)
+        args.extend(raw_args)
+        return args
 
 
 @dataclass(frozen=True)
@@ -117,10 +149,14 @@ class ClangFrontend:
     def compile_args(self) -> tuple[str, ...]:
         return self.config.compile_args
 
+    def normalized_parse_args(self) -> list[str]:
+        """Return the exact Clang args passed to libclang."""
+        return build_c_parse_args(list(self.compile_args), default_std="-std=gnu11")
+
     def parse_translation_unit(self) -> cx.TranslationUnit:
         """Parse the configured header into a libclang translation unit."""
         index = cx.Index.create()
-        args = build_c_parse_args(list(self.compile_args), default_std="-std=gnu11")
+        args = self.normalized_parse_args()
         options = _translation_unit_parse_options()
         if self.include_headers:
             umbrella_path = self._umbrella_header_path()
@@ -135,6 +171,30 @@ class ClangFrontend:
             args=args,
             options=options,
         )
+
+    def dump_preprocessed(self) -> str:
+        """Return preprocessed source for the configured primary or umbrella header."""
+        if self.include_headers:
+            input_path = self._umbrella_header_path()
+            cmd = ["clang", "-E", *self.normalized_parse_args(), "-"]
+            source = self._umbrella_header()
+            proc = subprocess.run(
+                cmd,
+                input=source,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        else:
+            input_path = self.header
+            cmd = ["clang", "-E", *self.normalized_parse_args(), str(input_path)]
+            proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                "clang preprocessing failed for "
+                f"{input_path} with args {self.normalized_parse_args()}:\n{proc.stderr}"
+            )
+        return proc.stdout
 
     def collect_diagnostics(self, tu: cx.TranslationUnit) -> list[FrontendDiagnostic]:
         """Normalize libclang diagnostics into plain dataclasses."""

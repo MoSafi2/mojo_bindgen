@@ -19,17 +19,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 cd "$HERE"
 
-if command -v mojo-bindgen >/dev/null 2>&1; then
-  BG=(mojo-bindgen)
-else
-  BG=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
-fi
-
-if command -v mojo >/dev/null 2>&1; then
-  MOJO=(mojo)
-else
-  MOJO=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo)
-fi
+source "$REPO_ROOT/examples/common.sh"
+set_mojo_bindgen_cmd BG "$REPO_ROOT"
+set_mojo_cmd MOJO "$REPO_ROOT"
 
 detect_png_pkg() {
   local module
@@ -102,13 +94,13 @@ PNG_H="$(find_png_h "$PNG_PKG")" || {
 }
 LINK_NAME="$(find_link_name "$PNG_PKG")"
 
-"${BG[@]}" "$PNG_H" --library "$LINK_NAME" --link-name "$LINK_NAME" -o libpng_bindings.mojo
+generate_bindings "$PNG_H" "$LINK_NAME" "$LINK_NAME" libpng_bindings.mojo
 
 OBJ="$(mktemp "${TMPDIR:-/tmp}/libpng-bindings-XXXXXX.o")"
 trap 'rm -f "$OBJ"' EXIT
-"${MOJO[@]}" build libpng_bindings.mojo -Xlinker "-l$LINK_NAME" --emit object -o "$OBJ"
+build_bindings_object libpng_bindings.mojo "$OBJ" -Xlinker "-l$LINK_NAME"
 "${MOJO[@]}" build libpng_smoke.mojo -I "$HERE" -Xlinker "-l$LINK_NAME" -o libpng_smoke
 
-echo "Wrote $HERE/libpng_bindings.mojo (from $PNG_H)"
+echo "Wrote $HERE/libpng_bindings.mojo and libpng_bindings_layout_tests.mojo (from $PNG_H)"
 echo "Running libpng_smoke (runtime version probe proof)"
 "$HERE/libpng_smoke"

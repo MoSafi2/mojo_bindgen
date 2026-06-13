@@ -1,9 +1,9 @@
-"""Unit tests for the high-level CIR ``Unit`` -> MojoIR lowering entrypoint."""
+"""Unit tests for the high-level CIR ``Unit`` -> MojoIR mapping entrypoint."""
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis import lower_unit
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis import map_unit
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
@@ -95,7 +95,7 @@ def _field(
     )
 
 
-def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
+def test_map_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -132,14 +132,14 @@ def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    assert lowered.source_header == "demo.h"
-    assert lowered.library == "demo"
-    assert lowered.link_name == "demo"
-    assert lowered.link_mode == LinkMode.EXTERNAL_CALL
-    assert lowered.library_path_hint is None
-    assert [type(decl) for decl in lowered.decls] == [
+    assert mapped.source_header == "demo.h"
+    assert mapped.library == "demo"
+    assert mapped.link_name == "demo"
+    assert mapped.link_mode == LinkMode.EXTERNAL_CALL
+    assert mapped.library_path_hint is None
+    assert [type(decl) for decl in mapped.decls] == [
         AliasDecl,
         AliasDecl,
         AliasDecl,
@@ -148,7 +148,7 @@ def test_lower_unit_builds_module_metadata_and_preserves_decl_order() -> None:
     ]
 
 
-def test_lower_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
+def test_map_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -165,7 +165,7 @@ def test_lower_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
         ],
     )
 
-    lowered = lower_unit(
+    mapped = map_unit(
         unit,
         options=MojoEmitOptions(
             linking="owned_dl_handle",
@@ -174,15 +174,15 @@ def test_lower_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
         ),
     )
 
-    fn_decl = lowered.decls[0]
+    fn_decl = mapped.decls[0]
 
-    assert lowered.link_mode == LinkMode.OWNED_DL_HANDLE
-    assert lowered.library_path_hint == "/tmp/libdemo.so"
+    assert mapped.link_mode == LinkMode.OWNED_DL_HANDLE
+    assert mapped.library_path_hint == "/tmp/libdemo.so"
     assert isinstance(fn_decl, FunctionDecl)
     assert fn_decl.call_target.link_mode == LinkMode.OWNED_DL_HANDLE
 
 
-def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
+def test_map_unit_maps_typedef_and_enum_surface_forms() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -211,12 +211,12 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    typedef_decl = lowered.decls[0]
-    signed_typedef_decl = lowered.decls[1]
-    enum_decl = lowered.decls[2]
-    enumerant_decl = lowered.decls[3]
+    typedef_decl = mapped.decls[0]
+    signed_typedef_decl = mapped.decls[1]
+    enum_decl = mapped.decls[2]
+    enumerant_decl = mapped.decls[3]
 
     assert typedef_decl == AliasDecl(
         name="size_t",
@@ -249,7 +249,7 @@ def test_lower_unit_lowers_typedef_and_enum_surface_forms() -> None:
     )
 
 
-def test_lower_unit_lowers_function_and_global() -> None:
+def test_map_unit_maps_function_and_global() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -274,10 +274,10 @@ def test_lower_unit_lowers_function_and_global() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    fn_decl = lowered.decls[0]
-    global_decl = lowered.decls[1]
+    fn_decl = mapped.decls[0]
+    global_decl = mapped.decls[1]
 
     assert isinstance(fn_decl, FunctionDecl)
     assert fn_decl.kind == FunctionKind.VARIADIC_STUB
@@ -287,7 +287,7 @@ def test_lower_unit_lowers_function_and_global() -> None:
     assert global_decl.is_const is True
 
 
-def test_lower_unit_lowers_const_and_supported_macro_to_aliases() -> None:
+def test_map_unit_maps_const_and_supported_macro_to_aliases() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -309,10 +309,10 @@ def test_lower_unit_lowers_const_and_supported_macro_to_aliases() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    const_decl = lowered.decls[0]
-    macro_decl = lowered.decls[1]
+    const_decl = mapped.decls[0]
+    macro_decl = mapped.decls[1]
 
     assert isinstance(const_decl, AliasDecl)
     assert const_decl.kind == AliasKind.CONST_VALUE
@@ -322,7 +322,7 @@ def test_lower_unit_lowers_const_and_supported_macro_to_aliases() -> None:
     assert macro_decl.const_value is not None
 
 
-def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
+def test_map_unit_emits_placeholder_macro_when_not_parsed() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -338,8 +338,8 @@ def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    decl = mapped.decls[0]
 
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.MACRO_VALUE
@@ -351,7 +351,7 @@ def test_lower_unit_emits_placeholder_macro_when_not_parsed() -> None:
     assert decl.diagnostics[1].message == "define BROKEN foo ( )"
 
 
-def test_lower_unit_preserves_macro_with_unemitted_reference() -> None:
+def test_map_unit_preserves_macro_with_unemitted_reference() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -368,8 +368,8 @@ def test_lower_unit_preserves_macro_with_unemitted_reference() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    decl = mapped.decls[0]
 
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.MACRO_VALUE
@@ -378,7 +378,7 @@ def test_lower_unit_preserves_macro_with_unemitted_reference() -> None:
     assert "non-emitted" in decl.diagnostics[0].message
 
 
-def test_lower_unit_preserves_macro_with_unfolded_c_logical_operator() -> None:
+def test_map_unit_preserves_macro_with_unfolded_c_logical_operator() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -395,8 +395,8 @@ def test_lower_unit_preserves_macro_with_unfolded_c_logical_operator() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    decl = mapped.decls[0]
 
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.MACRO_VALUE
@@ -404,7 +404,7 @@ def test_lower_unit_preserves_macro_with_unfolded_c_logical_operator() -> None:
     assert "logical operator" in decl.diagnostics[0].message
 
 
-def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None:
+def test_map_unit_maps_structs_and_unions_with_real_record_layouts() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -456,11 +456,11 @@ def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    opaque_decl = lowered.decls[0]
-    plain_decl = lowered.decls[1]
-    union_decl = lowered.decls[2]
+    opaque_decl = mapped.decls[0]
+    plain_decl = mapped.decls[1]
+    union_decl = mapped.decls[2]
 
     assert isinstance(opaque_decl, StructDecl)
     assert opaque_decl.kind == StructKind.OPAQUE
@@ -489,7 +489,7 @@ def test_lower_unit_lowers_structs_and_unions_with_real_record_layouts() -> None
     assert union_decl.diagnostics == []
 
 
-def test_lower_unit_uses_unsafe_union_for_repeated_types_union() -> None:
+def test_map_unit_uses_unsafe_union_for_repeated_types_union() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -512,8 +512,8 @@ def test_lower_unit_uses_unsafe_union_for_repeated_types_union() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    union_decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    union_decl = mapped.decls[0]
 
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
@@ -521,10 +521,10 @@ def test_lower_unit_uses_unsafe_union_for_repeated_types_union() -> None:
         base=ParametricBase.UNSAFE_UNION,
         args=[TypeArg(type=BuiltinType(MojoBuiltin.C_INT))],
     )
-    assert union_decl.diagnostics[0].category == "union_lowering"
+    assert union_decl.diagnostics[0].category == "union_mapping"
 
 
-def test_lower_unit_keeps_incomplete_union_as_placeholder_alias() -> None:
+def test_map_unit_keeps_incomplete_union_as_placeholder_alias() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -544,20 +544,20 @@ def test_lower_unit_keeps_incomplete_union_as_placeholder_alias() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    union_decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    union_decl = mapped.decls[0]
 
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
     assert union_decl.type_value is None
-    assert union_decl.diagnostics[0].category == "stub_lowering"
+    assert union_decl.diagnostics[0].category == "stub_mapping"
     assert (
         union_decl.diagnostics[0].message
-        == "incomplete union placeholder emitted; layout not lowered"
+        == "incomplete union placeholder emitted; layout not mapped"
     )
 
 
-def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> None:
+def test_map_unit_maps_structs_that_store_union_members_by_named_alias() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -601,9 +601,9 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
         ],
     )
 
-    lowered = lower_unit(unit)
-    union_decl = lowered.decls[0]
-    holder_decl = lowered.decls[1]
+    mapped = map_unit(unit)
+    union_decl = mapped.decls[0]
+    holder_decl = mapped.decls[1]
 
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
@@ -620,7 +620,7 @@ def test_lower_unit_lowers_structs_that_store_union_members_by_named_alias() -> 
     assert holder_decl.diagnostics == []
 
 
-def test_lower_unit_keeps_raw_callback_types_inline() -> None:
+def test_map_unit_keeps_raw_callback_types_inline() -> None:
     callback = FunctionPtr(
         ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
         params=[CIRParam(name="", type=Pointer(pointee=None))],
@@ -647,10 +647,10 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    typedef_decl = lowered.decls[0]
-    fn_decl = lowered.decls[1]
+    typedef_decl = mapped.decls[0]
+    fn_decl = mapped.decls[1]
 
     assert isinstance(typedef_decl, AliasDecl)
     assert isinstance(typedef_decl.type_value, FunctionPtr)
@@ -663,7 +663,7 @@ def test_lower_unit_keeps_raw_callback_types_inline() -> None:
     )
 
 
-def test_lower_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
+def test_map_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
     int32_ref = TypeRef(
         decl_id="typedef:int32_t",
         name="int32_t",
@@ -688,9 +688,9 @@ def test_lower_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    typedef_decl = lowered.decls[0]
-    fn_decl = lowered.decls[1]
+    mapped = map_unit(unit)
+    typedef_decl = mapped.decls[0]
+    fn_decl = mapped.decls[1]
 
     assert typedef_decl == AliasDecl(
         name="int32_t",
@@ -702,7 +702,7 @@ def test_lower_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
     assert fn_decl.return_type == NamedType("int32_t")
 
 
-def test_lower_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width() -> None:
+def test_map_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width() -> None:
     aliases = {
         "int8_t": (IntType(int_kind=IntKind.SCHAR, size_bytes=1, align_bytes=1), "Int8"),
         "uint8_t": (IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1), "UInt8"),
@@ -733,9 +733,9 @@ def test_lower_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width() -> N
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    assert lowered.decls[: len(aliases)] == [
+    assert mapped.decls[: len(aliases)] == [
         AliasDecl(
             name=name,
             kind=AliasKind.TYPE_ALIAS,
@@ -745,7 +745,7 @@ def test_lower_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width() -> N
     ]
 
 
-def test_lower_unit_lowers_local_exact_width_typedef_and_chain() -> None:
+def test_map_unit_maps_local_exact_width_typedef_and_chain() -> None:
     int64_ref = TypeRef(
         decl_id="typedef:int64_t",
         name="int64_t",
@@ -784,21 +784,21 @@ def test_lower_unit_lowers_local_exact_width_typedef_and_chain() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    assert lowered.decls[0] == AliasDecl(
+    assert mapped.decls[0] == AliasDecl(
         name="int64_t",
         kind=AliasKind.TYPE_ALIAS,
         type_value=NamedType("Int64"),
     )
-    assert lowered.decls[1] == AliasDecl(
+    assert mapped.decls[1] == AliasDecl(
         name="my_i64",
         kind=AliasKind.TYPE_ALIAS,
         type_value=NamedType("int64_t"),
     )
 
 
-def test_lower_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint() -> None:
+def test_map_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -814,16 +814,16 @@ def test_lower_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
+    mapped = map_unit(unit)
 
-    assert lowered.decls[0] == AliasDecl(
+    assert mapped.decls[0] == AliasDecl(
         name="raw_uint_t",
         kind=AliasKind.TYPE_ALIAS,
         type_value=BuiltinType(MojoBuiltin.C_UINT),
     )
 
 
-def test_lower_unit_keeps_ordinary_long_as_c_long() -> None:
+def test_map_unit_keeps_ordinary_long_as_c_long() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -840,15 +840,15 @@ def test_lower_unit_keeps_ordinary_long_as_c_long() -> None:
         ],
     )
 
-    lowered = lower_unit(unit)
-    fn_decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    fn_decl = mapped.decls[0]
 
     assert isinstance(fn_decl, FunctionDecl)
     assert fn_decl.return_type == BuiltinType(MojoBuiltin.C_LONG)
     assert fn_decl.params[0].type == BuiltinType(MojoBuiltin.C_LONG)
 
 
-def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> None:
+def test_map_unit_keeps_placeholder_const_when_const_expr_mapping_fails() -> None:
     unit = Unit(
         source_header="demo.h",
         library="demo",
@@ -863,13 +863,13 @@ def test_lower_unit_keeps_placeholder_const_when_const_expr_lowering_fails() -> 
         ],
     )
 
-    lowered = lower_unit(unit)
-    decl = lowered.decls[0]
+    mapped = map_unit(unit)
+    decl = mapped.decls[0]
 
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.CONST_VALUE
     assert decl.const_value is None
     assert decl.type_value is None
     assert decl.diagnostics[0].message == (
-        "constant expression could not be lowered; placeholder alias emitted"
+        "constant expression could not be mapped; placeholder alias emitted"
     )

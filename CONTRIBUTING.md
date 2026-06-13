@@ -5,7 +5,7 @@ Thanks for contributing to `mojo-bindgen`.
 This repository is primarily a Python project that parses C with `libclang` and
 emits Mojo FFI bindings. Most contribution work falls into one of three areas:
 
-- parser / lowering changes under `mojo_bindgen/parsing/` and `mojo_bindgen/analysis/`
+- parser changes under `mojo_bindgen/parsing/` and CIR-to-MojoIR mapping under `mojo_bindgen/analysis/`
 - Mojo IR emission changes under `mojo_bindgen/codegen/`
 - test and fixture updates under `tests/`
 

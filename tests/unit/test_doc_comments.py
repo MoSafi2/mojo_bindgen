@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_ir_printer import _clean_doc_comment
 from mojo_bindgen.ir import DocComment, Enum, Function, GlobalVar, Struct
 from mojo_bindgen.parsing.parser import ClangParser

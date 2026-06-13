@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mojo_bindgen.analysis import assign_record_policies, lower_unit
+from mojo_bindgen.analysis import assign_record_policies, map_unit
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
@@ -73,7 +73,7 @@ def _field(
 
 
 def _lowered_structs(*decls: Struct) -> list[StructDecl]:
-    lowered = lower_unit(
+    lowered = map_unit(
         Unit(
             source_header="demo.h",
             library="demo",

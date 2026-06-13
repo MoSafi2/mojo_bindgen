@@ -26,6 +26,7 @@ example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"
 example-sqlite = "bash examples/sqlite/generate.sh"
+example-global-consts = "bash examples/global_consts/generate.sh"
 
 [dependencies]
 mojo = ">=1.0.0b1,<2"
@@ -65,4 +66,3 @@ build = "python -m build"
 build-wheel = "python -m build --wheel"
 build-sdist = "python -m build --sdist"
 clean-dist = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in (Path('build'), Path('dist'))]; [shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True) for p in Path('.').glob('*.egg-info')]\""
-
