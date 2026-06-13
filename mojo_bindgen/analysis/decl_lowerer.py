@@ -2,28 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.alias_lowering import lower_typedef_alias
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.const_lowering import (
     ConstExprLoweringError,
     LowerConstExprPass,
 )
-from mojo_bindgen.analysis.lowering_support import (
-    lowering_note,
-    stub_note,
-)
+from mojo_bindgen.analysis.const_value_lowering import typed_const_value
+from mojo_bindgen.analysis.lowering_support import stub_note
+from mojo_bindgen.analysis.macro_lowering import MacroLowerer
 from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.struct_lowering import (
     StructLoweringContext,
     lower_struct,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.union_lowering import LowerUnionPass
 from mojo_bindgen.ir import (
-    _MOJO_INT_TYPES,
     AliasDecl,
     AliasKind,
-    BinaryExpr,
-    BuiltinType,
     CallExpr,
     CallTarget,
     CastExpr,
@@ -34,7 +31,6 @@ from mojo_bindgen.ir import (
     Function,
     FunctionDecl,
     FunctionKind,
-    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     GlobalVar,
@@ -43,15 +39,12 @@ from mojo_bindgen.ir import (
     MacroDecl,
     MojoDecl,
     NamedType,
-    NullPtrLiteral,
     Param,
     ParametricBase,
     ParametricType,
     RefExpr,
-    SizeOfExpr,
     Struct,
     Typedef,
-    UnaryExpr,
     Unit,
 )
 
@@ -82,8 +75,13 @@ class UnitDeclLowerer:
 
     def __init__(self, session: LoweringSession) -> None:
         self.session = session
-        self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
         self._emitted_const_names: set[str] = set()
+        self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
+        self._macro_lowerer = MacroLowerer(
+            const_lowerer=session.const_lowerer,
+            type_lowerer=session.type_lowerer,
+            emitted_const_names=self._emitted_const_names,
+        )
 
     def lower_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
         if isinstance(decl, Typedef):
@@ -103,23 +101,10 @@ class UnitDeclLowerer:
         raise UnitLoweringError(f"unsupported CIR declaration node: {type(decl).__name__!r}")
 
     def _lower_typedef(self, decl: Typedef) -> AliasDecl | None:
-        alias_name = mojo_ident(decl.name)
-        lowered_type = exact_width_stdint_alias_type(decl.name)
-        if lowered_type is None:
-            lowered_type = self.session.type_lowerer.run(decl.aliased)
-        if isinstance(lowered_type, FunctionPtr):
-            return AliasDecl(
-                name=alias_name,
-                kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=lowered_type,
-                doc=decl.doc,
-            )
-        if getattr(lowered_type, "name", None) == alias_name:
-            return None
-        return AliasDecl(
-            name=alias_name,
-            kind=AliasKind.TYPE_ALIAS,
-            type_value=lowered_type,
+        return lower_typedef_alias(
+            c_name=decl.name,
+            aliased=decl.aliased,
+            type_lowerer=self.session.type_lowerer,
             doc=decl.doc,
         )
 
@@ -220,78 +205,7 @@ class UnitDeclLowerer:
         )
 
     def _lower_macro(self, decl: MacroDecl) -> AliasDecl | None:
-        if decl.kind == "empty":
-            return None
-        name = mojo_ident(decl.name)
-        if name in self._emitted_const_names:
-            if isinstance(decl.expr, RefExpr) and mojo_ident(decl.expr.name) == name:
-                return None
-            return self._macro_comment_alias(
-                decl,
-                f"macro {decl.name}: macro name conflicts with an emitted constant",
-            )
-        if decl.expr is not None and decl.type is not None:
-            blocker = self._macro_emit_blocker(decl.expr)
-            if blocker is not None:
-                return self._macro_comment_alias(
-                    decl,
-                    f"macro {decl.name}: {blocker}",
-                )
-            try:
-                value = self.session.const_lowerer.run(decl.expr)
-            except ConstExprLoweringError:
-                if isinstance(decl.expr, NullPtrLiteral):
-                    return self._macro_comment_alias(
-                        decl,
-                        f"macro {decl.name}: null pointer macro is not emitted directly",
-                    )
-                value = None
-            else:
-                self._emitted_const_names.add(name)
-                return AliasDecl(
-                    name=name,
-                    kind=AliasKind.MACRO_VALUE,
-                    const_value=self._typed_const_value(value, decl.type),
-                    doc=decl.doc,
-                )
-        return AliasDecl(
-            name=mojo_ident(decl.name),
-            kind=AliasKind.MACRO_VALUE,
-            diagnostics=(
-                self._macro_comment_notes(
-                    decl,
-                    f"macro {decl.name}: {decl.diagnostic}",
-                )
-                if decl.diagnostic
-                else [stub_note("macro lowering is incomplete; placeholder alias emitted")]
-            ),
-            doc=decl.doc,
-        )
-
-    def _macro_emit_blocker(self, expr: ConstExpr) -> str | None:
-        if isinstance(expr, NullPtrLiteral):
-            return "null pointer macro is not emitted directly"
-        if isinstance(expr, RefExpr):
-            name = mojo_ident(expr.name)
-            if name not in self._emitted_const_names:
-                return (
-                    "macro expression references a non-emitted or later macro constant "
-                    f"{expr.name!r}"
-                )
-            return None
-        if isinstance(expr, UnaryExpr):
-            if expr.op == "!":
-                return "C logical operator '!' is not emitted directly"
-            return self._macro_emit_blocker(expr.operand)
-        if isinstance(expr, BinaryExpr):
-            if expr.op in {"&&", "||"}:
-                return f"C logical operator {expr.op!r} is not emitted directly"
-            return self._macro_emit_blocker(expr.lhs) or self._macro_emit_blocker(expr.rhs)
-        if isinstance(expr, CastExpr):
-            return self._macro_emit_blocker(expr.expr)
-        if isinstance(expr, (SizeOfExpr, CallExpr)):
-            return None
-        return None
+        return self._macro_lowerer.lower(decl)
 
     def _lower_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:
@@ -299,44 +213,4 @@ class UnitDeclLowerer:
         return lower_struct(decl, context=self.session.struct_context)
 
     def _typed_const_value(self, value: ConstExpr, decl_type) -> ConstExpr:
-        lowered_type = self.session.type_lowerer.run(decl_type)
-        if isinstance(lowered_type, BuiltinType) and lowered_type.name in _MOJO_INT_TYPES:
-            return self._coerce_integral_const(value, lowered_type)
-        return value
-
-    def _coerce_integral_const(
-        self,
-        value: ConstExpr,
-        lowered_type: BuiltinType,
-    ) -> ConstExpr:
-        if isinstance(value, IntLiteral):
-            return CastExpr(target=lowered_type, expr=value)
-        if isinstance(value, UnaryExpr):
-            return UnaryExpr(
-                op=value.op,
-                operand=self._coerce_integral_const(value.operand, lowered_type),
-            )
-        if isinstance(value, BinaryExpr):
-            return BinaryExpr(
-                op=value.op,
-                lhs=self._coerce_integral_const(value.lhs, lowered_type),
-                rhs=self._coerce_integral_const(value.rhs, lowered_type),
-            )
-        return value
-
-    def _macro_comment_alias(self, decl: MacroDecl, message: str) -> AliasDecl:
-        return AliasDecl(
-            name=mojo_ident(decl.name),
-            kind=AliasKind.MACRO_VALUE,
-            diagnostics=self._macro_comment_notes(decl, message),
-            doc=decl.doc,
-        )
-
-    def _macro_comment_notes(self, decl: MacroDecl, message: str):
-        return [
-            lowering_note(message, category="macro_comment"),
-            lowering_note(
-                f"define {decl.name} {' '.join(decl.tokens)}",
-                category="macro_comment",
-            ),
-        ]
+        return typed_const_value(value, decl_type, type_lowerer=self.session.type_lowerer)

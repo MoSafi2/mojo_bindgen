@@ -2,25 +2,16 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.traversal import iter_decl_referenced_types
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 from mojo_bindgen.ir import (
-    BinaryExpr,
-    CastExpr,
-    Const,
-    ConstExpr,
     Enum,
     EnumRef,
-    Function,
-    GlobalVar,
-    MacroDecl,
     OpaqueRecordRef,
-    SizeOfExpr,
     Struct,
     StructRef,
     Type,
-    Typedef,
     TypeRef,
-    UnaryExpr,
     Unit,
 )
 
@@ -44,19 +35,8 @@ class ValidateReferencesPass:
         enum_ids = {decl.decl_id for decl in unit.decls if isinstance(decl, Enum)}
 
         for decl in unit.decls:
-            for t in _decl_types(decl):
-                self._validate_type(
-                    t,
-                    struct_ids=struct_ids,
-                    enum_ids=enum_ids,
-                )
-            for expr in _decl_exprs(decl):
-                for t in _const_expr_types(expr):
-                    self._validate_type(
-                        t,
-                        struct_ids=struct_ids,
-                        enum_ids=enum_ids,
-                    )
+            for t in iter_decl_referenced_types(decl):
+                self._validate_type(t, struct_ids=struct_ids, enum_ids=enum_ids)
         return unit
 
     def _validate_type(
@@ -87,54 +67,6 @@ class ValidateReferencesPass:
                 )
             if isinstance(node, OpaqueRecordRef):
                 continue
-
-
-def _decl_types(decl) -> tuple[Type, ...]:
-    if isinstance(decl, Function):
-        return (decl.ret, *(param.type for param in decl.params))
-    if isinstance(decl, Typedef):
-        return (decl.aliased, decl.canonical)
-    if isinstance(decl, Struct):
-        return tuple(field.type for field in decl.fields)
-    if isinstance(decl, GlobalVar):
-        return (decl.type,)
-    if isinstance(decl, Const):
-        return (decl.type,)
-    if isinstance(decl, MacroDecl):
-        return () if decl.type is None else (decl.type,)
-    return ()
-
-
-def _decl_exprs(decl) -> tuple[ConstExpr, ...]:
-    if isinstance(decl, Const):
-        return (decl.expr,)
-    if isinstance(decl, GlobalVar) and decl.initializer is not None:
-        return (decl.initializer,)
-    if isinstance(decl, MacroDecl) and decl.expr is not None:
-        return (decl.expr,)
-    return ()
-
-
-def _const_expr_types(expr: ConstExpr) -> tuple[Type, ...]:
-    out: list[Type] = []
-
-    def walk(node: ConstExpr) -> None:
-        if isinstance(node, CastExpr):
-            out.append(node.target)
-            walk(node.expr)
-            return
-        if isinstance(node, SizeOfExpr):
-            out.append(node.target)
-            return
-        if isinstance(node, UnaryExpr):
-            walk(node.operand)
-            return
-        if isinstance(node, BinaryExpr):
-            walk(node.lhs)
-            walk(node.rhs)
-
-    walk(expr)
-    return tuple(out)
 
 
 __all__ = [

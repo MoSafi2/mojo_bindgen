@@ -60,6 +60,8 @@ Purpose:
 - reject conflicting duplicate `decl_id` values
 - require `decl_id` on `Typedef`, `Struct`, `TypeRef`, `StructRef`, and
   `OpaqueRecordRef` positions that participate in cross-reference analysis
+- validate declaration and constant-expression type slots through the shared
+  traversal helpers
 
 Placement:
 
@@ -118,7 +120,8 @@ would otherwise be repeated inside lowerers.
 
 ### Declaration Indexes
 
-`AnalysisContext` indexes normalized declarations by stable keys:
+`analysis.indexes` owns declaration lookup construction. `AnalysisContext`
+stores the resulting normalized declarations by stable keys:
 
 - records by `decl_id`
 - typedefs by `decl_id`
@@ -129,6 +132,20 @@ would otherwise be repeated inside lowerers.
 - macros by name
 
 These indexes are the basic lookup surface for later passes.
+
+### Shared Traversal Internals
+
+`analysis.traversal` owns declaration and constant-expression walking:
+
+- direct type slots on functions, typedefs, records, globals, constants, and
+  macros
+- type slots nested in cast and `sizeof` constant expressions
+- symbol references inside constant expressions
+- typedef/reference discovery across whole units
+
+Passes should use these helpers instead of each defining bespoke declaration or
+const-expression walkers. `analysis.type_walk` remains the lower-level helper
+for recursive `Type` trees only.
 
 ### `DeclDependencyGraph`
 
@@ -178,7 +195,9 @@ Purpose:
 
 This is the central record analysis pass. `struct_lowering` consumes these facts
 and performs MojoIR member construction; it should not own recursive record
-shape policy.
+shape policy. Its internal helpers are split by responsibility: record
+prechecks, plain-field checks, embedded-record/flexible-tail checks, and
+bitfield checks.
 
 ## Stage 3: CIR To MojoIR Lowering
 
@@ -191,7 +210,7 @@ analysis because they convert analyzed CIR into MojoIR.
 Purpose:
 
 - create shared lowerers for one unit
-- synthesize aliases for external typedef references when needed
+- synthesize aliases for external typedef references from `AliasClassification`
 - lower top-level declarations through `UnitDeclLowerer`
 - build module metadata and linking mode
 
@@ -209,6 +228,10 @@ Purpose:
 
 This is orchestration, not whole-unit analysis. New cross-declaration facts
 should generally be added to `AnalysisContext`.
+
+Typedef alias construction is centralized in `alias_lowering`, so local typedefs
+and external typedef aliases share callback, exact-width stdint, and no-op
+self-alias handling.
 
 ### `LowerTypePass`
 
@@ -231,8 +254,19 @@ Purpose:
 - reject constant forms that have no direct MojoIR value form, such as null
   pointer literals
 
-Macro emission policy lives in `UnitDeclLowerer`; expression lowering only
-rewrites supported expression shapes.
+Macro emission policy lives in `MacroLowerer`; expression lowering only rewrites
+supported expression shapes.
+
+### Macro Lowering
+
+Purpose:
+
+- lower supported object-like macros to MojoIR value aliases
+- block macro forms that would be misleading in Mojo, such as null pointer
+  macros and C logical operators
+- preserve unsupported macro spellings as diagnostic comment aliases
+- track emitted constants so self-alias and name-conflict handling is
+  deterministic
 
 ### Struct Lowering
 
@@ -246,6 +280,9 @@ Purpose:
 - compute Mojo alignment decorator policy
 
 Struct lowering should not recompute recursive record shape decisions.
+Typed-member lowering is intentionally split between plain fields, bitfield
+storage, and bitfield logical fields so fallback diagnostics stay local to the
+operation that failed.
 
 ### `LowerUnionPass`
 
@@ -259,6 +296,8 @@ Purpose:
 
 Union lowering remains separate because unions lower to alias-style layout
 types, not `StructDecl`.
+Its implementation is structured as union-arm collection followed by either
+`UnsafeUnion[...]` alias construction or byte-storage fallback construction.
 
 ## Stage 4: Late MojoIR Policy Analysis
 

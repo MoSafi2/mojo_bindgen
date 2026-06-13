@@ -7,7 +7,7 @@ declaration-family lowering to narrower helpers.
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.alias_lowering import lower_typedef_alias
 from mojo_bindgen.analysis.const_lowering import (
     LowerConstExprPass,
 )
@@ -21,26 +21,10 @@ from mojo_bindgen.analysis.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.struct_lowering import (
     StructLoweringContext,
 )
-from mojo_bindgen.analysis.type_lowering import LowerTypePass, exact_width_stdint_alias_type
-from mojo_bindgen.analysis.type_walk import _walk_typeref_nodes
+from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.ir import (
-    AliasDecl,
-    AliasKind,
-    BinaryExpr,
-    CastExpr,
-    Const,
-    ConstExpr,
-    Function,
-    FunctionPtr,
-    GlobalVar,
-    MacroDecl,
     MojoDecl,
     MojoModule,
-    SizeOfExpr,
-    Struct,
-    Typedef,
-    TypeRef,
-    UnaryExpr,
     Unit,
 )
 
@@ -76,7 +60,7 @@ class LowerUnitPass:
             ),
         )
         decl_lowerer = UnitDeclLowerer(session)
-        lowered_decls = self._synth_external_typedef_aliases(unit, type_lowerer)
+        lowered_decls = self._synth_external_typedef_aliases(context, type_lowerer)
         for decl in unit.decls:
             lowered = decl_lowerer.lower_decl(decl)
             if lowered is None:
@@ -96,88 +80,20 @@ class LowerUnitPass:
 
     def _synth_external_typedef_aliases(
         self,
-        unit: Unit,
+        context: AnalysisContext,
         type_lowerer: LowerTypePass,
     ) -> list[MojoDecl]:
-        local_typedef_ids = {decl.decl_id for decl in unit.decls if isinstance(decl, Typedef)}
-        seen_typedef_ids: set[str] = set()
         lowered: list[MojoDecl] = []
-        for ref in _collect_typeref_uses(unit):
-            if ref.decl_id in local_typedef_ids or ref.decl_id in seen_typedef_ids:
-                continue
-            seen_typedef_ids.add(ref.decl_id)
-            alias_name = mojo_ident(ref.name)
-            lowered_type = exact_width_stdint_alias_type(ref.name)
-            if lowered_type is None:
-                lowered_type = type_lowerer.run(ref.canonical)
-            if isinstance(lowered_type, FunctionPtr):
-                lowered.append(
-                    AliasDecl(
-                        name=alias_name,
-                        kind=AliasKind.CALLBACK_SIGNATURE,
-                        type_value=lowered_type,
-                    )
-                )
-                continue
-            if getattr(lowered_type, "name", None) == alias_name:
-                continue
-            lowered.append(
-                AliasDecl(
-                    name=alias_name,
-                    kind=AliasKind.TYPE_ALIAS,
-                    type_value=lowered_type,
-                )
+        for ref in context.alias_classification.external_type_refs_by_decl_id.values():
+            alias = lower_typedef_alias(
+                c_name=ref.name,
+                aliased=ref.canonical,
+                type_lowerer=type_lowerer,
             )
+            if alias is None:
+                continue
+            lowered.append(alias)
         return lowered
-
-
-def _walk_const_expr_typerefs(expr: ConstExpr, out: list[TypeRef]) -> None:
-    if isinstance(expr, CastExpr):
-        _walk_typeref_nodes(expr.target, out)
-        _walk_const_expr_typerefs(expr.expr, out)
-        return
-    if isinstance(expr, SizeOfExpr):
-        _walk_typeref_nodes(expr.target, out)
-        return
-    if isinstance(expr, UnaryExpr):
-        _walk_const_expr_typerefs(expr.operand, out)
-        return
-    if isinstance(expr, BinaryExpr):
-        _walk_const_expr_typerefs(expr.lhs, out)
-        _walk_const_expr_typerefs(expr.rhs, out)
-
-
-def _collect_typeref_uses(unit: Unit) -> list[TypeRef]:
-    collected: list[TypeRef] = []
-    for decl in unit.decls:
-        if isinstance(decl, Function):
-            _walk_typeref_nodes(decl.ret, collected)
-            for param in decl.params:
-                _walk_typeref_nodes(param.type, collected)
-            continue
-        if isinstance(decl, Typedef):
-            _walk_typeref_nodes(decl.aliased, collected)
-            _walk_typeref_nodes(decl.canonical, collected)
-            continue
-        if isinstance(decl, Struct):
-            for field in decl.fields:
-                _walk_typeref_nodes(field.type, collected)
-            continue
-        if isinstance(decl, GlobalVar):
-            _walk_typeref_nodes(decl.type, collected)
-            if decl.initializer is not None:
-                _walk_const_expr_typerefs(decl.initializer, collected)
-            continue
-        if isinstance(decl, Const):
-            _walk_typeref_nodes(decl.type, collected)
-            _walk_const_expr_typerefs(decl.expr, collected)
-            continue
-        if isinstance(decl, MacroDecl):
-            if decl.type is not None:
-                _walk_typeref_nodes(decl.type, collected)
-            if decl.expr is not None:
-                _walk_const_expr_typerefs(decl.expr, collected)
-    return collected
 
 
 def lower_unit(

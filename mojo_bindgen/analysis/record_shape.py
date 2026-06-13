@@ -11,10 +11,7 @@ from mojo_bindgen.analysis.type_lowering import LowerTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     Array,
-    AtomicType,
     FlexibleTail,
-    ParametricBase,
-    ParametricType,
     QualifiedType,
     Struct,
     StructRef,
@@ -199,167 +196,128 @@ class RecordShapeAnalyzer:
         if cached is not None:
             return cached
 
-        decl = self.records_by_decl_id.get(decl_id)
-        if decl is None:
-            return self._cache_by_value(
-                decl_id, ByValueRecordShape(False, ("referenced definition is unavailable",))
-            )
-        if decl.is_union:
-            return self._cache_by_value(decl_id, ByValueRecordShape(True))
-        if not decl.is_complete:
-            return self._cache_by_value(
-                decl_id, ByValueRecordShape(False, ("referenced definition is incomplete",))
-            )
-        if decl_id in active:
-            return self._cache_by_value(decl_id, ByValueRecordShape(True))
-
-        facts = self._layout(decl)
-        if not facts.is_complete:
-            return self._cache_by_value(
-                decl_id, ByValueRecordShape(False, ("referenced definition is incomplete",))
-            )
-        if facts.layout_problems:
-            return self._cache_by_value(
-                decl_id, ByValueRecordShape(False, (facts.layout_problems[0],))
-            )
+        decl, facts, early_shape = self._precheck_by_value_record(decl_id, active)
+        if early_shape is not None:
+            return self._cache_by_value(decl_id, early_shape)
+        assert decl is not None
+        assert facts is not None
 
         active.add(decl_id)
         try:
-            flexible_tail: FlexibleTail | None = None
-            for field_fact in facts.plain_fields:
-                field = decl.fields[field_fact.index]
-                lowered_type, reason = try_lower_type(
-                    self.type_lowerer,
-                    field.type,
-                    subject=f"field `{field_display_name(field, field_fact.index)}`",
-                    failure_suffix="opaque storage emitted",
-                )
-                if reason is not None or lowered_type is None:
-                    return self._cache_by_value(
-                        decl_id,
-                        ByValueRecordShape(False, ((reason or "field could not be lowered"),)),
-                    )
-                if isinstance(field.type, AtomicType) and not (
-                    isinstance(lowered_type, ParametricType)
-                    and lowered_type.base == ParametricBase.ATOMIC
-                ):
-                    # This remains typed-storage-compatible; struct lowering emits
-                    # the user-facing note while rendering the member.
-                    pass
-                if field.fam_pattern is not None:
-                    direct_tail, tail_reason = _lower_flexible_tail_metadata(
-                        field,
-                        field_fact.index,
-                        field_fact.byte_offset,
-                        lowered_type,
-                    )
-                    if tail_reason is not None or direct_tail is None:
-                        return self._cache_by_value(
-                            decl_id,
-                            ByValueRecordShape(
-                                False, ((tail_reason or "flexible tail could not lower"),)
-                            ),
-                        )
-                    flexible_tail = direct_tail
-                    continue
+            field_shape = self._plain_fields_by_value_shape(decl, facts, active=active)
+            if not field_shape.valid:
+                return self._cache_by_value(decl_id, field_shape)
 
-                refs = _embedded_struct_refs(field.type)
-                if not refs:
-                    continue
-                direct_ref = _direct_embedded_struct_ref(field.type)
-                nested_tail_shapes: list[tuple[StructRef, ByValueRecordShape]] = []
-                for ref in refs:
-                    shape = self._record_typed_shape_by_value(
-                        ref.decl_id,
-                        active=active,
-                    )
-                    if not shape.valid:
-                        target_name = ref.c_name or ref.name
-                        suffix = (
-                            shape.detail[0]
-                            if shape.detail
-                            else "embedded record is not layout-emittable by value"
-                        )
-                        return self._cache_by_value(
-                            decl_id,
-                            ByValueRecordShape(
-                                False,
-                                (
-                                    f"field `{field_display_name(field, field_fact.index)}` embeds "
-                                    f"struct `{target_name}` by value, but {suffix}; opaque storage emitted",
-                                ),
-                            ),
-                        )
-                    if shape.flexible_tail is not None:
-                        nested_tail_shapes.append((ref, shape))
-                if not nested_tail_shapes:
-                    continue
-                if len(nested_tail_shapes) > 1 or direct_ref is None:
-                    return self._cache_by_value(
-                        decl_id,
-                        ByValueRecordShape(
-                            False,
-                            (
-                                f"field `{field_display_name(field, field_fact.index)}` embeds a "
-                                "flexible-tail record through a non-direct aggregate type; opaque "
-                                "storage emitted",
-                            ),
-                        ),
-                    )
-                nested_ref, nested_shape = nested_tail_shapes[0]
-                if nested_ref.decl_id != direct_ref.decl_id:
-                    return self._cache_by_value(
-                        decl_id,
-                        ByValueRecordShape(
-                            False,
-                            (
-                                f"field `{field_display_name(field, field_fact.index)}` embeds a "
-                                "flexible-tail record through a non-direct aggregate type; opaque "
-                                "storage emitted",
-                            ),
-                        ),
-                    )
-                if not _field_is_terminal_in_enclosing_record(facts, field_fact):
-                    target_name = nested_ref.c_name or nested_ref.name
-                    return self._cache_by_value(
-                        decl_id,
-                        ByValueRecordShape(
-                            False,
-                            (
-                                f"field `{field_display_name(field, field_fact.index)}` embeds struct "
-                                f"`{target_name}` by value, but embedded flexible tail is not terminal "
-                                "in the enclosing record; opaque storage emitted",
-                            ),
-                        ),
-                    )
-                flexible_tail = replace(
-                    nested_shape.flexible_tail,  # type: ignore
-                    byte_offset=field_fact.byte_offset + nested_shape.flexible_tail.byte_offset,  # type: ignore
-                )
-
-            for run_layout in facts.bitfield_runs:
-                _, reason = try_lower_type(
-                    self.type_lowerer,
-                    run_layout.unsigned_storage_type,
-                    subject=f"bitfield storage `{run_layout.name}`",
-                    failure_suffix="opaque storage emitted",
-                )
-                if reason is not None:
-                    return self._cache_by_value(decl_id, ByValueRecordShape(False, (reason,)))
-
-                for field_layout in run_layout.fields:
-                    _, reason = try_lower_type(
-                        self.type_lowerer,
-                        field_layout.logical_type,
-                        subject=f"bitfield `{field_display_name(field_layout.field, field_layout.index)}`",
-                        failure_suffix="opaque storage emitted",
-                    )
-                    if reason is not None:
-                        return self._cache_by_value(decl_id, ByValueRecordShape(False, (reason,)))
+            bitfield_shape = self._bitfield_runs_by_value_shape(facts)
+            if not bitfield_shape.valid:
+                return self._cache_by_value(decl_id, bitfield_shape)
         finally:
             active.remove(decl_id)
 
-        return self._cache_by_value(decl_id, ByValueRecordShape(True, flexible_tail=flexible_tail))
+        return self._cache_by_value(
+            decl_id,
+            ByValueRecordShape(True, flexible_tail=field_shape.flexible_tail),
+        )
+
+    def _precheck_by_value_record(
+        self,
+        decl_id: str,
+        active: set[str],
+    ) -> tuple[Struct | None, RecordLayoutFacts | None, ByValueRecordShape | None]:
+        decl = self.records_by_decl_id.get(decl_id)
+        if decl is None:
+            return None, None, ByValueRecordShape(False, ("referenced definition is unavailable",))
+        if decl.is_union:
+            return None, None, ByValueRecordShape(True)
+        if not decl.is_complete:
+            return None, None, ByValueRecordShape(False, ("referenced definition is incomplete",))
+        if decl_id in active:
+            return None, None, ByValueRecordShape(True)
+
+        facts = self._layout(decl)
+        if not facts.is_complete:
+            return None, None, ByValueRecordShape(False, ("referenced definition is incomplete",))
+        if facts.layout_problems:
+            return None, None, ByValueRecordShape(False, (facts.layout_problems[0],))
+        return decl, facts, None
+
+    def _plain_fields_by_value_shape(
+        self,
+        decl: Struct,
+        facts: RecordLayoutFacts,
+        *,
+        active: set[str],
+    ) -> ByValueRecordShape:
+        flexible_tail: FlexibleTail | None = None
+        for field_fact in facts.plain_fields:
+            field = decl.fields[field_fact.index]
+            lowered_type, reason = try_lower_type(
+                self.type_lowerer,
+                field.type,
+                subject=f"field `{field_display_name(field, field_fact.index)}`",
+                failure_suffix="opaque storage emitted",
+            )
+            if reason is not None or lowered_type is None:
+                return ByValueRecordShape(False, ((reason or "field could not be lowered"),))
+            if field.fam_pattern is not None:
+                tail_shape = _direct_flexible_tail_shape(field, field_fact, lowered_type)
+                if not tail_shape.valid:
+                    return tail_shape
+                flexible_tail = tail_shape.flexible_tail
+                continue
+
+            nested_shape = self._nested_record_field_shape(field, field_fact, facts, active=active)
+            if not nested_shape.valid:
+                return nested_shape
+            if nested_shape.flexible_tail is not None:
+                flexible_tail = nested_shape.flexible_tail
+        return ByValueRecordShape(True, flexible_tail=flexible_tail)
+
+    def _nested_record_field_shape(
+        self,
+        field,
+        field_fact,
+        facts: RecordLayoutFacts,
+        *,
+        active: set[str],
+    ) -> ByValueRecordShape:
+        refs = _embedded_struct_refs(field.type)
+        if not refs:
+            return ByValueRecordShape(True)
+
+        nested_tail_shapes: list[tuple[StructRef, ByValueRecordShape]] = []
+        for ref in refs:
+            shape = self._record_typed_shape_by_value(ref.decl_id, active=active)
+            if not shape.valid:
+                return _embedded_record_failure(field, field_fact, ref, shape)
+            if shape.flexible_tail is not None:
+                nested_tail_shapes.append((ref, shape))
+
+        if not nested_tail_shapes:
+            return ByValueRecordShape(True)
+        return _embedded_flexible_tail_shape(field, field_fact, facts, nested_tail_shapes)
+
+    def _bitfield_runs_by_value_shape(self, facts: RecordLayoutFacts) -> ByValueRecordShape:
+        for run_layout in facts.bitfield_runs:
+            _, reason = try_lower_type(
+                self.type_lowerer,
+                run_layout.unsigned_storage_type,
+                subject=f"bitfield storage `{run_layout.name}`",
+                failure_suffix="opaque storage emitted",
+            )
+            if reason is not None:
+                return ByValueRecordShape(False, (reason,))
+
+            for field_layout in run_layout.fields:
+                _, reason = try_lower_type(
+                    self.type_lowerer,
+                    field_layout.logical_type,
+                    subject=f"bitfield `{field_display_name(field_layout.field, field_layout.index)}`",
+                    failure_suffix="opaque storage emitted",
+                )
+                if reason is not None:
+                    return ByValueRecordShape(False, (reason,))
+        return ByValueRecordShape(True)
 
     def _layout(self, record: Struct) -> RecordLayoutFacts:
         return self.record_layouts[record.decl_id]
@@ -395,6 +353,79 @@ def _lower_flexible_tail_metadata(
             byte_offset=byte_offset,
         ),
         None,
+    )
+
+
+def _direct_flexible_tail_shape(field, field_fact, lowered_type) -> ByValueRecordShape:
+    direct_tail, tail_reason = _lower_flexible_tail_metadata(
+        field,
+        field_fact.index,
+        field_fact.byte_offset,
+        lowered_type,
+    )
+    if tail_reason is not None or direct_tail is None:
+        return ByValueRecordShape(False, ((tail_reason or "flexible tail could not lower"),))
+    return ByValueRecordShape(True, flexible_tail=direct_tail)
+
+
+def _embedded_record_failure(
+    field,
+    field_fact,
+    ref: StructRef,
+    shape: ByValueRecordShape,
+) -> ByValueRecordShape:
+    target_name = ref.c_name or ref.name
+    suffix = shape.detail[0] if shape.detail else "embedded record is not layout-emittable by value"
+    return ByValueRecordShape(
+        False,
+        (
+            f"field `{field_display_name(field, field_fact.index)}` embeds struct "
+            f"`{target_name}` by value, but {suffix}; opaque storage emitted",
+        ),
+    )
+
+
+def _embedded_flexible_tail_shape(
+    field,
+    field_fact,
+    facts: RecordLayoutFacts,
+    nested_tail_shapes: list[tuple[StructRef, ByValueRecordShape]],
+) -> ByValueRecordShape:
+    direct_ref = _direct_embedded_struct_ref(field.type)
+    if len(nested_tail_shapes) > 1 or direct_ref is None:
+        return _non_direct_flexible_tail_failure(field, field_fact)
+
+    nested_ref, nested_shape = nested_tail_shapes[0]
+    if nested_ref.decl_id != direct_ref.decl_id:
+        return _non_direct_flexible_tail_failure(field, field_fact)
+    if not _field_is_terminal_in_enclosing_record(facts, field_fact):
+        target_name = nested_ref.c_name or nested_ref.name
+        return ByValueRecordShape(
+            False,
+            (
+                f"field `{field_display_name(field, field_fact.index)}` embeds struct "
+                f"`{target_name}` by value, but embedded flexible tail is not terminal "
+                "in the enclosing record; opaque storage emitted",
+            ),
+        )
+
+    assert nested_shape.flexible_tail is not None
+    return ByValueRecordShape(
+        True,
+        flexible_tail=replace(
+            nested_shape.flexible_tail,
+            byte_offset=field_fact.byte_offset + nested_shape.flexible_tail.byte_offset,
+        ),
+    )
+
+
+def _non_direct_flexible_tail_failure(field, field_fact) -> ByValueRecordShape:
+    return ByValueRecordShape(
+        False,
+        (
+            f"field `{field_display_name(field, field_fact.index)}` embeds a flexible-tail "
+            "record through a non-direct aggregate type; opaque storage emitted",
+        ),
     )
 
 

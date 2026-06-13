@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from mojo_bindgen.analysis.alias_classification import AliasClassification, classify_aliases
 from mojo_bindgen.analysis.dependency_graph import DeclDependencyGraph, build_decl_dependency_graph
-from mojo_bindgen.analysis.lowering_support import record_by_decl_id
+from mojo_bindgen.analysis.indexes import DeclIndexes, build_decl_indexes
 from mojo_bindgen.analysis.record_layout import RecordLayoutFacts, analyze_record_layout
 from mojo_bindgen.analysis.record_shape import RecordAnalysisFacts, analyze_record_shapes
 from mojo_bindgen.ir import Const, Enum, Function, GlobalVar, MacroDecl, Struct, Typedef, Unit
@@ -33,38 +33,39 @@ class AnalysisContext:
 def build_analysis_context(unit: Unit) -> AnalysisContext:
     """Build shared declaration indexes and record layout facts for ``unit``."""
 
-    records = record_by_decl_id(unit)
-    record_layouts = {
-        decl_id: analyze_record_layout(
-            record,
-            target_abi=unit.target_abi,
-            record_map=records,
-        )
-        for decl_id, record in records.items()
-    }
+    indexes = build_decl_indexes(unit)
+    record_layouts = _build_record_layouts(unit, indexes)
     dependency_graph = build_decl_dependency_graph(unit)
     alias_classification = classify_aliases(unit)
-    record_shapes = analyze_record_shapes(records, record_layouts)
+    record_shapes = analyze_record_shapes(indexes.records_by_decl_id, record_layouts)
     return AnalysisContext(
         unit=unit,
-        records_by_decl_id=records,
-        typedefs_by_decl_id={
-            decl.decl_id: decl for decl in unit.decls if isinstance(decl, Typedef)
-        },
-        enums_by_decl_id={decl.decl_id: decl for decl in unit.decls if isinstance(decl, Enum)},
-        functions_by_decl_id={
-            decl.decl_id: decl for decl in unit.decls if isinstance(decl, Function)
-        },
-        globals_by_decl_id={
-            decl.decl_id: decl for decl in unit.decls if isinstance(decl, GlobalVar)
-        },
-        consts_by_name={decl.name: decl for decl in unit.decls if isinstance(decl, Const)},
-        macros_by_name={decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)},
+        records_by_decl_id=indexes.records_by_decl_id,
+        typedefs_by_decl_id=indexes.typedefs_by_decl_id,
+        enums_by_decl_id=indexes.enums_by_decl_id,
+        functions_by_decl_id=indexes.functions_by_decl_id,
+        globals_by_decl_id=indexes.globals_by_decl_id,
+        consts_by_name=indexes.consts_by_name,
+        macros_by_name=indexes.macros_by_name,
         dependency_graph=dependency_graph,
         alias_classification=alias_classification,
         record_layouts=record_layouts,
         record_shapes=record_shapes,
     )
+
+
+def _build_record_layouts(
+    unit: Unit,
+    indexes: DeclIndexes,
+) -> dict[str, RecordLayoutFacts]:
+    return {
+        decl_id: analyze_record_layout(
+            record,
+            target_abi=unit.target_abi,
+            record_map=indexes.records_by_decl_id,
+        )
+        for decl_id, record in indexes.records_by_decl_id.items()
+    }
 
 
 __all__ = [

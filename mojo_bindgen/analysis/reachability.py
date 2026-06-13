@@ -12,22 +12,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from mojo_bindgen.analysis.traversal import (
+    iter_const_expr_types,
+    iter_decl_const_exprs,
+    iter_decl_types,
+)
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
-    BinaryExpr,
-    CastExpr,
-    Const,
-    ConstExpr,
     Decl,
-    Function,
-    GlobalVar,
-    MacroDecl,
-    SizeOfExpr,
     Struct,
     StructRef,
     Type,
-    Typedef,
-    UnaryExpr,
     Unit,
 )
 
@@ -71,24 +66,13 @@ def _walk_type(
 
 
 def _walk_const_expr(
-    expr: ConstExpr,
+    expr,
     out: list[StructRef],
     *,
     traverse_function_ptrs: bool,
 ) -> None:
-    if isinstance(expr, CastExpr):
-        _walk_type(expr.target, out, traverse_function_ptrs=traverse_function_ptrs)
-        _walk_const_expr(expr.expr, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(expr, SizeOfExpr):
-        _walk_type(expr.target, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(expr, UnaryExpr):
-        _walk_const_expr(expr.operand, out, traverse_function_ptrs=traverse_function_ptrs)
-        return
-    if isinstance(expr, BinaryExpr):
-        _walk_const_expr(expr.lhs, out, traverse_function_ptrs=traverse_function_ptrs)
-        _walk_const_expr(expr.rhs, out, traverse_function_ptrs=traverse_function_ptrs)
+    for t in iter_const_expr_types(expr):
+        _walk_type(t, out, traverse_function_ptrs=traverse_function_ptrs)
 
 
 def _collect_from_decl(
@@ -98,35 +82,12 @@ def _collect_from_decl(
     options: SignatureRecordStubOptions,
 ) -> None:
     traverse_fp = options.traverse_function_ptrs
-    if isinstance(decl, Function):
-        _walk_type(decl.ret, out, traverse_function_ptrs=traverse_fp)
-        for p in decl.params:
-            _walk_type(p.type, out, traverse_function_ptrs=traverse_fp)
+    for t in iter_decl_types(decl):
+        _walk_type(t, out, traverse_function_ptrs=traverse_fp)
+    if not options.traverse_const_expr_types:
         return
-    if isinstance(decl, Typedef):
-        _walk_type(decl.aliased, out, traverse_function_ptrs=traverse_fp)
-        _walk_type(decl.canonical, out, traverse_function_ptrs=traverse_fp)
-        return
-    if isinstance(decl, Struct):
-        for f in decl.fields:
-            _walk_type(f.type, out, traverse_function_ptrs=traverse_fp)
-        return
-    if isinstance(decl, GlobalVar):
-        _walk_type(decl.type, out, traverse_function_ptrs=traverse_fp)
-        if options.traverse_const_expr_types and decl.initializer is not None:
-            _walk_const_expr(decl.initializer, out, traverse_function_ptrs=traverse_fp)
-        return
-    if isinstance(decl, Const):
-        _walk_type(decl.type, out, traverse_function_ptrs=traverse_fp)
-        if options.traverse_const_expr_types:
-            _walk_const_expr(decl.expr, out, traverse_function_ptrs=traverse_fp)
-        return
-    if isinstance(decl, MacroDecl):
-        if decl.type is not None:
-            _walk_type(decl.type, out, traverse_function_ptrs=traverse_fp)
-        if options.traverse_const_expr_types and decl.expr is not None:
-            _walk_const_expr(decl.expr, out, traverse_function_ptrs=traverse_fp)
-        return
+    for expr in iter_decl_const_exprs(decl):
+        _walk_const_expr(expr, out, traverse_function_ptrs=traverse_fp)
 
 
 def _struct_from_ref(ref: StructRef) -> Struct:

@@ -12,6 +12,7 @@ from mojo_bindgen.ir import (
     ByteOrder,
     CallExpr,
     CastExpr,
+    Const,
     Enum,
     Enumerant,
     EnumRef,
@@ -21,15 +22,18 @@ from mojo_bindgen.ir import (
     IntKind,
     IntLiteral,
     IntType,
+    MacroDecl,
     MojoBuiltin,
     NamedType,
     Param,
     RefExpr,
+    SizeOfExpr,
     Struct,
     TargetABI,
     Typedef,
     TypeRef,
     Unit,
+    VectorType,
     VoidType,
 )
 
@@ -94,6 +98,58 @@ def test_validate_ir_pass_rejects_duplicate_decl_ids() -> None:
     with pytest.raises(IRValidationError) as exc_info:
         ValidateIRPass().run(unit)
     assert "duplicate decl_id" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "decl",
+    [
+        Const(
+            name="BAD_CONST_TYPE",
+            type=TypeRef(decl_id="", name="missing_t", canonical=_i32()),
+            expr=IntLiteral(1),
+        ),
+        Const(
+            name="BAD_CAST",
+            type=_i32(),
+            expr=CastExpr(
+                target=TypeRef(decl_id="", name="missing_t", canonical=_i32()),
+                expr=IntLiteral(1),
+            ),
+        ),
+        Const(
+            name="BAD_SIZEOF",
+            type=_i32(),
+            expr=SizeOfExpr(target=TypeRef(decl_id="", name="missing_t", canonical=_i32())),
+        ),
+        Const(
+            name="BAD_VECTOR",
+            type=VectorType(
+                element=TypeRef(decl_id="", name="missing_t", canonical=_i32()),
+                count=4,
+                size_bytes=16,
+            ),
+            expr=IntLiteral(1),
+        ),
+        MacroDecl(
+            name="BAD_MACRO",
+            tokens=["1"],
+            kind="object_like_supported",
+            type=TypeRef(decl_id="", name="missing_t", canonical=_i32()),
+            expr=IntLiteral(1),
+        ),
+    ],
+)
+def test_validate_ir_pass_rejects_missing_decl_ids_in_all_decl_type_positions(decl) -> None:
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        target_abi=_abi(),
+        decls=[decl],
+    )
+
+    with pytest.raises(IRValidationError, match="TypeRef"):
+        ValidateIRPass().run(unit)
 
 
 def test_run_ir_passes_returns_fresh_unit_without_mutating_raw_unit() -> None:

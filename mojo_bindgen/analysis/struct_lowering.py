@@ -120,11 +120,33 @@ def _lower_typed_members(
     tuple[str, ...],
     tuple[str, ...],
 ]:
+    plain_fields, diagnostic_notes, plain_failures = _lower_plain_fields(
+        decl,
+        facts,
+        context=context,
+    )
+    lowered_bitfield_groups, bitfield_failures = _lower_bitfield_groups(
+        facts,
+        context=context,
+    )
+
+    return (
+        plain_fields,
+        lowered_bitfield_groups,
+        tuple(diagnostic_notes),
+        (*plain_failures, *bitfield_failures),
+    )
+
+
+def _lower_plain_fields(
+    decl: Struct,
+    facts: RecordLayoutFacts,
+    *,
+    context: StructLoweringContext,
+) -> tuple[list[StoredMember], tuple[str, ...], tuple[str, ...]]:
     plain_fields: list[StoredMember] = []
-    lowered_bitfield_groups: list[BitfieldGroupMember] = []
     diagnostic_notes: list[str] = []
     fallback_reasons: list[str] = []
-
     for field_fact in facts.plain_fields:
         field = decl.fields[field_fact.index]
         display_name = field_display_name(field, field_fact.index)
@@ -158,45 +180,25 @@ def _lower_typed_members(
         )
         if field.fam_pattern is not None:
             continue
+    return plain_fields, tuple(diagnostic_notes), tuple(fallback_reasons)
 
+
+def _lower_bitfield_groups(
+    facts: RecordLayoutFacts,
+    *,
+    context: StructLoweringContext,
+) -> tuple[list[BitfieldGroupMember], tuple[str, ...]]:
+    lowered_bitfield_groups: list[BitfieldGroupMember] = []
+    fallback_reasons: list[str] = []
     for run_layout in facts.bitfield_runs:
-        lowered_storage_type, reason = try_lower_type(
-            context.type_lowerer,
-            run_layout.unsigned_storage_type,
-            subject=f"bitfield storage `{run_layout.name}`",
-            failure_suffix="opaque storage emitted",
-        )
+        lowered_storage_type, reason = _lower_bitfield_storage(run_layout, context=context)
         if reason is not None or lowered_storage_type is None:
             if reason is not None:
                 fallback_reasons.append(reason)
             continue
 
-        lowered_fields: list[BitfieldField] = []
-        for field_layout in run_layout.fields:
-            display_name = field_display_name(field_layout.field, field_layout.index)
-            logical_type, reason = try_lower_type(
-                context.type_lowerer,
-                field_layout.logical_type,
-                subject=f"bitfield `{display_name}`",
-                failure_suffix="opaque storage emitted",
-            )
-            if reason is not None or logical_type is None:
-                if reason is not None:
-                    fallback_reasons.append(reason)
-                continue
-            lowered_fields.append(
-                BitfieldField(
-                    index=field_layout.index,
-                    name=field_mojo_name(field_layout.field, field_layout.index),
-                    logical_type=logical_type,
-                    bit_offset=field_layout.bit_offset,
-                    bit_width=field_layout.bit_width,
-                    signed=field_layout.signed,
-                    bool_semantics=field_layout.bool_semantics,
-                    doc=field_layout.field.doc,
-                )
-            )
-
+        lowered_fields, field_failures = _lower_bitfield_fields(run_layout, context=context)
+        fallback_reasons.extend(field_failures)
         lowered_bitfield_groups.append(
             BitfieldGroupMember(
                 storage_name=run_layout.name,
@@ -207,13 +209,50 @@ def _lower_typed_members(
                 fields=lowered_fields,
             )
         )
+    return lowered_bitfield_groups, tuple(fallback_reasons)
 
-    return (
-        plain_fields,
-        lowered_bitfield_groups,
-        tuple(diagnostic_notes),
-        tuple(fallback_reasons),
+
+def _lower_bitfield_storage(run_layout, *, context: StructLoweringContext):
+    return try_lower_type(
+        context.type_lowerer,
+        run_layout.unsigned_storage_type,
+        subject=f"bitfield storage `{run_layout.name}`",
+        failure_suffix="opaque storage emitted",
     )
+
+
+def _lower_bitfield_fields(
+    run_layout,
+    *,
+    context: StructLoweringContext,
+) -> tuple[list[BitfieldField], tuple[str, ...]]:
+    lowered_fields: list[BitfieldField] = []
+    fallback_reasons: list[str] = []
+    for field_layout in run_layout.fields:
+        display_name = field_display_name(field_layout.field, field_layout.index)
+        logical_type, reason = try_lower_type(
+            context.type_lowerer,
+            field_layout.logical_type,
+            subject=f"bitfield `{display_name}`",
+            failure_suffix="opaque storage emitted",
+        )
+        if reason is not None or logical_type is None:
+            if reason is not None:
+                fallback_reasons.append(reason)
+            continue
+        lowered_fields.append(
+            BitfieldField(
+                index=field_layout.index,
+                name=field_mojo_name(field_layout.field, field_layout.index),
+                logical_type=logical_type,
+                bit_offset=field_layout.bit_offset,
+                bit_width=field_layout.bit_width,
+                signed=field_layout.signed,
+                bool_semantics=field_layout.bool_semantics,
+                doc=field_layout.field.doc,
+            )
+        )
+    return lowered_fields, tuple(fallback_reasons)
 
 
 def _record_shape(

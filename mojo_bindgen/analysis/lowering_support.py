@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.indexes import record_by_decl_id
 from mojo_bindgen.analysis.type_lowering import LowerTypePass, TypeLoweringError
 from mojo_bindgen.ir import (
     BuiltinType,
@@ -12,18 +13,7 @@ from mojo_bindgen.ir import (
     MojoBuiltin,
     Struct,
     Type,
-    Unit,
 )
-
-
-def record_by_decl_id(unit: Unit) -> dict[str, Struct]:
-    """Map every record ``decl_id`` to its CIR declaration, including unions."""
-
-    out: dict[str, Struct] = {}
-    for decl in unit.decls:
-        if isinstance(decl, Struct):
-            out[decl.decl_id] = decl
-    return out
 
 
 def field_display_name(field: Field, index: int) -> str:

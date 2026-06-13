@@ -5,16 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from mojo_bindgen.analysis.traversal import iter_unit_typerefs
 from mojo_bindgen.analysis.type_lowering import exact_width_stdint_alias_type
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
-    Const,
     EnumRef,
-    Function,
     FunctionPtr,
-    GlobalVar,
-    MacroDecl,
-    Struct,
     StructRef,
     Type,
     Typedef,
@@ -51,6 +46,7 @@ class AliasClassification:
 
     aliases_by_decl_id: dict[str, AliasInfo]
     external_aliases_by_decl_id: dict[str, AliasInfo]
+    external_type_refs_by_decl_id: dict[str, TypeRef]
 
 
 def classify_aliases(unit: Unit) -> AliasClassification:
@@ -69,7 +65,8 @@ def classify_aliases(unit: Unit) -> AliasClassification:
     }
 
     external: dict[str, AliasInfo] = {}
-    for ref in _typeref_uses(unit):
+    external_refs: dict[str, TypeRef] = {}
+    for ref in iter_unit_typerefs(unit):
         if ref.decl_id in local_typedefs or ref.decl_id in external:
             continue
         external[ref.decl_id] = AliasInfo(
@@ -78,10 +75,12 @@ def classify_aliases(unit: Unit) -> AliasClassification:
             alias_class=AliasClass.EXTERNAL_TYPEDEF,
             target_decl_id=_target_decl_id(ref.canonical),
         )
+        external_refs[ref.decl_id] = ref
 
     return AliasClassification(
         aliases_by_decl_id=aliases,
         external_aliases_by_decl_id=external,
+        external_type_refs_by_decl_id=external_refs,
     )
 
 
@@ -111,38 +110,6 @@ def _target_type(t: Type) -> EnumRef | StructRef | None:
 def _target_decl_id(t: Type) -> str | None:
     target = _target_type(t)
     return None if target is None else target.decl_id
-
-
-def _typeref_uses(unit: Unit) -> tuple[TypeRef, ...]:
-    out: list[TypeRef] = []
-    for decl in unit.decls:
-        for t in _decl_types(decl):
-            out.extend(
-                node
-                for node in collect_type_nodes(
-                    t,
-                    lambda node: isinstance(node, TypeRef),
-                    options=TypeWalkOptions(descend_vector_element=True),
-                )
-                if isinstance(node, TypeRef)
-            )
-    return tuple(out)
-
-
-def _decl_types(decl) -> tuple[Type, ...]:
-    if isinstance(decl, Function):
-        return (decl.ret, *(param.type for param in decl.params))
-    if isinstance(decl, Typedef):
-        return (decl.aliased, decl.canonical)
-    if isinstance(decl, Struct):
-        return tuple(field.type for field in decl.fields)
-    if isinstance(decl, GlobalVar):
-        return (decl.type,)
-    if isinstance(decl, Const):
-        return (decl.type,)
-    if isinstance(decl, MacroDecl):
-        return () if decl.type is None else (decl.type,)
-    return ()
 
 
 __all__ = [
