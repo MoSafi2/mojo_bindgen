@@ -54,7 +54,7 @@ class MapUnitPass:
             struct_context=StructMappingContext(
                 record_map=context.records_by_decl_id,
                 record_layouts=context.record_layouts,
-                record_shapes=context.record_shapes,
+                record_storage=context.record_storage,
                 target_abi=unit.target_abi,
                 type_mapper=type_mapper,
             ),

@@ -102,7 +102,7 @@ def test_analysis_context_classifies_aliases_and_builds_dependency_graph() -> No
     assert context.dependency_graph.edges_by_decl_id[function.decl_id] == frozenset(
         {payload.decl_id, external_ref.decl_id}
     )
-    assert context.record_shapes[payload.decl_id].typed_storage_candidate is True
+    assert context.record_storage[payload.decl_id].uses_typed_storage is True
 
 
 def test_validate_references_rejects_missing_enum_refs() -> None:

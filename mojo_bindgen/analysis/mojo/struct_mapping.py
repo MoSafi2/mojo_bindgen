@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
 from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts, analyze_record_layout
-from mojo_bindgen.analysis.facts.record_shape import (
-    RecordAnalysisFacts,
+from mojo_bindgen.analysis.facts.record_storage import (
+    RecordStorageFacts,
     RecordStorageKind,
-    analyze_record_shapes,
+    analyze_record_storage_facts,
 )
 from mojo_bindgen.analysis.mojo.mapping_support import (
     field_display_name,
@@ -47,7 +47,7 @@ class StructMappingContext:
     target_abi: TargetABI
     type_mapper: MapTypePass
     record_layouts: dict[str, RecordLayoutFacts] = field(default_factory=dict)
-    record_shapes: dict[str, RecordAnalysisFacts] = field(default_factory=dict)
+    record_storage: dict[str, RecordStorageFacts] = field(default_factory=dict)
 
 
 def map_struct(decl: Struct, *, context: StructMappingContext) -> StructDecl:
@@ -58,16 +58,16 @@ def map_struct(decl: Struct, *, context: StructMappingContext) -> StructDecl:
             f"expected non-union Struct declaration, got union {decl.decl_id!r}"
         )
 
-    shape = _record_shape(decl, context=context)
-    facts = shape.layout
-    if shape.storage_kind == RecordStorageKind.INCOMPLETE:
+    storage = _record_storage(decl, context=context)
+    facts = storage.layout
+    if storage.storage_kind == RecordStorageKind.INCOMPLETE:
         return _incomplete_struct_decl(decl)
-    if shape.storage_kind == RecordStorageKind.OPAQUE_STORAGE:
+    if storage.storage_kind == RecordStorageKind.OPAQUE_STORAGE:
         return _opaque_storage_struct_decl(
             decl,
             facts,
-            diagnostic_notes=shape.diagnostic_notes,
-            fallback_reasons=shape.fallback_reasons,
+            diagnostic_notes=storage.diagnostic_notes,
+            fallback_reasons=storage.fallback_reasons,
         )
 
     plain_fields, mapped_bitfield_groups, diagnostic_notes, fallback_reasons = _map_typed_members(
@@ -97,7 +97,7 @@ def map_struct(decl: Struct, *, context: StructMappingContext) -> StructDecl:
             mapped_bitfield_groups,
             uses_opaque_storage=False,
         ),
-        flexible_tail=shape.flexible_tail,
+        flexible_tail=storage.flexible_tail,
         diagnostics=_build_diagnostics(
             facts.layout_problems,
             diagnostic_notes=diagnostic_notes,
@@ -253,12 +253,12 @@ def _map_bitfield_fields(
     return mapped_fields, tuple(fallback_reasons)
 
 
-def _record_shape(
+def _record_storage(
     decl: Struct,
     *,
     context: StructMappingContext,
-) -> RecordAnalysisFacts:
-    cached = context.record_shapes.get(decl.decl_id)
+) -> RecordStorageFacts:
+    cached = context.record_storage.get(decl.decl_id)
     if cached is not None:
         return cached
 
@@ -271,12 +271,12 @@ def _record_shape(
                 target_abi=context.target_abi,
             )
     context.record_layouts = layouts
-    context.record_shapes = analyze_record_shapes(
+    context.record_storage = analyze_record_storage_facts(
         context.record_map,
         layouts,
         type_mapper=context.type_mapper,
     )
-    return context.record_shapes[decl.decl_id]
+    return context.record_storage[decl.decl_id]
 
 
 def _build_members(

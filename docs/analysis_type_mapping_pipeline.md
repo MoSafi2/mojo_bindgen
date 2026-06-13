@@ -106,7 +106,7 @@ Responsibilities:
 - reject incomplete or non-representable layouts onto opaque storage
 - map plain stored fields and bitfield storage/logical field types
 - synthesize padding members and initializers from analyzed layout facts
-- preserve flexible-tail metadata when the enclosing shape stays representable
+- preserve flexible-tail metadata when the enclosing record remains typed-storage eligible
 - attach fallback diagnostics when a record must collapse to opaque storage
 
 Source:

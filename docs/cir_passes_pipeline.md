@@ -24,7 +24,7 @@ flowchart TD
     G --> I[DeclDependencyGraph]
     G --> J[AliasClassification]
     G --> K[RecordLayoutFacts]
-    G --> L[RecordAnalysisFacts]
+    G --> L[RecordStorageFacts]
 
     G --> M[MapUnitPass]
     M --> N[MapTypePass]
@@ -182,21 +182,21 @@ Purpose:
 `analyze_record_layout()` owns pure C-layout checks. It does not decide how a
 Mojo `StructDecl` should be emitted.
 
-### `RecordAnalysisFacts` / `RecordShapeAnalyzer`
+### `RecordStorageFacts` / `RecordStorageAnalyzer`
 
 Purpose:
 
-- centralize record shape and representability decisions
+- centralize record storage and representability decisions
 - classify record storage as incomplete, union, typed, or opaque storage
 - validate direct and embedded flexible-tail patterns
-- analyze recursive by-value record shapes
+- analyze recursive by-value record storages
 - carry flexible-tail metadata for struct mapping
 - carry fallback reasons for opaque-storage diagnostics
 
-This is the central record analysis pass. `struct_mapping` consumes these facts
-and performs MojoIR member construction; it should not own recursive record
-shape policy. Its internal helpers are split by responsibility: record
-prechecks, plain-field checks, embedded-record/flexible-tail checks, and
+This is the central Mojo storage-decision pass. `struct_mapping` consumes these
+facts and performs MojoIR member construction; it should not own recursive
+typed-vs-opaque policy. Its internal helpers are split by responsibility:
+record prechecks, plain-field checks, embedded-record/flexible-tail checks, and
 bitfield checks.
 
 ## Stage 3: CIR To MojoIR Mapping
@@ -272,14 +272,14 @@ Purpose:
 
 Purpose:
 
-- consume `RecordAnalysisFacts` and `RecordLayoutFacts`
+- consume `RecordStorageFacts` and `RecordLayoutFacts`
 - emit opaque declarations for incomplete records
 - emit byte-storage structs for opaque-storage decisions
 - map typed plain fields and bitfield groups to MojoIR members
 - attach flexible-tail metadata computed by record analysis
 - compute Mojo alignment decorator policy
 
-Struct mapping should not recompute recursive record shape decisions.
+Struct mapping should not recompute recursive record storage decisions.
 Typed-member mapping is intentionally split between plain fields, bitfield
 storage, and bitfield logical fields so fallback diagnostics stay local to the
 operation that failed.

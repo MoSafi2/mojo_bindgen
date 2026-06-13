@@ -11,7 +11,10 @@ from mojo_bindgen.analysis.facts.dependency_graph import (
 )
 from mojo_bindgen.analysis.facts.indexes import DeclIndexes, build_decl_indexes
 from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts, analyze_record_layout
-from mojo_bindgen.analysis.facts.record_shape import RecordAnalysisFacts, analyze_record_shapes
+from mojo_bindgen.analysis.facts.record_storage import (
+    RecordStorageFacts,
+    analyze_record_storage_facts,
+)
 from mojo_bindgen.ir import Const, Enum, Function, GlobalVar, MacroDecl, Struct, Typedef, Unit
 
 
@@ -30,17 +33,21 @@ class AnalysisContext:
     dependency_graph: DeclDependencyGraph
     alias_classification: AliasClassification
     record_layouts: dict[str, RecordLayoutFacts]
-    record_shapes: dict[str, RecordAnalysisFacts]
+    record_storage: dict[str, RecordStorageFacts]
 
 
 def build_analysis_context(unit: Unit) -> AnalysisContext:
-    """Build shared declaration indexes and record layout facts for ``unit``."""
+    """Build shared declaration indexes and analysis facts for ``unit``."""
 
     indexes = build_decl_indexes(unit)
+    # First compute C ABI geometry: offsets, sizes, alignment, padding, and
+    # bitfield runs.
     record_layouts = _build_record_layouts(unit, indexes)
     dependency_graph = build_decl_dependency_graph(unit)
     alias_classification = classify_aliases(unit)
-    record_shapes = analyze_record_shapes(indexes.records_by_decl_id, record_layouts)
+    # Then decide Mojo storage eligibility using layout facts plus recursive
+    # record/type context.
+    record_storage = analyze_record_storage_facts(indexes.records_by_decl_id, record_layouts)
     return AnalysisContext(
         unit=unit,
         records_by_decl_id=indexes.records_by_decl_id,
@@ -53,7 +60,7 @@ def build_analysis_context(unit: Unit) -> AnalysisContext:
         dependency_graph=dependency_graph,
         alias_classification=alias_classification,
         record_layouts=record_layouts,
-        record_shapes=record_shapes,
+        record_storage=record_storage,
     )
 
 

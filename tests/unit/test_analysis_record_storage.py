@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.facts.record_layout import analyze_record_layout
-from mojo_bindgen.analysis.facts.record_shape import (
+from mojo_bindgen.analysis.facts.record_storage import (
     RecordStorageKind,
-    analyze_record_shape,
-    analyze_record_shapes,
+    analyze_record_storage,
+    analyze_record_storage_facts,
 )
 from mojo_bindgen.ir import (
     Array,
@@ -41,7 +41,7 @@ def _layout(record: Struct, records: dict[str, Struct] | None = None):
     return analyze_record_layout(record, record_map=record_map, target_abi=_abi())
 
 
-def test_record_shape_marks_incomplete_records_as_incomplete_storage() -> None:
+def test_record_storage_marks_incomplete_records_as_incomplete_storage() -> None:
     opaque = Struct(
         decl_id="struct:Opaque",
         name="Opaque",
@@ -52,13 +52,13 @@ def test_record_shape_marks_incomplete_records_as_incomplete_storage() -> None:
         is_complete=False,
     )
 
-    facts = analyze_record_shape(opaque, _layout(opaque))
+    facts = analyze_record_storage(opaque, _layout(opaque))
 
     assert facts.storage_kind == RecordStorageKind.INCOMPLETE
-    assert facts.typed_storage_candidate is False
+    assert facts.uses_typed_storage is False
 
 
-def test_record_shape_marks_layout_problems_as_opaque_storage() -> None:
+def test_record_storage_marks_layout_problems_as_opaque_storage() -> None:
     broken = Struct(
         decl_id="struct:Broken",
         name="Broken",
@@ -69,13 +69,13 @@ def test_record_shape_marks_layout_problems_as_opaque_storage() -> None:
         is_complete=True,
     )
 
-    facts = analyze_record_shape(broken, _layout(broken))
+    facts = analyze_record_storage(broken, _layout(broken))
 
     assert facts.storage_kind == RecordStorageKind.OPAQUE_STORAGE
     assert facts.fallback_reasons
 
 
-def test_record_shape_extracts_direct_flexible_tail_metadata() -> None:
+def test_record_storage_extracts_direct_flexible_tail_metadata() -> None:
     packet = Struct(
         decl_id="struct:Packet",
         name="Packet",
@@ -102,7 +102,7 @@ def test_record_shape_extracts_direct_flexible_tail_metadata() -> None:
         is_complete=True,
     )
 
-    facts = analyze_record_shape(packet, _layout(packet))
+    facts = analyze_record_storage(packet, _layout(packet))
 
     assert facts.storage_kind == RecordStorageKind.TYPED
     assert facts.flexible_tail is not None
@@ -110,7 +110,7 @@ def test_record_shape_extracts_direct_flexible_tail_metadata() -> None:
     assert facts.flexible_tail.element_type == BuiltinType(MojoBuiltin.C_UCHAR)
 
 
-def test_record_shape_rejects_non_terminal_embedded_flexible_tail() -> None:
+def test_record_storage_rejects_non_terminal_embedded_flexible_tail() -> None:
     tail = Struct(
         decl_id="struct:Tail",
         name="Tail",
@@ -162,7 +162,7 @@ def test_record_shape_rejects_non_terminal_embedded_flexible_tail() -> None:
     records = {tail.decl_id: tail, holder.decl_id: holder}
     layouts = {decl_id: _layout(record, records) for decl_id, record in records.items()}
 
-    facts = analyze_record_shapes(records, layouts)[holder.decl_id]
+    facts = analyze_record_storage_facts(records, layouts)[holder.decl_id]
 
     assert facts.storage_kind == RecordStorageKind.OPAQUE_STORAGE
     assert "embedded flexible tail is not terminal" in facts.fallback_reasons[0]

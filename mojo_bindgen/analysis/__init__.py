@@ -22,13 +22,12 @@ from mojo_bindgen.analysis.facts.dependency_graph import (
     DeclDependencyGraph,
     build_decl_dependency_graph,
 )
-from mojo_bindgen.analysis.facts.record_shape import (
-    ByValueRecordShape,
-    RecordAnalysisFacts,
-    RecordShapeFacts,
+from mojo_bindgen.analysis.facts.record_storage import (
+    ByValueEmbeddingDecision,
+    RecordStorageFacts,
     RecordStorageKind,
-    analyze_record_shape,
-    analyze_record_shapes,
+    analyze_record_storage,
+    analyze_record_storage_facts,
 )
 from mojo_bindgen.analysis.mojo.const_expr_mapping import (
     ConstExprMappingError,
@@ -90,9 +89,8 @@ __all__ = [
     "PolicyInferencePass",
     "DeclDependencyGraph",
     "ReferenceValidationError",
-    "ByValueRecordShape",
-    "RecordAnalysisFacts",
-    "RecordShapeFacts",
+    "ByValueEmbeddingDecision",
+    "RecordStorageFacts",
     "RecordStorageKind",
     "SignatureRecordStubOptions",
     "SignatureRecordStubPass",
@@ -106,8 +104,8 @@ __all__ = [
     "UnitMappingError",
     "TypeWalkOptions",
     "assign_record_policies",
-    "analyze_record_shape",
-    "analyze_record_shapes",
+    "analyze_record_storage",
+    "analyze_record_storage_facts",
     "build_analysis_context",
     "build_decl_dependency_graph",
     "classify_aliases",

@@ -1,4 +1,9 @@
-"""Central record layout and shape analysis for normalized CIR."""
+"""Mojo storage decisions for normalized CIR records.
+
+This module consumes :class:`RecordLayoutFacts` plus whole-unit record/type
+context. It decides typed-vs-opaque storage, by-value embeddability, and
+flexible-tail propagation. It does not recompute C ABI geometry.
+"""
 
 from __future__ import annotations
 
@@ -30,7 +35,7 @@ class RecordStorageKind(StrEnum):
 
 
 @dataclass(frozen=True)
-class ByValueRecordShape:
+class ByValueEmbeddingDecision:
     """Whether a record can be embedded by value in another typed record."""
 
     valid: bool
@@ -39,7 +44,7 @@ class ByValueRecordShape:
 
 
 @dataclass(frozen=True)
-class RecordAnalysisFacts:
+class RecordStorageFacts:
     """Central per-record facts used by struct mapping and later policy passes."""
 
     decl_id: str
@@ -47,41 +52,33 @@ class RecordAnalysisFacts:
     is_complete: bool
     layout: RecordLayoutFacts
     storage_kind: RecordStorageKind
-    by_value_shape: ByValueRecordShape
+    by_value_embedding: ByValueEmbeddingDecision
     flexible_tail: FlexibleTail | None = None
     diagnostic_notes: tuple[str, ...] = ()
     fallback_reasons: tuple[str, ...] = ()
 
     @property
-    def typed_storage_candidate(self) -> bool:
+    def uses_typed_storage(self) -> bool:
         return self.storage_kind == RecordStorageKind.TYPED
 
     @property
-    def opaque_storage_required(self) -> bool:
+    def requires_opaque_storage(self) -> bool:
         return self.storage_kind == RecordStorageKind.OPAQUE_STORAGE
 
     @property
     def layout_known(self) -> bool:
         return self.layout.is_complete and not self.layout.layout_problems
 
-    @property
-    def flexible_tail_field_index(self) -> int | None:
-        if self.flexible_tail is None:
-            return None
-        # Kept for compatibility with the first shape-facts API. Prefer
-        # ``flexible_tail`` for new callers.
-        return None
 
-
-def analyze_record_shapes(
+def analyze_record_storage_facts(
     records_by_decl_id: dict[str, Struct],
     record_layouts: dict[str, RecordLayoutFacts],
     *,
     type_mapper: MapTypePass | None = None,
-) -> dict[str, RecordAnalysisFacts]:
-    """Analyze every CIR record's layout shape and typed-storage eligibility."""
+) -> dict[str, RecordStorageFacts]:
+    """Analyze every CIR record's Mojo storage eligibility."""
 
-    analyzer = RecordShapeAnalyzer(
+    analyzer = RecordStorageAnalyzer(
         records_by_decl_id=records_by_decl_id,
         record_layouts=record_layouts,
         type_mapper=type_mapper or MapTypePass(),
@@ -91,14 +88,14 @@ def analyze_record_shapes(
     }
 
 
-def analyze_record_shape(
+def analyze_record_storage(
     record: Struct,
     layout: RecordLayoutFacts,
     *,
     records_by_decl_id: dict[str, Struct] | None = None,
     record_layouts: dict[str, RecordLayoutFacts] | None = None,
     type_mapper: MapTypePass | None = None,
-) -> RecordAnalysisFacts:
+) -> RecordStorageFacts:
     """Analyze one CIR record.
 
     Direct callers can pass only ``record`` and ``layout`` for isolated tests;
@@ -107,7 +104,7 @@ def analyze_record_shape(
 
     records = records_by_decl_id or {record.decl_id: record}
     layouts = record_layouts or {record.decl_id: layout}
-    return RecordShapeAnalyzer(
+    return RecordStorageAnalyzer(
         records_by_decl_id=records,
         record_layouts=layouts,
         type_mapper=type_mapper or MapTypePass(),
@@ -115,139 +112,153 @@ def analyze_record_shape(
 
 
 @dataclass
-class RecordShapeAnalyzer:
-    """Compute reusable record shape facts for a normalized CIR unit."""
+class RecordStorageAnalyzer:
+    """Compute reusable record storage facts for a normalized CIR unit."""
 
     records_by_decl_id: dict[str, Struct]
     record_layouts: dict[str, RecordLayoutFacts]
     type_mapper: MapTypePass
 
     def __post_init__(self) -> None:
-        self._record_cache: dict[str, RecordAnalysisFacts] = {}
-        self._by_value_cache: dict[str, ByValueRecordShape] = {}
+        self._record_cache: dict[str, RecordStorageFacts] = {}
+        self._by_value_cache: dict[str, ByValueEmbeddingDecision] = {}
 
-    def analyze_record(self, record: Struct) -> RecordAnalysisFacts:
+    def analyze_record(self, record: Struct) -> RecordStorageFacts:
         cached = self._record_cache.get(record.decl_id)
         if cached is not None:
             return cached
 
         layout = self._layout(record)
         if record.is_union:
-            facts = RecordAnalysisFacts(
+            facts = RecordStorageFacts(
                 decl_id=record.decl_id,
                 is_union=True,
                 is_complete=record.is_complete,
                 layout=layout,
                 storage_kind=RecordStorageKind.UNION,
-                by_value_shape=ByValueRecordShape(True),
+                by_value_embedding=ByValueEmbeddingDecision(True),
             )
             self._record_cache[record.decl_id] = facts
             return facts
 
         if not layout.is_complete:
-            facts = RecordAnalysisFacts(
+            facts = RecordStorageFacts(
                 decl_id=record.decl_id,
                 is_union=False,
                 is_complete=False,
                 layout=layout,
                 storage_kind=RecordStorageKind.INCOMPLETE,
-                by_value_shape=ByValueRecordShape(False, ("referenced definition is incomplete",)),
+                by_value_embedding=ByValueEmbeddingDecision(
+                    False, ("referenced definition is incomplete",)
+                ),
             )
             self._record_cache[record.decl_id] = facts
             return facts
 
         if layout.layout_problems:
-            facts = RecordAnalysisFacts(
+            facts = RecordStorageFacts(
                 decl_id=record.decl_id,
                 is_union=False,
                 is_complete=True,
                 layout=layout,
                 storage_kind=RecordStorageKind.OPAQUE_STORAGE,
-                by_value_shape=ByValueRecordShape(False, (layout.layout_problems[0],)),
+                by_value_embedding=ByValueEmbeddingDecision(False, (layout.layout_problems[0],)),
                 fallback_reasons=layout.layout_problems,
             )
             self._record_cache[record.decl_id] = facts
             return facts
 
-        by_value = self._record_typed_shape_by_value(record.decl_id, active=set())
+        by_value = self._record_typed_storage_by_value(record.decl_id, active=set())
         storage_kind = (
             RecordStorageKind.TYPED if by_value.valid else RecordStorageKind.OPAQUE_STORAGE
         )
-        facts = RecordAnalysisFacts(
+        facts = RecordStorageFacts(
             decl_id=record.decl_id,
             is_union=False,
             is_complete=True,
             layout=layout,
             storage_kind=storage_kind,
-            by_value_shape=by_value,
+            by_value_embedding=by_value,
             flexible_tail=by_value.flexible_tail,
             fallback_reasons=() if by_value.valid else by_value.detail,
         )
         self._record_cache[record.decl_id] = facts
         return facts
 
-    def _record_typed_shape_by_value(
+    def _record_typed_storage_by_value(
         self,
         decl_id: str,
         *,
         active: set[str],
-    ) -> ByValueRecordShape:
+    ) -> ByValueEmbeddingDecision:
         cached = self._by_value_cache.get(decl_id)
         if cached is not None:
             return cached
 
-        decl, facts, early_shape = self._precheck_by_value_record(decl_id, active)
-        if early_shape is not None:
-            return self._cache_by_value(decl_id, early_shape)
+        decl, facts, early_decision = self._precheck_by_value_record(decl_id, active)
+        if early_decision is not None:
+            return self._cache_by_value(decl_id, early_decision)
         assert decl is not None
         assert facts is not None
 
         active.add(decl_id)
         try:
-            field_shape = self._plain_fields_by_value_shape(decl, facts, active=active)
-            if not field_shape.valid:
-                return self._cache_by_value(decl_id, field_shape)
+            field_decision = self._plain_fields_by_value_embedding(decl, facts, active=active)
+            if not field_decision.valid:
+                return self._cache_by_value(decl_id, field_decision)
 
-            bitfield_shape = self._bitfield_runs_by_value_shape(facts)
-            if not bitfield_shape.valid:
-                return self._cache_by_value(decl_id, bitfield_shape)
+            bitfield_decision = self._bitfield_runs_by_value_embedding(facts)
+            if not bitfield_decision.valid:
+                return self._cache_by_value(decl_id, bitfield_decision)
         finally:
             active.remove(decl_id)
 
         return self._cache_by_value(
             decl_id,
-            ByValueRecordShape(True, flexible_tail=field_shape.flexible_tail),
+            ByValueEmbeddingDecision(True, flexible_tail=field_decision.flexible_tail),
         )
 
     def _precheck_by_value_record(
         self,
         decl_id: str,
         active: set[str],
-    ) -> tuple[Struct | None, RecordLayoutFacts | None, ByValueRecordShape | None]:
+    ) -> tuple[Struct | None, RecordLayoutFacts | None, ByValueEmbeddingDecision | None]:
         decl = self.records_by_decl_id.get(decl_id)
         if decl is None:
-            return None, None, ByValueRecordShape(False, ("referenced definition is unavailable",))
+            return (
+                None,
+                None,
+                ByValueEmbeddingDecision(False, ("referenced definition is unavailable",)),
+            )
         if decl.is_union:
-            return None, None, ByValueRecordShape(True)
+            return None, None, ByValueEmbeddingDecision(True)
         if not decl.is_complete:
-            return None, None, ByValueRecordShape(False, ("referenced definition is incomplete",))
+            return (
+                None,
+                None,
+                ByValueEmbeddingDecision(False, ("referenced definition is incomplete",)),
+            )
         if decl_id in active:
-            return None, None, ByValueRecordShape(True)
+            return None, None, ByValueEmbeddingDecision(True)
 
         facts = self._layout(decl)
         if not facts.is_complete:
-            return None, None, ByValueRecordShape(False, ("referenced definition is incomplete",))
+            return (
+                None,
+                None,
+                ByValueEmbeddingDecision(False, ("referenced definition is incomplete",)),
+            )
         if facts.layout_problems:
-            return None, None, ByValueRecordShape(False, (facts.layout_problems[0],))
+            return None, None, ByValueEmbeddingDecision(False, (facts.layout_problems[0],))
         return decl, facts, None
 
-    def _plain_fields_by_value_shape(
+    def _plain_fields_by_value_embedding(
         self,
         decl: Struct,
         facts: RecordLayoutFacts,
         *,
         active: set[str],
-    ) -> ByValueRecordShape:
+    ) -> ByValueEmbeddingDecision:
         flexible_tail: FlexibleTail | None = None
         for field_fact in facts.plain_fields:
             field = decl.fields[field_fact.index]
@@ -258,46 +269,53 @@ class RecordShapeAnalyzer:
                 failure_suffix="opaque storage emitted",
             )
             if reason is not None or mapped_type is None:
-                return ByValueRecordShape(False, ((reason or "field could not be mapped"),))
+                return ByValueEmbeddingDecision(False, ((reason or "field could not be mapped"),))
             if field.fam_pattern is not None:
-                tail_shape = _direct_flexible_tail_shape(field, field_fact, mapped_type)
-                if not tail_shape.valid:
-                    return tail_shape
-                flexible_tail = tail_shape.flexible_tail
+                tail_decision = _direct_flexible_tail_decision(field, field_fact, mapped_type)
+                if not tail_decision.valid:
+                    return tail_decision
+                flexible_tail = tail_decision.flexible_tail
                 continue
 
-            nested_shape = self._nested_record_field_shape(field, field_fact, facts, active=active)
-            if not nested_shape.valid:
-                return nested_shape
-            if nested_shape.flexible_tail is not None:
-                flexible_tail = nested_shape.flexible_tail
-        return ByValueRecordShape(True, flexible_tail=flexible_tail)
+            nested_decision = self._nested_record_field_decision(
+                field,
+                field_fact,
+                facts,
+                active=active,
+            )
+            if not nested_decision.valid:
+                return nested_decision
+            if nested_decision.flexible_tail is not None:
+                flexible_tail = nested_decision.flexible_tail
+        return ByValueEmbeddingDecision(True, flexible_tail=flexible_tail)
 
-    def _nested_record_field_shape(
+    def _nested_record_field_decision(
         self,
         field,
         field_fact,
         facts: RecordLayoutFacts,
         *,
         active: set[str],
-    ) -> ByValueRecordShape:
+    ) -> ByValueEmbeddingDecision:
         refs = _embedded_struct_refs(field.type)
         if not refs:
-            return ByValueRecordShape(True)
+            return ByValueEmbeddingDecision(True)
 
-        nested_tail_shapes: list[tuple[StructRef, ByValueRecordShape]] = []
+        nested_tail_decisions: list[tuple[StructRef, ByValueEmbeddingDecision]] = []
         for ref in refs:
-            shape = self._record_typed_shape_by_value(ref.decl_id, active=active)
-            if not shape.valid:
-                return _embedded_record_failure(field, field_fact, ref, shape)
-            if shape.flexible_tail is not None:
-                nested_tail_shapes.append((ref, shape))
+            decision = self._record_typed_storage_by_value(ref.decl_id, active=active)
+            if not decision.valid:
+                return _embedded_record_failure(field, field_fact, ref, decision)
+            if decision.flexible_tail is not None:
+                nested_tail_decisions.append((ref, decision))
 
-        if not nested_tail_shapes:
-            return ByValueRecordShape(True)
-        return _embedded_flexible_tail_shape(field, field_fact, facts, nested_tail_shapes)
+        if not nested_tail_decisions:
+            return ByValueEmbeddingDecision(True)
+        return _embedded_flexible_tail_decision(field, field_fact, facts, nested_tail_decisions)
 
-    def _bitfield_runs_by_value_shape(self, facts: RecordLayoutFacts) -> ByValueRecordShape:
+    def _bitfield_runs_by_value_embedding(
+        self, facts: RecordLayoutFacts
+    ) -> ByValueEmbeddingDecision:
         for run_layout in facts.bitfield_runs:
             _, reason = try_map_type(
                 self.type_mapper,
@@ -306,7 +324,7 @@ class RecordShapeAnalyzer:
                 failure_suffix="opaque storage emitted",
             )
             if reason is not None:
-                return ByValueRecordShape(False, (reason,))
+                return ByValueEmbeddingDecision(False, (reason,))
 
             for field_layout in run_layout.fields:
                 _, reason = try_map_type(
@@ -316,8 +334,8 @@ class RecordShapeAnalyzer:
                     failure_suffix="opaque storage emitted",
                 )
                 if reason is not None:
-                    return ByValueRecordShape(False, (reason,))
-        return ByValueRecordShape(True)
+                    return ByValueEmbeddingDecision(False, (reason,))
+        return ByValueEmbeddingDecision(True)
 
     def _layout(self, record: Struct) -> RecordLayoutFacts:
         return self.record_layouts[record.decl_id]
@@ -325,10 +343,10 @@ class RecordShapeAnalyzer:
     def _cache_by_value(
         self,
         decl_id: str,
-        shape: ByValueRecordShape,
-    ) -> ByValueRecordShape:
-        self._by_value_cache[decl_id] = shape
-        return shape
+        decision: ByValueEmbeddingDecision,
+    ) -> ByValueEmbeddingDecision:
+        self._by_value_cache[decl_id] = decision
+        return decision
 
 
 def _map_flexible_tail_metadata(
@@ -356,7 +374,7 @@ def _map_flexible_tail_metadata(
     )
 
 
-def _direct_flexible_tail_shape(field, field_fact, mapped_type) -> ByValueRecordShape:
+def _direct_flexible_tail_decision(field, field_fact, mapped_type) -> ByValueEmbeddingDecision:
     direct_tail, tail_reason = _map_flexible_tail_metadata(
         field,
         field_fact.index,
@@ -364,19 +382,23 @@ def _direct_flexible_tail_shape(field, field_fact, mapped_type) -> ByValueRecord
         mapped_type,
     )
     if tail_reason is not None or direct_tail is None:
-        return ByValueRecordShape(False, ((tail_reason or "flexible tail could not map"),))
-    return ByValueRecordShape(True, flexible_tail=direct_tail)
+        return ByValueEmbeddingDecision(False, ((tail_reason or "flexible tail could not map"),))
+    return ByValueEmbeddingDecision(True, flexible_tail=direct_tail)
 
 
 def _embedded_record_failure(
     field,
     field_fact,
     ref: StructRef,
-    shape: ByValueRecordShape,
-) -> ByValueRecordShape:
+    decision: ByValueEmbeddingDecision,
+) -> ByValueEmbeddingDecision:
     target_name = ref.c_name or ref.name
-    suffix = shape.detail[0] if shape.detail else "embedded record is not layout-emittable by value"
-    return ByValueRecordShape(
+    suffix = (
+        decision.detail[0]
+        if decision.detail
+        else "embedded record is not layout-emittable by value"
+    )
+    return ByValueEmbeddingDecision(
         False,
         (
             f"field `{field_display_name(field, field_fact.index)}` embeds struct "
@@ -385,22 +407,22 @@ def _embedded_record_failure(
     )
 
 
-def _embedded_flexible_tail_shape(
+def _embedded_flexible_tail_decision(
     field,
     field_fact,
     facts: RecordLayoutFacts,
-    nested_tail_shapes: list[tuple[StructRef, ByValueRecordShape]],
-) -> ByValueRecordShape:
+    nested_tail_decisions: list[tuple[StructRef, ByValueEmbeddingDecision]],
+) -> ByValueEmbeddingDecision:
     direct_ref = _direct_embedded_struct_ref(field.type)
-    if len(nested_tail_shapes) > 1 or direct_ref is None:
+    if len(nested_tail_decisions) > 1 or direct_ref is None:
         return _non_direct_flexible_tail_failure(field, field_fact)
 
-    nested_ref, nested_shape = nested_tail_shapes[0]
+    nested_ref, nested_decision = nested_tail_decisions[0]
     if nested_ref.decl_id != direct_ref.decl_id:
         return _non_direct_flexible_tail_failure(field, field_fact)
     if not _field_is_terminal_in_enclosing_record(facts, field_fact):
         target_name = nested_ref.c_name or nested_ref.name
-        return ByValueRecordShape(
+        return ByValueEmbeddingDecision(
             False,
             (
                 f"field `{field_display_name(field, field_fact.index)}` embeds struct "
@@ -409,18 +431,18 @@ def _embedded_flexible_tail_shape(
             ),
         )
 
-    assert nested_shape.flexible_tail is not None
-    return ByValueRecordShape(
+    assert nested_decision.flexible_tail is not None
+    return ByValueEmbeddingDecision(
         True,
         flexible_tail=replace(
-            nested_shape.flexible_tail,
-            byte_offset=field_fact.byte_offset + nested_shape.flexible_tail.byte_offset,
+            nested_decision.flexible_tail,
+            byte_offset=field_fact.byte_offset + nested_decision.flexible_tail.byte_offset,
         ),
     )
 
 
-def _non_direct_flexible_tail_failure(field, field_fact) -> ByValueRecordShape:
-    return ByValueRecordShape(
+def _non_direct_flexible_tail_failure(field, field_fact) -> ByValueEmbeddingDecision:
+    return ByValueEmbeddingDecision(
         False,
         (
             f"field `{field_display_name(field, field_fact.index)}` embeds a flexible-tail "
@@ -475,16 +497,11 @@ def _embedded_struct_refs(t: Type) -> tuple[StructRef, ...]:
     )
 
 
-# Compatibility aliases for the initial lightweight shape API.
-RecordShapeFacts = RecordAnalysisFacts
-
-
 __all__ = [
-    "ByValueRecordShape",
-    "RecordAnalysisFacts",
-    "RecordShapeFacts",
-    "RecordShapeAnalyzer",
+    "ByValueEmbeddingDecision",
+    "RecordStorageFacts",
+    "RecordStorageAnalyzer",
     "RecordStorageKind",
-    "analyze_record_shape",
-    "analyze_record_shapes",
+    "analyze_record_storage",
+    "analyze_record_storage_facts",
 ]

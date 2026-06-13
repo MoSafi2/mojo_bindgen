@@ -149,7 +149,7 @@ Current support includes:
   be represented safely fall back to opaque `InlineArray[...]` storage with
   diagnostics to preserve layout.
 - **Opaque and difficult layouts:** incomplete records, packed layouts, and
-  alignment-sensitive record shapes are preserved conservatively as opaque byte
+  alignment-sensitive record storages are preserved conservatively as opaque byte
   storage when a faithful typed layout is not possible.
 - **Callbacks and function pointers:** callback typedefs, function-pointer
   fields, and function-pointer parameters and returns are preserved in Mojo via

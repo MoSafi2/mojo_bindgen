@@ -1,4 +1,9 @@
-"""Pure record layout and representability analysis over CIR."""
+"""C ABI record layout facts for normalized CIR records.
+
+This module reports physical geometry: completion, size, alignment, field
+offsets, bitfield runs, padding spans, and layout problems. It does not decide
+whether a record should use typed Mojo fields or opaque byte storage.
+"""
 
 from __future__ import annotations
 
@@ -59,7 +64,7 @@ def analyze_record_layout(
     record_map: dict[str, Struct],
 ) -> RecordLayoutFacts:
     # Kept in the public signature for callers that pass whole-unit ABI/index
-    # context. The current layout facts are fully represented on each record.
+    # context. The current physical layout facts are represented on each record.
     del target_abi, record_map
 
     if not decl.is_complete:
