@@ -1,6 +1,6 @@
 # MojoIR Normalization Workflow
 
-This document shows how `normalize_mojo_module()` turns lowered MojoIR into the
+This document shows how `normalize_mojo_module()` turns mapped MojoIR into the
 printer-ready form consumed by the final rendering step.
 
 ## Overview
@@ -107,7 +107,7 @@ The current public render path is:
 
 1. `AnalysisOrchestrator.run_ir_passes(unit)` validates and normalizes raw CIR
 2. `build_analysis_context(unit)` computes shared declaration and layout facts
-3. `LowerUnitPass.run(unit)` produces a policy-light `MojoModule`
+3. `MapUnitPass.run(unit)` produces a policy-light `MojoModule`
 4. `PolicyInferencePass` derives late record passability, traits, and fieldwise-init policy
 5. `normalize_mojo_module(module)` makes printer-facing facts explicit
 6. `render_mojo_module(module, options)` emits Mojo source

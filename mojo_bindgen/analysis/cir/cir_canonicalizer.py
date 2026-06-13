@@ -36,7 +36,7 @@ type EnumResolution = tuple[str, tuple[str, ...]]
 
 
 class CIRCanonicalizer:
-    """Canonicalize cross-declaration CIR facts before Mojo lowering.
+    """Canonicalize cross-declaration CIR facts before Mojo mapping.
 
     This pass repairs parser-local declaration quirks without changing the
     caller-owned ``Unit``. Its ordered steps are:

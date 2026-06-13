@@ -2,7 +2,7 @@
 
 This is the main reference for analysis-owned passes in `mojo-bindgen`.
 Analysis starts with a raw parser `Unit`, validates and normalizes CIR, computes
-shared facts, lowers into policy-light MojoIR, and assigns late Mojo record
+shared facts, maps into policy-light MojoIR, and assigns late Mojo record
 policies.
 
 `NormalizeMojoModulePass` is intentionally not documented here in detail. It is
@@ -26,12 +26,12 @@ flowchart TD
     G --> K[RecordLayoutFacts]
     G --> L[RecordAnalysisFacts]
 
-    G --> M[LowerUnitPass]
-    M --> N[LowerTypePass]
-    M --> O[LowerConstExprPass]
-    M --> P[UnitDeclLowerer]
-    P --> Q[struct_lowering]
-    P --> R[LowerUnionPass]
+    G --> M[MapUnitPass]
+    M --> N[MapTypePass]
+    M --> O[MapConstExprPass]
+    M --> P[UnitDeclMapper]
+    P --> Q[struct_mapping]
+    P --> R[MapUnionPass]
 
     M --> S[policy-light MojoModule]
     S --> T[PolicyInferencePass]
@@ -42,7 +42,7 @@ flowchart TD
 The compatibility entry points are:
 
 - `run_ir_passes(unit)`: validates and normalizes CIR.
-- `lower_unit(unit)`: lowers normalized CIR, building fallback context if needed.
+- `map_unit(unit)`: maps normalized CIR, building fallback context if needed.
 - `AnalysisOrchestrator.analyze_with_artifacts(unit)`: returns the stable public
   `AnalysisResult`.
 - `AnalysisOrchestrator.analyze_pipeline(unit)`: returns `AnalysisArtifacts`
@@ -81,7 +81,7 @@ Purpose:
 - synthesize incomplete `Struct` declarations for signature-only `StructRef`
   uses that have no top-level record declaration
 
-This keeps signatures such as `int f(struct opaque *p);` lowerable as opaque
+This keeps signatures such as `int f(struct opaque *p);` mappable as opaque
 Mojo record stubs.
 
 ### `CIRCanonicalizer`
@@ -106,7 +106,7 @@ Purpose:
 - require `EnumRef` declarations to exist in the normalized `Unit`
 - require concrete non-union `StructRef` declarations to exist after signature
   stub materialization
-- allow external typedef references, because `LowerUnitPass` can synthesize
+- allow external typedef references, because `MapUnitPass` can synthesize
   external typedef aliases
 - allow `OpaqueRecordRef` to remain opaque/external
 
@@ -116,7 +116,7 @@ This is the dangling-reference gate for normalized CIR.
 
 `build_analysis_context(unit)` computes reusable whole-unit facts after CIR is
 normalized and reference-validated. This stage should absorb analysis work that
-would otherwise be repeated inside lowerers.
+would otherwise be repeated inside mappers.
 
 ### Declaration Indexes
 
@@ -168,7 +168,7 @@ Purpose:
   aliases, ordinary typedefs, and external typedefs
 
 This keeps alias meaning available as shared facts instead of rediscovering it
-inside lowerers.
+inside mappers.
 
 ### `RecordLayoutFacts`
 
@@ -177,7 +177,7 @@ Purpose:
 - analyze physical record layout from CIR offsets/sizes
 - compute plain field facts, bitfield storage runs, padding spans, natural typed
   alignment, and layout problems
-- preserve incomplete-record facts without forcing a lowering decision
+- preserve incomplete-record facts without forcing a mapping decision
 
 `analyze_record_layout()` owns pure C-layout checks. It does not decide how a
 Mojo `StructDecl` should be emitted.
@@ -190,111 +190,111 @@ Purpose:
 - classify record storage as incomplete, union, typed, or opaque storage
 - validate direct and embedded flexible-tail patterns
 - analyze recursive by-value record shapes
-- carry flexible-tail metadata for struct lowering
+- carry flexible-tail metadata for struct mapping
 - carry fallback reasons for opaque-storage diagnostics
 
-This is the central record analysis pass. `struct_lowering` consumes these facts
+This is the central record analysis pass. `struct_mapping` consumes these facts
 and performs MojoIR member construction; it should not own recursive record
 shape policy. Its internal helpers are split by responsibility: record
 prechecks, plain-field checks, embedded-record/flexible-tail checks, and
 bitfield checks.
 
-## Stage 3: CIR To MojoIR Lowering
+## Stage 3: CIR To MojoIR Mapping
 
-Lowering consumes normalized CIR plus `AnalysisContext` and produces a
+Mapping consumes normalized CIR plus `AnalysisContext` and produces a
 policy-light `MojoModule`. These passes are Mojo-facing, but still live in
 analysis because they convert analyzed CIR into MojoIR.
 
-### `LowerUnitPass`
+### `MapUnitPass`
 
 Purpose:
 
-- create shared lowerers for one unit
+- create shared mappers for one unit
 - synthesize aliases for external typedef references from `AliasClassification`
-- lower top-level declarations through `UnitDeclLowerer`
+- map top-level declarations through `UnitDeclMapper`
 - build module metadata and linking mode
 
-`lower_unit(unit)` remains a compatibility helper. If no `AnalysisContext` is
+`map_unit(unit)` remains a compatibility helper. If no `AnalysisContext` is
 provided, it builds one internally.
 
-### `UnitDeclLowerer`
+### `UnitDeclMapper`
 
 Purpose:
 
-- dispatch each top-level CIR declaration to the correct lowerer
-- lower typedefs, enums, functions, globals, constants, macros, structs, and
+- dispatch each top-level CIR declaration to the correct mapper
+- map typedefs, enums, functions, globals, constants, macros, structs, and
   unions
 - preserve declaration order except for intentionally synthesized aliases
 
 This is orchestration, not whole-unit analysis. New cross-declaration facts
 should generally be added to `AnalysisContext`.
 
-Typedef alias construction is centralized in `alias_lowering`, so local typedefs
+Typedef alias construction is centralized in `alias_mapping`, so local typedefs
 and external typedef aliases share callback, exact-width stdint, and no-op
 self-alias handling.
 
-### `LowerTypePass`
+### `MapTypePass`
 
 Purpose:
 
 - map CIR types to MojoIR type nodes
 - preserve named typedef/record/enum surfaces as `NamedType`
-- lower pointers, arrays, function pointers, atomics, vectors, complex values,
+- map pointers, arrays, function pointers, atomics, vectors, complex values,
   and unsupported sized types
 
-This is a recursive type lowerer. It does not decide declaration reachability or
+This is a recursive type mapper. It does not decide declaration reachability or
 record storage policy.
 
-### `LowerConstExprPass`
+### `MapConstExprPass`
 
 Purpose:
 
-- lower CIR constant-expression nodes to MojoIR constant-expression nodes
-- lower cast and `sizeof` target types through `LowerTypePass`
+- map CIR constant-expression nodes to MojoIR constant-expression nodes
+- map cast and `sizeof` target types through `MapTypePass`
 - reject constant forms that have no direct MojoIR value form, such as null
   pointer literals
 
-Macro emission policy lives in `MacroLowerer`; expression lowering only rewrites
+Macro emission policy lives in `MacroMapper`; expression mapping only rewrites
 supported expression shapes.
 
-### Macro Lowering
+### Macro Mapping
 
 Purpose:
 
-- lower supported object-like macros to MojoIR value aliases
+- map supported object-like macros to MojoIR value aliases
 - block macro forms that would be misleading in Mojo, such as null pointer
   macros and C logical operators
 - preserve unsupported macro spellings as diagnostic comment aliases
 - track emitted constants so self-alias and name-conflict handling is
   deterministic
 
-### Struct Lowering
+### Struct Mapping
 
 Purpose:
 
 - consume `RecordAnalysisFacts` and `RecordLayoutFacts`
 - emit opaque declarations for incomplete records
 - emit byte-storage structs for opaque-storage decisions
-- lower typed plain fields and bitfield groups to MojoIR members
+- map typed plain fields and bitfield groups to MojoIR members
 - attach flexible-tail metadata computed by record analysis
 - compute Mojo alignment decorator policy
 
-Struct lowering should not recompute recursive record shape decisions.
-Typed-member lowering is intentionally split between plain fields, bitfield
+Struct mapping should not recompute recursive record shape decisions.
+Typed-member mapping is intentionally split between plain fields, bitfield
 storage, and bitfield logical fields so fallback diagnostics stay local to the
 operation that failed.
 
-### `LowerUnionPass`
+### `MapUnionPass`
 
 Purpose:
 
-- lower complete unions to `UnsafeUnion[...]` when member types are distinct and
+- map complete unions to `UnsafeUnion[...]` when member types are distinct and
   representable
-- fall back to `InlineArray[UInt8, size]` when union lowering would be unsafe or
+- fall back to `InlineArray[UInt8, size]` when union mapping would be unsafe or
   ambiguous
 - emit placeholder aliases for incomplete unions
 
-Union lowering remains separate because unions lower to alias-style layout
+Union mapping remains separate because unions map to alias-style layout
 types, not `StructDecl`.
 Its implementation is structured as union-arm collection followed by either
 `UnsafeUnion[...]` alias construction or byte-storage fallback construction.
@@ -311,7 +311,7 @@ Purpose:
 - handle recursion, opaque storage, arrays, atomics, pointers, aliases, and
   nested records
 
-This pass runs after CIR-to-MojoIR lowering because it reasons over final MojoIR
+This pass runs after CIR-to-MojoIR mapping because it reasons over final MojoIR
 types and declaration relationships.
 
 ## Codegen Boundary

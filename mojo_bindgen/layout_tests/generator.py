@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.facts.record_layout import analyze_record_layout
-from mojo_bindgen.analysis.mojo.lowering_support import (
+from mojo_bindgen.analysis.mojo.mapping_support import (
     field_mojo_name,
     record_by_decl_id,
     record_name,

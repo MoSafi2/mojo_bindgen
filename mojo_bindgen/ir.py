@@ -102,10 +102,10 @@ UnsupportedTypeCategory = Literal[
 
 
 ArrayKind = Literal["fixed", "incomplete", "flexible", "variable"]
-# Array-shape categories that matter for ABI-faithful lowering.
+# Array-shape categories that matter for ABI-faithful mapping.
 
 FamPattern = Literal["c99_empty", "gnu_zero"]
-# Flexible-tail field patterns recognized by parser record lowering.
+# Flexible-tail field patterns recognized by parser record mapping.
 
 
 MacroDeclKind = Literal[
@@ -328,7 +328,7 @@ class UnsupportedType(SerDeMixin):
     """A type that the parser recognized but cannot model faithfully yet.
 
     Unlike :class:`OpaqueRecordRef`, this means the source type is known but
-    unsupported for precise lowering. The category and reason fields make the
+    unsupported for precise mapping. The category and reason fields make the
     fallback explicit for later diagnostics and renderer policy.
     """
 
@@ -377,7 +377,7 @@ class StructRef(SerDeMixin):
     layouts. ``name`` and ``c_name`` are usually the same C tag; anonymous
     record bodies use a stable parent-scoped synthetic name from the parser.
 
-    Unions carry ``is_union=True`` and ``size_bytes`` so the emitter can lower
+    Unions carry ``is_union=True`` and ``size_bytes`` so the emitter can map
     by-value unions to ``InlineArray[UInt8, size]`` without a separate lookup.
     """
 
@@ -418,7 +418,7 @@ class TypeRef(SerDeMixin):
     A named reference to a C typedef where the typedef name appears in a type
     position (parameter, field, pointer target, etc.).
 
-    ``canonical`` is the fully resolved :class:`Type` for ABI lowering; the
+    ``canonical`` is the fully resolved :class:`Type` for ABI mapping; the
     typedef ``name`` preserves the C API spelling for readable emission.
     """
 
@@ -612,11 +612,11 @@ class Enumerant(SerDeMixin):
 @dataclass
 class Enum(SerDeMixin):
     """
-    C enum lowered to a scalar type alias plus typed enumerator constants.
+    C enum mapped to a scalar type alias plus typed enumerator constants.
 
     ``name`` is the primary emitted alias chosen by CIR canonicalization.
     ``alias_names`` are additional collision-free names that should alias the
-    primary name at Mojo lowering time.
+    primary name at Mojo mapping time.
     ``underlying`` is always IntType (C enum base type is integer).
     """
 
@@ -645,7 +645,7 @@ class Typedef(SerDeMixin):
     ``aliased`` is the direct underlying type (one typedef step), often a
     :class:`TypeRef` when the underlying names another typedef.
 
-    ``canonical`` is the fully unrolled type for ABI layout and for lowering
+    ``canonical`` is the fully unrolled type for ABI layout and for mapping
     inside compound positions (struct fields, function pointer signatures).
     """
 
@@ -733,7 +733,7 @@ class Const(SerDeMixin):
 class MacroDecl(SerDeMixin):
     """Source-backed preprocessor macro preserved from the parsed translation unit.
 
-    Macros are preserved even when their replacement list cannot be lowered to
+    Macros are preserved even when their replacement list cannot be mapped to
     the supported :class:`ConstExpr` subset. ``tokens`` keeps the original
     replacement spelling, while ``expr`` and ``type`` are populated only for
     macros the parser can structurally understand today.
@@ -1021,15 +1021,15 @@ class LinkMode(StrEnum):
     OWNED_DL_HANDLE = "owned_dl_handle"
 
 
-class LoweringSeverity(StrEnum):
+class MappingSeverity(StrEnum):
     NOTE = "note"
     WARNING = "warning"
     ERROR = "error"
 
 
 @dataclass(frozen=True)
-class LoweringNote(SerDeMixin):
-    severity: LoweringSeverity
+class MappingNote(SerDeMixin):
+    severity: MappingSeverity
     message: str
     category: str
 
@@ -1268,7 +1268,7 @@ class StructDecl(SerDeMixin):
     comptime_members: list[ComptimeMember] = field(default_factory=list)
     initializers: list[Initializer] = field(default_factory=list)
     flexible_tail: FlexibleTail | None = None
-    diagnostics: list[LoweringNote] = field(default_factory=list)
+    diagnostics: list[MappingNote] = field(default_factory=list)
     doc: DocComment | None = None
 
 
@@ -1286,7 +1286,7 @@ class AliasDecl(SerDeMixin):
     type_value: Type | None = None
     const_type: Type | None = None
     const_value: ConstExpr | None = None
-    diagnostics: list[LoweringNote] = field(default_factory=list)
+    diagnostics: list[MappingNote] = field(default_factory=list)
     doc: DocComment | None = None
 
     def has_payload(self) -> bool:
@@ -1322,7 +1322,7 @@ class FunctionDecl(SerDeMixin):
     call_target: CallTarget = field(
         default_factory=lambda: CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="")
     )
-    diagnostics: list[LoweringNote] = field(default_factory=list)
+    diagnostics: list[MappingNote] = field(default_factory=list)
     doc: DocComment | None = None
 
 
@@ -1340,7 +1340,7 @@ class GlobalDecl(SerDeMixin):
     value_type: Type
     is_const: bool = False
     kind: GlobalKind = GlobalKind.WRAPPER
-    diagnostics: list[LoweringNote] = field(default_factory=list)
+    diagnostics: list[MappingNote] = field(default_factory=list)
     doc: DocComment | None = None
 
 
@@ -1504,8 +1504,8 @@ __all__ = [
     "IntLiteral",
     "IntType",
     "LinkMode",
-    "LoweringNote",
-    "LoweringSeverity",
+    "MappingNote",
+    "MappingSeverity",
     "MacroDecl",
     "MacroDeclKind",
     "ModuleDependencies",

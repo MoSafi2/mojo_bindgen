@@ -31,7 +31,7 @@ from mojo_bindgen.ir import (
     Initializer,
     IntLiteral,
     LinkMode,
-    LoweringNote,
+    MappingNote,
     ModuleImport,
     MojoBuiltin,
     MojoDecl,
@@ -797,7 +797,7 @@ class MojoIRPrinter:
         raise MojoIRPrintError(f"unsupported ConstExpr node: {type(expr).__name__!r}")
 
     @staticmethod
-    def _diagnostic_lines(notes: Iterable[LoweringNote]) -> list[str]:
+    def _diagnostic_lines(notes: Iterable[MappingNote]) -> list[str]:
         return [
             f"# {note.severity.value.upper()}[{note.category}]: {note.message}" for note in notes
         ]

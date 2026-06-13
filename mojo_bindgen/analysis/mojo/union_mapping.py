@@ -1,18 +1,18 @@
-"""Lower CIR unions into MojoIR union layout aliases."""
+"""Map CIR unions into MojoIR union layout aliases."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 
-from mojo_bindgen.analysis.mojo.lowering_support import (
+from mojo_bindgen.analysis.mojo.mapping_support import (
     field_display_name,
     record_name,
     stub_note,
-    try_lower_type,
+    try_map_type,
     union_note,
 )
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
@@ -28,8 +28,8 @@ from mojo_bindgen.ir import (
 )
 
 
-class UnionLoweringError(ValueError):
-    """Raised when a CIR union declaration cannot be lowered to MojoIR."""
+class UnionMappingError(ValueError):
+    """Raised when a CIR union declaration cannot be mapped to MojoIR."""
 
 
 @dataclass(frozen=True)
@@ -40,14 +40,14 @@ class _UnionArmPlan:
 
 
 @dataclass
-class LowerUnionPass:
-    """Lower top-level CIR union declarations to MojoIR alias declarations."""
+class MapUnionPass:
+    """Map top-level CIR union declarations to MojoIR alias declarations."""
 
-    type_lowerer: LowerTypePass
+    type_mapper: MapTypePass
 
     def run(self, decl: Struct) -> AliasDecl:
         if not decl.is_union:
-            raise UnionLoweringError(
+            raise UnionMappingError(
                 f"expected union Struct declaration, got non-union {decl.decl_id!r}"
             )
 
@@ -68,35 +68,35 @@ class LowerUnionPass:
 
         for index, field in enumerate(decl.fields):
             field_name = field_display_name(field, index)
-            lowered, reason = try_lower_type(
-                self.type_lowerer,
+            mapped, reason = try_map_type(
+                self.type_mapper,
                 field.type,
                 subject=f"union member `{field_name}`",
                 failure_suffix="using byte-storage fallback",
             )
-            if reason is not None or lowered is None:
+            if reason is not None or mapped is None:
                 eligible = False
                 if reason is not None:
                     diagnostics.append(union_note(reason))
                 continue
 
-            if isinstance(lowered, NamedType) and lowered.name == alias_name:
+            if isinstance(mapped, NamedType) and mapped.name == alias_name:
                 eligible = False
                 diagnostics.append(
                     union_note(
-                        f"union member `{field_name}` lowered to self-referential type `{alias_name}`; using byte-storage fallback"
+                        f"union member `{field_name}` mapped to self-referential type `{alias_name}`; using byte-storage fallback"
                     )
                 )
                 continue
 
-            key = self._type_key(lowered)
+            key = self._type_key(mapped)
             prior_name = seen_keys.get(key)
             if prior_name is not None:
                 diagnostics.append(_duplicate_member_note(field_name, prior_name))
                 continue
 
             seen_keys[key] = field_name
-            arms.append(lowered)
+            arms.append(mapped)
 
         return _UnionArmPlan(arms=tuple(arms), diagnostics=tuple(diagnostics), eligible=eligible)
 
@@ -109,7 +109,7 @@ def _incomplete_union_alias(decl: Struct) -> AliasDecl:
     return AliasDecl(
         name=record_name(decl),
         kind=AliasKind.UNION_LAYOUT,
-        diagnostics=[stub_note("incomplete union placeholder emitted; layout not lowered")],
+        diagnostics=[stub_note("incomplete union placeholder emitted; layout not mapped")],
         doc=decl.doc,
     )
 
@@ -139,7 +139,7 @@ def _byte_storage_union_alias(decl: Struct, *, alias_name: str, plan: _UnionArmP
         diagnostics=[
             *plan.diagnostics,
             union_note(
-                f"union `{decl.c_name}` lowered as InlineArray[UInt8, {decl.size_bytes}] to preserve layout"
+                f"union `{decl.c_name}` mapped as InlineArray[UInt8, {decl.size_bytes}] to preserve layout"
             ),
         ],
         doc=decl.doc,
@@ -158,18 +158,18 @@ def _size_diagnostics(decl: Struct) -> list:
 
 def _duplicate_member_note(field_name: str, prior_name: str):
     return union_note(
-        f"union member `{field_name}` duplicates lowered type of earlier member `{prior_name}`;"
+        f"union member `{field_name}` duplicates mapped type of earlier member `{prior_name}`;"
     )
 
 
-def lower_union(decl: Struct, *, type_lowerer: LowerTypePass | None = None) -> AliasDecl:
-    """Lower one top-level union declaration to a MojoIR alias."""
+def map_union(decl: Struct, *, type_mapper: MapTypePass | None = None) -> AliasDecl:
+    """Map one top-level union declaration to a MojoIR alias."""
 
-    return LowerUnionPass(type_lowerer=type_lowerer or LowerTypePass()).run(decl)
+    return MapUnionPass(type_mapper=type_mapper or MapTypePass()).run(decl)
 
 
 __all__ = [
-    "LowerUnionPass",
-    "UnionLoweringError",
-    "lower_union",
+    "MapUnionPass",
+    "UnionMappingError",
+    "map_union",
 ]

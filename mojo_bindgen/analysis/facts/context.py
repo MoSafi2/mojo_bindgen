@@ -17,7 +17,7 @@ from mojo_bindgen.ir import Const, Enum, Function, GlobalVar, MacroDecl, Struct,
 
 @dataclass(frozen=True)
 class AnalysisContext:
-    """Reusable facts computed after CIR normalization and before MojoIR lowering."""
+    """Reusable facts computed after CIR normalization and before MojoIR mapping."""
 
     unit: Unit
     records_by_decl_id: dict[str, Struct]

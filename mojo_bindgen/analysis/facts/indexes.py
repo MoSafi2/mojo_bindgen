@@ -21,7 +21,7 @@ class DeclIndexes:
 
 
 def build_decl_indexes(unit: Unit) -> DeclIndexes:
-    """Build declaration lookup maps used by analysis and lowering."""
+    """Build declaration lookup maps used by analysis and mapping."""
 
     records_by_decl_id: dict[str, Struct] = {}
     typedefs_by_decl_id: dict[str, Typedef] = {}

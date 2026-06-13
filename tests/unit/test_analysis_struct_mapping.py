@@ -1,10 +1,10 @@
-"""Unit tests for CIR struct -> MojoIR struct lowering."""
+"""Unit tests for CIR struct -> MojoIR struct mapping."""
 
 from __future__ import annotations
 
 from mojo_bindgen.analysis.facts.record_layout import PlainFieldFact, RecordLayoutFacts
-from mojo_bindgen.analysis.mojo.struct_lowering import StructLoweringContext, lower_struct
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.struct_mapping import StructMappingContext, map_struct
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     Array,
     AtomicType,
@@ -77,16 +77,16 @@ def _field(
     )
 
 
-def _context_for(*decls: Struct) -> StructLoweringContext:
+def _context_for(*decls: Struct) -> StructMappingContext:
     record_map = {decl.decl_id: decl for decl in decls}
-    return StructLoweringContext(
+    return StructMappingContext(
         record_map=record_map,
         target_abi=_abi(),
-        type_lowerer=LowerTypePass(),
+        type_mapper=MapTypePass(),
     )
 
 
-def test_lower_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
+def test_map_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
     decl = Struct(
         decl_id="struct:Widget",
         name="Widget",
@@ -98,13 +98,13 @@ def test_lower_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
     )
 
     def fail_if_recomputed(*args, **kwargs):
-        raise AssertionError("record layout should come from StructLoweringContext")
+        raise AssertionError("record layout should come from StructMappingContext")
 
     monkeypatch.setattr(
-        "mojo_bindgen.analysis.mojo.struct_lowering.analyze_record_layout",
+        "mojo_bindgen.analysis.mojo.struct_mapping.analyze_record_layout",
         fail_if_recomputed,
     )
-    context = StructLoweringContext(
+    context = StructMappingContext(
         record_map={decl.decl_id: decl},
         record_layouts={
             decl.decl_id: RecordLayoutFacts(
@@ -116,17 +116,17 @@ def test_lower_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
             )
         },
         target_abi=_abi(),
-        type_lowerer=LowerTypePass(),
+        type_mapper=MapTypePass(),
     )
 
-    lowered = lower_struct(decl, context=context)
+    mapped = map_struct(decl, context=context)
 
-    assert lowered.members == [
+    assert mapped.members == [
         StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0)
     ]
 
 
-def test_lower_struct_keeps_incomplete_records_opaque_with_explicit_align_none() -> None:
+def test_map_struct_keeps_incomplete_records_opaque_with_explicit_align_none() -> None:
     decl = Struct(
         decl_id="struct:Opaque",
         name="Opaque",
@@ -137,20 +137,20 @@ def test_lower_struct_keeps_incomplete_records_opaque_with_explicit_align_none()
         is_complete=False,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.name == "Opaque"
-    assert lowered.kind == StructKind.OPAQUE
-    assert lowered.align is None
-    assert lowered.align_decorator is None
-    assert lowered.fieldwise_init is False
-    assert lowered.traits == []
-    assert lowered.members == []
-    assert lowered.initializers == []
-    assert lowered.diagnostics == []
+    assert mapped.name == "Opaque"
+    assert mapped.kind == StructKind.OPAQUE
+    assert mapped.align is None
+    assert mapped.align_decorator is None
+    assert mapped.fieldwise_init is False
+    assert mapped.traits == []
+    assert mapped.members == []
+    assert mapped.initializers == []
+    assert mapped.diagnostics == []
 
 
-def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
+def test_map_struct_maps_fieldwise_exact_structs_without_policies() -> None:
     decl = Struct(
         decl_id="struct:Widget",
         name="Widget",
@@ -164,20 +164,20 @@ def test_lower_struct_lowers_fieldwise_exact_structs_without_policies() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.kind == StructKind.PLAIN
-    assert lowered.align == 4
-    assert lowered.align_decorator is None
-    assert lowered.fieldwise_init is False
-    assert lowered.traits == []
-    assert lowered.members == [
+    assert mapped.kind == StructKind.PLAIN
+    assert mapped.align == 4
+    assert mapped.align_decorator is None
+    assert mapped.fieldwise_init is False
+    assert mapped.traits == []
+    assert mapped.members == [
         StoredMember(index=0, name="size", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
         StoredMember(index=1, name="flags", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=4),
     ]
 
 
-def test_lower_struct_synthesizes_padding_members_for_exact_layout_gaps() -> None:
+def test_map_struct_synthesizes_padding_members_for_exact_layout_gaps() -> None:
     decl = Struct(
         decl_id="struct:Padded",
         name="Padded",
@@ -196,17 +196,17 @@ def test_lower_struct_synthesizes_padding_members_for_exact_layout_gaps() -> Non
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.members == [
+    assert mapped.fieldwise_init is False
+    assert mapped.members == [
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         PaddingMember(name="__pad0", size_bytes=4, byte_offset=4),
         StoredMember(index=1, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=8),
     ]
 
 
-def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
+def test_map_struct_keeps_union_members_typed_and_preserves_padding() -> None:
     union_decl = Struct(
         decl_id="union:Payload",
         name="Payload",
@@ -248,17 +248,17 @@ def test_lower_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl, union_decl))
+    mapped = map_struct(decl, context=_context_for(decl, union_decl))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.members == [
+    assert mapped.fieldwise_init is False
+    assert mapped.members == [
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
         StoredMember(index=2, name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
     ]
 
 
-def test_lower_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None:
+def test_map_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None:
     inner = Struct(
         decl_id="struct:Inner",
         name="Inner",
@@ -293,12 +293,12 @@ def test_lower_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> No
         is_complete=True,
     )
 
-    lowered = lower_struct(outer, context=_context_for(outer, inner))
+    mapped = map_struct(outer, context=_context_for(outer, inner))
 
-    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=24)]
+    assert mapped.members == [OpaqueStorageMember(name="storage", size_bytes=24)]
 
 
-def test_lower_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
+def test_map_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
     inner = Struct(
         decl_id="struct:Inner",
         name="Inner",
@@ -338,16 +338,16 @@ def test_lower_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(outer, context=_context_for(outer, inner))
+    mapped = map_struct(outer, context=_context_for(outer, inner))
 
-    assert lowered.kind == StructKind.PLAIN
-    assert [member.name for member in lowered.members if isinstance(member, StoredMember)] == [
+    assert mapped.kind == StructKind.PLAIN
+    assert [member.name for member in mapped.members if isinstance(member, StoredMember)] == [
         "items",
         "tail",
     ]
 
 
-def test_lower_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
+def test_map_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
     inner = Struct(
         decl_id="struct:Inner",
         name="Inner",
@@ -387,16 +387,16 @@ def test_lower_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(outer, context=_context_for(outer, inner))
+    mapped = map_struct(outer, context=_context_for(outer, inner))
 
-    assert lowered.kind == StructKind.PLAIN
-    assert [member.name for member in lowered.members if isinstance(member, StoredMember)] == [
+    assert mapped.kind == StructKind.PLAIN
+    assert [member.name for member in mapped.members if isinstance(member, StoredMember)] == [
         "ptr",
         "tail",
     ]
 
 
-def test_lower_struct_omits_trailing_padding_explained_by_struct_alignment() -> None:
+def test_map_struct_omits_trailing_padding_explained_by_struct_alignment() -> None:
     decl = Struct(
         decl_id="struct:Aligned",
         name="Aligned",
@@ -407,14 +407,14 @@ def test_lower_struct_omits_trailing_padding_explained_by_struct_alignment() -> 
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.members == [
+    assert mapped.members == [
         StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
     ]
 
 
-def test_lower_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() -> None:
+def test_map_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() -> None:
     decl = Struct(
         decl_id="struct:Packed",
         name="Packed",
@@ -434,18 +434,18 @@ def test_lower_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() 
         is_packed=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert len(lowered.members) == 1
-    assert lowered.members[0].name == "storage"
-    assert lowered.members[0].size_bytes == 5
-    assert lowered.diagnostics
-    assert all(note.category == "struct_lowering" for note in lowered.diagnostics)
-    assert "opaque storage emitted" in lowered.diagnostics[0].message
+    assert mapped.fieldwise_init is False
+    assert len(mapped.members) == 1
+    assert mapped.members[0].name == "storage"
+    assert mapped.members[0].size_bytes == 5
+    assert mapped.diagnostics
+    assert all(note.category == "struct_mapping" for note in mapped.diagnostics)
+    assert "opaque storage emitted" in mapped.diagnostics[0].message
 
 
-def test_lower_struct_keeps_atomic_field_types_and_drops_traits() -> None:
+def test_map_struct_keeps_atomic_field_types_and_drops_traits() -> None:
     decl = Struct(
         decl_id="struct:AtomicHolder",
         name="AtomicHolder",
@@ -465,11 +465,11 @@ def test_lower_struct_keeps_atomic_field_types_and_drops_traits() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.traits == []
-    assert lowered.fieldwise_init is False
-    assert lowered.members[0] == StoredMember(
+    assert mapped.traits == []
+    assert mapped.fieldwise_init is False
+    assert mapped.members[0] == StoredMember(
         index=0,
         name="counter",
         type=ParametricType(base=ParametricBase.ATOMIC, args=[DTypeArg("DType.int32")]),
@@ -477,7 +477,7 @@ def test_lower_struct_keeps_atomic_field_types_and_drops_traits() -> None:
     )
 
 
-def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers() -> None:
+def test_map_struct_maps_pure_bitfield_structs_with_synthesized_initializers() -> None:
     decl = Struct(
         decl_id="struct:Bits",
         name="Bits",
@@ -526,10 +526,10 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.members == [
+    assert mapped.fieldwise_init is False
+    assert mapped.members == [
         BitfieldGroupMember(
             storage_name="__bf0",
             storage_type=BuiltinType(MojoBuiltin.C_UINT),
@@ -574,7 +574,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
             ],
         ),
     ]
-    assert lowered.initializers == [
+    assert mapped.initializers == [
         Initializer(params=[]),
         Initializer(
             params=[
@@ -586,7 +586,7 @@ def test_lower_struct_lowers_pure_bitfield_structs_with_synthesized_initializers
     ]
 
 
-def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> None:
+def test_map_struct_maps_mixed_bitfield_structs_in_byte_offset_order() -> None:
     decl = Struct(
         decl_id="struct:MixedBits",
         name="MixedBits",
@@ -617,18 +617,18 @@ def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> No
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.initializers == []
-    assert lowered.members[0] == StoredMember(
+    assert mapped.fieldwise_init is False
+    assert mapped.initializers == []
+    assert mapped.members[0] == StoredMember(
         index=0,
         name="tag",
         type=BuiltinType(MojoBuiltin.C_UINT),
         byte_offset=0,
     )
-    assert isinstance(lowered.members[1], BitfieldGroupMember)
-    group = lowered.members[1]
+    assert isinstance(mapped.members[1], BitfieldGroupMember)
+    group = mapped.members[1]
     assert group.storage_name == "__bf0"
     assert group.byte_offset == 4
     assert [field.name for field in group.fields] == ["signed_bits", "enabled"]
@@ -636,7 +636,7 @@ def test_lower_struct_lowers_mixed_bitfield_structs_in_byte_offset_order() -> No
     assert group.fields[1].bool_semantics is True
 
 
-def test_lower_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
+def test_map_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
     decl = Struct(
         decl_id="struct:SplitBits",
         name="SplitBits",
@@ -676,13 +676,13 @@ def test_lower_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert [member.storage_name for member in lowered.members] == ["__bf0", "__bf1"]
-    assert [member.byte_offset for member in lowered.members] == [0, 4]
+    assert [member.storage_name for member in mapped.members] == ["__bf0", "__bf1"]
+    assert [member.byte_offset for member in mapped.members] == [0, 4]
 
 
-def test_lower_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() -> None:
+def test_map_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() -> None:
     decl = Struct(
         decl_id="struct:AnonBits",
         name="AnonBits",
@@ -704,14 +704,14 @@ def test_lower_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() 
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert len(lowered.initializers) == 1
-    assert lowered.initializers[0] == Initializer(params=[])
+    assert mapped.fieldwise_init is False
+    assert len(mapped.initializers) == 1
+    assert mapped.initializers[0] == Initializer(params=[])
 
 
-def test_lower_struct_omits_register_passable_when_field_references_incomplete_struct() -> None:
+def test_map_struct_omits_register_passable_when_field_references_incomplete_struct() -> None:
     child = Struct(
         decl_id="struct:Child",
         name="Child",
@@ -745,13 +745,13 @@ def test_lower_struct_omits_register_passable_when_field_references_incomplete_s
         is_complete=True,
     )
 
-    lowered = lower_struct(holder, context=_context_for(holder, child))
+    mapped = map_struct(holder, context=_context_for(holder, child))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.traits == []
+    assert mapped.fieldwise_init is False
+    assert mapped.traits == []
 
 
-def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> None:
+def test_map_struct_omits_register_passable_for_recursive_struct_cycle() -> None:
     left = Struct(
         decl_id="struct:Left",
         name="Left",
@@ -801,17 +801,17 @@ def test_lower_struct_omits_register_passable_for_recursive_struct_cycle() -> No
         )
     ]
 
-    lowered = lower_struct(left, context=_context_for(left, right))
+    mapped = map_struct(left, context=_context_for(left, right))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.traits == []
+    assert mapped.fieldwise_init is False
+    assert mapped.traits == []
 
 
-def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None:
+def test_map_struct_falls_back_only_after_mojo_type_mapping_failure() -> None:
     decl = Struct(
-        decl_id="struct:LoweringFallback",
-        name="LoweringFallback",
-        c_name="LoweringFallback",
+        decl_id="struct:MappingFallback",
+        name="MappingFallback",
+        c_name="MappingFallback",
         fields=[
             _field(
                 name="mystery",
@@ -831,11 +831,11 @@ def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.diagnostics == []
-    assert lowered.members == [
+    assert mapped.fieldwise_init is False
+    assert mapped.diagnostics == []
+    assert mapped.members == [
         StoredMember(
             index=0,
             name="mystery",
@@ -845,7 +845,7 @@ def test_lower_struct_falls_back_only_after_mojo_type_lowering_failure() -> None
     ]
 
 
-def test_lower_struct_tracks_flexible_tail_metadata() -> None:
+def test_map_struct_tracks_flexible_tail_metadata() -> None:
     decl = Struct(
         decl_id="struct:Packet",
         name="Packet",
@@ -871,14 +871,14 @@ def test_lower_struct_tracks_flexible_tail_metadata() -> None:
         is_complete=True,
     )
 
-    lowered = lower_struct(decl, context=_context_for(decl))
+    mapped = map_struct(decl, context=_context_for(decl))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.flexible_tail is not None
-    assert lowered.flexible_tail.field_name == "payload"
-    assert lowered.flexible_tail.pattern == "c99_empty"
-    assert lowered.flexible_tail.byte_offset == 4
-    assert lowered.members == [
+    assert mapped.fieldwise_init is False
+    assert mapped.flexible_tail is not None
+    assert mapped.flexible_tail.field_name == "payload"
+    assert mapped.flexible_tail.pattern == "c99_empty"
+    assert mapped.flexible_tail.byte_offset == 4
+    assert mapped.members == [
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=0),
         StoredMember(
             index=1,
@@ -889,7 +889,7 @@ def test_lower_struct_tracks_flexible_tail_metadata() -> None:
     ]
 
 
-def test_lower_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
+def test_map_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
     packet = Struct(
         decl_id="struct:Packet",
         name="Packet",
@@ -938,15 +938,15 @@ def test_lower_struct_propagates_terminal_by_value_embedded_fam_struct() -> None
         is_complete=True,
     )
 
-    lowered = lower_struct(wrapper, context=_context_for(packet, wrapper))
+    mapped = map_struct(wrapper, context=_context_for(packet, wrapper))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.diagnostics == []
-    assert lowered.flexible_tail is not None
-    assert lowered.flexible_tail.field_name == "payload"
-    assert lowered.flexible_tail.pattern == "c99_empty"
-    assert lowered.flexible_tail.byte_offset == 4
-    assert lowered.members == [
+    assert mapped.fieldwise_init is False
+    assert mapped.diagnostics == []
+    assert mapped.flexible_tail is not None
+    assert mapped.flexible_tail.field_name == "payload"
+    assert mapped.flexible_tail.pattern == "c99_empty"
+    assert mapped.flexible_tail.byte_offset == 4
+    assert mapped.members == [
         StoredMember(
             index=0,
             name="packet",
@@ -956,7 +956,7 @@ def test_lower_struct_propagates_terminal_by_value_embedded_fam_struct() -> None
     ]
 
 
-def test_lower_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() -> None:
+def test_map_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() -> None:
     packet = Struct(
         decl_id="struct:Packet",
         name="Packet",
@@ -1006,13 +1006,13 @@ def test_lower_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() 
         is_complete=True,
     )
 
-    lowered = lower_struct(wrapper, context=_context_for(packet, wrapper))
+    mapped = map_struct(wrapper, context=_context_for(packet, wrapper))
 
-    assert lowered.fieldwise_init is False
-    assert lowered.flexible_tail is None
-    assert lowered.members == [OpaqueStorageMember(name="storage", size_bytes=8)]
-    assert lowered.diagnostics
+    assert mapped.fieldwise_init is False
+    assert mapped.flexible_tail is None
+    assert mapped.members == [OpaqueStorageMember(name="storage", size_bytes=8)]
+    assert mapped.diagnostics
     assert (
         "embedded flexible tail is not terminal in the enclosing record"
-        in lowered.diagnostics[0].message
+        in mapped.diagnostics[0].message
     )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.facts.type_layout import peel_layout_wrappers
-from mojo_bindgen.analysis.mojo.lowering_support import field_display_name
+from mojo_bindgen.analysis.mojo.mapping_support import field_display_name
 from mojo_bindgen.ir import Field, IntKind, IntType, Struct, Type
 
 

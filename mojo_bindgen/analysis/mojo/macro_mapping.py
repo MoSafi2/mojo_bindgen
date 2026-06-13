@@ -1,14 +1,14 @@
-"""Lower C macro declarations into MojoIR aliases or diagnostic placeholders."""
+"""Map C macro declarations into MojoIR aliases or diagnostic placeholders."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.mojo.const_lowering import ConstExprLoweringError, LowerConstExprPass
-from mojo_bindgen.analysis.mojo.const_value_lowering import typed_const_value
-from mojo_bindgen.analysis.mojo.lowering_support import lowering_note, stub_note
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.const_expr_mapping import ConstExprMappingError, MapConstExprPass
+from mojo_bindgen.analysis.mojo.const_value_mapping import typed_const_value
+from mojo_bindgen.analysis.mojo.mapping_support import mapping_note, stub_note
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
@@ -25,14 +25,14 @@ from mojo_bindgen.ir import (
 
 
 @dataclass
-class MacroLowerer:
-    """Lower macro declarations while tracking already-emitted constant names."""
+class MacroMapper:
+    """Map macro declarations while tracking already-emitted constant names."""
 
-    const_lowerer: LowerConstExprPass
-    type_lowerer: LowerTypePass
+    const_expr_mapper: MapConstExprPass
+    type_mapper: MapTypePass
     emitted_const_names: set[str]
 
-    def lower(self, decl: MacroDecl) -> AliasDecl | None:
+    def map(self, decl: MacroDecl) -> AliasDecl | None:
         if decl.kind == "empty":
             return None
 
@@ -46,13 +46,13 @@ class MacroLowerer:
             )
 
         if decl.expr is not None and decl.type is not None:
-            lowered = self._lower_value_macro(decl, name)
-            if lowered is not None:
-                return lowered
+            mapped = self._map_value_macro(decl, name)
+            if mapped is not None:
+                return mapped
 
         return self._placeholder_alias(decl)
 
-    def _lower_value_macro(self, decl: MacroDecl, name: str) -> AliasDecl | None:
+    def _map_value_macro(self, decl: MacroDecl, name: str) -> AliasDecl | None:
         assert decl.expr is not None
         assert decl.type is not None
 
@@ -61,8 +61,8 @@ class MacroLowerer:
             return self._comment_alias(decl, f"macro {decl.name}: {blocker}")
 
         try:
-            value = self.const_lowerer.run(decl.expr)
-        except ConstExprLoweringError:
+            value = self.const_expr_mapper.run(decl.expr)
+        except ConstExprMappingError:
             if isinstance(decl.expr, NullPtrLiteral):
                 return self._comment_alias(
                     decl,
@@ -77,7 +77,7 @@ class MacroLowerer:
             const_value=typed_const_value(
                 value,
                 decl.type,
-                type_lowerer=self.type_lowerer,
+                type_mapper=self.type_mapper,
             ),
             doc=decl.doc,
         )
@@ -114,7 +114,7 @@ class MacroLowerer:
             diagnostics=(
                 self._comment_notes(decl, f"macro {decl.name}: {decl.diagnostic}")
                 if decl.diagnostic
-                else [stub_note("macro lowering is incomplete; placeholder alias emitted")]
+                else [stub_note("macro mapping is incomplete; placeholder alias emitted")]
             ),
             doc=decl.doc,
         )
@@ -129,8 +129,8 @@ class MacroLowerer:
 
     def _comment_notes(self, decl: MacroDecl, message: str):
         return [
-            lowering_note(message, category="macro_comment"),
-            lowering_note(
+            mapping_note(message, category="macro_comment"),
+            mapping_note(
                 f"define {decl.name} {' '.join(decl.tokens)}",
                 category="macro_comment",
             ),
@@ -138,5 +138,5 @@ class MacroLowerer:
 
 
 __all__ = [
-    "MacroLowerer",
+    "MacroMapper",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from mojo_bindgen.analysis.mojo.type_lowering import exact_width_stdint_alias_type
+from mojo_bindgen.analysis.mojo.type_mapping import exact_width_stdint_alias_type
 from mojo_bindgen.analysis.traversal import iter_unit_typerefs
 from mojo_bindgen.ir import (
     EnumRef,

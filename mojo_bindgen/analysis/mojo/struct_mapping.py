@@ -1,4 +1,4 @@
-"""Lower CIR structs into MojoIR structs using pure layout facts plus Mojo planning."""
+"""Map CIR structs into MojoIR structs using pure layout facts plus Mojo planning."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ from mojo_bindgen.analysis.facts.record_shape import (
     RecordStorageKind,
     analyze_record_shapes,
 )
-from mojo_bindgen.analysis.mojo.lowering_support import (
+from mojo_bindgen.analysis.mojo.mapping_support import (
     field_display_name,
     field_mojo_name,
     record_name,
     struct_note,
-    try_lower_type,
+    try_map_type,
 )
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     AtomicType,
     BitfieldField,
@@ -37,24 +37,24 @@ from mojo_bindgen.ir import (
 )
 
 
-class StructLoweringError(ValueError):
-    """Raised when a CIR struct declaration cannot be lowered to MojoIR."""
+class StructMappingError(ValueError):
+    """Raised when a CIR struct declaration cannot be mapped to MojoIR."""
 
 
 @dataclass
-class StructLoweringContext:
+class StructMappingContext:
     record_map: dict[str, Struct]
     target_abi: TargetABI
-    type_lowerer: LowerTypePass
+    type_mapper: MapTypePass
     record_layouts: dict[str, RecordLayoutFacts] = field(default_factory=dict)
     record_shapes: dict[str, RecordAnalysisFacts] = field(default_factory=dict)
 
 
-def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
-    """Lower one top-level CIR struct declaration to MojoIR."""
+def map_struct(decl: Struct, *, context: StructMappingContext) -> StructDecl:
+    """Map one top-level CIR struct declaration to MojoIR."""
 
     if decl.is_union:
-        raise StructLoweringError(
+        raise StructMappingError(
             f"expected non-union Struct declaration, got union {decl.decl_id!r}"
         )
 
@@ -70,12 +70,10 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
             fallback_reasons=shape.fallback_reasons,
         )
 
-    plain_fields, lowered_bitfield_groups, diagnostic_notes, fallback_reasons = (
-        _lower_typed_members(
-            decl,
-            facts,
-            context=context,
-        )
+    plain_fields, mapped_bitfield_groups, diagnostic_notes, fallback_reasons = _map_typed_members(
+        decl,
+        facts,
+        context=context,
     )
     if fallback_reasons:
         return _opaque_storage_struct_decl(
@@ -93,10 +91,10 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
         align=align,
         align_decorator=align_decorator,
         fieldwise_init=False,
-        members=_build_members(decl, facts, plain_fields, lowered_bitfield_groups),
+        members=_build_members(decl, facts, plain_fields, mapped_bitfield_groups),
         initializers=_build_initializers(
             facts,
-            lowered_bitfield_groups,
+            mapped_bitfield_groups,
             uses_opaque_storage=False,
         ),
         flexible_tail=shape.flexible_tail,
@@ -109,40 +107,40 @@ def lower_struct(decl: Struct, *, context: StructLoweringContext) -> StructDecl:
     )
 
 
-def _lower_typed_members(
+def _map_typed_members(
     decl: Struct,
     facts: RecordLayoutFacts,
     *,
-    context: StructLoweringContext,
+    context: StructMappingContext,
 ) -> tuple[
     list[StoredMember],
     list[BitfieldGroupMember],
     tuple[str, ...],
     tuple[str, ...],
 ]:
-    plain_fields, diagnostic_notes, plain_failures = _lower_plain_fields(
+    plain_fields, diagnostic_notes, plain_failures = _map_plain_fields(
         decl,
         facts,
         context=context,
     )
-    lowered_bitfield_groups, bitfield_failures = _lower_bitfield_groups(
+    mapped_bitfield_groups, bitfield_failures = _map_bitfield_groups(
         facts,
         context=context,
     )
 
     return (
         plain_fields,
-        lowered_bitfield_groups,
+        mapped_bitfield_groups,
         tuple(diagnostic_notes),
         (*plain_failures, *bitfield_failures),
     )
 
 
-def _lower_plain_fields(
+def _map_plain_fields(
     decl: Struct,
     facts: RecordLayoutFacts,
     *,
-    context: StructLoweringContext,
+    context: StructMappingContext,
 ) -> tuple[list[StoredMember], tuple[str, ...], tuple[str, ...]]:
     plain_fields: list[StoredMember] = []
     diagnostic_notes: list[str] = []
@@ -150,18 +148,18 @@ def _lower_plain_fields(
     for field_fact in facts.plain_fields:
         field = decl.fields[field_fact.index]
         display_name = field_display_name(field, field_fact.index)
-        lowered_type, reason = try_lower_type(
-            context.type_lowerer,
+        mapped_type, reason = try_map_type(
+            context.type_mapper,
             field.type,
             subject=f"field `{display_name}`",
             failure_suffix="opaque storage emitted",
         )
-        if reason is not None or lowered_type is None:
+        if reason is not None or mapped_type is None:
             if reason is not None:
                 fallback_reasons.append(reason)
             continue
         if isinstance(field.type, AtomicType) and not (
-            isinstance(lowered_type, ParametricType) and lowered_type.base == ParametricBase.ATOMIC
+            isinstance(mapped_type, ParametricType) and mapped_type.base == ParametricBase.ATOMIC
         ):
             note = (
                 "some atomic types were mapped to their underlying non-atomic Mojo type "
@@ -173,7 +171,7 @@ def _lower_plain_fields(
             StoredMember(
                 index=field_fact.index,
                 name=field_mojo_name(field, field_fact.index),
-                type=lowered_type,
+                type=mapped_type,
                 byte_offset=field_fact.byte_offset,
                 doc=field.doc,
             )
@@ -183,55 +181,55 @@ def _lower_plain_fields(
     return plain_fields, tuple(diagnostic_notes), tuple(fallback_reasons)
 
 
-def _lower_bitfield_groups(
+def _map_bitfield_groups(
     facts: RecordLayoutFacts,
     *,
-    context: StructLoweringContext,
+    context: StructMappingContext,
 ) -> tuple[list[BitfieldGroupMember], tuple[str, ...]]:
-    lowered_bitfield_groups: list[BitfieldGroupMember] = []
+    mapped_bitfield_groups: list[BitfieldGroupMember] = []
     fallback_reasons: list[str] = []
     for run_layout in facts.bitfield_runs:
-        lowered_storage_type, reason = _lower_bitfield_storage(run_layout, context=context)
-        if reason is not None or lowered_storage_type is None:
+        mapped_storage_type, reason = _map_bitfield_storage(run_layout, context=context)
+        if reason is not None or mapped_storage_type is None:
             if reason is not None:
                 fallback_reasons.append(reason)
             continue
 
-        lowered_fields, field_failures = _lower_bitfield_fields(run_layout, context=context)
+        mapped_fields, field_failures = _map_bitfield_fields(run_layout, context=context)
         fallback_reasons.extend(field_failures)
-        lowered_bitfield_groups.append(
+        mapped_bitfield_groups.append(
             BitfieldGroupMember(
                 storage_name=run_layout.name,
-                storage_type=lowered_storage_type,
+                storage_type=mapped_storage_type,
                 byte_offset=run_layout.byte_offset,
                 first_index=run_layout.first_index,
                 storage_width_bits=run_layout.storage_width_bits,
-                fields=lowered_fields,
+                fields=mapped_fields,
             )
         )
-    return lowered_bitfield_groups, tuple(fallback_reasons)
+    return mapped_bitfield_groups, tuple(fallback_reasons)
 
 
-def _lower_bitfield_storage(run_layout, *, context: StructLoweringContext):
-    return try_lower_type(
-        context.type_lowerer,
+def _map_bitfield_storage(run_layout, *, context: StructMappingContext):
+    return try_map_type(
+        context.type_mapper,
         run_layout.unsigned_storage_type,
         subject=f"bitfield storage `{run_layout.name}`",
         failure_suffix="opaque storage emitted",
     )
 
 
-def _lower_bitfield_fields(
+def _map_bitfield_fields(
     run_layout,
     *,
-    context: StructLoweringContext,
+    context: StructMappingContext,
 ) -> tuple[list[BitfieldField], tuple[str, ...]]:
-    lowered_fields: list[BitfieldField] = []
+    mapped_fields: list[BitfieldField] = []
     fallback_reasons: list[str] = []
     for field_layout in run_layout.fields:
         display_name = field_display_name(field_layout.field, field_layout.index)
-        logical_type, reason = try_lower_type(
-            context.type_lowerer,
+        logical_type, reason = try_map_type(
+            context.type_mapper,
             field_layout.logical_type,
             subject=f"bitfield `{display_name}`",
             failure_suffix="opaque storage emitted",
@@ -240,7 +238,7 @@ def _lower_bitfield_fields(
             if reason is not None:
                 fallback_reasons.append(reason)
             continue
-        lowered_fields.append(
+        mapped_fields.append(
             BitfieldField(
                 index=field_layout.index,
                 name=field_mojo_name(field_layout.field, field_layout.index),
@@ -252,13 +250,13 @@ def _lower_bitfield_fields(
                 doc=field_layout.field.doc,
             )
         )
-    return lowered_fields, tuple(fallback_reasons)
+    return mapped_fields, tuple(fallback_reasons)
 
 
 def _record_shape(
     decl: Struct,
     *,
-    context: StructLoweringContext,
+    context: StructMappingContext,
 ) -> RecordAnalysisFacts:
     cached = context.record_shapes.get(decl.decl_id)
     if cached is not None:
@@ -276,7 +274,7 @@ def _record_shape(
     context.record_shapes = analyze_record_shapes(
         context.record_map,
         layouts,
-        type_lowerer=context.type_lowerer,
+        type_mapper=context.type_mapper,
     )
     return context.record_shapes[decl.decl_id]
 
@@ -285,14 +283,14 @@ def _build_members(
     decl: Struct,
     facts: RecordLayoutFacts,
     plain_fields: list[StoredMember],
-    lowered_bitfield_groups: list[BitfieldGroupMember],
+    mapped_bitfield_groups: list[BitfieldGroupMember],
 ) -> list[StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember]:
     members_with_offsets: list[
         tuple[int, int, StoredMember | PaddingMember | OpaqueStorageMember | BitfieldGroupMember]
     ] = [(field.byte_offset, field.index, field) for field in plain_fields]
 
     if not facts.is_pure_bitfield:
-        pad_order_base = len(decl.fields) + len(lowered_bitfield_groups)
+        pad_order_base = len(decl.fields) + len(mapped_bitfield_groups)
         for i, padding in enumerate(facts.padding_spans):
             members_with_offsets.append(
                 (
@@ -306,7 +304,7 @@ def _build_members(
                 )
             )
 
-    for group in lowered_bitfield_groups:
+    for group in mapped_bitfield_groups:
         members_with_offsets.append((group.byte_offset, group.first_index, group))
 
     members_with_offsets.sort(key=lambda item: (item[0], item[1]))
@@ -345,7 +343,7 @@ def _compute_align_policy(
 
 def _build_initializers(
     facts: RecordLayoutFacts,
-    lowered_bitfield_groups: list[BitfieldGroupMember],
+    mapped_bitfield_groups: list[BitfieldGroupMember],
     *,
     uses_opaque_storage: bool,
 ) -> list[Initializer]:
@@ -354,7 +352,7 @@ def _build_initializers(
 
     named_members = [
         member
-        for group in lowered_bitfield_groups
+        for group in mapped_bitfield_groups
         for member in sorted(group.fields, key=lambda item: item.index)
     ]
     initializers = [Initializer(params=[])]
@@ -412,7 +410,7 @@ def _opaque_storage_struct_decl(
 
 
 __all__ = [
-    "StructLoweringContext",
-    "StructLoweringError",
-    "lower_struct",
+    "StructMappingContext",
+    "StructMappingError",
+    "map_struct",
 ]

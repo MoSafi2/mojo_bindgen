@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mojo_bindgen.analysis import AnalysisOrchestrator, lower_unit, run_ir_passes
+from mojo_bindgen.analysis import AnalysisOrchestrator, map_unit, run_ir_passes
 from mojo_bindgen.analysis.cir.validate_ir import IRValidationError, ValidateIRPass
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
@@ -223,7 +223,7 @@ def test_analysis_pipeline_exposes_context_and_policy_light_module() -> None:
     assert artifacts.mojo_module.decls
 
 
-def test_run_ir_passes_and_lower_unit_preserve_typedef_surface_name() -> None:
+def test_run_ir_passes_and_map_unit_preserve_typedef_surface_name() -> None:
     i32 = _i32()
     td = Typedef(decl_id="typedef:my_int", name="my_int", aliased=i32, canonical=i32)
     tr = TypeRef(decl_id=td.decl_id, name=td.name, canonical=i32)
@@ -237,9 +237,9 @@ def test_run_ir_passes_and_lower_unit_preserve_typedef_surface_name() -> None:
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[td, fn])
 
     normalized = run_ir_passes(unit)
-    lowered = lower_unit(normalized, options=MojoEmitOptions())
-    typedef_decl = lowered.decls[0]
-    fn_decl = lowered.decls[1]
+    mapped = map_unit(normalized, options=MojoEmitOptions())
+    typedef_decl = mapped.decls[0]
+    fn_decl = mapped.decls[1]
 
     assert typedef_decl == AliasDecl(
         name="my_int",
@@ -303,18 +303,18 @@ def test_run_ir_passes_prefers_typedef_name_for_named_enum_and_emits_tag_alias()
     assert enum_decl.name == "typedef_name"
     assert enum_decl.alias_names == ["tag_name"]
 
-    lowered = lower_unit(normalized, options=MojoEmitOptions())
-    assert lowered.decls[0] == AliasDecl(
+    mapped = map_unit(normalized, options=MojoEmitOptions())
+    assert mapped.decls[0] == AliasDecl(
         name="typedef_name",
         kind=AliasKind.TYPE_ALIAS,
         type_value=BuiltinType(MojoBuiltin.C_UINT),
     )
-    assert lowered.decls[1] == AliasDecl(
+    assert mapped.decls[1] == AliasDecl(
         name="tag_name",
         kind=AliasKind.TYPE_ALIAS,
         type_value=NamedType("typedef_name"),
     )
-    assert lowered.decls[2] == AliasDecl(
+    assert mapped.decls[2] == AliasDecl(
         name="TAG_A",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("typedef_name"),
@@ -328,8 +328,8 @@ def test_run_ir_passes_prefers_typedef_name_for_named_enum_and_emits_tag_alias()
             ],
         ),
     )
-    assert isinstance(lowered.decls[3], FunctionDecl)
-    assert lowered.decls[3].params[0].type == NamedType("typedef_name")
+    assert isinstance(mapped.decls[3], FunctionDecl)
+    assert mapped.decls[3].params[0].type == NamedType("typedef_name")
 
 
 def test_run_ir_passes_uses_tag_name_for_tag_only_enum() -> None:
@@ -369,13 +369,13 @@ def test_run_ir_passes_uses_tag_name_for_tag_only_enum() -> None:
     assert enum_decl.name == "mode_tag"
     assert enum_decl.alias_names == []
 
-    lowered = lower_unit(normalized, options=MojoEmitOptions())
-    assert lowered.decls[0] == AliasDecl(
+    mapped = map_unit(normalized, options=MojoEmitOptions())
+    assert mapped.decls[0] == AliasDecl(
         name="mode_tag",
         kind=AliasKind.TYPE_ALIAS,
         type_value=BuiltinType(MojoBuiltin.C_UINT),
     )
-    assert lowered.decls[1] == AliasDecl(
+    assert mapped.decls[1] == AliasDecl(
         name="MODE_A",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("mode_tag"),
@@ -389,8 +389,8 @@ def test_run_ir_passes_uses_tag_name_for_tag_only_enum() -> None:
             ],
         ),
     )
-    assert isinstance(lowered.decls[2], FunctionDecl)
-    assert lowered.decls[2].return_type == NamedType("mode_tag")
+    assert isinstance(mapped.decls[2], FunctionDecl)
+    assert mapped.decls[2].return_type == NamedType("mode_tag")
 
 
 def test_run_ir_passes_drops_colliding_tag_alias_for_typedef_enum() -> None:
@@ -429,8 +429,8 @@ def test_run_ir_passes_drops_colliding_tag_alias_for_typedef_enum() -> None:
     assert enum_decl.name == "mode_t"
     assert enum_decl.alias_names == []
 
-    lowered = lower_unit(normalized, options=MojoEmitOptions())
-    assert lowered.decls == [
+    mapped = map_unit(normalized, options=MojoEmitOptions())
+    assert mapped.decls == [
         AliasDecl(
             name="mode_t",
             kind=AliasKind.TYPE_ALIAS,

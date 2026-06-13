@@ -45,23 +45,23 @@ struct ag_field_align(TrivialRegisterPassable):
     var __pad0_1: UInt64
     var value: c_int
 
-# NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
-# NOTE[struct_lowering]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
+# NOTE[struct_mapping]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
+# NOTE[struct_mapping]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
 struct ag_packed(Copyable, Movable):
     var storage: InlineArray[UInt8, 5]
 
-# NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
+# NOTE[struct_mapping]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
 @align(16)
 struct ag_packed_aligned(Copyable, Movable):
     var storage: InlineArray[UInt8, 16]
 
-# NOTE[struct_lowering]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
-# NOTE[struct_lowering]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
+# NOTE[struct_mapping]: member at byte offset 1 is before the natural typed offset 4; opaque storage emitted
+# NOTE[struct_mapping]: C base alignment 1 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
 struct ag_pragma_packed(Copyable, Movable):
     var storage: InlineArray[UInt8, 5]
 
-# NOTE[struct_lowering]: member at byte offset 2 is before the natural typed offset 4; opaque storage emitted
-# NOTE[struct_lowering]: C base alignment 2 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
+# NOTE[struct_mapping]: member at byte offset 2 is before the natural typed offset 4; opaque storage emitted
+# NOTE[struct_mapping]: C base alignment 2 is smaller than the natural typed Mojo alignment 4; opaque storage emitted
 @align(2)
 struct ag_pragma_pack2(Copyable, Movable):
     var storage: InlineArray[UInt8, 6]

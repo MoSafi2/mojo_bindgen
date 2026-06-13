@@ -1,4 +1,4 @@
-"""Lower CIR types into surface-oriented MojoIR type nodes."""
+"""Map CIR types into surface-oriented MojoIR type nodes."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ from mojo_bindgen.ir import (
 )
 
 
-class TypeLoweringError(ValueError):
-    """Raised when a CIR type cannot be lowered to a MojoIR type."""
+class TypeMappingError(ValueError):
+    """Raised when a CIR type cannot be mapped to a MojoIR type."""
 
 
 PrimitiveCIRType = VoidType | IntType | FloatType
@@ -143,8 +143,8 @@ def exact_width_stdint_alias_type(name: str) -> NamedType | None:
 
 
 @dataclass
-class LowerTypePass:
-    """Lower CIR types into surface-oriented MojoIR type nodes."""
+class MapTypePass:
+    """Map CIR types into surface-oriented MojoIR type nodes."""
 
     _cache: dict[int, Type] = field(default_factory=dict, init=False, repr=False)
     _active: set[int] = field(default_factory=set, init=False, repr=False)
@@ -157,11 +157,11 @@ class LowerTypePass:
         if key in self._cache:
             return self._cache[key]
         if key in self._active:
-            raise TypeLoweringError(f"recursive CIR type cycle while lowering {type(t).__name__}")
+            raise TypeMappingError(f"recursive CIR type cycle while mapping {type(t).__name__}")
         self._active.add(key)
         try:
             t_norm = _strip_transparent_wrappers(t)
-            result = self._lower(t_norm)
+            result = self._map(t_norm)
         finally:
             self._active.remove(key)
 
@@ -169,14 +169,14 @@ class LowerTypePass:
         return result
 
     # ------------------------
-    # Core lowering dispatcher
+    # Core mapping dispatcher
     # ------------------------
 
-    def _lower(self, t: Type) -> Type:
+    def _map(self, t: Type) -> Type:
         if isinstance(t, (VoidType, IntType, FloatType)):
-            return self._lower_primitive(t)
+            return self._map_primitive(t)
         if isinstance(t, AtomicType):
-            return self._lower_atomic(t)
+            return self._map_atomic(t)
         if isinstance(t, (TypeRef, EnumRef, StructRef)):
             return self._named(t.name)
         if isinstance(t, OpaqueRecordRef):
@@ -186,23 +186,23 @@ class LowerTypePass:
                 origin=PointerOrigin.EXTERNAL,
             )
         if isinstance(t, Pointer):
-            return self._lower_pointer(t)
+            return self._map_pointer(t)
         if isinstance(t, Array):
-            return self._lower_array(t)
+            return self._map_array(t)
         if isinstance(t, FunctionPtr):
-            return self._lower_function_ptr(t)
+            return self._map_function_ptr(t)
         if isinstance(t, ComplexType):
-            return self._lower_complex(t)
+            return self._map_complex(t)
         if isinstance(t, VectorType):
-            return self._lower_vector(t)
+            return self._map_vector(t)
         if isinstance(t, UnsupportedType):
             return self._unsupported_type(t)
-        raise TypeLoweringError(f"unsupported CIR type node: {type(t).__name__!r}")
+        raise TypeMappingError(f"unsupported CIR type node: {type(t).__name__!r}")
 
     # ------------------------
     # Named types
     # ------------------------
-    def _lower_primitive(self, t: PrimitiveCIRType) -> Type:
+    def _map_primitive(self, t: PrimitiveCIRType) -> Type:
         if isinstance(t, VoidType):
             key = "void"
         elif isinstance(t, IntType):
@@ -219,17 +219,17 @@ class LowerTypePass:
                 return self._opaque_bytes(t.size_bytes)
             key = t.float_kind
         else:
-            raise TypeLoweringError(f"expected CIR primitive type, got {type(t).__name__!r}")
+            raise TypeMappingError(f"expected CIR primitive type, got {type(t).__name__!r}")
 
         try:
             builtin = PRIMITIVE_BUILTINS[key]
         except KeyError as exc:
-            raise TypeLoweringError(
+            raise TypeMappingError(
                 f"no Mojo primitive builtin registered for {type(t).__name__} key {key!r}"
             ) from exc
         return BuiltinType(name=builtin)
 
-    def _lower_atomic(self, t: AtomicType) -> Type:
+    def _map_atomic(self, t: AtomicType) -> Type:
         dtype = self._dtype_arg(t.value_type)
         if dtype is not None:
             return ParametricType(
@@ -242,9 +242,9 @@ class LowerTypePass:
         return NamedType(name=mojo_ident(name.strip()))
 
     # ------------------------
-    # Pointer lowering
+    # Pointer mapping
     # ------------------------
-    def _lower_pointer(self, t: Pointer) -> Pointer:
+    def _map_pointer(self, t: Pointer) -> Pointer:
         pointee, mutability = _unwrap_pointer_pointee(t.pointee)
         if pointee is None or isinstance(pointee, VoidType):
             return Pointer(
@@ -263,7 +263,7 @@ class LowerTypePass:
     # ------------------------
     # Arrays
     # ------------------------
-    def _lower_array(self, t: Array) -> Type:
+    def _map_array(self, t: Array) -> Type:
         if t.array_kind == "fixed" and t.size is not None:
             return Array(element=self.run(t.element), size=t.size, array_kind="fixed")
 
@@ -280,7 +280,7 @@ class LowerTypePass:
     # ------------------------
     # Function pointers
     # ------------------------
-    def _lower_function_ptr(self, t: FunctionPtr) -> FunctionPtr:
+    def _map_function_ptr(self, t: FunctionPtr) -> FunctionPtr:
         param_names = t.param_names or []
         params = [
             Param(
@@ -301,7 +301,7 @@ class LowerTypePass:
     # Vector & complex
     # ------------------------
 
-    def _lower_vector(self, t: VectorType) -> Type:
+    def _map_vector(self, t: VectorType) -> Type:
         if t.count is None:
             return self._opaque_bytes(t.size_bytes)
         dtype = self._dtype_arg(t.element)
@@ -312,7 +312,7 @@ class LowerTypePass:
             )
         return Array(element=self.run(t.element), size=t.count, array_kind="fixed")
 
-    def _lower_complex(self, t: ComplexType) -> Type:
+    def _map_complex(self, t: ComplexType) -> Type:
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
             return ParametricType(
@@ -362,13 +362,13 @@ class LowerTypePass:
 # ------------------------
 
 
-def lower_type(t: Type) -> Type:
-    """Lower a CIR type to MojoIR."""
-    return LowerTypePass().run(t)
+def map_type(t: Type) -> Type:
+    """Map a CIR type to MojoIR."""
+    return MapTypePass().run(t)
 
 
 __all__ = [
-    "LowerTypePass",
-    "TypeLoweringError",
-    "lower_type",
+    "MapTypePass",
+    "TypeMappingError",
+    "map_type",
 ]

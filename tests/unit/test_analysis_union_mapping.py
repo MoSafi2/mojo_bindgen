@@ -1,8 +1,8 @@
-"""Unit tests for CIR union -> MojoIR union layout lowering."""
+"""Unit tests for CIR union -> MojoIR union layout mapping."""
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis.mojo.union_lowering import lower_union
+from mojo_bindgen.analysis.mojo.union_mapping import map_union
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
@@ -34,7 +34,7 @@ def _u32() -> IntType:
     return IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4)
 
 
-def test_lower_union_uses_unsafe_union_for_distinct_supported_member_types() -> None:
+def test_map_union_uses_unsafe_union_for_distinct_supported_member_types() -> None:
     decl = Struct(
         decl_id="union:Payload",
         name="Payload",
@@ -54,9 +54,9 @@ def test_lower_union_uses_unsafe_union_for_distinct_supported_member_types() -> 
         is_complete=True,
     )
 
-    lowered = lower_union(decl)
+    mapped = map_union(decl)
 
-    assert lowered == AliasDecl(
+    assert mapped == AliasDecl(
         name="Payload",
         kind=AliasKind.UNION_LAYOUT,
         type_value=ParametricType(
@@ -69,7 +69,7 @@ def test_lower_union_uses_unsafe_union_for_distinct_supported_member_types() -> 
     )
 
 
-def test_lower_union_falls_back_for_duplicate_member_types() -> None:
+def test_map_union_falls_back_for_duplicate_member_types() -> None:
     decl = Struct(
         decl_id="union:Dup",
         name="Dup",
@@ -85,20 +85,20 @@ def test_lower_union_falls_back_for_duplicate_member_types() -> None:
         is_complete=True,
     )
 
-    lowered = lower_union(decl)
+    mapped = map_union(decl)
 
-    assert lowered.type_value == ParametricType(
+    assert mapped.type_value == ParametricType(
         base=ParametricBase.UNSAFE_UNION,
         args=[
             TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),
             TypeArg(type=BuiltinType(MojoBuiltin.C_SHORT)),
         ],
     )
-    assert lowered.diagnostics[0].category == "union_lowering"
-    assert "duplicates lowered type of earlier member" in lowered.diagnostics[0].message
+    assert mapped.diagnostics[0].category == "union_mapping"
+    assert "duplicates mapped type of earlier member" in mapped.diagnostics[0].message
 
 
-def test_lower_union_falls_back_for_unsupported_member_type() -> None:
+def test_map_union_falls_back_for_unsupported_member_type() -> None:
     decl = Struct(
         decl_id="union:Odd",
         name="Odd",
@@ -123,9 +123,9 @@ def test_lower_union_falls_back_for_unsupported_member_type() -> None:
         is_complete=True,
     )
 
-    lowered = lower_union(decl)
+    mapped = map_union(decl)
 
-    assert lowered.type_value == ParametricType(
+    assert mapped.type_value == ParametricType(
         base=ParametricBase.UNSAFE_UNION,
         args=[
             TypeArg(
@@ -136,10 +136,10 @@ def test_lower_union_falls_back_for_unsupported_member_type() -> None:
             )
         ],
     )
-    assert lowered.diagnostics == []
+    assert mapped.diagnostics == []
 
 
-def test_lower_union_falls_back_for_self_referential_member_type() -> None:
+def test_map_union_falls_back_for_self_referential_member_type() -> None:
     decl = Struct(
         decl_id="union:Node",
         name="Node",
@@ -164,17 +164,17 @@ def test_lower_union_falls_back_for_self_referential_member_type() -> None:
         is_complete=True,
     )
 
-    lowered = lower_union(decl)
+    mapped = map_union(decl)
 
-    assert lowered.type_value == Array(
+    assert mapped.type_value == Array(
         element=BuiltinType(MojoBuiltin.UINT8),
         size=8,
     )
-    assert lowered.diagnostics[0].category == "union_lowering"
-    assert "self-referential type `Node`" in lowered.diagnostics[0].message
+    assert mapped.diagnostics[0].category == "union_mapping"
+    assert "self-referential type `Node`" in mapped.diagnostics[0].message
 
 
-def test_lower_union_keeps_incomplete_unions_as_placeholder_aliases() -> None:
+def test_map_union_keeps_incomplete_unions_as_placeholder_aliases() -> None:
     decl = Struct(
         decl_id="union:Opaque",
         name="Opaque",
@@ -186,14 +186,14 @@ def test_lower_union_keeps_incomplete_unions_as_placeholder_aliases() -> None:
         is_complete=False,
     )
 
-    lowered = lower_union(decl)
+    mapped = map_union(decl)
 
-    assert lowered.name == "Opaque"
-    assert lowered.kind == AliasKind.UNION_LAYOUT
-    assert lowered.type_value is None
-    assert lowered.const_value is None
-    assert len(lowered.diagnostics) == 1
-    assert lowered.diagnostics[0].category == "stub_lowering"
+    assert mapped.name == "Opaque"
+    assert mapped.kind == AliasKind.UNION_LAYOUT
+    assert mapped.type_value is None
+    assert mapped.const_value is None
+    assert len(mapped.diagnostics) == 1
+    assert mapped.diagnostics[0].category == "stub_mapping"
     assert (
-        lowered.diagnostics[0].message == "incomplete union placeholder emitted; layout not lowered"
+        mapped.diagnostics[0].message == "incomplete union placeholder emitted; layout not mapped"
     )

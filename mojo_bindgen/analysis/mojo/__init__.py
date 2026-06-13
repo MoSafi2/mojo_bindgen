@@ -1,1 +1,1 @@
-"""CIR-to-MojoIR lowering and MojoIR policy passes."""
+"""CIR-to-MojoIR mapping and MojoIR policy passes."""

@@ -1,11 +1,11 @@
-"""Lower CIR constant expressions into Mojo-facing constant-expression IR."""
+"""Map CIR constant expressions into Mojo-facing constant-expression IR."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     BinaryExpr,
     CallExpr,
@@ -22,21 +22,21 @@ from mojo_bindgen.ir import (
 )
 
 
-class ConstExprLoweringError(ValueError):
-    """Raised when a CIR constant expression cannot be lowered to MojoIR."""
+class ConstExprMappingError(ValueError):
+    """Raised when a CIR constant expression cannot be mapped to MojoIR."""
 
 
 @dataclass
-class LowerConstExprPass:
-    """Lower CIR constant expressions into Mojo-facing constant expressions."""
+class MapConstExprPass:
+    """Map CIR constant expressions into Mojo-facing constant expressions."""
 
-    type_lowering: LowerTypePass
+    type_mapping: MapTypePass
 
     @staticmethod
     def _parse_float_literal(value: str | float) -> float:
         text = mojo_float_literal_text(str(value))
-        lowered = text.lower()
-        if lowered.startswith(("0x", "+0x", "-0x")):
+        mapped = text.lower()
+        if mapped.startswith(("0x", "+0x", "-0x")):
             return float.fromhex(text)
         return float(text)
 
@@ -57,33 +57,31 @@ class LowerConstExprPass:
             return BinaryExpr(op=expr.op, lhs=self.run(expr.lhs), rhs=self.run(expr.rhs))
         if isinstance(expr, CastExpr):
             return CastExpr(
-                target=self.type_lowering.run(expr.target),
+                target=self.type_mapping.run(expr.target),
                 expr=self.run(expr.expr),
             )
         if isinstance(expr, SizeOfExpr):
-            return SizeOfExpr(target=self.type_lowering.run(expr.target))
+            return SizeOfExpr(target=self.type_mapping.run(expr.target))
         if isinstance(expr, CallExpr):
             return CallExpr(
                 callee=self.run(expr.callee),
                 args=[self.run(arg) for arg in expr.args],
             )
         if isinstance(expr, NullPtrLiteral):
-            raise ConstExprLoweringError(
-                "nullptr constants do not have a valid MojoIR literal form"
-            )
-        raise ConstExprLoweringError(
+            raise ConstExprMappingError("nullptr constants do not have a valid MojoIR literal form")
+        raise ConstExprMappingError(
             f"unsupported CIR constant-expression node: {type(expr).__name__!r}"
         )
 
 
-def lower_const_expr(expr: ConstExpr) -> ConstExpr:
-    """Lower one CIR constant expression to MojoIR."""
+def map_const_expr(expr: ConstExpr) -> ConstExpr:
+    """Map one CIR constant expression to MojoIR."""
 
-    return LowerConstExprPass(type_lowering=LowerTypePass()).run(expr)
+    return MapConstExprPass(type_mapping=MapTypePass()).run(expr)
 
 
 __all__ = [
-    "ConstExprLoweringError",
-    "LowerConstExprPass",
-    "lower_const_expr",
+    "ConstExprMappingError",
+    "MapConstExprPass",
+    "map_const_expr",
 ]

@@ -132,20 +132,20 @@ generating bindings.
 
 Current support includes:
 
-- **Parsing and lowering:** real C parsing through `libclang`, repeatable `--clang-arg`
+- **Parsing and mapping:** real C parsing through `libclang`, repeatable `--clang-arg`
   support, and a structured IR pipeline rather than text-only generation.
 - **Primitive types:** scalar types, typedef chains, pointers with const-aware
   mutability, fixed arrays, incomplete-array decay cases, complex values,
   vector extension types, and representable atomics.
-- **Mojo-native numeric lowering:** vector types lower to `SIMD[...]`, complex
-  values lower to `ComplexSIMD[...]`, and representable atomics lower to
+- **Mojo-native numeric mapping:** vector types map to `SIMD[...]`, complex
+  values map to `ComplexSIMD[...]`, and representable atomics map to
   `Atomic[...]`.
 - **Records:** structs, anonymous members, mixed layouts that combine plain
   fields and bitfields, synthesized padding, and custom alignment emission
   where Mojo can represent the layout faithfully.
 - **Bitfields:** bitfields are emitted through explicit storage fields plus
   synthesized getter and setter methods.
-- **Unions:** eligible unions lower to `UnsafeUnion[...]`; unions that cannot
+- **Unions:** eligible unions map to `UnsafeUnion[...]`; unions that cannot
   be represented safely fall back to opaque `InlineArray[...]` storage with
   diagnostics to preserve layout.
 - **Opaque and difficult layouts:** incomplete records, packed layouts, and
@@ -157,9 +157,9 @@ Current support includes:
 - **Functions:** thin wrappers are generated for non-variadic functions under
   both `external_call` and `owned_dl_handle` link modes.
 - **Globals and constants:** because Mojo does not currently expose native C
-  globals directly, supported globals lower through generated `GlobalVar` /
+  globals directly, supported globals map through generated `GlobalVar` /
   `GlobalConst` helper structs with synthesized `load()` / `store()` methods;
-  constants and supported object-like macros lower to `comptime` declarations.
+  constants and supported object-like macros map to `comptime` declarations.
 - **Macros:** integer, float, string, and char literal macros, foldable macro
   chains, supported casts, and `sizeof(type)` expressions are emitted as Mojo
   code.

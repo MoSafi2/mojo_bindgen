@@ -27,9 +27,9 @@ class ValidateIRPass:
     The pass is intentionally fail-fast and non-mutating. It guarantees stable
     declaration identities for declarations that participate in cross-reference
     analysis, and it verifies nested record/type references carry the identity
-    fields needed by canonicalization, reachability, layout, and lowering. It
+    fields needed by canonicalization, reachability, layout, and mapping. It
     does not prove ABI correctness or Mojo representability; later layout and
-    lowering passes own those decisions.
+    mapping passes own those decisions.
     """
 
     def run(self, unit: Unit) -> Unit:

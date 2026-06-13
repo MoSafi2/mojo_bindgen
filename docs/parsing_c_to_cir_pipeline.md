@@ -96,14 +96,14 @@ This produces a source-faithful but not yet normalized `Unit`.
 
 ### 5. Hand-off boundary
 
-`ClangParser.run()` stops at raw CIR. Any later CIR normalization or lowering
+`ClangParser.run()` stops at raw CIR. Any later CIR normalization or mapping
 belongs to the analysis layer, not the parser. In the current code shape that
 means `AnalysisOrchestrator` owns:
 
 - CIR validation
 - signature-only record stub materialization
 - CIR canonicalization
-- CIR -> MojoIR lowering
+- CIR -> MojoIR mapping
 - late record policy assignment
 - MojoIR normalization
 

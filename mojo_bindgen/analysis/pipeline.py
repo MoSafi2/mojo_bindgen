@@ -11,7 +11,7 @@ from mojo_bindgen.analysis.cir.validate_ir import ValidateIRPass
 from mojo_bindgen.analysis.facts.context import AnalysisContext, build_analysis_context
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.analysis.mojo.record_policies import assign_record_policies
-from mojo_bindgen.analysis.mojo.unit_lowering import lower_unit
+from mojo_bindgen.analysis.mojo.unit_mapping import map_unit
 from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.ir import MojoModule, Unit
 
@@ -45,7 +45,7 @@ class AnalysisOrchestrator:
         return self._options
 
     def normalize_cir(self, unit: Unit) -> Unit:
-        """Run the ordered, pure CIR repair sequence before MojoIR lowering."""
+        """Run the ordered, pure CIR repair sequence before MojoIR mapping."""
         validated = ValidateIRPass().run(unit)
         with_signature_stubs = SignatureRecordStubPass().run(validated).unit
         normalized = CIRCanonicalizer().canonicalize(with_signature_stubs)
@@ -56,18 +56,18 @@ class AnalysisOrchestrator:
         """Compatibility alias for the CIR normalization pass sequence."""
         return self.normalize_cir(unit)
 
-    def lower_normalized(
+    def map_normalized(
         self,
         unit: Unit,
         *,
         context: AnalysisContext | None = None,
     ) -> MojoModule:
-        """Lower already-normalized CIR into policy-free MojoIR."""
-        return lower_unit(unit, options=self._options, context=context)
+        """Map already-normalized CIR into policy-free MojoIR."""
+        return map_unit(unit, options=self._options, context=context)
 
-    def lower(self, unit: Unit) -> MojoModule:
-        """Lower validated CIR into policy-free MojoIR."""
-        return self.lower_normalized(self.normalize_cir(unit))
+    def map(self, unit: Unit) -> MojoModule:
+        """Map validated CIR into policy-free MojoIR."""
+        return self.map_normalized(self.normalize_cir(unit))
 
     def finalize(self, module: MojoModule) -> MojoModule:
         """Apply late record policy decisions and final normalization."""
@@ -93,19 +93,19 @@ class AnalysisOrchestrator:
         )
         normalized_unit = ValidateReferencesPass().run(normalized_unit)
         context = build_analysis_context(normalized_unit)
-        lowered = self.lower_normalized(normalized_unit, context=context)
+        mapped = self.map_normalized(normalized_unit, context=context)
         return AnalysisArtifacts(
             raw_unit=unit,
             validated_unit=validated_unit,
             normalized_unit=normalized_unit,
             context=context,
-            policy_light_module=lowered,
-            mojo_module=self.finalize(lowered),
+            policy_light_module=mapped,
+            mojo_module=self.finalize(mapped),
         )
 
 
 def run_ir_passes(unit: Unit) -> Unit:
-    """Run the analysis-owned CIR pass sequence before MojoIR lowering."""
+    """Run the analysis-owned CIR pass sequence before MojoIR mapping."""
     return AnalysisOrchestrator().run_ir_passes(unit)
 
 

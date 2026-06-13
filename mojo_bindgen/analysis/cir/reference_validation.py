@@ -24,7 +24,7 @@ class ValidateReferencesPass:
     """Validate cross-declaration references that must resolve inside the ``Unit``.
 
     Missing ``TypeRef`` declarations are treated as external typedef uses because
-    ``LowerUnitPass`` can synthesize aliases for those. ``OpaqueRecordRef`` is
+    ``MapUnitPass`` can synthesize aliases for those. ``OpaqueRecordRef`` is
     also allowed to remain external. Concrete non-union ``StructRef`` and all
     ``EnumRef`` nodes must resolve after signature-stub materialization and enum
     canonicalization.
@@ -53,7 +53,7 @@ class ValidateReferencesPass:
             if isinstance(node, TypeRef):
                 if not node.decl_id:
                     raise ReferenceValidationError(f"TypeRef {node.name!r} is missing decl_id")
-                # External typedef refs are supported by synthetic alias lowering.
+                # External typedef refs are supported by synthetic alias mapping.
                 continue
             if isinstance(node, StructRef):
                 if node.decl_id not in struct_ids and not node.is_union:

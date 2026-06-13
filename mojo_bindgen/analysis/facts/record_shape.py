@@ -6,8 +6,8 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts
-from mojo_bindgen.analysis.mojo.lowering_support import field_display_name, try_lower_type
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
+from mojo_bindgen.analysis.mojo.mapping_support import field_display_name, try_map_type
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     Array,
@@ -40,7 +40,7 @@ class ByValueRecordShape:
 
 @dataclass(frozen=True)
 class RecordAnalysisFacts:
-    """Central per-record facts used by struct lowering and later policy passes."""
+    """Central per-record facts used by struct mapping and later policy passes."""
 
     decl_id: str
     is_union: bool
@@ -77,14 +77,14 @@ def analyze_record_shapes(
     records_by_decl_id: dict[str, Struct],
     record_layouts: dict[str, RecordLayoutFacts],
     *,
-    type_lowerer: LowerTypePass | None = None,
+    type_mapper: MapTypePass | None = None,
 ) -> dict[str, RecordAnalysisFacts]:
     """Analyze every CIR record's layout shape and typed-storage eligibility."""
 
     analyzer = RecordShapeAnalyzer(
         records_by_decl_id=records_by_decl_id,
         record_layouts=record_layouts,
-        type_lowerer=type_lowerer or LowerTypePass(),
+        type_mapper=type_mapper or MapTypePass(),
     )
     return {
         decl_id: analyzer.analyze_record(record) for decl_id, record in records_by_decl_id.items()
@@ -97,7 +97,7 @@ def analyze_record_shape(
     *,
     records_by_decl_id: dict[str, Struct] | None = None,
     record_layouts: dict[str, RecordLayoutFacts] | None = None,
-    type_lowerer: LowerTypePass | None = None,
+    type_mapper: MapTypePass | None = None,
 ) -> RecordAnalysisFacts:
     """Analyze one CIR record.
 
@@ -110,7 +110,7 @@ def analyze_record_shape(
     return RecordShapeAnalyzer(
         records_by_decl_id=records,
         record_layouts=layouts,
-        type_lowerer=type_lowerer or LowerTypePass(),
+        type_mapper=type_mapper or MapTypePass(),
     ).analyze_record(record)
 
 
@@ -120,7 +120,7 @@ class RecordShapeAnalyzer:
 
     records_by_decl_id: dict[str, Struct]
     record_layouts: dict[str, RecordLayoutFacts]
-    type_lowerer: LowerTypePass
+    type_mapper: MapTypePass
 
     def __post_init__(self) -> None:
         self._record_cache: dict[str, RecordAnalysisFacts] = {}
@@ -251,16 +251,16 @@ class RecordShapeAnalyzer:
         flexible_tail: FlexibleTail | None = None
         for field_fact in facts.plain_fields:
             field = decl.fields[field_fact.index]
-            lowered_type, reason = try_lower_type(
-                self.type_lowerer,
+            mapped_type, reason = try_map_type(
+                self.type_mapper,
                 field.type,
                 subject=f"field `{field_display_name(field, field_fact.index)}`",
                 failure_suffix="opaque storage emitted",
             )
-            if reason is not None or lowered_type is None:
-                return ByValueRecordShape(False, ((reason or "field could not be lowered"),))
+            if reason is not None or mapped_type is None:
+                return ByValueRecordShape(False, ((reason or "field could not be mapped"),))
             if field.fam_pattern is not None:
-                tail_shape = _direct_flexible_tail_shape(field, field_fact, lowered_type)
+                tail_shape = _direct_flexible_tail_shape(field, field_fact, mapped_type)
                 if not tail_shape.valid:
                     return tail_shape
                 flexible_tail = tail_shape.flexible_tail
@@ -299,8 +299,8 @@ class RecordShapeAnalyzer:
 
     def _bitfield_runs_by_value_shape(self, facts: RecordLayoutFacts) -> ByValueRecordShape:
         for run_layout in facts.bitfield_runs:
-            _, reason = try_lower_type(
-                self.type_lowerer,
+            _, reason = try_map_type(
+                self.type_mapper,
                 run_layout.unsigned_storage_type,
                 subject=f"bitfield storage `{run_layout.name}`",
                 failure_suffix="opaque storage emitted",
@@ -309,8 +309,8 @@ class RecordShapeAnalyzer:
                 return ByValueRecordShape(False, (reason,))
 
             for field_layout in run_layout.fields:
-                _, reason = try_lower_type(
-                    self.type_lowerer,
+                _, reason = try_map_type(
+                    self.type_mapper,
                     field_layout.logical_type,
                     subject=f"bitfield `{field_display_name(field_layout.field, field_layout.index)}`",
                     failure_suffix="opaque storage emitted",
@@ -331,24 +331,24 @@ class RecordShapeAnalyzer:
         return shape
 
 
-def _lower_flexible_tail_metadata(
+def _map_flexible_tail_metadata(
     field,
     index: int,
     byte_offset: int,
-    lowered_type,
+    mapped_type,
 ) -> tuple[FlexibleTail | None, str | None]:
     if not isinstance(field.type, Array):
-        return None, "flexible tail field did not lower from an array type; opaque storage emitted"
-    if not isinstance(lowered_type, Array) or lowered_type.size != 0:
+        return None, "flexible tail field did not map from an array type; opaque storage emitted"
+    if not isinstance(mapped_type, Array) or mapped_type.size != 0:
         return (
             None,
-            f"field `{field_display_name(field, index)}` did not lower to InlineArray[..., 0]; "
+            f"field `{field_display_name(field, index)}` did not map to InlineArray[..., 0]; "
             "opaque storage emitted",
         )
     return (
         FlexibleTail(
             field_name=field.name,
-            element_type=lowered_type.element,
+            element_type=mapped_type.element,
             pattern=field.fam_pattern,
             byte_offset=byte_offset,
         ),
@@ -356,15 +356,15 @@ def _lower_flexible_tail_metadata(
     )
 
 
-def _direct_flexible_tail_shape(field, field_fact, lowered_type) -> ByValueRecordShape:
-    direct_tail, tail_reason = _lower_flexible_tail_metadata(
+def _direct_flexible_tail_shape(field, field_fact, mapped_type) -> ByValueRecordShape:
+    direct_tail, tail_reason = _map_flexible_tail_metadata(
         field,
         field_fact.index,
         field_fact.byte_offset,
-        lowered_type,
+        mapped_type,
     )
     if tail_reason is not None or direct_tail is None:
-        return ByValueRecordShape(False, ((tail_reason or "flexible tail could not lower"),))
+        return ByValueRecordShape(False, ((tail_reason or "flexible tail could not map"),))
     return ByValueRecordShape(True, flexible_tail=direct_tail)
 
 

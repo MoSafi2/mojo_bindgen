@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mojo_bindgen.analysis import lower_unit
+from mojo_bindgen.analysis import map_unit
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AtomicType,
@@ -164,7 +164,7 @@ def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None
         align_bytes=0,
         is_complete=False,
     )
-    lowered = lower_unit(
+    mapped = map_unit(
         Unit(
             source_header="t.h",
             library="t",
@@ -174,7 +174,7 @@ def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None
         ),
         options=MojoEmitOptions(),
     )
-    structs = [decl for decl in lowered.decls if isinstance(decl, StructDecl)]
+    structs = [decl for decl in mapped.decls if isinstance(decl, StructDecl)]
     assert len(structs) == 1
     assert structs[0].name == "foo"
     assert structs[0].kind == StructKind.OPAQUE
@@ -1080,7 +1080,7 @@ def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_un
             decls=[union_decl, holder],
         )
     )
-    assert "duplicates lowered type of earlier member `a`" in out
+    assert "duplicates mapped type of earlier member `a`" in out
     assert "comptime Dup = UnsafeUnion[c_int]" in out
     assert "var payload: Dup" in out
 

@@ -3,21 +3,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.common import mojo_ident
-from mojo_bindgen.analysis.mojo.alias_lowering import lower_typedef_alias
-from mojo_bindgen.analysis.mojo.const_lowering import (
-    ConstExprLoweringError,
-    LowerConstExprPass,
+from mojo_bindgen.analysis.mojo.alias_mapping import map_typedef_alias
+from mojo_bindgen.analysis.mojo.const_expr_mapping import (
+    ConstExprMappingError,
+    MapConstExprPass,
 )
-from mojo_bindgen.analysis.mojo.const_value_lowering import typed_const_value
-from mojo_bindgen.analysis.mojo.lowering_support import stub_note
-from mojo_bindgen.analysis.mojo.macro_lowering import MacroLowerer
+from mojo_bindgen.analysis.mojo.const_value_mapping import typed_const_value
+from mojo_bindgen.analysis.mojo.macro_mapping import MacroMapper
+from mojo_bindgen.analysis.mojo.mapping_support import stub_note
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.analysis.mojo.struct_lowering import (
-    StructLoweringContext,
-    lower_struct,
+from mojo_bindgen.analysis.mojo.struct_mapping import (
+    StructMappingContext,
+    map_struct,
 )
-from mojo_bindgen.analysis.mojo.type_lowering import LowerTypePass
-from mojo_bindgen.analysis.mojo.union_lowering import LowerUnionPass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.mojo.union_mapping import MapUnionPass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
@@ -49,8 +49,8 @@ from mojo_bindgen.ir import (
 )
 
 
-class UnitLoweringError(ValueError):
-    """Raised when a CIR declaration cannot be lowered to MojoIR."""
+class UnitMappingError(ValueError):
+    """Raised when a CIR declaration cannot be mapped to MojoIR."""
 
 
 def _link_mode_for_options(options: MojoEmitOptions) -> LinkMode:
@@ -60,56 +60,56 @@ def _link_mode_for_options(options: MojoEmitOptions) -> LinkMode:
 
 
 @dataclass(frozen=True)
-class LoweringSession:
-    """Immutable collaborators shared across one ``Unit`` lowering run."""
+class MappingSession:
+    """Immutable collaborators shared across one ``Unit`` mapping run."""
 
     unit: Unit
     options: MojoEmitOptions
-    type_lowerer: LowerTypePass
-    const_lowerer: LowerConstExprPass
-    struct_context: StructLoweringContext
+    type_mapper: MapTypePass
+    const_expr_mapper: MapConstExprPass
+    struct_context: StructMappingContext
 
 
-class UnitDeclLowerer:
-    """Lower one top-level CIR declaration into one or more MojoIR declarations."""
+class UnitDeclMapper:
+    """Map one top-level CIR declaration into one or more MojoIR declarations."""
 
-    def __init__(self, session: LoweringSession) -> None:
+    def __init__(self, session: MappingSession) -> None:
         self.session = session
         self._emitted_const_names: set[str] = set()
-        self._union_lowerer = LowerUnionPass(type_lowerer=session.type_lowerer)
-        self._macro_lowerer = MacroLowerer(
-            const_lowerer=session.const_lowerer,
-            type_lowerer=session.type_lowerer,
+        self._union_mapper = MapUnionPass(type_mapper=session.type_mapper)
+        self._macro_mapper = MacroMapper(
+            const_expr_mapper=session.const_expr_mapper,
+            type_mapper=session.type_mapper,
             emitted_const_names=self._emitted_const_names,
         )
 
-    def lower_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
+    def map_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
         if isinstance(decl, Typedef):
-            return self._lower_typedef(decl)
+            return self._map_typedef(decl)
         if isinstance(decl, Enum):
-            return self._lower_enum(decl)
+            return self._map_enum(decl)
         if isinstance(decl, Function):
-            return self._lower_function(decl)
+            return self._map_function(decl)
         if isinstance(decl, GlobalVar):
-            return self._lower_global(decl)
+            return self._map_global(decl)
         if isinstance(decl, Const):
-            return self._lower_const(decl)
+            return self._map_const(decl)
         if isinstance(decl, MacroDecl):
-            return self._lower_macro(decl)
+            return self._map_macro(decl)
         if isinstance(decl, Struct):
-            return self._lower_struct(decl)
-        raise UnitLoweringError(f"unsupported CIR declaration node: {type(decl).__name__!r}")
+            return self._map_struct(decl)
+        raise UnitMappingError(f"unsupported CIR declaration node: {type(decl).__name__!r}")
 
-    def _lower_typedef(self, decl: Typedef) -> AliasDecl | None:
-        return lower_typedef_alias(
+    def _map_typedef(self, decl: Typedef) -> AliasDecl | None:
+        return map_typedef_alias(
             c_name=decl.name,
             aliased=decl.aliased,
-            type_lowerer=self.session.type_lowerer,
+            type_mapper=self.session.type_mapper,
             doc=decl.doc,
         )
 
-    def _lower_enum(self, decl: Enum) -> list[MojoDecl]:
-        underlying = self.session.type_lowerer.run(decl.underlying)
+    def _map_enum(self, decl: Enum) -> list[MojoDecl]:
+        underlying = self.session.type_mapper.run(decl.underlying)
         enum_name = mojo_ident(decl.name)
         enum_decl = AliasDecl(
             name=enum_name,
@@ -148,19 +148,19 @@ class UnitDeclLowerer:
         self._emitted_const_names.update(mojo_ident(alias_name) for alias_name in decl.alias_names)
         return [enum_decl, *aliases, *enumerants]
 
-    def _lower_function(self, decl: Function) -> FunctionDecl:
+    def _map_function(self, decl: Function) -> FunctionDecl:
         return FunctionDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
             params=[
                 Param(
                     name=(mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}"),
-                    type=self.session.type_lowerer.run(param.type),
+                    type=self.session.type_mapper.run(param.type),
                     doc=param.doc,
                 )
                 for i, param in enumerate(decl.params)
             ],
-            return_type=self.session.type_lowerer.run(decl.ret),
+            return_type=self.session.type_mapper.run(decl.ret),
             kind=(FunctionKind.VARIADIC_STUB if decl.is_variadic else FunctionKind.WRAPPER),
             call_target=CallTarget(
                 link_mode=_link_mode_for_options(self.session.options),
@@ -169,29 +169,29 @@ class UnitDeclLowerer:
             doc=decl.doc,
         )
 
-    def _lower_global(self, decl: GlobalVar) -> GlobalDecl:
-        lowered_type = self.session.type_lowerer.run(decl.type)
+    def _map_global(self, decl: GlobalVar) -> GlobalDecl:
+        mapped_type = self.session.type_mapper.run(decl.type)
         is_atomic = (
-            isinstance(lowered_type, ParametricType) and lowered_type.base == ParametricBase.ATOMIC
+            isinstance(mapped_type, ParametricType) and mapped_type.base == ParametricBase.ATOMIC
         )
         return GlobalDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
-            value_type=lowered_type,
+            value_type=mapped_type,
             is_const=decl.is_const,
             kind=(GlobalKind.STUB if is_atomic else GlobalKind.WRAPPER),
             doc=decl.doc,
         )
 
-    def _lower_const(self, decl: Const) -> AliasDecl:
+    def _map_const(self, decl: Const) -> AliasDecl:
         try:
-            value = self.session.const_lowerer.run(decl.expr)
-        except ConstExprLoweringError:
+            value = self.session.const_expr_mapper.run(decl.expr)
+        except ConstExprMappingError:
             return AliasDecl(
                 name=mojo_ident(decl.name),
                 kind=AliasKind.CONST_VALUE,
                 diagnostics=[
-                    stub_note("constant expression could not be lowered; placeholder alias emitted")
+                    stub_note("constant expression could not be mapped; placeholder alias emitted")
                 ],
                 doc=decl.doc,
             )
@@ -204,13 +204,13 @@ class UnitDeclLowerer:
             doc=decl.doc,
         )
 
-    def _lower_macro(self, decl: MacroDecl) -> AliasDecl | None:
-        return self._macro_lowerer.lower(decl)
+    def _map_macro(self, decl: MacroDecl) -> AliasDecl | None:
+        return self._macro_mapper.map(decl)
 
-    def _lower_struct(self, decl: Struct) -> MojoDecl:
+    def _map_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:
-            return self._union_lowerer.run(decl)
-        return lower_struct(decl, context=self.session.struct_context)
+            return self._union_mapper.run(decl)
+        return map_struct(decl, context=self.session.struct_context)
 
     def _typed_const_value(self, value: ConstExpr, decl_type) -> ConstExpr:
-        return typed_const_value(value, decl_type, type_lowerer=self.session.type_lowerer)
+        return typed_const_value(value, decl_type, type_mapper=self.session.type_mapper)
