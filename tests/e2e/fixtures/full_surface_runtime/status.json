@@ -1,12 +1,16 @@
 {
   "phases": {
     "bindgen_external": "pass",
-    "bindgen_dl": "pass",
+    "bindgen_dylib_lazy": "pass",
+    "bindgen_dylib_checked": "pass",
     "emit_external": "pass",
-    "emit_dl": "pass",
+    "emit_dylib_lazy": "pass",
+    "emit_dylib_checked": "pass",
     "mojo_build_external": "pass",
-    "mojo_build_dl": "pass",
+    "mojo_build_dylib_lazy": "pass",
+    "mojo_build_dylib_checked": "pass",
     "runtime_external": "pass",
-    "runtime_owned_dl_handle": "pass"
+    "runtime_dylib_lazy": "pass",
+    "runtime_dylib_checked": "pass"
   }
 }

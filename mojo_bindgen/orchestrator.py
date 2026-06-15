@@ -19,7 +19,12 @@ from mojo_bindgen.parsing.parser import (
     _resolve_include_headers,
 )
 
-LinkingMode = Literal["external_call", "owned_dl_handle"]
+LinkingMode = Literal[
+    "external_call",
+    "dylib_lazy",
+    "dylib_checked",
+    "owned_dl_handle",  # deprecated alias for dylib_checked
+]
 
 
 @dataclass(frozen=True)

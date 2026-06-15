@@ -176,10 +176,10 @@ def test_map_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
 
     fn_decl = mapped.decls[0]
 
-    assert mapped.link_mode == LinkMode.OWNED_DL_HANDLE
+    assert mapped.link_mode == LinkMode.DYLIB_CHECKED
     assert mapped.library_path_hint == "/tmp/libdemo.so"
     assert isinstance(fn_decl, FunctionDecl)
-    assert fn_decl.call_target.link_mode == LinkMode.OWNED_DL_HANDLE
+    assert fn_decl.call_target.link_mode == LinkMode.DYLIB_CHECKED
 
 
 def test_map_unit_maps_typedef_and_enum_surface_forms() -> None:

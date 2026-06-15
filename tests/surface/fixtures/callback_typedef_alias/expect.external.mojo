@@ -9,5 +9,5 @@ comptime int32_t = Int32
 
 comptime cta_cb_t = def (value: int32_t) thin abi("C") -> int32_t
 
-def cta_install(cb: cta_cb_t) abi("C") -> None:
+def cta_install(cb: cta_cb_t) -> None:
     external_call["cta_install", NoneType, cta_cb_t](cb)

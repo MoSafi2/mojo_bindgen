@@ -11,5 +11,5 @@ comptime ENB_ADD = enb_mode(c_uint(1))
 
 comptime ENB_SUB = enb_mode(c_uint(2))
 
-def enb_flip(mode: enb_mode) abi("C") -> enb_mode:
+def enb_flip(mode: enb_mode) -> enb_mode:
     return external_call["enb_flip", enb_mode, enb_mode](mode)

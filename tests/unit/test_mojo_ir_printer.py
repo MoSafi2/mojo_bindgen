@@ -297,7 +297,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
     assert "comptime Packet = UnsafeUnion[c_int, Widget]" in out
     assert "comptime LIMIT = (1 + 2)" in out
     assert (
-        'def install(cb: install_cb, widget: UnsafePointer[Widget, ImmutExternalOrigin]) abi("C") -> None:'
+        "def install(cb: install_cb, widget: UnsafePointer[Widget, ImmutExternalOrigin]) -> None:"
         in out
     )
 
@@ -505,14 +505,17 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
 
     normalized = normalize_mojo_module(module)
 
+    assert normalized.link_mode == LinkMode.DYLIB_CHECKED
     assert normalized.dependencies.imports == [
         ModuleImport(
             module="std.ffi",
-            names=["DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
-        )
+            names=["OwnedDLHandle", "_Global", "c_int"],
+        ),
+        ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
+        ModuleImport(module="std.pathlib", names=["Path"]),
     ]
     assert normalized.dependencies.support_decls == [
-        SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
+        SupportDecl(SupportDeclKind.DYLIB_CHECKED_API_HELPERS),
         SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS),
     ]
     assert isinstance(normalized.decls[0], AliasDecl)
@@ -530,7 +533,7 @@ def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() ->
         link_mode=LinkMode.EXTERNAL_CALL,
         dependencies=ModuleDependencies(
             imports=[ModuleImport(module="std.ffi", names=["c_int", "external_call"])],
-            support_decls=[SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS)],
+            support_decls=[SupportDecl(SupportDeclKind.DYLIB_LAZY_HELPERS)],
         ),
         decls=[
             AliasDecl(
@@ -554,12 +557,20 @@ def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() ->
     assert normalized.dependencies.imports == [
         ModuleImport(
             module="std.ffi",
-            names=["external_call", "DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
+            names=[
+                "external_call",
+                "OwnedDLHandle",
+                "_Global",
+                "_find_dylib",
+                "_get_dylib_function",
+                "c_int",
+            ],
         ),
         ModuleImport(module="std.sys.info", names=["size_of"]),
+        ModuleImport(module="std.pathlib", names=["Path"]),
     ]
     assert normalized.dependencies.support_decls == [
-        SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
+        SupportDecl(SupportDeclKind.DYLIB_LAZY_HELPERS),
     ]
 
 
@@ -587,8 +598,10 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
         MojoIRPrintOptions(module_comment=False),
     )
 
-    assert 'comptime _BINDGEN_LIB_PATH: String = "/tmp/libdemo.so"' in rendered
-    assert "return OwnedDLHandle(_BINDGEN_LIB_PATH)" in rendered
+    assert "struct _BindgenApi(Movable):" in rendered
+    assert 'Path("/tmp/libdemo.so")' in rendered
+    assert "def install() raises -> None:" in rendered
+    assert 'var f = _bindgen_api()[].get_function["install", _bindgen_fn_install]()' in rendered
 
 
 def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:
@@ -808,7 +821,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
         source_header="demo.h",
         library="demo",
         link_name="demo",
-        link_mode=LinkMode.OWNED_DL_HANDLE,
+        link_mode=LinkMode.DYLIB_CHECKED,
         decls=[
             AliasDecl(
                 name="binary_cb_t",
@@ -944,10 +957,15 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert "def _bindgen_dl() raises -> OwnedDLHandle:" in rendered
+    assert "struct _BindgenApi(Movable):" in rendered
+    assert "def _bindgen_api() -> UnsafePointer[_BindgenApi, MutUntrackedOrigin]:" in rendered
     assert (
         "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:"
         in rendered
     )
-    assert 'def install(cb: binary_cb_t) abi("C") -> None:' in rendered
+    assert "def install(cb: binary_cb_t) -> None:" in rendered
     assert "def load_widget() raises -> UnsafePointer[Widget, MutExternalOrigin]:" in rendered
+    assert (
+        'var f = _bindgen_api()[].get_function["load_widget", _bindgen_fn_load_widget]()'
+        in rendered
+    )

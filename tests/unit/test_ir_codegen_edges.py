@@ -509,7 +509,8 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert (
         "external_call" in import_line and "OwnedDLHandle" in import_line and "c_int" in import_line
     )
-    assert "def _bindgen_dl() raises -> OwnedDLHandle:" in out
+    assert "struct _BindgenApi(Movable):" in out
+    assert "def _bindgen_api() -> UnsafePointer[_BindgenApi, MutUntrackedOrigin]:" in out
     assert "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
     assert (
         "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
@@ -565,7 +566,7 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
     macro_pos = out.index("comptime MACRO_OK = c_int(1)")
     const_pos = out.index("comptime LIMIT = c_int(7)")
     global_pos = out.index('comptime global_counter = GlobalVar[T=c_int, link="global_counter"]')
-    fn_pos = out.index('def do_work() abi("C") -> c_int:')
+    fn_pos = out.index("def do_work() -> c_int:")
     assert macro_pos < global_pos
     assert const_pos < global_pos
     assert macro_pos < fn_pos
@@ -845,19 +846,14 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     assert (
         'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in external_out
     )
-    assert 'def pfr_select_add() abi("C") -> pfr_binary_op_t:' in external_out
-    assert (
-        'def pfr_select_add_direct() abi("C") -> pfr_select_add_direct_return_cb:'
-    ) in external_out
+    assert "def pfr_select_add() -> pfr_binary_op_t:" in external_out
+    assert ("def pfr_select_add_direct() -> pfr_select_add_direct_return_cb:") in external_out
     assert 'return external_call["pfr_select_add", pfr_binary_op_t]()' in external_out
     assert (
         'return external_call["pfr_select_add_direct", pfr_select_add_direct_return_cb]()'
         in external_out
     )
-    assert (
-        'def pfr_call(op: pfr_binary_op_t, lhs: c_int, rhs: c_int) abi("C") -> c_int:'
-        in external_out
-    )
+    assert "def pfr_call(op: pfr_binary_op_t, lhs: c_int, rhs: c_int) -> c_int:" in external_out
     assert (
         'return external_call["pfr_call", c_int, pfr_binary_op_t, c_int, c_int](op, lhs, rhs)'
         in external_out
@@ -872,15 +868,15 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     assert 'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in dl_out
     assert "def pfr_select_add() raises -> pfr_binary_op_t:" in dl_out
     assert ("def pfr_select_add_direct() raises -> pfr_select_add_direct_return_cb:") in dl_out
-    assert 'return _bindgen_dl().call["pfr_select_add", pfr_binary_op_t]()' in dl_out
     assert (
-        'return _bindgen_dl().call["pfr_select_add_direct", pfr_select_add_direct_return_cb]()'
+        'var f = _bindgen_api()[].get_function["pfr_select_add", _bindgen_fn_pfr_select_add]()'
         in dl_out
     )
     assert (
-        'return _bindgen_dl().call["pfr_call", c_int, pfr_binary_op_t, c_int, c_int](op, lhs, rhs)'
+        'var f = _bindgen_api()[].get_function["pfr_select_add_direct", _bindgen_fn_pfr_select_add_direct]()'
         in dl_out
     )
+    assert 'var f = _bindgen_api()[].get_function["pfr_call", _bindgen_fn_pfr_call]()' in dl_out
 
 
 def test_generator_emits_struct_field_callback_aliases() -> None:
@@ -1159,7 +1155,7 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
         "ctx: Optional[MutOpaquePointer[MutExternalOrigin]], "
         "xCompare: sqlite3_create_collation_v2_xCompare_cb, "
         "xDestroy: sqlite3_create_collation_v2_xDestroy_cb"
-        ') abi("C") -> c_int:'
+        ") -> c_int:"
     ) in out
     assert (
         'return external_call["sqlite3_create_collation_v2", c_int, '
@@ -1217,7 +1213,7 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
     assert "comptime nested_cb_t = def (" in out
     assert (
         "def install_nested_cb(slot: Optional[UnsafePointer[Optional[UnsafePointer[nested_cb_t, "
-        'MutExternalOrigin]], MutExternalOrigin]]) abi("C") -> None:'
+        "MutExternalOrigin]], MutExternalOrigin]]) -> None:"
     ) in out
     assert (
         'external_call["install_nested_cb", NoneType, '
@@ -1249,7 +1245,7 @@ def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
         )
     )
     assert "from std.ffi import external_call, c_int" in out
-    assert 'def sf_add(a: c_int, b: c_int) abi("C") -> c_int:' in out
+    assert "def sf_add(a: c_int, b: c_int) -> c_int:" in out
     assert 'return external_call["sf_add", c_int, c_int, c_int](a, b)' in out
 
 
@@ -1294,4 +1290,4 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
     )
     assert "from std.ffi import external_call, c_int" in out
     assert 'comptime only_cb_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in out
-    assert 'def get_only_cb() abi("C") -> only_cb_t:' in out
+    assert "def get_only_cb() -> only_cb_t:" in out

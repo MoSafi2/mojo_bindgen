@@ -1,6 +1,6 @@
-# Smoke test for OwnedDLHandle bindings: dynamic load of libz and runtime FFI calls.
-# Requires zlib_bindings_dl.mojo from generate.sh (--linking owned_dl_handle).
-from zlib_bindings_dl import (
+# Smoke test for dylib-checked bindings: dynamic load of libz and runtime FFI calls.
+# Requires zlib_bindings_dylib_checked.mojo from generate.sh (--linking dylib-checked).
+from zlib_bindings_dylib_checked import (
     Z_OK,
     compressBound,
     gzclose,

@@ -54,9 +54,13 @@ class UnitMappingError(ValueError):
 
 
 def _link_mode_for_options(options: MojoEmitOptions) -> LinkMode:
-    if options.linking == "owned_dl_handle":
-        return LinkMode.OWNED_DL_HANDLE
-    return LinkMode.EXTERNAL_CALL
+    if options.linking == "external_call":
+        return LinkMode.EXTERNAL_CALL
+    if options.linking == "dylib_lazy":
+        return LinkMode.DYLIB_LAZY
+    if options.linking in {"dylib_checked", "owned_dl_handle"}:
+        return LinkMode.DYLIB_CHECKED
+    raise UnitMappingError(f"unsupported linking mode: {options.linking!r}")
 
 
 @dataclass(frozen=True)

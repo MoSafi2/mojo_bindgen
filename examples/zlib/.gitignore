@@ -1,4 +1,8 @@
 zlib_bindings.mojo
 zlib_bindings_dl.mojo
+zlib_bindings_dylib_lazy.mojo
+zlib_bindings_dylib_checked.mojo
+zlib_dylib_lazy_smoke
+zlib_dylib_checked_smoke
 zlib_dl_smoke
 *.o

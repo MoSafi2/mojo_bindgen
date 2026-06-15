@@ -15,8 +15,8 @@ comptime mode_tag = c_uint
 
 comptime MODE_A = mode_tag(c_uint(1))
 
-def take_typedef_name(mode: typedef_name) abi("C") -> typedef_name:
+def take_typedef_name(mode: typedef_name) -> typedef_name:
     return external_call["take_typedef_name", typedef_name, typedef_name](mode)
 
-def get_mode_tag() abi("C") -> mode_tag:
+def get_mode_tag() -> mode_tag:
     return external_call["get_mode_tag", mode_tag]()

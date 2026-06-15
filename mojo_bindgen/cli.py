@@ -17,7 +17,12 @@ from mojo_bindgen.parsing.parser import ParseError
 stderr_console = Console(stderr=True)
 
 OutputFormat = Literal["mojo", "cir-json", "mojo-ir-json"]
-LinkModeOption = Literal["external-call", "owned-dl-handle"]
+LinkModeOption = Literal[
+    "external-call",
+    "dylib-lazy",
+    "dylib-checked",
+    "owned-dl-handle",
+]
 DiagnosticsMode = Literal["text", "json", "silent"]
 
 
@@ -112,14 +117,21 @@ def run(
     ] = None,
     link_mode: Annotated[
         LinkModeOption,
-        typer.Option("--link-mode", help="FFI linking mode for Mojo output.", case_sensitive=False),
+        typer.Option(
+            "--link-mode",
+            help=(
+                "FFI linking mode for Mojo output: external-call, dylib-lazy, or dylib-checked. "
+                "owned-dl-handle is deprecated and aliases dylib-checked."
+            ),
+            case_sensitive=False,
+        ),
     ] = "external-call",
     library_path: Annotated[
         str | None,
         typer.Option(
             "--library-path",
             metavar="PATH",
-            help="Path hint for OwnedDLHandle when --link-mode owned-dl-handle.",
+            help="Path hint for dynamic link modes (dylib-lazy, dylib-checked, owned-dl-handle).",
         ),
     ] = None,
     diagnostics: Annotated[
@@ -241,6 +253,11 @@ def run(
         clang_macro_fallback_build_dir=clang_macro_fallback_dir,
         keep_going=keep_going,
     )
+    if link_mode == "owned-dl-handle":
+        stderr_console.print(
+            "[bold yellow]warning:[/bold yellow] "
+            "--link-mode owned-dl-handle is deprecated; use --link-mode dylib-checked."
+        )
     orchestrator = BindgenOrchestrator(options)
 
     if dump_clang_args:
@@ -292,8 +309,23 @@ def run(
     return 0
 
 
-def _internal_link_mode(link_mode: LinkModeOption) -> Literal["external_call", "owned_dl_handle"]:
-    return "owned_dl_handle" if link_mode == "owned-dl-handle" else "external_call"
+def _internal_link_mode(
+    link_mode: LinkModeOption,
+) -> Literal[
+    "external_call",
+    "dylib_lazy",
+    "dylib_checked",
+    "owned_dl_handle",
+]:
+    if link_mode == "external-call":
+        return "external_call"
+    if link_mode == "dylib-lazy":
+        return "dylib_lazy"
+    if link_mode == "dylib-checked":
+        return "dylib_checked"
+    if link_mode == "owned-dl-handle":
+        return "owned_dl_handle"
+    raise ValueError(f"unsupported link mode: {link_mode!r}")
 
 
 def _primary_output(result, output_format: OutputFormat) -> str:

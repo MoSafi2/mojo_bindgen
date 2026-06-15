@@ -18,13 +18,17 @@ _GOLDEN_ROOT = _REPO_ROOT / "tests" / "e2e" / "fixtures"
 
 _PHASES = (
     "bindgen_external",
-    "bindgen_dl",
+    "bindgen_dylib_lazy",
+    "bindgen_dylib_checked",
     "emit_external",
-    "emit_dl",
+    "emit_dylib_lazy",
+    "emit_dylib_checked",
     "mojo_build_external",
-    "mojo_build_dl",
+    "mojo_build_dylib_lazy",
+    "mojo_build_dylib_checked",
     "runtime_external",
-    "runtime_owned_dl_handle",
+    "runtime_dylib_lazy",
+    "runtime_dylib_checked",
 )
 _VALID_PHASE_STATUS = {
     "pass",
@@ -62,11 +66,14 @@ def _assert_schema(case_dir: Path, status: dict[str, Any]) -> None:
         "input.h",
         "impl.c",
         "runner_external.mojo",
-        "runner_dl.mojo",
+        "runner_dylib_lazy.mojo",
+        "runner_dylib_checked.mojo",
         "expect.emit.external.mojo",
-        "expect.emit.owned_dl_handle.mojo",
+        "expect.emit.dylib_lazy.mojo",
+        "expect.emit.dylib_checked.mojo",
         "expect.runtime.external.json",
-        "expect.runtime.owned_dl_handle.json",
+        "expect.runtime.dylib_lazy.json",
+        "expect.runtime.dylib_checked.json",
     )
     for name in required:
         assert (case_dir / name).exists(), f"{case_dir}: missing required file '{name}'"
@@ -160,12 +167,16 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     header = case_dir / "input.h"
     source = case_dir / "impl.c"
     runner_external = case_dir / "runner_external.mojo"
-    runner_dl = case_dir / "runner_dl.mojo"
+    runner_dylib_lazy = case_dir / "runner_dylib_lazy.mojo"
+    runner_dylib_checked = case_dir / "runner_dylib_checked.mojo"
     expected_rt_external = json.loads(
         (case_dir / "expect.runtime.external.json").read_text(encoding="utf-8")
     )
-    expected_rt_dl = json.loads(
-        (case_dir / "expect.runtime.owned_dl_handle.json").read_text(encoding="utf-8")
+    expected_rt_dylib_lazy = json.loads(
+        (case_dir / "expect.runtime.dylib_lazy.json").read_text(encoding="utf-8")
+    )
+    expected_rt_dylib_checked = json.loads(
+        (case_dir / "expect.runtime.dylib_checked.json").read_text(encoding="utf-8")
     )
 
     lib_path = tmp_path / f"lib{case_name}.so"
@@ -176,7 +187,9 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         )
 
     bindings_external = tmp_path / f"{case_name}_bindings_external.mojo"
-    bindings_dl = tmp_path / f"{case_name}_bindings_dl.mojo"
+    bindings_dylib_lazy = tmp_path / f"{case_name}_bindings_dylib_lazy.mojo"
+    bindings_dylib_checked = tmp_path / f"{case_name}_bindings_dylib_checked.mojo"
+
     bindgen_external = _run(
         [
             *mojo_bindgen,
@@ -192,7 +205,7 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     )
     _check_phase("bindgen_external", phases["bindgen_external"], bindgen_external, str(case_dir))
 
-    bindgen_dl = _run(
+    bindgen_dylib_lazy = _run(
         [
             *mojo_bindgen,
             str(header),
@@ -201,19 +214,50 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
             "--link-name",
             case_name,
             "--link-mode",
-            "owned-dl-handle",
+            "dylib-lazy",
             "--library-path",
             str(lib_path),
             "--output",
-            str(bindings_dl),
+            str(bindings_dylib_lazy),
         ],
         cwd=_REPO_ROOT,
     )
-    _check_phase("bindgen_dl", phases["bindgen_dl"], bindgen_dl, str(case_dir))
+    _check_phase(
+        "bindgen_dylib_lazy", phases["bindgen_dylib_lazy"], bindgen_dylib_lazy, str(case_dir)
+    )
+
+    bindgen_dylib_checked = _run(
+        [
+            *mojo_bindgen,
+            str(header),
+            "--library",
+            case_name,
+            "--link-name",
+            case_name,
+            "--link-mode",
+            "dylib-checked",
+            "--library-path",
+            str(lib_path),
+            "--output",
+            str(bindings_dylib_checked),
+        ],
+        cwd=_REPO_ROOT,
+    )
+    _check_phase(
+        "bindgen_dylib_checked",
+        phases["bindgen_dylib_checked"],
+        bindgen_dylib_checked,
+        str(case_dir),
+    )
 
     # Keep generated bindings under each golden case for local inspection.
     _persist_generated_bindings(bindings_external, case_dir / "generated.bindings.external.mojo")
-    _persist_generated_bindings(bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo")
+    _persist_generated_bindings(
+        bindings_dylib_lazy, case_dir / "generated.bindings.dylib_lazy.mojo"
+    )
+    _persist_generated_bindings(
+        bindings_dylib_checked, case_dir / "generated.bindings.dylib_checked.mojo"
+    )
 
     if bindgen_external.returncode == 0:
         _assert_emit_has_snippets(
@@ -223,16 +267,26 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     else:
         pytest.xfail("bindgen external did not succeed; emit check skipped")
 
-    if bindgen_dl.returncode == 0:
+    if bindgen_dylib_lazy.returncode == 0:
         _assert_emit_has_snippets(
-            bindings_dl.read_text(encoding="utf-8"),
-            case_dir / "expect.emit.owned_dl_handle.mojo",
+            bindings_dylib_lazy.read_text(encoding="utf-8"),
+            case_dir / "expect.emit.dylib_lazy.mojo",
         )
     else:
-        pytest.xfail("bindgen dl did not succeed; emit check skipped")
+        pytest.xfail("bindgen dylib-lazy did not succeed; emit check skipped")
+
+    if bindgen_dylib_checked.returncode == 0:
+        _assert_emit_has_snippets(
+            bindings_dylib_checked.read_text(encoding="utf-8"),
+            case_dir / "expect.emit.dylib_checked.mojo",
+        )
+    else:
+        pytest.xfail("bindgen dylib-checked did not succeed; emit check skipped")
 
     external_bin = tmp_path / f"{case_name}_runner_external"
-    dl_bin = tmp_path / f"{case_name}_runner_dl"
+    dylib_lazy_bin = tmp_path / f"{case_name}_runner_dylib_lazy"
+    dylib_checked_bin = tmp_path / f"{case_name}_runner_dylib_checked"
+
     build_external = _run(
         [
             *mojo,
@@ -256,19 +310,43 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         str(case_dir),
     )
 
-    build_dl = _run(
+    build_dylib_lazy = _run(
         [
             *mojo,
             "build",
-            str(runner_dl),
+            str(runner_dylib_lazy),
             "-I",
             str(tmp_path),
             "-o",
-            str(dl_bin),
+            str(dylib_lazy_bin),
         ],
         cwd=_REPO_ROOT,
     )
-    _check_phase("mojo_build_dl", phases["mojo_build_dl"], build_dl, str(case_dir))
+    _check_phase(
+        "mojo_build_dylib_lazy",
+        phases["mojo_build_dylib_lazy"],
+        build_dylib_lazy,
+        str(case_dir),
+    )
+
+    build_dylib_checked = _run(
+        [
+            *mojo,
+            "build",
+            str(runner_dylib_checked),
+            "-I",
+            str(tmp_path),
+            "-o",
+            str(dylib_checked_bin),
+        ],
+        cwd=_REPO_ROOT,
+    )
+    _check_phase(
+        "mojo_build_dylib_checked",
+        phases["mojo_build_dylib_checked"],
+        build_dylib_checked,
+        str(case_dir),
+    )
 
     if build_external.returncode == 0:
         external_env = os.environ.copy()
@@ -292,19 +370,28 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
                 _parse_runner_output(runtime_external.stdout), expected_rt_external
             )
 
-    if build_dl.returncode == 0:
-        dl_env = os.environ.copy()
-        # Mojo cannot keep a module-level OwnedDLHandle alive yet, so the generated
-        # owned-dl-handle bindings reopen the library on each call. Preloading the
-        # fixture DSO keeps one process-lifetime instance resident, which preserves
-        # C global/atomic state across those transient handles.
-        dl_env["LD_PRELOAD"] = str(lib_path)
-        runtime_dl = _run([str(dl_bin)], cwd=_REPO_ROOT, env=dl_env)
+    if build_dylib_lazy.returncode == 0:
+        runtime_dylib_lazy = _run([str(dylib_lazy_bin)], cwd=_REPO_ROOT)
         _check_phase(
-            "runtime_owned_dl_handle",
-            phases["runtime_owned_dl_handle"],
-            runtime_dl,
+            "runtime_dylib_lazy",
+            phases["runtime_dylib_lazy"],
+            runtime_dylib_lazy,
             str(case_dir),
         )
-        if runtime_dl.returncode == 0:
-            _assert_expected_values(_parse_runner_output(runtime_dl.stdout), expected_rt_dl)
+        if runtime_dylib_lazy.returncode == 0:
+            _assert_expected_values(
+                _parse_runner_output(runtime_dylib_lazy.stdout), expected_rt_dylib_lazy
+            )
+
+    if build_dylib_checked.returncode == 0:
+        runtime_dylib_checked = _run([str(dylib_checked_bin)], cwd=_REPO_ROOT)
+        _check_phase(
+            "runtime_dylib_checked",
+            phases["runtime_dylib_checked"],
+            runtime_dylib_checked,
+            str(case_dir),
+        )
+        if runtime_dylib_checked.returncode == 0:
+            _assert_expected_values(
+                _parse_runner_output(runtime_dylib_checked.stdout), expected_rt_dylib_checked
+            )

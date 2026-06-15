@@ -1018,7 +1018,9 @@ class FunctionKind(StrEnum):
 
 class LinkMode(StrEnum):
     EXTERNAL_CALL = "external_call"
-    OWNED_DL_HANDLE = "owned_dl_handle"
+    DYLIB_LAZY = "dylib_lazy"
+    DYLIB_CHECKED = "dylib_checked"
+    OWNED_DL_HANDLE = "owned_dl_handle"  # deprecated alias for dylib_checked
 
 
 class MappingSeverity(StrEnum):
@@ -1041,7 +1043,8 @@ class ModuleImport(SerDeMixin):
 
 
 class SupportDeclKind(StrEnum):
-    DL_HANDLE_HELPERS = "dl_handle_helpers"
+    DYLIB_LAZY_HELPERS = "dylib_lazy_helpers"
+    DYLIB_CHECKED_API_HELPERS = "dylib_checked_api_helpers"
     GLOBAL_SYMBOL_HELPERS = "global_symbol_helpers"
 
 

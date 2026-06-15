@@ -7,5 +7,5 @@ from std.ffi import external_call
 
 comptime int32_t = Int32
 
-def sf_add(a: int32_t, b: int32_t) abi("C") -> int32_t:
+def sf_add(a: int32_t, b: int32_t) -> int32_t:
     return external_call["sf_add", int32_t, int32_t, int32_t](a, b)

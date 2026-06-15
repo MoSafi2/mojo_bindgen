@@ -12,5 +12,5 @@ comptime int32_t = Int32
 struct nrr_payload(Copyable, Movable):
     var values: InlineArray[int32_t, 2]
 
-def nrr_build() abi("C") -> nrr_payload:
+def nrr_build() -> nrr_payload:
     return external_call["nrr_build", nrr_payload]()

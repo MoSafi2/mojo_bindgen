@@ -59,7 +59,7 @@ class NormalizeMojoModulePass:
     """Resolve printer-facing facts into explicit MojoIR."""
 
     def run(self, module: MojoModule) -> MojoModule:
-        self._module = module
+        self._module = self._normalize_module_link_mode(module)
         self._reserved_names = {decl.name for decl in module.decls}
         self._function_signature_names = {
             decl.name
@@ -71,14 +71,24 @@ class NormalizeMojoModulePass:
         self._imports_by_module: dict[str, set[str]] = {}
         self._support_decl_kinds: set[SupportDeclKind] = set()
 
-        normalized_decls = [self._normalize_decl(decl) for decl in module.decls]
+        normalized_decls = [self._normalize_decl(decl) for decl in self._module.decls]
         all_decls = [*self._synth_aliases, *self._ordered_decls(normalized_decls)]
         dependencies = self._collect_dependencies(all_decls)
 
         return replace(
-            module,
+            self._module,
             dependencies=dependencies,
             decls=all_decls,
+        )
+
+    @staticmethod
+    def _normalize_module_link_mode(module: MojoModule) -> MojoModule:
+        """Collapse deprecated owned_dl_handle alias into dylib_checked."""
+        if module.link_mode != LinkMode.OWNED_DL_HANDLE:
+            return module
+        return replace(
+            module,
+            link_mode=LinkMode.DYLIB_CHECKED,
         )
 
     def _normalize_decl(self, decl: MojoDecl) -> MojoDecl:
@@ -138,7 +148,7 @@ class NormalizeMojoModulePass:
                 ],
                 return_type=self._normalize_type(decl.return_type, (decl.name, "return")),
                 call_target=CallTarget(
-                    link_mode=self._effective_link_mode(decl),
+                    link_mode=self._normalize_link_mode(self._effective_link_mode(decl)),
                     symbol=decl.call_target.symbol,
                 ),
             )
@@ -370,14 +380,28 @@ class NormalizeMojoModulePass:
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:
-                if decl.call_target.link_mode == LinkMode.OWNED_DL_HANDLE:
-                    self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
+                if decl.call_target.link_mode == LinkMode.DYLIB_LAZY:
+                    self._record_support_decl(SupportDeclKind.DYLIB_LAZY_HELPERS)
+                elif decl.call_target.link_mode == LinkMode.DYLIB_CHECKED:
+                    self._record_support_decl(SupportDeclKind.DYLIB_CHECKED_API_HELPERS)
             elif isinstance(decl, GlobalDecl) and decl.kind == GlobalKind.WRAPPER:
                 self._record_support_decl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS)
-                self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
+                if self._module.link_mode == LinkMode.DYLIB_LAZY:
+                    self._record_support_decl(SupportDeclKind.DYLIB_LAZY_HELPERS)
+                else:
+                    # external-call functions still need dynamic symbol resolution for globals
+                    self._record_support_decl(SupportDeclKind.DYLIB_CHECKED_API_HELPERS)
 
-        if SupportDeclKind.DL_HANDLE_HELPERS in self._support_decl_kinds:
-            self._record_import("std.ffi", "DEFAULT_RTLD", "OwnedDLHandle")
+        if SupportDeclKind.DYLIB_LAZY_HELPERS in self._support_decl_kinds:
+            self._record_import(
+                "std.ffi", "_Global", "_find_dylib", "_get_dylib_function", "OwnedDLHandle"
+            )
+            self._record_import("std.pathlib", "Path")
+
+        if SupportDeclKind.DYLIB_CHECKED_API_HELPERS in self._support_decl_kinds:
+            self._record_import("std.ffi", "_Global", "OwnedDLHandle")
+            self._record_import("std.memory.unsafe_pointer", "unsafe_cast")
+            self._record_import("std.pathlib", "Path")
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:
@@ -403,10 +427,14 @@ class NormalizeMojoModulePass:
         ordered_ffi: list[str] = []
         if "external_call" in ffi_names:
             ordered_ffi.append("external_call")
-        if "DEFAULT_RTLD" in ffi_names:
-            ordered_ffi.append("DEFAULT_RTLD")
         if "OwnedDLHandle" in ffi_names:
             ordered_ffi.append("OwnedDLHandle")
+        if "_Global" in ffi_names:
+            ordered_ffi.append("_Global")
+        if "_find_dylib" in ffi_names:
+            ordered_ffi.append("_find_dylib")
+        if "_get_dylib_function" in ffi_names:
+            ordered_ffi.append("_get_dylib_function")
         if "UnsafeUnion" in ffi_names:
             ordered_ffi.append("UnsafeUnion")
         ordered_ffi.extend(sorted(name for name in ffi_names if name.startswith("c_")))
@@ -422,9 +450,11 @@ class NormalizeMojoModulePass:
         preferred_modules = (
             "std.sys.info",
             "std.memory",
+            "std.memory.unsafe_pointer",
             "std.builtin.simd",
             "std.complex",
             "std.atomic",
+            "std.pathlib",
         )
         for module_name in preferred_modules:
             names = self._imports_by_module.get(module_name)
@@ -441,7 +471,8 @@ class NormalizeMojoModulePass:
     def _ordered_support_decls(self) -> list[SupportDecl]:
         ordered: list[SupportDecl] = []
         for kind in (
-            SupportDeclKind.DL_HANDLE_HELPERS,
+            SupportDeclKind.DYLIB_LAZY_HELPERS,
+            SupportDeclKind.DYLIB_CHECKED_API_HELPERS,
             SupportDeclKind.GLOBAL_SYMBOL_HELPERS,
         ):
             if kind in self._support_decl_kinds:
@@ -577,6 +608,12 @@ class NormalizeMojoModulePass:
         ):
             return self._module.link_mode
         return decl.call_target.link_mode
+
+    @staticmethod
+    def _normalize_link_mode(link_mode: LinkMode) -> LinkMode:
+        if link_mode == LinkMode.OWNED_DL_HANDLE:
+            return LinkMode.DYLIB_CHECKED
+        return link_mode
 
     @staticmethod
     def _function_type_from_type(t: Type | None) -> FunctionPtr | None:

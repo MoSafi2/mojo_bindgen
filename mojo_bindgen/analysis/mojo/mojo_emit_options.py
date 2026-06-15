@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-LinkingMode = Literal["external_call", "owned_dl_handle"]
+LinkingMode = Literal[
+    "external_call",
+    "dylib_lazy",
+    "dylib_checked",
+    "owned_dl_handle",  # deprecated alias for dylib_checked
+]
 """Supported linking strategies for generated wrappers."""
 
 
@@ -22,12 +27,14 @@ class MojoEmitOptions:
     """
 
     linking: LinkingMode = "external_call"
-    """external_call: link C symbols at mojo build time; emitted wrappers use ``abi("C")``.
-    owned_dl_handle: resolve via ``OwnedDLHandle.call`` (raises); wrappers omit ``abi("C")`` on
-    the ``def`` line because ``abi("C")`` combined with ``raises`` currently fails LLVM mapping."""
+    """external_call: link C symbols at mojo build time; emitted wrappers are plain Mojo functions.
+    dylib_lazy: load the shared library once and cache C-ABI function pointers via stdlib internals.
+    dylib_checked: own the library in a generated API struct and raise on load/symbol errors.
+    owned_dl_handle: deprecated alias for dylib_checked."""
 
     library_path_hint: str | None = None
-    """If set with owned_dl_handle, pass this path to OwnedDLHandle(...). If None, use DEFAULT_RTLD (symbols must be linked into the process)."""
+    """If set with a dynamic link mode, try this path first when loading the shared library.
+    If None, the generated code guesses platform-specific names such as lib<name>.so."""
 
     module_comment: bool = True
     """Emit a leading comment with source header and library metadata."""

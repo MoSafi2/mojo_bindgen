@@ -3,19 +3,60 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 
-from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle
+from std.ffi import external_call, OwnedDLHandle, _Global
+from std.memory.unsafe_pointer import unsafe_cast
+from std.pathlib import Path
 
-# Resolve symbols from libraries already linked into this process.
-def _bindgen_dl() raises -> OwnedDLHandle:
-    return OwnedDLHandle(DEFAULT_RTLD)
+struct _BindgenApi(Movable):
+    var _lib: OwnedDLHandle
+    var _loaded: Bool
+
+    def __init__(out self):
+        self._lib = OwnedDLHandle(unsafe_uninitialized=True)
+        self._loaded = False
+
+    def _ensure_loaded(mut self) raises:
+        if not self._loaded:
+            self._lib = OwnedDLHandle()
+            self._loaded = True
+
+    def get_symbol[
+        T: AnyType,
+        symbol: StaticString,
+    ](mut self) raises -> UnsafePointer[T, MutUntrackedOrigin]:
+        self._ensure_loaded()
+        var opt = self._lib.get_symbol[T](StringSlice(symbol))
+        if not opt:
+            raise Error(String("bindgen: missing C symbol: ") + String(symbol))
+        return opt.value()
+
+    def get_function[
+        symbol: StaticString,
+        F: TrivialRegisterPassable,
+    ](mut self) raises -> F:
+        self._ensure_loaded()
+        var opt = self._lib.get_symbol[NoneType](StringSlice(symbol))
+        if not opt:
+            raise Error(String("bindgen: missing C function symbol: ") + String(symbol))
+        return UnsafePointer(to=opt.value()).bitcast[F]()[]
+
+def _bindgen_init_api() -> _BindgenApi:
+    return _BindgenApi()
+
+comptime _BINDGEN_API = _Global[
+    _BindgenApi,
+    "mojo_bindgen/surface_globals/api",
+    _bindgen_init_api,
+]
+
+@always_inline
+def _bindgen_api() -> UnsafePointer[_BindgenApi, MutUntrackedOrigin]:
+    return _BINDGEN_API.get_or_create_ptr()
 
 struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
-        if not opt:
-            raise Error(String("bindgen: missing C global symbol"))
-        return opt.value()
+        return _bindgen_api()[].get_symbol[Self.T, Self.link]()
 
     @staticmethod
     def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:
@@ -33,10 +74,7 @@ struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
 struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
     def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
-        if not opt:
-            raise Error(String("bindgen: missing C global symbol"))
-        return opt.value()
+        return _bindgen_api()[].get_symbol[Self.T, Self.link]()
 
     @staticmethod
     def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:

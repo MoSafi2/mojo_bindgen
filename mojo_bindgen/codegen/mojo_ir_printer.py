@@ -239,65 +239,144 @@ class MojoIRPrinter:
     def _render_support_decls(self, module: MojoModule) -> str:
         chunks: list[str] = []
         for support in module.dependencies.support_decls:
-            if support.kind == SupportDeclKind.DL_HANDLE_HELPERS:
-                chunks.append(self._render_dl_handle_helper(module))
+            if support.kind == SupportDeclKind.DYLIB_LAZY_HELPERS:
+                chunks.append(self._render_dylib_lazy_helpers(module))
+            elif support.kind == SupportDeclKind.DYLIB_CHECKED_API_HELPERS:
+                chunks.append(self._render_dylib_checked_helpers(module))
             elif support.kind == SupportDeclKind.GLOBAL_SYMBOL_HELPERS:
-                chunks.append(
-                    "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
-                    "    @staticmethod\n"
-                    "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
-                    "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
-                    "        if not opt:\n"
-                    '            raise Error(String("bindgen: missing C global symbol"))\n'
-                    "        return opt.value()\n"
-                    "\n"
-                    "    @staticmethod\n"
-                    "    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:\n"
-                    "        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
-                    "\n"
-                    "    @staticmethod\n"
-                    "    def load() raises -> Self.T:\n"
-                    "        return Self._raw()[].copy()\n"
-                    "\n"
-                    "    @staticmethod\n"
-                    "    def store(value: Self.T) raises -> None:\n"
-                    "        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
-                    "        p[] = value.copy()\n"
-                    "\n"
-                    "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
-                    "    @staticmethod\n"
-                    "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
-                    "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
-                    "        if not opt:\n"
-                    '            raise Error(String("bindgen: missing C global symbol"))\n'
-                    "        return opt.value()\n"
-                    "\n"
-                    "    @staticmethod\n"
-                    "    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:\n"
-                    "        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())\n"
-                    "\n"
-                    "    @staticmethod\n"
-                    "    def load() raises -> Self.T:\n"
-                    "        return Self._raw()[].copy()"
-                )
+                chunks.append(self._render_global_symbol_helpers(module))
             else:
                 raise MojoIRPrintError(f"unsupported SupportDecl kind: {support.kind!r}")
         return "\n\n".join(chunks)
 
-    @staticmethod
-    def _render_dl_handle_helper(module: MojoModule) -> str:
-        if module.link_mode == LinkMode.OWNED_DL_HANDLE and module.library_path_hint is not None:
+    def _library_path_candidates(self, module: MojoModule) -> list[str]:
+        if module.library_path_hint is not None:
             path_lit = module.library_path_hint.replace("\\", "\\\\").replace('"', '\\"')
-            return (
-                f'comptime _BINDGEN_LIB_PATH: String = "{path_lit}"\n'
-                "\n"
-                "def _bindgen_dl() raises -> OwnedDLHandle:\n"
-                "    return OwnedDLHandle(_BINDGEN_LIB_PATH)"
+            return [f'Path("{path_lit}")']
+        name = module.link_name or module.library
+        return [
+            f'Path("lib{name}.so")',
+            f'Path("lib{name}.dylib")',
+            f'Path("{name}.dll")',
+        ]
+
+    def _render_dylib_lazy_helpers(self, module: MojoModule) -> str:
+        candidates = self._library_path_candidates(module)
+        candidates_text = ",\n        ".join(candidates)
+        name = module.link_name or module.library
+        return (
+            f"def _bindgen_init_dylib() -> OwnedDLHandle:\n"
+            f'    return _find_dylib["{name}"](\n'
+            f"        {candidates_text},\n"
+            f"    )\n"
+            f"\n"
+            f"comptime _BINDGEN_DYLIB = _Global[\n"
+            f'    "mojo_bindgen/{name}/dylib",\n'
+            f"    _bindgen_init_dylib,\n"
+            f"]"
+        )
+
+    def _render_dylib_checked_helpers(self, module: MojoModule) -> str:
+        name = module.link_name or module.library
+        if module.library_path_hint is not None:
+            path_lit = module.library_path_hint.replace("\\", "\\\\").replace('"', '\\"')
+            load_expr = f'OwnedDLHandle(Path("{path_lit}"))'
+        elif module.link_mode == LinkMode.EXTERNAL_CALL:
+            load_expr = "OwnedDLHandle()"
+        else:
+            candidates = self._library_path_candidates(module)
+            candidates_text = ",\n                ".join(candidates)
+            load_expr = (
+                f'_try_find_dylib["{name}"](\n                {candidates_text},\n            )'
             )
         return (
-            "# Resolve symbols from libraries already linked into this process.\n"
-            "def _bindgen_dl() raises -> OwnedDLHandle:\n"
-            "    return OwnedDLHandle(DEFAULT_RTLD)"
+            "struct _BindgenApi(Movable):\n"
+            "    var _lib: OwnedDLHandle\n"
+            "    var _loaded: Bool\n"
+            "\n"
+            "    def __init__(out self):\n"
+            "        self._lib = OwnedDLHandle(unsafe_uninitialized=True)\n"
+            "        self._loaded = False\n"
+            "\n"
+            "    def _ensure_loaded(mut self) raises:\n"
+            "        if not self._loaded:\n"
+            f"            self._lib = {load_expr}\n"
+            "            self._loaded = True\n"
+            "\n"
+            "    def get_symbol[\n"
+            "        T: AnyType,\n"
+            "        symbol: StaticString,\n"
+            "    ](mut self) raises -> UnsafePointer[T, MutExternalOrigin]:\n"
+            "        self._ensure_loaded()\n"
+            "        var opt = self._lib.get_symbol[T](StringSlice(symbol))\n"
+            "        if not opt:\n"
+            '            raise Error(String("bindgen: missing C symbol: ") + String(symbol))\n'
+            "        return opt.value()\n"
+            "\n"
+            "    def get_function[\n"
+            "        symbol: StaticString,\n"
+            "        F: TrivialRegisterPassable,\n"
+            "    ](mut self) raises -> F:\n"
+            "        self._ensure_loaded()\n"
+            "        var opt = self._lib.get_symbol[NoneType](StringSlice(symbol))\n"
+            "        if not opt:\n"
+            '            raise Error(String("bindgen: missing C function symbol: ") + String(symbol))\n'
+            "        return UnsafePointer(to=opt.value()).bitcast[F]()[]\n"
+            "\n"
+            "def _bindgen_init_api() -> _BindgenApi:\n"
+            "    return _BindgenApi()\n"
+            "\n"
+            "comptime _BINDGEN_API = _Global[\n"
+            f'    "mojo_bindgen/{name}/api",\n'
+            "    _bindgen_init_api,\n"
+            "]\n"
+            "\n"
+            "@always_inline\n"
+            "def _bindgen_api() -> UnsafePointer[_BindgenApi, MutExternalOrigin]:\n"
+            "    return _BINDGEN_API.get_or_create_ptr()"
+        )
+
+    def _render_global_symbol_helpers(self, module: MojoModule) -> str:
+        if module.link_mode == LinkMode.DYLIB_LAZY:
+            raw_body = (
+                "        var dl = _BINDGEN_DYLIB.get_or_create_ptr()[].borrow()\n"
+                "        var opt = dl.get_symbol[Self.T](StringSlice(Self.link))\n"
+                "        if not opt:\n"
+                '            raise Error(String("bindgen: missing C global symbol: ") + String(Self.link))\n'
+                "        return opt.value()"
+            )
+        else:
+            # external-call and dylib-checked both resolve globals through the checked API object
+            raw_body = "        return _bindgen_api()[].get_symbol[Self.T, Self.link]()"
+        return (
+            "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
+            "    @staticmethod\n"
+            "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n" + raw_body + "\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:\n"
+            "        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def load() raises -> Self.T:\n"
+            "        return Self._raw()[].copy()\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def store(value: Self.T) raises -> None:\n"
+            "        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
+            "        p[] = value.copy()\n"
+            "\n"
+            "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
+            "    @staticmethod\n"
+            "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n" + raw_body + "\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:\n"
+            "        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())\n"
+            "\n"
+            "    @staticmethod\n"
+            "    def load() raises -> Self.T:\n"
+            "        return Self._raw()[].copy()"
         )
 
     def _render_decl(self, decl: MojoDecl) -> str:
@@ -610,21 +689,32 @@ class MojoIRPrinter:
             b.add(f"# alias {decl.name}: missing payload")
         return b.render()
 
+    def _function_pointer_alias_name(self, decl: FunctionDecl) -> str:
+        return f"_bindgen_fn_{decl.name}"
+
+    def _render_function_pointer_alias(self, decl: FunctionDecl) -> str:
+        fn_type = FunctionPtr(
+            ret=decl.return_type,
+            params=decl.params,
+            abi="C",
+            thin=True,
+            raises=False,
+        )
+        return f"comptime {self._function_pointer_alias_name(decl)} = {self._render_function_signature(fn_type)}"
+
     def _render_function_decl(self, decl: FunctionDecl) -> str:
+        mode = decl.call_target.link_mode
+        if mode == LinkMode.EXTERNAL_CALL:
+            return self._render_external_call_function(decl)
+        if mode == LinkMode.DYLIB_LAZY:
+            return self._render_dylib_lazy_function(decl)
+        if mode == LinkMode.DYLIB_CHECKED:
+            return self._render_dylib_checked_function(decl)
+        raise MojoIRPrintError(f"unsupported link mode for function: {mode!r}")
+
+    def _render_external_call_function(self, decl: FunctionDecl) -> str:
         b = CodeBuilder()
-        params = [
-            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type)}"
-            for i, param in enumerate(decl.params)
-        ]
-        params_text = ", ".join(params)
-        return_type = self._render_type(decl.return_type)
-        symbol = self._link_symbol(decl.call_target, decl.link_name)
-        bracket_inner = ", ".join(
-            [f'"{symbol}"', return_type] + [self._render_type(param.type) for param in decl.params]
-        )
-        call_args = ", ".join(
-            self._render_param_name(param.name, i) for i, param in enumerate(decl.params)
-        )
+        params_text, return_type, symbol, bracket_inner, call_args = self._function_call_parts(decl)
 
         if decl.kind == FunctionKind.VARIADIC_STUB:
             b.extend(self._doc_comment_lines(decl.doc))
@@ -642,30 +732,81 @@ class MojoIRPrinter:
             return b.render()
 
         b.extend(self._diagnostic_lines(decl.diagnostics))
-        if decl.call_target.link_mode == LinkMode.EXTERNAL_CALL:
-            if return_type == "NoneType":
-                b.add(f'def {decl.name}({params_text}) abi("C") -> None:')
-                b.indent()
-                self._render_docstring(b, decl.doc)
-                b.add(f"external_call[{bracket_inner}]({call_args})")
-            else:
-                b.add(f'def {decl.name}({params_text}) abi("C") -> {return_type}:')
-                b.indent()
-                self._render_docstring(b, decl.doc)
-                b.add(f"return external_call[{bracket_inner}]({call_args})")
+        return_type_text = self._render_signature_return_type(decl.return_type)
+        if return_type == "NoneType":
+            b.add(f"def {decl.name}({params_text}) -> None:")
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add(f"external_call[{bracket_inner}]({call_args})")
         else:
-            if return_type == "NoneType":
-                b.add(f"def {decl.name}({params_text}) raises -> None:")
-                b.indent()
-                self._render_docstring(b, decl.doc)
-                b.add(f"_bindgen_dl().call[{bracket_inner}]({call_args})")
-            else:
-                b.add(f"def {decl.name}({params_text}) raises -> {return_type}:")
-                b.indent()
-                self._render_docstring(b, decl.doc)
-                b.add(f"return _bindgen_dl().call[{bracket_inner}]({call_args})")
+            b.add(f"def {decl.name}({params_text}) -> {return_type_text}:")
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add(f"return external_call[{bracket_inner}]({call_args})")
         b.dedent()
         return b.render()
+
+    def _render_dylib_lazy_function(self, decl: FunctionDecl) -> str:
+        b = CodeBuilder()
+        params_text, return_type, symbol, _, call_args = self._function_call_parts(decl)
+        alias = self._function_pointer_alias_name(decl)
+        return_type_text = self._render_signature_return_type(decl.return_type)
+
+        b.extend(self._diagnostic_lines(decl.diagnostics))
+        b.add(self._render_function_pointer_alias(decl))
+        if return_type == "NoneType":
+            b.add(f"def {decl.name}({params_text}) raises -> None:")
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add(f'var f = _get_dylib_function[_BINDGEN_DYLIB, "{symbol}", {alias}]()')
+            b.add(f"f({call_args})")
+        else:
+            b.add(f"def {decl.name}({params_text}) raises -> {return_type_text}:")
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add(f'var f = _get_dylib_function[_BINDGEN_DYLIB, "{symbol}", {alias}]()')
+            b.add(f"return f({call_args})")
+        b.dedent()
+        return b.render()
+
+    def _render_dylib_checked_function(self, decl: FunctionDecl) -> str:
+        b = CodeBuilder()
+        params_text, return_type, symbol, _, call_args = self._function_call_parts(decl)
+        alias = self._function_pointer_alias_name(decl)
+        return_type_text = self._render_signature_return_type(decl.return_type)
+
+        b.extend(self._diagnostic_lines(decl.diagnostics))
+        b.add(self._render_function_pointer_alias(decl))
+        if return_type == "NoneType":
+            b.add(f"def {decl.name}({params_text}) raises -> None:")
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add(f'var f = _bindgen_api()[].get_function["{symbol}", {alias}]()')
+            b.add(f"f({call_args})")
+        else:
+            b.add(f"def {decl.name}({params_text}) raises -> {return_type_text}:")
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add(f'var f = _bindgen_api()[].get_function["{symbol}", {alias}]()')
+            b.add(f"return f({call_args})")
+        b.dedent()
+        return b.render()
+
+    def _function_call_parts(self, decl: FunctionDecl) -> tuple[str, str, str, str, str]:
+        params = [
+            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type)}"
+            for i, param in enumerate(decl.params)
+        ]
+        params_text = ", ".join(params)
+        return_type = self._render_type(decl.return_type)
+        symbol = self._link_symbol(decl.call_target, decl.link_name)
+        bracket_inner = ", ".join(
+            [f'"{symbol}"', return_type] + [self._render_type(param.type) for param in decl.params]
+        )
+        call_args = ", ".join(
+            self._render_param_name(param.name, i) for i, param in enumerate(decl.params)
+        )
+        return params_text, return_type, symbol, bracket_inner, call_args
 
     def _render_global_decl(self, decl: GlobalDecl) -> str:
         b = CodeBuilder()

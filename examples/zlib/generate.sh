@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Example driver for the system zlib header.
-# It generates both:
+# It generates three variants:
 #   - `zlib_bindings.mojo` for `external_call`
-#   - `zlib_bindings_dl.mojo` for `owned_dl_handle` when a shared library path is found
-# and then builds/runs `zlib_dl_smoke.mojo` for the runtime-loaded path.
+#   - `zlib_bindings_dylib_lazy.mojo` for `dylib-lazy`
+#   - `zlib_bindings_dylib_checked.mojo` for `dylib-checked`
+# and then builds/runs smoke tests for the dynamic-loaded paths.
 #
 # Expects:
 #   - mojo-bindgen on PATH (e.g. `pixi shell` from the repository root), or Pixi
@@ -14,7 +15,7 @@
 #   - mojo-bindgen emits declarations from the primary header only, so this
 #     script locates `zlib.h` directly instead of using a wrapper.
 #   - The short link name is `z`, not `zlib`.
-#   - The owned-dl-handle variant is skipped if no shared-library path can be found.
+#   - The dynamic variants are skipped if no shared-library path can be found.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,20 +93,27 @@ ZLIB_H="$(find_zlib_h)" || {
 }
 
 
-generate_bindings "$ZLIB_H" z z zlib_bindings.mojo
+generate_bindings "$ZLIB_H" z z zlib_bindings.mojo --link-mode external-call
 build_bindings_object zlib_bindings.mojo zlib_bindings.o -Xlinker -lz
 
 echo "Wrote $HERE/zlib_bindings.mojo, zlib_bindings_layout_tests.mojo, and zlib_bindings.o (from $ZLIB_H)"
 
 LIBZ_SO="$(find_libz_so)" || true
 if [[ -n "${LIBZ_SO:-}" ]]; then
-  generate_bindings "$ZLIB_H" z z zlib_bindings_dl.mojo \
-    --link-mode owned-dl-handle --library-path "$LIBZ_SO"
-  "${MOJO[@]}" build zlib_dl_smoke.mojo -I "$HERE" -o zlib_dl_smoke
-  echo "Wrote $HERE/zlib_bindings_dl.mojo (dlopen: $LIBZ_SO) and built zlib_dl_smoke"
-  echo "Running zlib_dl_smoke (owned_dl_handle runtime proof)"
-  "$HERE/zlib_dl_smoke"
+  generate_bindings "$ZLIB_H" z z zlib_bindings_dylib_lazy.mojo \
+    --link-mode dylib-lazy --library-path "$LIBZ_SO"
+  generate_bindings "$ZLIB_H" z z zlib_bindings_dylib_checked.mojo \
+    --link-mode dylib-checked --library-path "$LIBZ_SO"
+
+  "${MOJO[@]}" build zlib_dylib_lazy_smoke.mojo -I "$HERE" -o zlib_dylib_lazy_smoke
+  "${MOJO[@]}" build zlib_dylib_checked_smoke.mojo -I "$HERE" -o zlib_dylib_checked_smoke
+
+  echo "Wrote $HERE/zlib_bindings_dylib_lazy.mojo and $HERE/zlib_bindings_dylib_checked.mojo (dlopen: $LIBZ_SO)"
+  echo "Running zlib_dylib_lazy_smoke (dylib-lazy runtime proof)"
+  "$HERE/zlib_dylib_lazy_smoke"
+  echo "Running zlib_dylib_checked_smoke (dylib-checked runtime proof)"
+  "$HERE/zlib_dylib_checked_smoke"
 else
-  echo "mojo-bindgen zlib example: could not locate libz shared library; skipping OwnedDLHandle output." >&2
+  echo "mojo-bindgen zlib example: could not locate libz shared library; skipping dynamic output." >&2
   echo "  (Install zlib and ensure gcc -print-file-name=libz.so resolves.)" >&2
 fi
