@@ -12,8 +12,8 @@ from zlib_bindings_dl import (
 )
 
 
-def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutExternalOrigin]:
-    return rebind[UnsafePointer[Int8, ImmutExternalOrigin]](s.unsafe_ptr())
+def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutUntrackedOrigin]:
+    return rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](s.unsafe_ptr())
 
 
 def main() raises:

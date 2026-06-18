@@ -245,15 +245,15 @@ class MojoIRPrinter:
                 chunks.append(
                     "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
                     "    @staticmethod\n"
-                    "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
-                    "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
+                    "    def _raw() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:\n"
+                    "        var opt: Optional[UnsafePointer[Self.T, MutUntrackedOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
                     "        if not opt:\n"
                     '            raise Error(String("bindgen: missing C global symbol"))\n'
                     "        return opt.value()\n"
                     "\n"
                     "    @staticmethod\n"
-                    "    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:\n"
-                    "        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
+                    "    def ptr() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:\n"
+                    "        return rebind[UnsafePointer[Self.T, MutUntrackedOrigin]](Self._raw())\n"
                     "\n"
                     "    @staticmethod\n"
                     "    def load() raises -> Self.T:\n"
@@ -261,20 +261,20 @@ class MojoIRPrinter:
                     "\n"
                     "    @staticmethod\n"
                     "    def store(value: Self.T) raises -> None:\n"
-                    "        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())\n"
+                    "        var p = rebind[UnsafePointer[Self.T, MutUntrackedOrigin]](Self._raw())\n"
                     "        p[] = value.copy()\n"
                     "\n"
                     "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:\n"
                     "    @staticmethod\n"
-                    "    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:\n"
-                    "        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
+                    "    def _raw() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:\n"
+                    "        var opt: Optional[UnsafePointer[Self.T, MutUntrackedOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))\n"
                     "        if not opt:\n"
                     '            raise Error(String("bindgen: missing C global symbol"))\n'
                     "        return opt.value()\n"
                     "\n"
                     "    @staticmethod\n"
-                    "    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:\n"
-                    "        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())\n"
+                    "    def ptr() raises -> UnsafePointer[Self.T, ImmutUntrackedOrigin]:\n"
+                    "        return rebind[UnsafePointer[Self.T, ImmutUntrackedOrigin]](Self._raw())\n"
                     "\n"
                     "    @staticmethod\n"
                     "    def load() raises -> Self.T:\n"
@@ -452,18 +452,18 @@ class MojoIRPrinter:
         b.dedent()
         b.add("@staticmethod")
         b.add(
-            f"def {tail.field_name}_ptr(base: UnsafePointer[{struct_name}, ImmutExternalOrigin]) -> UnsafePointer[{elem_type}, ImmutExternalOrigin]:"
+            f"def {tail.field_name}_ptr(base: UnsafePointer[{struct_name}, ImmutUntrackedOrigin]) -> UnsafePointer[{elem_type}, ImmutUntrackedOrigin]:"
         )
         b.indent()
-        b.add(f"var raw = rebind[UnsafePointer[{elem_type}, ImmutExternalOrigin]](base)")
+        b.add(f"var raw = rebind[UnsafePointer[{elem_type}, ImmutUntrackedOrigin]](base)")
         b.add(f"return raw + {tail.byte_offset}")
         b.dedent()
         b.add("@staticmethod")
         b.add(
-            f"def {tail.field_name}_mut_ptr(base: UnsafePointer[{struct_name}, MutExternalOrigin]) -> UnsafePointer[{elem_type}, MutExternalOrigin]:"
+            f"def {tail.field_name}_mut_ptr(base: UnsafePointer[{struct_name}, MutUntrackedOrigin]) -> UnsafePointer[{elem_type}, MutUntrackedOrigin]:"
         )
         b.indent()
-        b.add(f"var raw = rebind[UnsafePointer[{elem_type}, MutExternalOrigin]](base)")
+        b.add(f"var raw = rebind[UnsafePointer[{elem_type}, MutUntrackedOrigin]](base)")
         b.add(f"return raw + {tail.byte_offset}")
         b.dedent()
 
@@ -836,9 +836,15 @@ class MojoIRPrinter:
     @staticmethod
     def _origin_name(origin: PointerOrigin, mutability: PointerMutability) -> str:
         if origin == PointerOrigin.ANY:
-            return "ImmutAnyOrigin" if mutability == PointerMutability.IMMUT else "MutAnyOrigin"
+            return (
+                "ImmutUnsafeAnyOrigin"
+                if mutability == PointerMutability.IMMUT
+                else "MutUnsafeAnyOrigin"
+            )
         return (
-            "ImmutExternalOrigin" if mutability == PointerMutability.IMMUT else "MutExternalOrigin"
+            "ImmutUntrackedOrigin"
+            if mutability == PointerMutability.IMMUT
+            else "MutUntrackedOrigin"
         )
 
     @staticmethod

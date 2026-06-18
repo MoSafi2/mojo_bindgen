@@ -152,11 +152,11 @@ def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
 
     assert (
-        'comptime named_cb_t = def (value: c_int, userdata: Optional[MutOpaquePointer[MutExternalOrigin]]) thin abi("C") -> c_int'
+        'comptime named_cb_t = def (value: c_int, userdata: Optional[MutOpaquePointer[MutUntrackedOrigin]]) thin abi("C") -> c_int'
         in out
     )
     assert (
-        'comptime callbacks_t_poll_cb = def (timeout_ms: c_int, arg1: Optional[MutOpaquePointer[MutExternalOrigin]]) thin abi("C") -> c_int'
+        'comptime callbacks_t_poll_cb = def (timeout_ms: c_int, arg1: Optional[MutOpaquePointer[MutUntrackedOrigin]]) thin abi("C") -> c_int'
         in out
     )
 
@@ -588,11 +588,11 @@ def test_codegen_emits_named_nested_record_defs_before_parent(tmp_path: Path) ->
     assert "struct sqlite3_index_info" in out
     assert out.index("struct sqlite3_index_constraint") < out.index("struct sqlite3_index_info")
     assert (
-        "var aConstraint: Optional[UnsafePointer[sqlite3_index_constraint, MutExternalOrigin]]"
+        "var aConstraint: Optional[UnsafePointer[sqlite3_index_constraint, MutUntrackedOrigin]]"
         in out
     )
-    assert "var aOrderBy: Optional[UnsafePointer[sqlite3_index_orderby, MutExternalOrigin]]" in out
+    assert "var aOrderBy: Optional[UnsafePointer[sqlite3_index_orderby, MutUntrackedOrigin]]" in out
     assert (
-        "var aConstraintUsage: Optional[UnsafePointer[sqlite3_index_constraint_usage, MutExternalOrigin]]"
+        "var aConstraintUsage: Optional[UnsafePointer[sqlite3_index_constraint_usage, MutUntrackedOrigin]]"
         in out
     )

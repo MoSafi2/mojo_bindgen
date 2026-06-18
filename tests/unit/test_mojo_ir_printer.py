@@ -297,7 +297,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
     assert "comptime Packet = UnsafeUnion[c_int, Widget]" in out
     assert "comptime LIMIT = (1 + 2)" in out
     assert (
-        'def install(cb: install_cb, widget: UnsafePointer[Widget, ImmutExternalOrigin]) abi("C") -> None:'
+        'def install(cb: install_cb, widget: UnsafePointer[Widget, ImmutUntrackedOrigin]) abi("C") -> None:'
         in out
     )
 
@@ -391,7 +391,7 @@ def test_render_callback_alias_uses_none_in_signature_position() -> None:
     )
 
     assert (
-        'comptime log_callback_t = def (msg: UnsafePointer[c_char, ImmutExternalOrigin]) thin abi("C") -> None'
+        'comptime log_callback_t = def (msg: UnsafePointer[c_char, ImmutUntrackedOrigin]) thin abi("C") -> None'
         in out
     )
 
@@ -438,12 +438,12 @@ def test_render_struct_emits_flexible_tail_helpers() -> None:
     assert "@staticmethod" in rendered
     assert "def payload_offset() -> UInt:" in rendered
     assert (
-        "def payload_ptr(base: UnsafePointer[Packet, ImmutExternalOrigin]) -> "
-        "UnsafePointer[c_uchar, ImmutExternalOrigin]:" in rendered
+        "def payload_ptr(base: UnsafePointer[Packet, ImmutUntrackedOrigin]) -> "
+        "UnsafePointer[c_uchar, ImmutUntrackedOrigin]:" in rendered
     )
     assert (
-        "def payload_mut_ptr(base: UnsafePointer[Packet, MutExternalOrigin]) -> "
-        "UnsafePointer[c_uchar, MutExternalOrigin]:" in rendered
+        "def payload_mut_ptr(base: UnsafePointer[Packet, MutUntrackedOrigin]) -> "
+        "UnsafePointer[c_uchar, MutUntrackedOrigin]:" in rendered
     )
     assert "return raw + 4" in rendered
 
@@ -950,4 +950,4 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
         in rendered
     )
     assert 'def install(cb: binary_cb_t) abi("C") -> None:' in rendered
-    assert "def load_widget() raises -> UnsafePointer[Widget, MutExternalOrigin]:" in rendered
+    assert "def load_widget() raises -> UnsafePointer[Widget, MutUntrackedOrigin]:" in rendered

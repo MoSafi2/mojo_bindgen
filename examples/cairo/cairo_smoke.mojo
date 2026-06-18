@@ -30,7 +30,7 @@ def _approx_eq(a: Float64, b: Float64, eps: Float64 = 1e-9) -> Bool:
 
 
 def _draw_panel_border(
-    cr: Optional[UnsafePointer[cairo_t, MutExternalOrigin]],
+    cr: Optional[UnsafePointer[cairo_t, MutUntrackedOrigin]],
     x: Float64,
     y: Float64,
     w: Float64,
@@ -49,7 +49,7 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert(
         "version_string_nonnull",
         cairo_version_string()
-        != Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
+        != Optional[UnsafePointer[Int8, ImmutUntrackedOrigin]](),
     )
 
     var surf = cairo_image_surface_create(
@@ -74,7 +74,7 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert(
         "status_to_string_nonnull",
         cairo_status_to_string(materialize[OK]())
-        != Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
+        != Optional[UnsafePointer[Int8, ImmutUntrackedOrigin]](),
     )
 
     cairo_save(cr)
@@ -118,12 +118,12 @@ def run_metadata_and_lifecycle_checks() raises:
     _assert(
         "get_target_nonnull",
         cairo_get_target(cr)
-        != Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]](),
+        != Optional[UnsafePointer[cairo_surface_t, MutUntrackedOrigin]](),
     )
     _assert(
         "get_group_target_nonnull",
         cairo_get_group_target(cr)
-        != Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]](),
+        != Optional[UnsafePointer[cairo_surface_t, MutUntrackedOrigin]](),
     )
 
     cairo_destroy(cr)
@@ -132,7 +132,7 @@ def run_metadata_and_lifecycle_checks() raises:
 
 
 def draw_composite_scene(
-    cr: Optional[UnsafePointer[cairo_t, MutExternalOrigin]]
+    cr: Optional[UnsafePointer[cairo_t, MutUntrackedOrigin]]
 ) raises:
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0)
     cairo_paint(cr)
@@ -256,12 +256,12 @@ def draw_composite_scene(
     cairo_pattern_get_matrix(rgba_pat, matrix)
     cairo_pattern_set_matrix(
         rgba_pat,
-        rebind[Optional[UnsafePointer[cairo_matrix_t, ImmutExternalOrigin]]](
+        rebind[Optional[UnsafePointer[cairo_matrix_t, ImmutUntrackedOrigin]]](
             matrix
         ),
     )
     var surf_ptr = alloc[
-        Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]]
+        Optional[UnsafePointer[cairo_surface_t, MutUntrackedOrigin]]
     ](1)
     _ok("pattern_get_surface", cairo_pattern_get_surface(surface_pat, surf_ptr))
     var x0 = alloc[Float64](1)
@@ -353,7 +353,7 @@ def draw_composite_scene(
     _assert(
         "panel4_get_source_nonnull",
         cairo_get_source(cr)
-        != Optional[UnsafePointer[cairo_pattern_t, MutExternalOrigin]](),
+        != Optional[UnsafePointer[cairo_pattern_t, MutUntrackedOrigin]](),
     )
     cairo_pattern_destroy(source_probe)
     cairo_restore(cr)
@@ -386,7 +386,7 @@ def draw_composite_scene(
     var family = CStringSlice("sans\0")
     cairo_select_font_face(
         cr,
-        rebind[UnsafePointer[Int8, ImmutExternalOrigin]](family.unsafe_ptr()),
+        rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](family.unsafe_ptr()),
         materialize[CAIRO_FONT_SLANT_NORMAL](),
         materialize[CAIRO_FONT_WEIGHT_BOLD](),
     )
@@ -404,7 +404,7 @@ def draw_composite_scene(
     cairo_font_face_destroy(ff2)
 
     var tf = cairo_toy_font_face_create(
-        rebind[UnsafePointer[Int8, ImmutExternalOrigin]](family.unsafe_ptr()),
+        rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](family.unsafe_ptr()),
         materialize[CAIRO_FONT_SLANT_ITALIC](),
         materialize[CAIRO_FONT_WEIGHT_NORMAL](),
     )
@@ -420,7 +420,7 @@ def draw_composite_scene(
     _assert(
         "panel6_toy_family_nonnull",
         cairo_toy_font_face_get_family(tf)
-        != Optional[UnsafePointer[Int8, ImmutExternalOrigin]](),
+        != Optional[UnsafePointer[Int8, ImmutUntrackedOrigin]](),
     )
     cairo_font_face_destroy(tf)
 
@@ -428,19 +428,19 @@ def draw_composite_scene(
     cairo_set_source_rgb(cr, 0.0, 0.0, 0.0)
     cairo_move_to(cr, 12.0, 60.0)
     cairo_show_text(
-        cr, rebind[UnsafePointer[Int8, ImmutExternalOrigin]](hello.unsafe_ptr())
+        cr, rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](hello.unsafe_ptr())
     )
     _ok("panel6_show_text", cairo_status(cr))
     cairo_move_to(cr, 12.0, 120.0)
     cairo_text_path(
-        cr, rebind[UnsafePointer[Int8, ImmutExternalOrigin]](hello.unsafe_ptr())
+        cr, rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](hello.unsafe_ptr())
     )
     _ok("panel6_text_path", cairo_status(cr))
     cairo_new_path(cr)
     var glyphs = cairo_glyph_allocate(4)
     _assert(
         "panel6_glyph_alloc_nonnull",
-        glyphs != Optional[UnsafePointer[cairo_glyph_t, MutExternalOrigin]](),
+        glyphs != Optional[UnsafePointer[cairo_glyph_t, MutUntrackedOrigin]](),
     )
     cairo_glyph_free(glyphs)
     cairo_restore(cr)
@@ -450,7 +450,7 @@ def draw_composite_scene(
     cairo_translate(cr, 20.0, 420.0)
     var rec = cairo_recording_surface_create(
         materialize[CAIRO_CONTENT_COLOR_ALPHA](),
-        Optional[UnsafePointer[cairo_rectangle_t, ImmutExternalOrigin]](),
+        Optional[UnsafePointer[cairo_rectangle_t, ImmutUntrackedOrigin]](),
     )
     _ok("panel7_recording_surface_create", cairo_surface_status(rec))
     var rec_cr = cairo_create(rec)
@@ -472,20 +472,20 @@ def run_non_visual_object_checks() raises:
     var opts = cairo_font_options_create()
     _ok("font_options_create", cairo_font_options_status(opts))
     var opts2 = cairo_font_options_copy(
-        rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](opts)
+        rebind[UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]](opts)
     )
     _ok("font_options_copy", cairo_font_options_status(opts2))
     cairo_font_options_merge(
         opts,
-        rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](opts2),
+        rebind[UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]](opts2),
     )
     _assert(
         "font_options_equal",
         cairo_font_options_equal(
-            rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](
+            rebind[UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]](
                 opts
             ),
-            rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](
+            rebind[UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]](
                 opts2
             ),
         )
@@ -494,7 +494,7 @@ def run_non_visual_object_checks() raises:
     _assert(
         "font_options_hash_stable",
         cairo_font_options_hash(
-            rebind[UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]](
+            rebind[UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]](
                 opts
             )
         )
@@ -506,7 +506,7 @@ def run_non_visual_object_checks() raises:
         cairo_font_options_get_antialias(
             rebind[
                 Optional[
-                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                    UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]
                 ]
             ](opts)
         )
@@ -520,7 +520,7 @@ def run_non_visual_object_checks() raises:
         cairo_font_options_get_subpixel_order(
             rebind[
                 Optional[
-                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                    UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]
                 ]
             ](opts)
         )
@@ -534,7 +534,7 @@ def run_non_visual_object_checks() raises:
         cairo_font_options_get_hint_style(
             rebind[
                 Optional[
-                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                    UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]
                 ]
             ](opts)
         )
@@ -548,7 +548,7 @@ def run_non_visual_object_checks() raises:
         cairo_font_options_get_hint_metrics(
             rebind[
                 Optional[
-                    UnsafePointer[cairo_font_options_t, ImmutExternalOrigin]
+                    UnsafePointer[cairo_font_options_t, ImmutUntrackedOrigin]
                 ]
             ](opts)
         )
@@ -561,12 +561,12 @@ def run_non_visual_object_checks() raises:
     rect_storage[0] = cairo_rectangle_int_t(10, 10, 60, 60)
     var reg = cairo_region_create_rectangle(
         rebind[
-            Optional[UnsafePointer[cairo_rectangle_int_t, ImmutExternalOrigin]]
+            Optional[UnsafePointer[cairo_rectangle_int_t, ImmutUntrackedOrigin]]
         ](rect_storage)
     )
     rect_storage.free()
     var reg_const = rebind[
-        Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]
+        Optional[UnsafePointer[cairo_region_t, ImmutUntrackedOrigin]]
     ](reg)
     _ok("region_create_rectangle", cairo_region_status(reg_const))
     _assert(
@@ -591,7 +591,7 @@ def run_non_visual_object_checks() raises:
     extents.free()
     var reg2 = cairo_region_copy(reg_const)
     var reg2_const = rebind[
-        Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]
+        Optional[UnsafePointer[cairo_region_t, ImmutUntrackedOrigin]]
     ](reg2)
     _assert(
         "region_equal_after_copy",
@@ -608,7 +608,7 @@ def run_non_visual_object_checks() raises:
 
     var empty = cairo_region_create()
     var empty_const = rebind[
-        Optional[UnsafePointer[cairo_region_t, ImmutExternalOrigin]]
+        Optional[UnsafePointer[cairo_region_t, ImmutUntrackedOrigin]]
     ](empty)
     _ok("region_create_empty", cairo_region_status(empty_const))
     _assert(
@@ -621,20 +621,20 @@ def run_non_visual_object_checks() raises:
 
 
 def run_png_roundtrip_from_composite(
-    surface: Optional[UnsafePointer[cairo_surface_t, MutExternalOrigin]]
+    surface: Optional[UnsafePointer[cairo_surface_t, MutUntrackedOrigin]]
 ) raises:
     var out_path = CStringSlice("/tmp/mojo_bindgen_cairo_smoke_composite.png\0")
     _ok(
         "surface_write_to_png",
         cairo_surface_write_to_png(
             surface,
-            rebind[UnsafePointer[Int8, ImmutExternalOrigin]](
+            rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](
                 out_path.unsafe_ptr()
             ),
         ),
     )
     var loaded = cairo_image_surface_create_from_png(
-        rebind[UnsafePointer[Int8, ImmutExternalOrigin]](out_path.unsafe_ptr())
+        rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](out_path.unsafe_ptr())
     )
     _ok("png_load", cairo_surface_status(loaded))
     _assert("png_width", cairo_image_surface_get_width(loaded) == SCENE_W)

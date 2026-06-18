@@ -785,7 +785,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "comptime my_uint = c_int" in out
-    assert "comptime my_uint_ptr = Optional[UnsafePointer[my_uint, MutExternalOrigin]]" in out
+    assert "comptime my_uint_ptr = Optional[UnsafePointer[my_uint, MutUntrackedOrigin]]" in out
     assert "var value: my_uint" in out
     assert "var ptr: my_uint_ptr" in out
     assert 'comptime global_ptr = GlobalVar[T=my_uint_ptr, link="global_ptr"]' in out
@@ -1153,19 +1153,19 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
     assert "comptime sqlite3_create_collation_v2_xDestroy_cb = def (" in out
     assert (
         "def sqlite3_create_collation_v2("
-        "db: Optional[UnsafePointer[sqlite3, MutExternalOrigin]], "
-        "zName: Optional[UnsafePointer[c_char, MutExternalOrigin]], "
+        "db: Optional[UnsafePointer[sqlite3, MutUntrackedOrigin]], "
+        "zName: Optional[UnsafePointer[c_char, MutUntrackedOrigin]], "
         "eTextRep: c_int, "
-        "ctx: Optional[MutOpaquePointer[MutExternalOrigin]], "
+        "ctx: Optional[MutOpaquePointer[MutUntrackedOrigin]], "
         "xCompare: sqlite3_create_collation_v2_xCompare_cb, "
         "xDestroy: sqlite3_create_collation_v2_xDestroy_cb"
         ') abi("C") -> c_int:'
     ) in out
     assert (
         'return external_call["sqlite3_create_collation_v2", c_int, '
-        "Optional[UnsafePointer[sqlite3, MutExternalOrigin]], "
-        "Optional[UnsafePointer[c_char, MutExternalOrigin]], c_int, "
-        "Optional[MutOpaquePointer[MutExternalOrigin]], "
+        "Optional[UnsafePointer[sqlite3, MutUntrackedOrigin]], "
+        "Optional[UnsafePointer[c_char, MutUntrackedOrigin]], c_int, "
+        "Optional[MutOpaquePointer[MutUntrackedOrigin]], "
         "sqlite3_create_collation_v2_xCompare_cb, sqlite3_create_collation_v2_xDestroy_cb]"
         "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
     ) in out
@@ -1217,12 +1217,12 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
     assert "comptime nested_cb_t = def (" in out
     assert (
         "def install_nested_cb(slot: Optional[UnsafePointer[Optional[UnsafePointer[nested_cb_t, "
-        'MutExternalOrigin]], MutExternalOrigin]]) abi("C") -> None:'
+        'MutUntrackedOrigin]], MutUntrackedOrigin]]) abi("C") -> None:'
     ) in out
     assert (
         'external_call["install_nested_cb", NoneType, '
-        "Optional[UnsafePointer[Optional[UnsafePointer[nested_cb_t, MutExternalOrigin]], "
-        "MutExternalOrigin]]](slot)"
+        "Optional[UnsafePointer[Optional[UnsafePointer[nested_cb_t, MutUntrackedOrigin]], "
+        "MutUntrackedOrigin]]](slot)"
     ) in out
 
 

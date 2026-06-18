@@ -11,15 +11,15 @@ def _bindgen_dl() raises -> OwnedDLHandle:
 
 struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
-    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+    def _raw() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        var opt: Optional[UnsafePointer[Self.T, MutUntrackedOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
         if not opt:
             raise Error(String("bindgen: missing C global symbol"))
         return opt.value()
 
     @staticmethod
-    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:
-        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+    def ptr() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        return rebind[UnsafePointer[Self.T, MutUntrackedOrigin]](Self._raw())
 
     @staticmethod
     def load() raises -> Self.T:
@@ -27,20 +27,20 @@ struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
 
     @staticmethod
     def store(value: Self.T) raises -> None:
-        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+        var p = rebind[UnsafePointer[Self.T, MutUntrackedOrigin]](Self._raw())
         p[] = value.copy()
 
 struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
-    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+    def _raw() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        var opt: Optional[UnsafePointer[Self.T, MutUntrackedOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
         if not opt:
             raise Error(String("bindgen: missing C global symbol"))
         return opt.value()
 
     @staticmethod
-    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:
-        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())
+    def ptr() raises -> UnsafePointer[Self.T, ImmutUntrackedOrigin]:
+        return rebind[UnsafePointer[Self.T, ImmutUntrackedOrigin]](Self._raw())
 
     @staticmethod
     def load() raises -> Self.T:
