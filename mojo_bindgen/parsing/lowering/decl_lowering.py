@@ -17,6 +17,7 @@ from mojo_bindgen.ir import (
     Function,
     GlobalVar,
     IntLiteral,
+    IntType,
     MacroDecl,
     Param,
     Typedef,
@@ -199,11 +200,11 @@ class DeclLowerer:
                     return True
         return False
 
-    def _anonymous_enum_as_consts(self, cursor: cx.Cursor) -> list[Const]:
+    def _anonymous_enum_as_consts(self, cursor: cx.Cursor) -> list[Decl]:
         underlying = self.primitive_resolver.resolve_primitive(cursor.enum_type)
         if underlying is None:
             underlying = default_signed_int_primitive()
-        out: list[Const] = []
+        out: list[Decl] = []
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
                 out.append(
@@ -221,7 +222,7 @@ class DeclLowerer:
         if not c_name:
             return None
         underlying = self.primitive_resolver.resolve_primitive(cursor.enum_type)
-        if underlying is None:
+        if not isinstance(underlying, IntType):
             underlying = default_signed_int_primitive()
         enumerants: list[Enumerant] = []
         for child in cursor.get_children():

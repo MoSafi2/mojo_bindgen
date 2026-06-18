@@ -12,7 +12,7 @@ import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 import clang.cindex as cx
 
@@ -279,8 +279,8 @@ class ClangCompat:
         """Return a vector or complex element type across libclang variants."""
         getter = getattr(t, "get_element_type", None)
         if callable(getter):
-            return getter()
-        return getattr(t, "element_type")
+            return cast(cx.Type, getter())
+        return cast(cx.Type, getattr(t, "element_type"))
 
     def get_num_elements(self, t: cx.Type) -> int | None:
         """Return vector element count across libclang variants."""
@@ -317,14 +317,14 @@ class ClangCompat:
         getter = getattr(t, "get_value_type", None)
         if callable(getter):
             try:
-                value_type = getter()
+                value_type = cast(cx.Type, getter())
             except Exception:
                 return None
             return None if value_type.kind == cx.TypeKind.INVALID else value_type
         if not self._ensure_value_type_api():
             return None
         try:
-            value_type = cx.conf.lib.clang_Type_getValueType(t)
+            value_type = cast(cx.Type, cast(Any, cx.conf.lib).clang_Type_getValueType(t))
         except Exception:
             return None
         return None if value_type.kind == cx.TypeKind.INVALID else value_type

@@ -8,10 +8,11 @@ type lowerer, but it does not own post-parse normalization or semantic policy.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import Array, Field, IntType, Struct, StructRef, Type
+from mojo_bindgen.ir import Array, FamPattern, Field, IntType, Struct, StructRef, Type
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
@@ -67,6 +68,7 @@ class _FieldDiscovery:
         attached = self._attached_inline_record_definition(field_cursor)
 
         if field_cursor.is_bitfield():
+            bit_width = field_cursor.get_bitfield_width()
             return FieldSite(
                 name=name,
                 source_name=name,
@@ -77,7 +79,7 @@ class _FieldDiscovery:
                 is_anonymous=not bool(name),
                 is_bitfield=True,
                 bit_offset=max(bit_offset, 0),
-                bit_width=field_cursor.get_bitfield_width(),
+                bit_width=bit_width if bit_width is not None else 0,
             )
 
         return FieldSite(
@@ -199,7 +201,7 @@ class _FieldDiscovery:
         getter = getattr(cursor, "get_field_offsetof", None)
         if callable(getter):
             try:
-                return getter()
+                return cast(int, getter())
             except Exception:
                 return -1
         return -1
@@ -251,14 +253,15 @@ class RecordLowerer:
             )
         return None
 
-    def completed_records_since(self, start: int) -> tuple[int, list[Struct | None]]:
+    def completed_records_since(self, start: int) -> tuple[int, list[Struct]]:
         """Return lowered record definitions completed after one marker index."""
         decl_ids = self._completed_record_decl_ids[start:]
-        return len(self._completed_record_decl_ids), [
-            self.registry.get(decl_id)
-            for decl_id in decl_ids
-            if self.registry.get(decl_id) is not None
-        ]
+        records: list[Struct] = []
+        for decl_id in decl_ids:
+            record = self.registry.get(decl_id)
+            if record is not None:
+                records.append(record)
+        return len(self._completed_record_decl_ids), records
 
     def lower_record_definition(self, cursor: cx.Cursor) -> Struct:
         """Lower one complete struct/union definition exactly once."""
@@ -315,7 +318,7 @@ class RecordLowerer:
                 is_anonymous=site.is_anonymous,
                 is_bitfield=True,
                 bit_offset=site.bit_offset,
-                bit_width=site.bit_width,
+                bit_width=site.bit_width if site.bit_width is not None else 0,
                 doc=(
                     cursor_doc_comment(site.field_cursor)
                     if site.field_cursor is not None
@@ -370,13 +373,13 @@ class RecordLowerer:
         record: Struct,
         index: int,
         field_count: int,
-    ) -> str | None:
+    ) -> FamPattern | None:
         if record.is_union or site.field_cursor is None:
             return None
         if not isinstance(field_type, Array):
             return None
 
-        pattern: str | None = None
+        pattern: FamPattern | None = None
         if field_type.array_kind == "flexible" and field_type.size is None:
             pattern = "c99_empty"
         elif field_type.array_kind == "fixed" and field_type.size == 0:

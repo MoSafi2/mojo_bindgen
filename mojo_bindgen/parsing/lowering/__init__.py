@@ -35,6 +35,5 @@ __all__ = [
     "RecordRegistry",
     "TypeContext",
     "TypeLowerer",
-    "_suffix_probe_parse_args",
     "default_signed_int_primitive",
 ]

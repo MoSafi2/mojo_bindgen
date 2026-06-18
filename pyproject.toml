@@ -69,7 +69,6 @@ ignore = ["E501", "UP007"]
 [tool.pyright]
 # `libclang` Python bindings ship without accurate stubs; typecheck the rest of the package.
 include = ["mojo_bindgen"]
-exclude = ["mojo_bindgen/parsing"]
 # Align with the oldest supported checker grammar; runtime is 3.14+.
 pythonVersion = "3.13"
 typeCheckingMode = "basic"
