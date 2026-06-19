@@ -9,11 +9,13 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import (
     Array,
+    ArrayKind,
     AtomicType,
     ComplexType,
     EnumRef,
     FloatType,
     FunctionPtr,
+    IntType,
     Param,
     Pointer,
     QualifiedType,
@@ -63,7 +65,7 @@ def _safe_align(t: cx.Type) -> int | None:
     return max(0, t.get_align()) or None
 
 
-def _array_kind(t: cx.Type, ctx: TypeContext) -> str:
+def _array_kind(t: cx.Type, ctx: TypeContext) -> ArrayKind:
     if t.kind == cx.TypeKind.CONSTANTARRAY:
         return "fixed"
     if t.kind == cx.TypeKind.INCOMPLETEARRAY:
@@ -244,7 +246,8 @@ class TypeLowerer:
         canonical_pointee = _normalize(pointee.get_canonical())
         if canonical_pointee.kind not in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
             return None
-        return self._lower_pointer(t, ctx, source_cursor=source_cursor)
+        lowered = self._lower_pointer(t, ctx, source_cursor=source_cursor)
+        return lowered if isinstance(lowered, FunctionPtr) else None
 
     def _lower_fn_proto_parameter(
         self, sugared: cx.Type, canonical: cx.Type, ctx: TypeContext
@@ -381,6 +384,8 @@ class TypeLowerer:
         decl = t.get_declaration()
         name = decl.spelling
         underlying = self.primitive_resolver.resolve_primitive(decl.enum_type)
+        if not isinstance(underlying, IntType):
+            underlying = None
         if name and underlying is not None:
             decl_id = self.registry.decl_id_for_cursor(decl)
             return EnumRef(

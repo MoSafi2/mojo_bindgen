@@ -26,6 +26,7 @@ from mojo_bindgen.ir import (
     IntKind,
     IntLiteral,
     IntType,
+    MacroDeclKind,
     NullPtrLiteral,
     RefExpr,
     SizeOfExpr,
@@ -330,7 +331,7 @@ class ParsedMacro:
     """Classification result for one macro definition."""
 
     tokens: list[str]
-    kind: str
+    kind: MacroDeclKind
     expr: ConstExpr | None = None
     primitive: IntType | FloatType | VoidType | None = None
     diagnostic: str | None = None

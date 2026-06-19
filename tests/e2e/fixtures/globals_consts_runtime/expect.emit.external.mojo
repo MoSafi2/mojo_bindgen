@@ -1,5 +1,5 @@
 # Each non-comment line must be present in the emitted file.
-from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle
+from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle, _DLHandle, _Global, _get_global
 from std.builtin.simd import SIMD
 from std.atomic import Atomic
 struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:

@@ -1,5 +1,5 @@
-def _bindgen_dl(
-_bindgen_dl().call[
+def _bindgen_dylib(
+_bindgen_function[
 def fr_linear(
 def fr_apply_mode(
 def fr_is_nonzero(

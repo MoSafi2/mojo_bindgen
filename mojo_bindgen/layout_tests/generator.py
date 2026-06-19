@@ -180,7 +180,7 @@ def render_layout_test_module(
 
     for record in checks:
         lines.extend(["", "", f"def test_layout_{record.record_name}() raises:"])
-        lines.append(f"    comptime r = reflect[{record.record_name}]()")
+        lines.append(f"    comptime r = reflect[{record.record_name}]")
         for check in record.checks:
             lines.append(
                 f'    _check_eq("{check.label}", Int({check.expression}), {check.expected})'

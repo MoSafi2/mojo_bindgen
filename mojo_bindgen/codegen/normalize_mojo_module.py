@@ -377,7 +377,14 @@ class NormalizeMojoModulePass:
                 self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
 
         if SupportDeclKind.DL_HANDLE_HELPERS in self._support_decl_kinds:
-            self._record_import("std.ffi", "DEFAULT_RTLD", "OwnedDLHandle")
+            ffi_imports = ["OwnedDLHandle", "_DLHandle", "_Global", "_get_global"]
+            if self._module.link_mode == LinkMode.EXTERNAL_CALL:
+                ffi_imports.append("DEFAULT_RTLD")
+            else:
+                ffi_imports.append("_find_dylib")
+            self._record_import("std.ffi", *ffi_imports)
+            self._record_import("std.memory.unsafe_pointer", "unsafe_cast")
+            self._record_import("std.os", "abort")
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:
@@ -407,6 +414,9 @@ class NormalizeMojoModulePass:
             ordered_ffi.append("DEFAULT_RTLD")
         if "OwnedDLHandle" in ffi_names:
             ordered_ffi.append("OwnedDLHandle")
+        for private_name in ("_DLHandle", "_Global", "_find_dylib", "_get_global"):
+            if private_name in ffi_names:
+                ordered_ffi.append(private_name)
         if "UnsafeUnion" in ffi_names:
             ordered_ffi.append("UnsafeUnion")
         ordered_ffi.extend(sorted(name for name in ffi_names if name.startswith("c_")))

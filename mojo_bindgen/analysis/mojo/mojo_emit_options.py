@@ -23,11 +23,11 @@ class MojoEmitOptions:
 
     linking: LinkingMode = "external_call"
     """external_call: link C symbols at mojo build time; emitted wrappers use ``abi("C")``.
-    owned_dl_handle: resolve via ``OwnedDLHandle.call`` (raises); wrappers omit ``abi("C")`` on
-    the ``def`` line because ``abi("C")`` combined with ``raises`` currently fails LLVM mapping."""
+    owned_dl_handle: cache a dynamic library handle and resolve explicit C-ABI function pointers;
+    load or symbol failures abort."""
 
     library_path_hint: str | None = None
-    """If set with owned_dl_handle, pass this path to OwnedDLHandle(...). If None, use DEFAULT_RTLD (symbols must be linked into the process)."""
+    """If set with owned_dl_handle, load this path. If None, try the link name and common shared-library names."""
 
     module_comment: bool = True
     """Emit a leading comment with source header and library metadata."""

@@ -3,47 +3,83 @@
 # library: surface_globals  link_name: surface_globals
 # FFI mode: external_call
 
-from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle, c_int, c_uint
+from std.ffi import external_call, DEFAULT_RTLD, OwnedDLHandle, _DLHandle, _Global, _get_global, c_int, c_uint
+from std.memory.unsafe_pointer import unsafe_cast
+from std.os import abort
 
-# Resolve symbols from libraries already linked into this process.
-def _bindgen_dl() raises -> OwnedDLHandle:
-    return OwnedDLHandle(DEFAULT_RTLD)
+comptime _BINDGEN_LIB_NAME = "surface_globals"
+comptime _BINDGEN_LINK_NAME = "surface_globals"
+
+def _bindgen_init_dylib() -> OwnedDLHandle:
+    try:
+        return OwnedDLHandle(DEFAULT_RTLD)
+    except e:
+        abort(t"bindgen: failed to open process dynamic symbol table: {e}")
+
+comptime _BINDGEN_DYLIB = _Global["mojo_bindgen/surface_globals", _bindgen_init_dylib]
+
+# Returns a borrowed process-lifetime dynamic library handle; do not close it.
+def _bindgen_dylib() -> _DLHandle:
+    var dylib_ptr = _get_global[
+        _BINDGEN_DYLIB.name,
+        _BINDGEN_DYLIB._init_wrapper,
+        _BINDGEN_DYLIB._deinit_wrapper,
+    ]()
+    var dylib = unsafe_cast[Type=_BINDGEN_DYLIB.StorageType](dylib_ptr).value()[].borrow()
+    if not dylib:
+        abort(t"bindgen: failed to load dynamic library '{_BINDGEN_LIB_NAME}'")
+    return dylib
+
+def _bindgen_function[Fn: TrivialRegisterPassable](symbol: StringSlice) -> Fn:
+    var fn_ptr = _bindgen_dylib().get_symbol[NoneType](symbol)
+    if not fn_ptr:
+        abort(
+            t"bindgen: missing C function symbol '{symbol}' "
+            t"in dynamic library '{_BINDGEN_LIB_NAME}'"
+        )
+    return UnsafePointer(to=fn_ptr.value()).bitcast[Fn]()[]
 
 struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
-    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+    def _raw() -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        var opt: Optional[UnsafePointer[Self.T, MutUntrackedOrigin]] = _bindgen_dylib().get_symbol[Self.T](StringSlice(Self.link))
         if not opt:
-            raise Error(String("bindgen: missing C global symbol"))
+            abort(
+                t"bindgen: missing C global symbol '{Self.link}' "
+                t"in dynamic library '{_BINDGEN_LIB_NAME}'"
+            )
         return opt.value()
 
     @staticmethod
-    def ptr() raises -> UnsafePointer[Self.T, MutExternalOrigin]:
-        return rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+    def ptr() -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        return rebind[UnsafePointer[Self.T, MutUntrackedOrigin]](Self._raw())
 
     @staticmethod
-    def load() raises -> Self.T:
+    def load() -> Self.T:
         return Self._raw()[].copy()
 
     @staticmethod
-    def store(value: Self.T) raises -> None:
-        var p = rebind[UnsafePointer[Self.T, MutExternalOrigin]](Self._raw())
+    def store(value: Self.T) -> None:
+        var p = rebind[UnsafePointer[Self.T, MutUntrackedOrigin]](Self._raw())
         p[] = value.copy()
 
 struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:
     @staticmethod
-    def _raw() raises -> UnsafePointer[Self.T, MutAnyOrigin]:
-        var opt: Optional[UnsafePointer[Self.T, MutAnyOrigin]] = _bindgen_dl().get_symbol[Self.T](StringSlice(Self.link))
+    def _raw() -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        var opt: Optional[UnsafePointer[Self.T, MutUntrackedOrigin]] = _bindgen_dylib().get_symbol[Self.T](StringSlice(Self.link))
         if not opt:
-            raise Error(String("bindgen: missing C global symbol"))
+            abort(
+                t"bindgen: missing C global symbol '{Self.link}' "
+                t"in dynamic library '{_BINDGEN_LIB_NAME}'"
+            )
         return opt.value()
 
     @staticmethod
-    def ptr() raises -> UnsafePointer[Self.T, ImmutExternalOrigin]:
-        return rebind[UnsafePointer[Self.T, ImmutExternalOrigin]](Self._raw())
+    def ptr() -> UnsafePointer[Self.T, ImmutUntrackedOrigin]:
+        return rebind[UnsafePointer[Self.T, ImmutUntrackedOrigin]](Self._raw())
 
     @staticmethod
-    def load() raises -> Self.T:
+    def load() -> Self.T:
         return Self._raw()[].copy()
 
 comptime DEFAULT_LIMIT = c_uint(42)

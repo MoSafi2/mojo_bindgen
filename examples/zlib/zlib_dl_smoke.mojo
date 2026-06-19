@@ -1,6 +1,5 @@
-# Smoke test for OwnedDLHandle bindings: dynamic load of libz and runtime FFI calls.
-# Requires zlib_bindings_dl.mojo from generate.sh (--linking owned_dl_handle).
-from zlib_bindings_dl import (
+# Smoke test for owned-dl-handle bindings: dynamic load of libz and runtime FFI calls.
+from zlib_bindings import (
     Z_OK,
     compressBound,
     gzclose,
@@ -12,8 +11,8 @@ from zlib_bindings_dl import (
 )
 
 
-def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutExternalOrigin]:
-    return rebind[UnsafePointer[Int8, ImmutExternalOrigin]](s.unsafe_ptr())
+def _cstr(s: StaticString) -> UnsafePointer[Int8, ImmutUntrackedOrigin]:
+    return rebind[UnsafePointer[Int8, ImmutUntrackedOrigin]](s.unsafe_ptr())
 
 
 def main() raises:
