@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file.
   collides with the generated function-pointer local, and use a clearer
   `_bindgen_c_fn` internal name.
 
+- Added new emission model for `owned_dl_handle` were functions are now non-raising and the `OwnedDLHandle` is stored globally to avoid the overhead of its creation on every function call.
+
 - Update generated Mojo bindings, layout-test sidecars, and example smoke tests
   for Mojo 1.0.0b2 syntax changes, including `def`, explicit `abi("C")`,
   `reflect[T]`, and the new `UntrackedOrigin` / `UnsafeAnyOrigin` spelling
