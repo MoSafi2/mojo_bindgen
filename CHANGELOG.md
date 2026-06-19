@@ -10,10 +10,6 @@ All notable changes to this project are documented in this file.
   collides with the generated function-pointer local, and use a clearer
   `_bindgen_c_fn` internal name.
 
-## [0.3.1] 2026-06-18
-
-### Changed
-
 - Update generated Mojo bindings, layout-test sidecars, and example smoke tests
   for Mojo 1.0.0b2 syntax changes, including `def`, explicit `abi("C")`,
   `reflect[T]`, and the new `UntrackedOrigin` / `UnsafeAnyOrigin` spelling
