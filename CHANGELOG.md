@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Avoid invalid Mojo in `owned_dl_handle` wrappers when a C parameter name
+  collides with the generated function-pointer local, and use a clearer
+  `_bindgen_c_fn` internal name.
+
 ## [0.3.1] 2026-06-18
 
 ### Changed

@@ -676,9 +676,12 @@ class MojoIRPrinter:
 
     def _render_function_decl(self, decl: FunctionDecl) -> str:
         b = CodeBuilder()
+        param_names = [
+            self._render_param_name(param.name, i) for i, param in enumerate(decl.params)
+        ]
         params = [
-            f"{self._render_param_name(param.name, i)}: {self._render_type(param.type)}"
-            for i, param in enumerate(decl.params)
+            f"{param_name}: {self._render_type(param.type)}"
+            for param_name, param in zip(param_names, decl.params, strict=True)
         ]
         params_text = ", ".join(params)
         return_type = self._render_type(decl.return_type)
@@ -688,9 +691,7 @@ class MojoIRPrinter:
             [f'"{symbol}"', return_type] + [self._render_type(param.type) for param in decl.params]
         )
         fn_type = self._render_c_abi_function_pointer_type(decl)
-        call_args = ", ".join(
-            self._render_param_name(param.name, i) for i, param in enumerate(decl.params)
-        )
+        call_args = ", ".join(param_names)
 
         if decl.kind == FunctionKind.VARIADIC_STUB:
             b.extend(self._doc_comment_lines(decl.doc))
@@ -720,18 +721,25 @@ class MojoIRPrinter:
                 self._render_docstring(b, decl.doc)
                 b.add(f"return external_call[{bracket_inner}]({call_args})")
         else:
+            fn_local = self._unique_local_name("_bindgen_c_fn", reserved=param_names)
             if return_type == "NoneType":
                 b.add(f"def {decl.name}({params_text}) -> None:")
                 b.indent()
                 self._render_docstring(b, decl.doc)
-                b.add(f'var fn_ = _bindgen_function[{fn_type}](StringSlice("{symbol_lit}"))')
-                b.add(f"fn_({call_args})")
+                b.add(
+                    f'var {fn_local} = _bindgen_function[{fn_type}]'
+                    f'(StringSlice("{symbol_lit}"))'
+                )
+                b.add(f"{fn_local}({call_args})")
             else:
                 b.add(f"def {decl.name}({params_text}) -> {return_type}:")
                 b.indent()
                 self._render_docstring(b, decl.doc)
-                b.add(f'var fn_ = _bindgen_function[{fn_type}](StringSlice("{symbol_lit}"))')
-                b.add(f"return fn_({call_args})")
+                b.add(
+                    f'var {fn_local} = _bindgen_function[{fn_type}]'
+                    f'(StringSlice("{symbol_lit}"))'
+                )
+                b.add(f"return {fn_local}({call_args})")
         b.dedent()
         return b.render()
 
@@ -905,6 +913,16 @@ class MojoIRPrinter:
         if param.name.strip():
             return mojo_ident(param.name, fallback=f"arg{index}")
         return f"arg{index}"
+
+    @staticmethod
+    def _unique_local_name(base: str, *, reserved: Iterable[str]) -> str:
+        used = set(reserved)
+        if base not in used:
+            return base
+        suffix = 1
+        while f"{base}_{suffix}" in used:
+            suffix += 1
+        return f"{base}_{suffix}"
 
     @staticmethod
     def _origin_name(origin: PointerOrigin, mutability: PointerMutability) -> str:

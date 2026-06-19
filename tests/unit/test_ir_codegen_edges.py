@@ -873,18 +873,18 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     assert "def pfr_select_add() -> pfr_binary_op_t:" in dl_out
     assert ("def pfr_select_add_direct() -> pfr_select_add_direct_return_cb:") in dl_out
     assert (
-        'var fn_ = _bindgen_function[def() thin abi("C") -> pfr_binary_op_t]('
+        'var _bindgen_c_fn = _bindgen_function[def() thin abi("C") -> pfr_binary_op_t]('
         'StringSlice("pfr_select_add"))'
     ) in dl_out
     assert (
-        'var fn_ = _bindgen_function[def() thin abi("C") -> '
+        'var _bindgen_c_fn = _bindgen_function[def() thin abi("C") -> '
         'pfr_select_add_direct_return_cb](StringSlice("pfr_select_add_direct"))' in dl_out
     )
     assert (
-        'var fn_ = _bindgen_function[def(pfr_binary_op_t, c_int, c_int) thin abi("C") -> '
-        'c_int](StringSlice("pfr_call"))' in dl_out
+        'var _bindgen_c_fn = _bindgen_function[def(pfr_binary_op_t, c_int, c_int) '
+        'thin abi("C") -> c_int](StringSlice("pfr_call"))' in dl_out
     )
-    assert "return fn_(op, lhs, rhs)" in dl_out
+    assert "return _bindgen_c_fn(op, lhs, rhs)" in dl_out
 
 
 def test_generator_emits_struct_field_callback_aliases() -> None:

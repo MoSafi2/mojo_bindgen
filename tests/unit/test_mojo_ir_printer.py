@@ -604,6 +604,47 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
     assert "def _bindgen_dylib() -> _DLHandle:" in rendered
 
 
+def test_render_owned_dl_handle_function_local_does_not_collide_with_parameters() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.OWNED_DL_HANDLE,
+        decls=[
+            FunctionDecl(
+                name="execute_on_thread",
+                link_name="execute_on_thread",
+                params=[
+                    Param(name="fn", type=NamedType("execute_on_thread_cb")),
+                    Param(name="_bindgen_c_fn", type=BuiltinType(MojoBuiltin.C_INT)),
+                ],
+                return_type=BuiltinType(MojoBuiltin.NONE),
+                kind=FunctionKind.WRAPPER,
+                call_target=CallTarget(
+                    link_mode=LinkMode.OWNED_DL_HANDLE,
+                    symbol="execute_on_thread",
+                ),
+            )
+        ],
+    )
+
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
+
+    assert (
+        "def execute_on_thread(fn_: execute_on_thread_cb, _bindgen_c_fn: c_int) -> None:"
+        in rendered
+    )
+    assert (
+        'var _bindgen_c_fn_1 = _bindgen_function[def(execute_on_thread_cb, c_int) '
+        'thin abi("C") -> NoneType](StringSlice("execute_on_thread"))'
+    ) in rendered
+    assert "_bindgen_c_fn_1(fn_, _bindgen_c_fn)" in rendered
+    assert "var fn_ =" not in rendered
+
+
 def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:
     normalize_mod = importlib.import_module("mojo_bindgen.codegen.normalize_mojo_module")
 
