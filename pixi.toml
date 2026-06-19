@@ -26,7 +26,6 @@ example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"
 example-sqlite = "bash examples/sqlite/generate.sh"
-example-global-consts = "bash examples/global_consts/generate.sh"
 
 [dependencies]
 mojo = ">=1.0.0b2,<2"
