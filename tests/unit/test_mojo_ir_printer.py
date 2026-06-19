@@ -508,8 +508,10 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
     assert normalized.dependencies.imports == [
         ModuleImport(
             module="std.ffi",
-            names=["DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
-        )
+            names=["OwnedDLHandle", "_DLHandle", "_Global", "_find_dylib", "_get_global", "c_int"],
+        ),
+        ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
+        ModuleImport(module="std.os", names=["abort"]),
     ]
     assert normalized.dependencies.support_decls == [
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
@@ -554,9 +556,19 @@ def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() ->
     assert normalized.dependencies.imports == [
         ModuleImport(
             module="std.ffi",
-            names=["external_call", "DEFAULT_RTLD", "OwnedDLHandle", "c_int"],
+            names=[
+                "external_call",
+                "DEFAULT_RTLD",
+                "OwnedDLHandle",
+                "_DLHandle",
+                "_Global",
+                "_get_global",
+                "c_int",
+            ],
         ),
         ModuleImport(module="std.sys.info", names=["size_of"]),
+        ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
+        ModuleImport(module="std.os", names=["abort"]),
     ]
     assert normalized.dependencies.support_decls == [
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
@@ -588,7 +600,8 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
     )
 
     assert 'comptime _BINDGEN_LIB_PATH: String = "/tmp/libdemo.so"' in rendered
-    assert "return OwnedDLHandle(_BINDGEN_LIB_PATH)" in rendered
+    assert "return _find_dylib[_BINDGEN_LIB_NAME](_BINDGEN_LIB_PATH)" in rendered
+    assert "def _bindgen_dylib() -> _DLHandle:" in rendered
 
 
 def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:
@@ -944,10 +957,10 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert "def _bindgen_dl() raises -> OwnedDLHandle:" in rendered
+    assert "def _bindgen_dylib() -> _DLHandle:" in rendered
     assert (
         "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:"
         in rendered
     )
     assert 'def install(cb: binary_cb_t) abi("C") -> None:' in rendered
-    assert "def load_widget() raises -> UnsafePointer[Widget, MutUntrackedOrigin]:" in rendered
+    assert "def load_widget() -> UnsafePointer[Widget, MutUntrackedOrigin]:" in rendered

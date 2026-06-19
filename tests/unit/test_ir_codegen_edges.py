@@ -509,7 +509,7 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert (
         "external_call" in import_line and "OwnedDLHandle" in import_line and "c_int" in import_line
     )
-    assert "def _bindgen_dl() raises -> OwnedDLHandle:" in out
+    assert "def _bindgen_dylib() -> _DLHandle:" in out
     assert "struct GlobalVar[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
     assert (
         "struct GlobalConst[T: Copyable & ImplicitlyDestructible, //, link: StaticString]:" in out
@@ -870,17 +870,21 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         )
     ).generate(unit)
     assert 'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in dl_out
-    assert "def pfr_select_add() raises -> pfr_binary_op_t:" in dl_out
-    assert ("def pfr_select_add_direct() raises -> pfr_select_add_direct_return_cb:") in dl_out
-    assert 'return _bindgen_dl().call["pfr_select_add", pfr_binary_op_t]()' in dl_out
+    assert "def pfr_select_add() -> pfr_binary_op_t:" in dl_out
+    assert ("def pfr_select_add_direct() -> pfr_select_add_direct_return_cb:") in dl_out
     assert (
-        'return _bindgen_dl().call["pfr_select_add_direct", pfr_select_add_direct_return_cb]()'
-        in dl_out
+        'var fn_ = _bindgen_function[def() thin abi("C") -> pfr_binary_op_t]('
+        'StringSlice("pfr_select_add"))'
+    ) in dl_out
+    assert (
+        'var fn_ = _bindgen_function[def() thin abi("C") -> '
+        'pfr_select_add_direct_return_cb](StringSlice("pfr_select_add_direct"))' in dl_out
     )
     assert (
-        'return _bindgen_dl().call["pfr_call", c_int, pfr_binary_op_t, c_int, c_int](op, lhs, rhs)'
-        in dl_out
+        'var fn_ = _bindgen_function[def(pfr_binary_op_t, c_int, c_int) thin abi("C") -> '
+        'c_int](StringSlice("pfr_call"))' in dl_out
     )
+    assert "return fn_(op, lhs, rhs)" in dl_out
 
 
 def test_generator_emits_struct_field_callback_aliases() -> None:
