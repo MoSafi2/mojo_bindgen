@@ -881,7 +881,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         'pfr_select_add_direct_return_cb](StringSlice("pfr_select_add_direct"))' in dl_out
     )
     assert (
-        'var _bindgen_c_fn = _bindgen_function[def(pfr_binary_op_t, c_int, c_int) '
+        "var _bindgen_c_fn = _bindgen_function[def(pfr_binary_op_t, c_int, c_int) "
         'thin abi("C") -> c_int](StringSlice("pfr_call"))' in dl_out
     )
     assert "return _bindgen_c_fn(op, lhs, rhs)" in dl_out

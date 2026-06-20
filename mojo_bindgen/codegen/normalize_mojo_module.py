@@ -384,7 +384,10 @@ class NormalizeMojoModulePass:
                 ffi_imports.append("_find_dylib")
             self._record_import("std.ffi", *ffi_imports)
             self._record_import("std.memory.unsafe_pointer", "unsafe_cast")
-            self._record_import("std.os", "abort")
+            os_imports = ["abort"]
+            if self._module.link_mode == LinkMode.OWNED_DL_HANDLE:
+                os_imports.append("getenv")
+            self._record_import("std.os", *os_imports)
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:

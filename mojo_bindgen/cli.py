@@ -119,7 +119,7 @@ def run(
         typer.Option(
             "--library-path",
             metavar="PATH",
-            help="Shared-library path to cache when --link-mode owned-dl-handle.",
+            help="Shared-library candidate path for --link-mode owned-dl-handle.",
         ),
     ] = None,
     diagnostics: Annotated[

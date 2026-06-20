@@ -511,7 +511,7 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
             names=["OwnedDLHandle", "_DLHandle", "_Global", "_find_dylib", "_get_global", "c_int"],
         ),
         ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
-        ModuleImport(module="std.os", names=["abort"]),
+        ModuleImport(module="std.os", names=["abort", "getenv"]),
     ]
     assert normalized.dependencies.support_decls == [
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
@@ -599,9 +599,50 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
         MojoIRPrintOptions(module_comment=False),
     )
 
-    assert 'comptime _BINDGEN_LIB_PATH: String = "/tmp/libdemo.so"' in rendered
-    assert "return _find_dylib[_BINDGEN_LIB_NAME](_BINDGEN_LIB_PATH)" in rendered
+    assert 'comptime _BINDGEN_LIB_PATH_CANDIDATE: String = "/tmp/libdemo.so"' in rendered
+    assert 'comptime _BINDGEN_LIB_PATH_ENV = "MOJO_BINDGEN_DEMO_LIBRARY_PATH"' in rendered
+    assert 'comptime _BINDGEN_GENERIC_LIB_PATH_ENV = "MOJO_BINDGEN_LIBRARY_PATH"' in rendered
+    assert "def _bindgen_env_path(name: String) -> String:" in rendered
+    assert "def _bindgen_pixi_env_lib_path(subdir: String) -> String:" in rendered
+    assert "return _find_dylib[_BINDGEN_LIB_NAME](" in rendered
+    assert "_bindgen_env_path(_BINDGEN_LIB_PATH_ENV)" in rendered
+    assert "_bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV)" in rendered
+    assert "_BINDGEN_LIB_PATH_CANDIDATE" in rendered
+    assert (
+        '_bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")'
+        in rendered
+    )
+    assert '_bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")' in rendered
+    assert '"lib" + String(_BINDGEN_LINK_NAME) + ".dylib"' in rendered
+    assert '"/opt/homebrew/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"' in rendered
+    assert '"/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"' in rendered
     assert "def _bindgen_dylib() -> _DLHandle:" in rendered
+
+
+def test_render_owned_dl_handle_sanitizes_library_path_env_var() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="foo-bar.2",
+        link_mode=LinkMode.OWNED_DL_HANDLE,
+        decls=[
+            FunctionDecl(
+                name="install",
+                link_name="install",
+                params=[],
+                return_type=BuiltinType(MojoBuiltin.NONE),
+                kind=FunctionKind.WRAPPER,
+                call_target=CallTarget(link_mode=LinkMode.OWNED_DL_HANDLE, symbol="install"),
+            )
+        ],
+    )
+
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
+
+    assert 'comptime _BINDGEN_LIB_PATH_ENV = "MOJO_BINDGEN_FOO_BAR_2_LIBRARY_PATH"' in rendered
 
 
 def test_render_owned_dl_handle_function_local_does_not_collide_with_parameters() -> None:
@@ -638,7 +679,7 @@ def test_render_owned_dl_handle_function_local_does_not_collide_with_parameters(
         in rendered
     )
     assert (
-        'var _bindgen_c_fn_1 = _bindgen_function[def(execute_on_thread_cb, c_int) '
+        "var _bindgen_c_fn_1 = _bindgen_function[def(execute_on_thread_cb, c_int) "
         'thin abi("C") -> NoneType](StringSlice("execute_on_thread"))'
     ) in rendered
     assert "_bindgen_c_fn_1(fn_, _bindgen_c_fn)" in rendered

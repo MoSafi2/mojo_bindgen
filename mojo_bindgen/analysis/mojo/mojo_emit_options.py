@@ -27,7 +27,7 @@ class MojoEmitOptions:
     load or symbol failures abort."""
 
     library_path_hint: str | None = None
-    """If set with owned_dl_handle, load this path. If None, try the link name and common shared-library names."""
+    """If set with owned_dl_handle, use this as an early dynamic-library candidate."""
 
     module_comment: bool = True
     """Emit a leading comment with source header and library metadata."""

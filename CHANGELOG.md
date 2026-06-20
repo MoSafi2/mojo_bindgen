@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Make `owned_dl_handle` dynamic-library loading portable by trying generated
+  and generic environment overrides, Pixi/Conda environment locations, and
+  Linux/macOS fallback names, and move generated Mojo support blocks into
+  reusable codegen templates.
+
 - Avoid invalid Mojo in `owned_dl_handle` wrappers when a C parameter name
   collides with the generated function-pointer local, and use a clearer
   `_bindgen_c_fn` internal name.

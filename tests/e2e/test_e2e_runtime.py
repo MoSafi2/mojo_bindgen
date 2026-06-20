@@ -294,6 +294,7 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
 
     if build_dl.returncode == 0:
         dl_env = os.environ.copy()
+        dl_env[f"MOJO_BINDGEN_{case_name.upper()}_LIBRARY_PATH"] = str(lib_path)
         runtime_dl = _run([str(dl_bin)], cwd=_REPO_ROOT, env=dl_env)
         _check_phase(
             "runtime_owned_dl_handle",
