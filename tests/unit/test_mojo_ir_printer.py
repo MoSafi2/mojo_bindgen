@@ -512,6 +512,7 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
         ),
         ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
         ModuleImport(module="std.os", names=["abort", "getenv"]),
+        ModuleImport(module="std.pathlib", names=["Path"]),
     ]
     assert normalized.dependencies.support_decls == [
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
@@ -604,9 +605,21 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
     assert 'comptime _BINDGEN_GENERIC_LIB_PATH_ENV = "MOJO_BINDGEN_LIBRARY_PATH"' in rendered
     assert "def _bindgen_env_path(name: String) -> String:" in rendered
     assert "def _bindgen_pixi_env_lib_path(subdir: String) -> String:" in rendered
-    assert "return _find_dylib[_BINDGEN_LIB_NAME](" in rendered
-    assert "_bindgen_env_path(_BINDGEN_LIB_PATH_ENV)" in rendered
-    assert "_bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV)" in rendered
+    assert (
+        "def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String) -> None:"
+        in rendered
+    )
+    assert 'if path != "":' in rendered
+    assert "paths.append(Path(path))" in rendered
+    assert "def _bindgen_dylib_candidates() -> List[Path]:" in rendered
+    assert (
+        "_bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_LIB_PATH_ENV))"
+        in rendered
+    )
+    assert (
+        "_bindgen_append_dylib_candidate(paths, "
+        "_bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))" in rendered
+    )
     assert "_BINDGEN_LIB_PATH_CANDIDATE" in rendered
     assert (
         '_bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")'
@@ -616,6 +629,8 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
     assert '"lib" + String(_BINDGEN_LINK_NAME) + ".dylib"' in rendered
     assert '"/opt/homebrew/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"' in rendered
     assert '"/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"' in rendered
+    assert "var paths = _bindgen_dylib_candidates()" in rendered
+    assert "return _find_dylib[_BINDGEN_LIB_NAME](paths)" in rendered
     assert "def _bindgen_dylib() -> _DLHandle:" in rendered
 
 

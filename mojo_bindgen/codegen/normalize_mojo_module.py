@@ -387,6 +387,7 @@ class NormalizeMojoModulePass:
             os_imports = ["abort"]
             if self._module.link_mode == LinkMode.OWNED_DL_HANDLE:
                 os_imports.append("getenv")
+                self._record_import("std.pathlib", "Path")
             self._record_import("std.os", *os_imports)
 
         for decl in decls:

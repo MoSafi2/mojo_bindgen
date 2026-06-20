@@ -80,37 +80,45 @@ def _render_owned_dl_handle_helpers(
         '        return project_root + "/.pixi/envs/" + env_name + "/" + subdir\n'
         '    return ""\n'
         "\n"
+        "def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String) -> None:\n"
+        '    if path != "":\n'
+        "        paths.append(Path(path))\n"
+        "\n"
+        "def _bindgen_dylib_candidates() -> List[Path]:\n"
+        "    var paths = List[Path]()\n"
+        "    _bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_LIB_PATH_ENV))\n"
+        "    _bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))\n"
+        "    _bindgen_append_dylib_candidate(paths, _BINDGEN_LIB_PATH_CANDIDATE)\n"
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "bin/lib" + String(_BINDGEN_LINK_NAME) + ".so"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "bin/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"))\n'
+        '    _bindgen_append_dylib_candidate(paths, _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"))\n'
+        "    _bindgen_append_dylib_candidate(paths, String(_BINDGEN_LINK_NAME))\n"
+        '    _bindgen_append_dylib_candidate(paths, "lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
+        '    _bindgen_append_dylib_candidate(paths, "lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
+        '    _bindgen_append_dylib_candidate(paths, "lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/opt/homebrew/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
+        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
+        "    return paths^\n"
+        "\n"
         "def _bindgen_init_dylib() -> OwnedDLHandle:\n"
-        "    return _find_dylib[_BINDGEN_LIB_NAME](\n"
-        "        _bindgen_env_path(_BINDGEN_LIB_PATH_ENV),\n"
-        "        _bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV),\n"
-        "        _BINDGEN_LIB_PATH_CANDIDATE,\n"
-        '        _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so"),\n'
-        '        _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"),\n'
-        '        _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"),\n'
-        '        _bindgen_prefix_lib_path("CONDA_PREFIX", "bin/lib" + String(_BINDGEN_LINK_NAME) + ".so"),\n'
-        '        _bindgen_prefix_lib_path("CONDA_PREFIX", "bin/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"),\n'
-        '        _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so"),\n'
-        '        _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"),\n'
-        '        _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"),\n'
-        "        _BINDGEN_LINK_NAME,\n"
-        '        "lib" + String(_BINDGEN_LINK_NAME) + ".so",\n'
-        '        "lib" + String(_BINDGEN_LINK_NAME) + ".so.1",\n'
-        '        "lib" + String(_BINDGEN_LINK_NAME) + ".dylib",\n'
-        '        "/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so",\n'
-        '        "/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1",\n'
-        '        "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so",\n'
-        '        "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1",\n'
-        '        "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so",\n'
-        '        "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1",\n'
-        '        "/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so",\n'
-        '        "/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1",\n'
-        '        "/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so",\n'
-        '        "/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1",\n'
-        '        "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib",\n'
-        '        "/opt/homebrew/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib",\n'
-        '        "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib",\n'
-        "    )\n"
+        "    var paths = _bindgen_dylib_candidates()\n"
+        "    return _find_dylib[_BINDGEN_LIB_NAME](paths)\n"
         "\n"
         'comptime _BINDGEN_DYLIB = _Global["mojo_bindgen/'
         f'{library_lit}", _bindgen_init_dylib]\n'

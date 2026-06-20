@@ -3,7 +3,9 @@ from std.builtin.simd import SIMD
 from std.atomic import Atomic
 comptime _BINDGEN_LIB_PATH_CANDIDATE: String
 comptime _BINDGEN_LIB_PATH_ENV = "MOJO_BINDGEN_GLOBALS_CONSTS_RUNTIME_LIBRARY_PATH"
-_bindgen_env_path(_BINDGEN_LIB_PATH_ENV)
+def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String) -> None:
+_bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_LIB_PATH_ENV))
+return _find_dylib[_BINDGEN_LIB_NAME](paths)
 def _bindgen_dylib() -> _DLHandle:
 comptime int32_t = Int32
 comptime gcr_vec4 = SIMD[DType.float32, 4]
