@@ -155,6 +155,9 @@ def _float_kind_by_type(kind: cx.TypeKind) -> Optional[String]:
 struct PrimitiveResolver(Copyable, Movable):
     """Stateless lowering of clang scalar types to IR primitives."""
 
+    def __init__(out self):
+        pass
+
     def resolve_primitive(self, clang_type: cx.Type) raises -> Optional[Value]:
         """Return a scalar IR node for scalar clang types, else `None`."""
         var canonical = clang_type.canonical()
