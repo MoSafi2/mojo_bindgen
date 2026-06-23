@@ -2,3 +2,4 @@ sqlite3_bindings.mojo
 sqlite_smoke
 *.o
 sqlite.json
+sqlite3_bindings_layout_tests.mojo
