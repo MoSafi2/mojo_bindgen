@@ -9,11 +9,19 @@ Core source lives in `mojo_bindgen/`.
 - `mojo_bindgen/codegen/`: Mojo emission and generator orchestration
 - `mojo_bindgen/ir.py`: unified C-facing and Mojo-facing IR schemas
 
+A Mojo port of the IR (with EmberJson-backed SerDe) lives in `mojo/`:
+
+- `mojo/ir.mojo`: Mojo `@fieldwise_init` structs mirroring `mojo_bindgen/ir.py`,
+  with JSON serialization/deserialization via the `emberjson` pixi git dependency
+  (pinned to tag `0.3.3`). All IR nodes are `Copyable` via `.copy()`.
+- `mojo/__init__.mojo`: re-exports from `ir`.
+
 Tests live under `tests/`:
 
 - `tests/unit/` for fast isolated checks
 - `tests/surface/` for parser/emitter goldens
 - `tests/corpus/`, `tests/stress/`, and `tests/e2e/` for broader coverage
+- `tests/mojo/` for Mojo-side IR SerDe round-trip checks (run via `pixi run test-mojo`)
 
 Supporting material lives in `examples/`, `docs/`, `scripts/`, `typings/`, and
 `CONTRIBUTING.md`.
@@ -26,6 +34,7 @@ Use Pixi on Linux; it is the primary workflow for this repo.
 pixi install
 pixi run test
 pixi run test-light
+pixi run test-mojo
 pixi run lint
 pixi run format
 pixi run typecheck
@@ -35,6 +44,7 @@ pixi run build
 
 - `pixi run test`: full pytest suite
 - `pixi run test-light`: skips `expensive` tests for faster feedback
+- `pixi run test-mojo`: run Mojo-side IR SerDe round-trip tests
 - `pixi run check-light`: CI-aligned validation (`format-check`, lint, pyright, light tests)
 - `pixi run build`: build sdist and wheel
 - `pixi run precommit`: format, apply safe Ruff fixes, restage, and run `check-light`

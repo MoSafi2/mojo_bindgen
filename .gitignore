@@ -14,6 +14,5 @@ tests/test.json
 examples/cairo/cairo_smoke_2
 todo.md
 *.h
-*.mojo
-io_uring.json
-io_uring.rs
+*.mojoc
+*.mojopkg
