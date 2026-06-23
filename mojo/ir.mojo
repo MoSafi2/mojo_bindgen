@@ -281,7 +281,6 @@ struct DocComment(IRBase):
         self.source = "clang_raw"
 
 
-@fieldwise_init
 struct TargetABI(IRBase):
     var kind: String
     var pointer_size_bytes: Int
@@ -404,7 +403,6 @@ struct IntType(IRBase):
         self.size_bytes = 0
         self.align_bytes = None
         self.ext_bits = None
-
 
 
 @fieldwise_init
@@ -663,12 +661,12 @@ struct FloatLiteral(IRBase):
 
 
 @fieldwise_init
-struct String(IRBase):
+struct IRString(IRBase):
     var kind: String
     var value: String
 
     def __init__(out self):
-        self.kind = "String"
+        self.kind = "IRString"
         self.value = ""
 
 
@@ -1002,6 +1000,7 @@ struct Unit(IRBase):
         self.target_abi = TargetABI()
         self.decls = List[Value]()
         self.diagnostics = List[IRDiagnostic]()
+
 
     def to_json[*, pretty: Bool = True](self) raises -> String:
         return serialize[pretty=pretty](self)
@@ -1377,3 +1376,5 @@ struct MojoModule(IRBase):
     @staticmethod
     def from_json(s: String) raises -> MojoModule:
         return deserialize_ir[MojoModule](s)
+
+

@@ -17,13 +17,13 @@ struct ParserDiagnosticSink(Copyable, Movable):
     def __init__(out self):
         self.diagnostics = List[FrontendDiagnostic]()
 
-    def add_frontend_diagnostics(self, diags: List[FrontendDiagnostic]):
+    def add_frontend_diagnostics(mut self, diags: List[FrontendDiagnostic]):
         """Append normalized frontend diagnostics from libclang."""
         for d in diags:
-            self.diagnostics.append(d)
+            self.diagnostics.append(d.copy())
 
     def add_cursor_diag(
-        self, severity: String, cursor: Cursor, message: String
+        mut self, severity: String, cursor: Cursor, message: String
     ) raises:
         """Append a cursor-based diagnostic."""
         var loc = cursor.location()
@@ -31,36 +31,36 @@ struct ParserDiagnosticSink(Copyable, Movable):
         var file_opt = loc.file()
         if file_opt:
             file_name = file_opt.value().name()
-        self.diagnostics.append(FrontendDiagnostic(
-            severity=severity,
-            file=file_name,
-            line=loc.line(),
-            col=loc.column(),
-            message=message,
-        ))
+        var diag = FrontendDiagnostic()
+        diag.severity = severity
+        diag.file = file_name
+        diag.line = loc.line()
+        diag.col = loc.column()
+        diag.message = message
+        self.diagnostics.append(diag^)
 
     def add_type_diag(
-        self, severity: String, clang_type: Type, message: String
+        mut self, severity: String, clang_type: Type, message: String
     ) raises:
         """Append a type-based diagnostic when no source cursor is available."""
-        self.diagnostics.append(FrontendDiagnostic(
-            severity=severity,
-            file="<type>",
-            line=0,
-            col=0,
-            message=message + ": " + clang_type.spelling(),
-        ))
+        var diag = FrontendDiagnostic()
+        diag.severity = severity
+        diag.file = "<type>"
+        diag.line = 0
+        diag.col = 0
+        diag.message = message + ": " + clang_type.spelling()
+        self.diagnostics.append(diag^)
 
     def to_ir_diagnostics(self) raises -> List[IRDiagnostic]:
         """Convert accumulated diagnostics into final IR diagnostics."""
         var out: List[IRDiagnostic] = []
         for d in self.diagnostics:
-            out.append(IRDiagnostic(
-                severity=d.severity,
-                message=d.message,
-                file=Optional[String](d.file),
-                line=Optional[Int](d.line),
-                col=Optional[Int](d.col),
-                decl_id=None,
-            ))
+            var diag = IRDiagnostic()
+            diag.severity = d.severity
+            diag.message = d.message
+            diag.file = Optional[String](d.file)
+            diag.line = Optional[Int](d.line)
+            diag.col = Optional[Int](d.col)
+            diag.decl_id = None
+            out.append(diag^)
         return out^

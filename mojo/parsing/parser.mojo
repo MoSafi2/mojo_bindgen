@@ -7,8 +7,11 @@
 
 from clang.cindex import Cursor, CursorKind, TranslationUnit
 from mojo.parsing.frontend import (
-    ClangFrontend, ClangFrontendConfig, FrontendDiagnostic,
-    _resolve_header_path, _default_system_compile_args,
+    ClangFrontend,
+    ClangFrontendConfig,
+    FrontendDiagnostic,
+    _resolve_header_path,
+    _default_system_compile_args,
     _parse_translation_unit_direct,
 )
 from mojo.parsing.diagnostics import ParserDiagnosticSink
@@ -87,7 +90,7 @@ struct ClangParser(Copyable, Movable):
         self.clang_macro_fallback_build_dir = clang_macro_fallback_build_dir
         self.diagnostics = ParserDiagnosticSink()
 
-    def run(self) raises -> Unit:
+    def run(mut self) raises -> Unit:
         """Parse the configured header into raw source-faithful IR.
 
         Phase-1: returns a Unit with empty decls but populated
@@ -95,30 +98,31 @@ struct ClangParser(Copyable, Movable):
         """
         return self._parse_unit()
 
-    def run_raw(self) raises -> Unit:
+    def run_raw(mut self) raises -> Unit:
         """Compatibility alias for run()."""
         return self._parse_unit()
 
-    def _parse_unit(self) raises -> Unit:
+    def _parse_unit(mut self) raises -> Unit:
         """Parse the configured header into raw IR."""
         var session = self._build_parser_session()
         return Unit(
-            kind="Unit",
-            source_header=session.header,
-            library=session.library,
-            link_name=session.link_name,
-            target_abi=session.target_abi,
-            decls=List[Value](),
-            diagnostics=self.diagnostics.to_ir_diagnostics(),
+            "Unit",
+            session.header,
+            session.library,
+            session.link_name,
+            session.target_abi.copy(),
+            List[Value](),
+            self.diagnostics.to_ir_diagnostics(),
         )
 
-    def _build_parser_session(self) raises -> _ParserSession:
-        """Create frontend artifacts, collect diagnostics, and index declarations."""
-        var frontend = ClangFrontend(ClangFrontendConfig(
-            header=self.header,
-            compile_args=self.compile_args,
-            include_headers=self.include_headers,
-        ))
+    def _build_parser_session(mut self) raises -> _ParserSession:
+        """Create frontend artifacts, collect diagnostics, and index declarations.
+        """
+        var frontend_config = ClangFrontendConfig()
+        frontend_config.header = self.header
+        frontend_config.compile_args = self.compile_args.copy()
+        frontend_config.include_headers = self.include_headers.copy()
+        var frontend = ClangFrontend(frontend_config^)
 
         var tu = frontend.parse_translation_unit()
         var frontend_diagnostics = frontend.collect_diagnostics(tu)
@@ -132,10 +136,10 @@ struct ClangParser(Copyable, Movable):
         var target_abi = probe_target_abi(self.compile_args)
 
         return _ParserSession(
-            header=self.header,
-            library=self.library,
-            link_name=self.link_name,
-            target_abi=target_abi,
+            self.header,
+            self.library,
+            self.link_name,
+            target_abi.copy(),
         )
 
 
@@ -160,7 +164,8 @@ def _handle_frontend_errors(
     frontend_diagnostics: List[FrontendDiagnostic],
     raise_on_error: Bool,
 ) raises:
-    """Raise ParseError if fatal diagnostics present and raise_on_error is True."""
+    """Raise ParseError if fatal diagnostics present and raise_on_error is True.
+    """
     var has_fatal = False
     var messages: List[String] = []
     for d in frontend_diagnostics:

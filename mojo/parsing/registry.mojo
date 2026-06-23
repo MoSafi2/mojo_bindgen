@@ -42,9 +42,9 @@ def _is_anonymous_record_spelling(spelling: String) -> Bool:
     """Heuristic for clang's synthetic spellings for anonymous records."""
     if spelling == "":
         return True
-    if spelling.contains("(unnamed at "):
+    if spelling.find("(unnamed at ") != -1:
         return True
-    if spelling.contains("(anonymous at "):
+    if spelling.find("(anonymous at ") != -1:
         return True
     return False
 
@@ -67,11 +67,11 @@ def _sanitize_name_stem(raw: String, *, fallback: String) -> String:
             result += "_"
 
     # Collapse runs of _
-    while result.contains("__"):
+    while result.find("__") != -1:
         result = result.replace("__", "_")
 
     # Strip leading/trailing _
-    result = result.strip("_")
+    result = String(result.strip("_"))
 
     if result == "":
         return fallback
@@ -127,13 +127,13 @@ struct RecordRegistry(Copyable, Movable):
         """Index one translation unit for record declarations."""
         var top_level = frontend.iter_translation_unit_cursors(tu)
         var registry = RecordRegistry()
-        registry.top_level_cursors_in_order = top_level
+        registry.top_level_cursors_in_order = top_level.copy()
 
         var all_cursors = tu.cursor().walk_preorder()
         for cursor in all_cursors:
             if _is_record_kind(cursor.kind()) and cursor.is_definition():
                 var decl_id = registry.decl_id_for_cursor(cursor)
-                registry.record_definition_by_decl_id[decl_id] = cursor
+                registry.record_definition_by_decl_id[decl_id] = cursor.copy()
 
         return registry^
 
@@ -166,39 +166,42 @@ struct RecordRegistry(Copyable, Movable):
             return False
         return self.record_definition_for_decl(cursor) is not None
 
-    def record_naming(self, cursor: Cursor) raises -> RecordNaming:
+    def record_naming(mut self, cursor: Cursor) raises -> RecordNaming:
         """Return stable lowered naming metadata for a record declaration."""
         var decl_id = self.decl_id_for_cursor(cursor)
         if not _is_anonymous_record_spelling(cursor.spelling()):
-            return RecordNaming(
-                name=cursor.spelling(),
-                c_name=cursor.spelling(),
-                is_anonymous=False,
-            )
+            var naming = RecordNaming()
+            naming.name = cursor.spelling()
+            naming.c_name = cursor.spelling()
+            naming.is_anonymous = False
+            return naming^
         var synth = self._anonymous_record_name(cursor, decl_id)
-        return RecordNaming(name=synth, c_name=synth, is_anonymous=True)
+        var naming = RecordNaming()
+        naming.name = synth
+        naming.c_name = synth
+        naming.is_anonymous = True
+        return naming^
 
     def get(self, decl_id: String) -> Optional[Struct]:
         """Return a cached lowered record definition when available."""
         return self._records_by_decl_id.get(decl_id)
 
-    def store(self, struct: Struct):
+    def store(mut self, struct_decl: Struct):
         """Store a lowered record definition by declaration id."""
-        self._records_by_decl_id[struct.decl_id] = struct
+        self._records_by_decl_id[struct_decl.decl_id] = struct_decl.copy()
 
     @staticmethod
-    def make_struct_ref(struct: Struct) -> StructRef:
+    def make_struct_ref(struct_decl: Struct) -> StructRef:
         """Build a stable StructRef from one lowered Struct."""
-        return StructRef(
-            kind="StructRef",
-            decl_id=struct.decl_id,
-            name=struct.name,
-            c_name=struct.c_name,
-            is_union=struct.is_union,
-            size_bytes=struct.size_bytes,
-            align_bytes=Optional[Int](struct.align_bytes),
-            is_anonymous=struct.is_anonymous,
-        )
+        var struct_ref = StructRef()
+        struct_ref.decl_id = struct_decl.decl_id
+        struct_ref.name = struct_decl.name
+        struct_ref.c_name = struct_decl.c_name
+        struct_ref.is_union = struct_decl.is_union
+        struct_ref.size_bytes = struct_decl.size_bytes
+        struct_ref.align_bytes = Optional[Int](struct_decl.align_bytes)
+        struct_ref.is_anonymous = struct_decl.is_anonymous
+        return struct_ref^
 
     def materialize_record_definition(self, cursor: Cursor) raises -> Struct:
         """Lower one complete record definition cursor and return cached Struct.
@@ -209,7 +212,7 @@ struct RecordRegistry(Copyable, Movable):
                      "definition lowerer not yet ported (deferred to lowering/)")
 
     def _anonymous_record_name(
-        self, cursor: Cursor, decl_id: String
+        mut self, cursor: Cursor, decl_id: String
     ) raises -> String:
         """Synthesize a stable IR-friendly name for an anonymous record."""
         var cached_opt = self.anonymous_record_name_by_decl_id.get(decl_id)
@@ -235,7 +238,7 @@ struct RecordRegistry(Copyable, Movable):
         self.anonymous_record_name_by_decl_id[decl_id] = synth
         return synth
 
-    def _scope_stem(self, cursor: Cursor) raises -> String:
+    def _scope_stem(mut self, cursor: Cursor) raises -> String:
         """Compute the hierarchical scope stem part of an anonymous name."""
         if cursor.kind() == CursorKind.FIELD_DECL:
             var field_name = _sanitize_name_stem(cursor.spelling(), fallback="field")
@@ -270,10 +273,10 @@ struct RecordRegistry(Copyable, Movable):
             parent_opt = cursor.semantic_parent()
         if not parent_opt:
             return None
-        var parent = parent_opt.value()
+        var parent = parent_opt.value().copy()
         if parent.kind() == CursorKind.TRANSLATION_UNIT:
             return None
-        return Optional[Cursor](parent)
+        return Optional[Cursor](parent^)
 
     def _anonymous_record_ordinal(
         self, cursor: Cursor, parent_opt: Optional[Cursor]
@@ -281,7 +284,7 @@ struct RecordRegistry(Copyable, Movable):
         """Compute a stable ordinal among sibling anonymous record definitions."""
         var siblings: List[Cursor] = []
         if parent_opt is None:
-            siblings = self.top_level_cursors_in_order
+            siblings = self.top_level_cursors_in_order.copy()
         else:
             siblings = parent_opt.value().children()
 
@@ -300,7 +303,7 @@ struct RecordRegistry(Copyable, Movable):
         return max(ordinal, 1)
 
 
-def _sha256_hex16(data: String) -> String:
+def _sha256_hex16(data: String) raises -> String:
     """Return first 16 hex chars of SHA-256 hash of data (via Python interop)."""
     var py = Python()
     var hashlib = Python.import_module("hashlib")
@@ -312,6 +315,6 @@ def _sha256_hex16(data: String) -> String:
     return String(hex_s[byte=0:16])
 
 
-def _ord(ch: String) -> Int:
+def _ord(ch: String) raises -> Int:
     """Return the ASCII code of the first byte of a 1-byte string."""
     return Int(ch[byte=0])

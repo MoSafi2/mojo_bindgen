@@ -10,16 +10,32 @@
 # array. Similarly, `TargetInfo.triple()` is buggy; we call the FFI directly.
 
 from clang.cindex import (
-    Index, TranslationUnit, TranslationUnitFlags, UnsavedFile,
-    Cursor, Diagnostic, DiagnosticSeverity, CursorKind,
+    Index,
+    TranslationUnit,
+    TranslationUnitFlags,
+    UnsavedFile,
+    Cursor,
+    Diagnostic,
+    DiagnosticSeverity,
+    CursorKind,
 )
 from clang._ffi import (
-    clang_parseTranslationUnit2, CXTranslationUnit,
-    clang_getTranslationUnitTargetInfo, clang_TargetInfo_getTriple,
-    clang_TargetInfo_dispose, clang_TargetInfo_getPointerWidth,
-    clang_getCString, clang_disposeString, CXString,
+    clang_parseTranslationUnit2,
+    CXTranslationUnit,
+    clang_getTranslationUnitTargetInfo,
+    clang_TargetInfo_getTriple,
+    clang_TargetInfo_dispose,
+    clang_TargetInfo_getPointerWidth,
+    clang_getCString,
+    clang_disposeString,
+    CXString,
 )
-from clang.common import _borrow_c_string, _alloc_c_string, _c_string, UnsavedFileArena
+from clang.common import (
+    _borrow_c_string,
+    _alloc_c_string,
+    _c_string,
+    UnsavedFileArena,
+)
 from clang.enums import ErrorCode
 from mojo.utils import build_c_parse_args, normalize_std_flag
 from std.memory import alloc, UnsafePointer
@@ -32,6 +48,7 @@ from std.subprocess import run
 # ─────────────────────────────────────────────
 # FrontendDiagnostic
 # ─────────────────────────────────────────────
+
 
 @fieldwise_init
 struct FrontendDiagnostic(Copyable, Movable, Writable):
@@ -52,14 +69,22 @@ struct FrontendDiagnostic(Copyable, Movable, Writable):
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write(
-            self.file, ":", self.line, ":", self.col, ": ",
-            self.severity, ": ", self.message,
+            self.file,
+            ":",
+            self.line,
+            ":",
+            self.col,
+            ": ",
+            self.severity,
+            ": ",
+            self.message,
         )
 
 
 # ─────────────────────────────────────────────
 # ClangOptions
 # ─────────────────────────────────────────────
+
 
 struct ClangOptions(Copyable, Movable, Writable):
     """Structured Clang argument options accepted by the public CLI."""
@@ -141,6 +166,7 @@ struct ClangOptions(Copyable, Movable, Writable):
 # ClangFrontendConfig
 # ─────────────────────────────────────────────
 
+
 @fieldwise_init
 struct ClangFrontendConfig(Copyable, Movable, Writable):
     """Stable parser frontend configuration for one translation unit."""
@@ -159,6 +185,7 @@ struct ClangFrontendConfig(Copyable, Movable, Writable):
 # ClangFrontend
 # ─────────────────────────────────────────────
 
+
 struct ClangFrontend(Copyable, Movable):
     """Thin libclang translation-unit frontend wrapper."""
 
@@ -171,7 +198,7 @@ struct ClangFrontend(Copyable, Movable):
         return self._config.header
 
     def include_headers(self) -> List[String]:
-        return self._config.include_headers
+        return self._config.include_headers.copy()
 
     def configured_headers(self) -> List[String]:
         var result: List[String] = [self._config.header]
@@ -180,7 +207,7 @@ struct ClangFrontend(Copyable, Movable):
         return result^
 
     def compile_args(self) -> List[String]:
-        return self._config.compile_args
+        return self._config.compile_args.copy()
 
     def normalized_parse_args(self) raises -> List[String]:
         """Return the exact Clang args passed to libclang."""
@@ -224,8 +251,12 @@ struct ClangFrontend(Copyable, Movable):
             if not Python.is_true(proc.returncode == 0):
                 var stderr_str = String(py.as_string_slice(proc.stderr))
                 raise Error(
-                    "clang preprocessing failed for " + input_path +
-                    " with args " + _join_args(args) + ":\n" + stderr_str
+                    "clang preprocessing failed for "
+                    + input_path
+                    + " with args "
+                    + _join_args(args)
+                    + ":\n"
+                    + stderr_str
                 )
             return String(py.as_string_slice(proc.stdout))
         else:
@@ -239,8 +270,12 @@ struct ClangFrontend(Copyable, Movable):
             if not Python.is_true(proc.returncode == 0):
                 var stderr_str = String(py.as_string_slice(proc.stderr))
                 raise Error(
-                    "clang preprocessing failed for " + input_path +
-                    " with args " + _join_args(args) + ":\n" + stderr_str
+                    "clang preprocessing failed for "
+                    + input_path
+                    + " with args "
+                    + _join_args(args)
+                    + ":\n"
+                    + stderr_str
                 )
             return String(py.as_string_slice(proc.stdout))
 
@@ -262,13 +297,13 @@ struct ClangFrontend(Copyable, Movable):
                 file_name = file_opt.value().name()
             line = loc.line()
             col = loc.column()
-            out.append(FrontendDiagnostic(
-                severity=severity,
-                file=file_name,
-                line=line,
-                col=col,
-                message=d.spelling(),
-            ))
+            var diag = FrontendDiagnostic()
+            diag.severity = severity
+            diag.file = file_name
+            diag.line = line
+            diag.col = col
+            diag.message = d.spelling()
+            out.append(diag^)
         return out^
 
     def iter_translation_unit_cursors(
@@ -292,6 +327,7 @@ struct ClangFrontend(Copyable, Movable):
 # ─────────────────────────────────────────────
 # Free-function helpers
 # ─────────────────────────────────────────────
+
 
 def _resolve_header_path(header: String) raises -> String:
     """Resolve a header path relative to the current working directory."""
@@ -345,9 +381,9 @@ def _default_system_compile_args() raises -> List[String]:
 
     if len(args) == 1:
         print(
-            "Warning: Could not probe a system include directory via cc or clang "
-            "(using -I/usr/include only). If standard headers fail to resolve, "
-            "pass explicit -I/--sysroot flags in compile_args."
+            "Warning: Could not probe a system include directory via cc or"
+            " clang (using -I/usr/include only). If standard headers fail to"
+            " resolve, pass explicit -I/--sysroot flags in compile_args."
         )
 
     return args^
@@ -368,7 +404,10 @@ def _translation_unit_parse_options() -> TranslationUnitFlags:
     )
     # INCLUDE_BRIEF_COMMENTS_IN_CODE_COMPLETION may not exist in all bindings
     try:
-        options = options | TranslationUnitFlags.INCLUDE_BRIEF_COMMENTS_IN_CODE_COMPLETION
+        options = (
+            options
+            | TranslationUnitFlags.INCLUDE_BRIEF_COMMENTS_IN_CODE_COMPLETION
+        )
     except:
         pass
     return options
@@ -413,6 +452,7 @@ def _join_strings(strings: List[String], separator: String) -> String:
 # Direct FFI parse workaround
 # ─────────────────────────────────────────────
 
+
 def _parse_translation_unit_direct(
     ref index: Index,
     path: String,
@@ -430,7 +470,9 @@ def _parse_translation_unit_direct(
     var cstrs: List[UnsafePointer[c_char, MutAnyOrigin]] = []
 
     comptime SlotType = Optional[UnsafePointer[c_char, ImmutUntrackedOrigin]]
-    var slots_opt: Optional[UnsafePointer[SlotType, ImmutUntrackedOrigin]] = None
+    var slots_opt: Optional[
+        UnsafePointer[SlotType, ImmutUntrackedOrigin]
+    ] = None
     var slots_mut_opt: Optional[UnsafePointer[SlotType, MutAnyOrigin]] = None
 
     if n > 0:
@@ -467,15 +509,14 @@ def _parse_translation_unit_direct(
 
     var err = ErrorCode(raw_err)
     if err != ErrorCode.SUCCESS:
-        raise Error(
-            "parse failed: error code=" + String(Int(err.as_c_uint()))
-        )
+        raise Error("parse failed: error code=" + String(Int(err.as_c_uint())))
 
     return TranslationUnit(index._shared_state(), out_tu)
 
 
 def _get_target_triple(tu: TranslationUnit) raises -> String:
-    """Get the target triple via direct FFI (workaround for buggy TargetInfo.triple())."""
+    """Get the target triple via direct FFI (workaround for buggy TargetInfo.triple()).
+    """
     var ti = clang_getTranslationUnitTargetInfo(tu._raw_handle())
     if not ti:
         raise Error("null target info")
