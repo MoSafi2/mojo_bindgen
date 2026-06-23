@@ -27,6 +27,7 @@ example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"
 example-sqlite = "bash examples/sqlite/generate.sh"
 test-mojo = "mojo -I . -I .pixi/envs/default/lib/mojo tests/mojo/test_ir_serde.mojo"
+test-mojo-parsing = "bash scripts/test-mojo-parsing.sh"
 
 [dependencies]
 mojo = ">=1.0.0b2,<2"
