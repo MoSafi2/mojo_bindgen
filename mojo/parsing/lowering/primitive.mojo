@@ -73,7 +73,9 @@ def _align_bytes(clang_type: cx.Type) -> Optional[Int]:
     return None
 
 
-def _char_int_kind(clang_type: cx.Type, norm: String) raises -> Optional[String]:
+def _char_int_kind(
+    clang_type: cx.Type, norm: String
+) raises -> Optional[String]:
     if norm != "char":
         return None
     if clang_type.kind() == cx.TypeKind.CHAR_S:
@@ -169,27 +171,30 @@ struct PrimitiveResolver(Copyable, Movable):
         if kind == cx.TypeKind.VOID:
             return Optional[Value](_void_type_node())
 
-    
         if norm.find("__float128") != -1 or norm.find("_Float128") != -1:
-            return Optional[Value](_float_type_node(
-                FloatType(
-                    kind="FloatType",
-                    float_kind=FloatKind.FLOAT128,
-                    size_bytes=size_bytes,
-                    align_bytes=align_bytes,
+            return Optional[Value](
+                _float_type_node(
+                    FloatType(
+                        kind="FloatType",
+                        float_kind=FloatKind.FLOAT128,
+                        size_bytes=size_bytes,
+                        align_bytes=align_bytes,
+                    )
                 )
-            ))
+            )
 
         var float_kind = _float_kind_by_type(kind)
         if float_kind:
-            return Optional[Value](_float_type_node(
-                FloatType(
-                    kind="FloatType",
-                    float_kind=float_kind.value(),
-                    size_bytes=size_bytes,
-                    align_bytes=align_bytes,
+            return Optional[Value](
+                _float_type_node(
+                    FloatType(
+                        kind="FloatType",
+                        float_kind=float_kind.value(),
+                        size_bytes=size_bytes,
+                        align_bytes=align_bytes,
+                    )
                 )
-            ))
+            )
 
         var int_kind = _char_int_kind(canonical, norm)
         if not int_kind:
@@ -197,25 +202,29 @@ struct PrimitiveResolver(Copyable, Movable):
 
         var ext_bits = _ext_int_bits(norm)
         if int_kind:
-            return Optional[Value](_int_type_node(
-                IntType(
-                    kind="IntType",
-                    int_kind=int_kind.value(),
-                    size_bytes=size_bytes,
-                    align_bytes=align_bytes,
-                    ext_bits=ext_bits,
+            return Optional[Value](
+                _int_type_node(
+                    IntType(
+                        kind="IntType",
+                        int_kind=int_kind.value(),
+                        size_bytes=size_bytes,
+                        align_bytes=align_bytes,
+                        ext_bits=ext_bits,
+                    )
                 )
-            ))
+            )
 
         if ext_bits:
-            return Optional[Value](_int_type_node(
-                IntType(
-                    kind="IntType",
-                    int_kind=IntKind.EXT_INT,
-                    size_bytes=size_bytes,
-                    align_bytes=align_bytes,
-                    ext_bits=ext_bits,
+            return Optional[Value](
+                _int_type_node(
+                    IntType(
+                        kind="IntType",
+                        int_kind=IntKind.EXT_INT,
+                        size_bytes=size_bytes,
+                        align_bytes=align_bytes,
+                        ext_bits=ext_bits,
+                    )
                 )
-            ))
+            )
 
         return None

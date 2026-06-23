@@ -46,7 +46,7 @@ comptime EnumBase = Copyable & ImplicitlyDestructible & Hashable & Equatable
 
 @fieldwise_init
 struct IntKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime BOOL = "BOOL"
     comptime CHAR_S = "CHAR_S"
     comptime CHAR_U = "CHAR_U"
@@ -69,7 +69,7 @@ struct IntKind(EnumBase):
 
 @fieldwise_init
 struct FloatKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime FLOAT16 = "FLOAT16"
     comptime FLOAT = "FLOAT"
     comptime DOUBLE = "DOUBLE"
@@ -78,7 +78,7 @@ struct FloatKind(EnumBase):
 
 @fieldwise_init
 struct UnsupportedTypeCategory(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime UNEXPOSED = "unexposed"
     comptime VECTOR = "vector"
     comptime COMPLEX = "complex"
@@ -90,7 +90,7 @@ struct UnsupportedTypeCategory(EnumBase):
 
 @fieldwise_init
 struct ArrayKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime FIXED = "fixed"
     comptime INCOMPLETE = "incomplete"
     comptime FLEXIBLE = "flexible"
@@ -103,7 +103,7 @@ struct FamPattern(EnumBase):
 
 @fieldwise_init
 struct MacroDeclKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime OBJECT_LIKE_SUPPORTED = "object_like_supported"
     comptime OBJECT_LIKE_UNSUPPORTED = "object_like_unsupported"
     comptime FUNCTION_LIKE_UNSUPPORTED = "function_like_unsupported"
@@ -113,25 +113,25 @@ struct MacroDeclKind(EnumBase):
 
 @fieldwise_init
 struct PointerMutability(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime MUT = "mut"
     comptime IMMUT = "immut"
 
 @fieldwise_init
 struct PointerOrigin(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime EXTERNAL = "external"
     comptime ANY = "any"
 
 @fieldwise_init
 struct ByteOrder(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime LITTLE = "little"
     comptime BIG = "big"
 
 @fieldwise_init
 struct MojoBuiltin(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime NONE = "NoneType"
     comptime BOOL = "Bool"
     comptime UINT8 = "UInt8"
@@ -154,7 +154,7 @@ struct MojoBuiltin(EnumBase):
 
 @fieldwise_init
 struct StructTraits(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime COPYABLE = "Copyable"
     comptime IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
     comptime MOVABLE = "Movable"
@@ -168,14 +168,14 @@ struct StructKind(EnumBase):
 
 @fieldwise_init
 struct MojoPassability(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime MEMORY_ONLY = "memory_only"
     comptime REGISTER_PASSABLE = "register_passable"
     comptime TRIVIAL_REGISTER_PASSABLE = "trivial_register_passable"
 
 @fieldwise_init
 struct AliasKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime TYPE_ALIAS = "type_alias"
     comptime CALLBACK_SIGNATURE = "callback_signature"
     comptime UNION_LAYOUT = "union_layout"
@@ -184,33 +184,33 @@ struct AliasKind(EnumBase):
 
 @fieldwise_init
 struct FunctionKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime WRAPPER = "wrapper"
     comptime VARIADIC_STUB = "variadic_stub"
     comptime NON_REGISTER_RETURN_STUB = "non_register_return_stub"
 
 @fieldwise_init
 struct GlobalKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime WRAPPER = "wrapper"
     comptime STUB = "stub"
 
 @fieldwise_init
 struct LinkMode(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime EXTERNAL_CALL = "external_call"
     comptime OWNED_DL_HANDLE = "owned_dl_handle"
 
 @fieldwise_init
 struct MappingSeverity(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime NOTE = "note"
     comptime WARNING = "warning"
     comptime ERROR = "error"
 
 @fieldwise_init
 struct ParametricBase(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime SIMD = "SIMD"
     comptime COMPLEX_SIMD = "ComplexSIMD"
     comptime ATOMIC = "Atomic"
@@ -218,7 +218,7 @@ struct ParametricBase(EnumBase):
 
 @fieldwise_init
 struct SupportDeclKind(EnumBase):
-    var value: StringLiteral
+    var value: String
     comptime DL_HANDLE_HELPERS = "dl_handle_helpers"
     comptime GLOBAL_SYMBOL_HELPERS = "global_symbol_helpers"
 
@@ -663,12 +663,12 @@ struct FloatLiteral(IRBase):
 
 
 @fieldwise_init
-struct StringLiteral(IRBase):
+struct String(IRBase):
     var kind: String
     var value: String
 
     def __init__(out self):
-        self.kind = "StringLiteral"
+        self.kind = "String"
         self.value = ""
 
 
