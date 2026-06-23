@@ -41,7 +41,12 @@ comptime StructMemberNode = Value
 # Enum-like discriminants (Python StrEnum → comptime String constants).
 # ============================================================================
 
-struct IntKind:
+
+comptime EnumBase = Copyable & ImplicitlyDestructible & Hashable & Equatable
+
+@fieldwise_init
+struct IntKind(EnumBase):
+    var value: StringLiteral
     comptime BOOL = "BOOL"
     comptime CHAR_S = "CHAR_S"
     comptime CHAR_U = "CHAR_U"
@@ -62,16 +67,18 @@ struct IntKind:
     comptime CHAR32 = "CHAR32"
     comptime EXT_INT = "EXT_INT"
 
-
-struct FloatKind:
+@fieldwise_init
+struct FloatKind(EnumBase):
+    var value: StringLiteral
     comptime FLOAT16 = "FLOAT16"
     comptime FLOAT = "FLOAT"
     comptime DOUBLE = "DOUBLE"
     comptime LONG_DOUBLE = "LONG_DOUBLE"
     comptime FLOAT128 = "FLOAT128"
 
-
-struct UnsupportedTypeCategory:
+@fieldwise_init
+struct UnsupportedTypeCategory(EnumBase):
+    var value: StringLiteral
     comptime UNEXPOSED = "unexposed"
     comptime VECTOR = "vector"
     comptime COMPLEX = "complex"
@@ -81,20 +88,22 @@ struct UnsupportedTypeCategory:
     comptime INVALID = "invalid"
     comptime UNKNOWN = "unknown"
 
-
-struct ArrayKind:
+@fieldwise_init
+struct ArrayKind(EnumBase):
+    var value: StringLiteral
     comptime FIXED = "fixed"
     comptime INCOMPLETE = "incomplete"
     comptime FLEXIBLE = "flexible"
     comptime VARIABLE = "variable"
 
-
-struct FamPattern:
+@fieldwise_init
+struct FamPattern(EnumBase):
     comptime C99_EMPTY = "c99_empty"
     comptime GNU_ZERO = "gnu_zero"
 
-
-struct MacroDeclKind:
+@fieldwise_init
+struct MacroDeclKind(EnumBase):
+    var value: StringLiteral
     comptime OBJECT_LIKE_SUPPORTED = "object_like_supported"
     comptime OBJECT_LIKE_UNSUPPORTED = "object_like_unsupported"
     comptime FUNCTION_LIKE_UNSUPPORTED = "function_like_unsupported"
@@ -102,23 +111,27 @@ struct MacroDeclKind:
     comptime PREDEFINED = "predefined"
     comptime INVALID = "invalid"
 
-
-struct PointerMutability:
+@fieldwise_init
+struct PointerMutability(EnumBase):
+    var value: StringLiteral
     comptime MUT = "mut"
     comptime IMMUT = "immut"
 
-
-struct PointerOrigin:
+@fieldwise_init
+struct PointerOrigin(EnumBase):
+    var value: StringLiteral
     comptime EXTERNAL = "external"
     comptime ANY = "any"
 
-
-struct ByteOrder:
+@fieldwise_init
+struct ByteOrder(EnumBase):
+    var value: StringLiteral
     comptime LITTLE = "little"
     comptime BIG = "big"
 
-
-struct MojoBuiltin:
+@fieldwise_init
+struct MojoBuiltin(EnumBase):
+    var value: StringLiteral
     comptime NONE = "NoneType"
     comptime BOOL = "Bool"
     comptime UINT8 = "UInt8"
@@ -139,64 +152,73 @@ struct MojoBuiltin:
     comptime C_DOUBLE = "c_double"
     comptime UNSUPPORTED = "unsupported"
 
-
-struct StructTraits:
+@fieldwise_init
+struct StructTraits(EnumBase):
+    var value: StringLiteral
     comptime COPYABLE = "Copyable"
     comptime IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
     comptime MOVABLE = "Movable"
     comptime REGISTER_PASSABLE = "RegisterPassable"
     comptime TRIVIAL_REGISTER_PASSABLE = "TrivialRegisterPassable"
 
-
-struct StructKind:
+@fieldwise_init
+struct StructKind(EnumBase):
     comptime PLAIN = "plain"
     comptime OPAQUE = "opaque"
 
-
-struct MojoPassability:
+@fieldwise_init
+struct MojoPassability(EnumBase):
+    var value: StringLiteral
     comptime MEMORY_ONLY = "memory_only"
     comptime REGISTER_PASSABLE = "register_passable"
     comptime TRIVIAL_REGISTER_PASSABLE = "trivial_register_passable"
 
-
-struct AliasKind:
+@fieldwise_init
+struct AliasKind(EnumBase):
+    var value: StringLiteral
     comptime TYPE_ALIAS = "type_alias"
     comptime CALLBACK_SIGNATURE = "callback_signature"
     comptime UNION_LAYOUT = "union_layout"
     comptime CONST_VALUE = "const_value"
     comptime MACRO_VALUE = "macro_value"
 
-
-struct FunctionKind:
+@fieldwise_init
+struct FunctionKind(EnumBase):
+    var value: StringLiteral
     comptime WRAPPER = "wrapper"
     comptime VARIADIC_STUB = "variadic_stub"
     comptime NON_REGISTER_RETURN_STUB = "non_register_return_stub"
 
-
-struct GlobalKind:
+@fieldwise_init
+struct GlobalKind(EnumBase):
+    var value: StringLiteral
     comptime WRAPPER = "wrapper"
     comptime STUB = "stub"
 
-
-struct LinkMode:
+@fieldwise_init
+struct LinkMode(EnumBase):
+    var value: StringLiteral
     comptime EXTERNAL_CALL = "external_call"
     comptime OWNED_DL_HANDLE = "owned_dl_handle"
 
-
-struct MappingSeverity:
+@fieldwise_init
+struct MappingSeverity(EnumBase):
+    var value: StringLiteral
     comptime NOTE = "note"
     comptime WARNING = "warning"
     comptime ERROR = "error"
 
-
-struct ParametricBase:
+@fieldwise_init
+struct ParametricBase(EnumBase):
+    var value: StringLiteral
     comptime SIMD = "SIMD"
     comptime COMPLEX_SIMD = "ComplexSIMD"
     comptime ATOMIC = "Atomic"
     comptime UNSAFE_UNION = "UnsafeUnion"
 
-
-struct SupportDeclKind:
+@fieldwise_init
+struct SupportDeclKind(EnumBase):
+    var value: StringLiteral
     comptime DL_HANDLE_HELPERS = "dl_handle_helpers"
     comptime GLOBAL_SYMBOL_HELPERS = "global_symbol_helpers"
 
@@ -382,6 +404,7 @@ struct IntType(IRBase):
         self.size_bytes = 0
         self.align_bytes = None
         self.ext_bits = None
+
 
 
 @fieldwise_init
