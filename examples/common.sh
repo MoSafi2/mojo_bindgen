@@ -123,10 +123,9 @@ generate_owned_bindings() {
     --link-name "$link_name" \
     --link-mode owned-dl-handle \
     --library-path "$dylib" \
-    --emit-layout-tests \
-    --layout-test-output "${output%.mojo}_layout_tests.mojo" \
+    --layout-tests "${output%.mojo}_layout_tests.mojo" \
     "$@" \
-    --output "$output"
+    -o "$output"
 }
 
 build_smoke() {

@@ -63,41 +63,42 @@ For development setup, checks, and Pixi workflows, see
 Generate bindings from a primary header:
 
 ```bash
-mojo-bindgen path/to/header.h --output bindings.mojo --link-mode external-call
+mojo-bindgen path/to/header.h -o bindings.mojo --link-mode external-call
 ```
 
 Pass common Clang inputs with structured flags:
 
 ```bash
 mojo-bindgen include/mylib.h \
-  --include-dir ./include \
-  --define MYLIB_FEATURE=1 \
+  -I ./include \
+  -D MYLIB_FEATURE=1 \
   --std c11 \
-  --output mylib_bindings.mojo
+  -o mylib_bindings.mojo
 ```
 
-Emit declarations from additional include headers with repeated
-`--emit-header`. Dependency headers are still parsed for type information
-and macro expansion, but are not emitted unless listed:
+Add sibling public headers with repeated `--public-header`. The primary header
+and public headers are included in an internal umbrella header. Transitive
+`#include` files are parsed by Clang and can still contribute declarations
+because source-file filtering is not applied yet:
 
 ```bash
 mojo-bindgen include/mylib.h \
-  --emit-header include/mylib_extra.h \
-  --include-dir ./include \
-  --output mylib_bindings.mojo
+  --public-header include/mylib_extra.h \
+  -I ./include \
+  -o mylib_bindings.mojo
 ```
 
 By default the parser uses `-std=gnu11` when no C standard is provided. Pin a
 standard explicitly if your header requires one:
 
 ```bash
-mojo-bindgen include/mylib.h --std c99 --output mylib_bindings.mojo
+mojo-bindgen include/mylib.h --std c99 -o mylib_bindings.mojo
 ```
 
 Use `--clang-arg` for raw Clang flags that do not have a structured option:
 
 ```bash
-mojo-bindgen include/mylib.h --clang-arg=-fms-extensions --output mylib_bindings.mojo
+mojo-bindgen include/mylib.h --clang-arg=-fms-extensions -o mylib_bindings.mojo
 ```
 
 ## Linking modes
@@ -115,13 +116,13 @@ Examples:
 
 ```bash
 # default
-mojo-bindgen include/mylib.h --link-mode external-call --output mylib_bindings.mojo
+mojo-bindgen include/mylib.h --link-mode external-call -o mylib_bindings.mojo
 
 # runtime-loaded shared library
 mojo-bindgen include/mylib.h \
   --link-mode owned-dl-handle \
   --library-path /usr/lib/libmylib.so \
-  --output mylib_bindings_dl.mojo
+  -o mylib_bindings_dl.mojo
 ```
 
 ## What works today?
@@ -163,8 +164,8 @@ Current support includes:
 - **Macros:** integer, float, string, and char literal macros, foldable macro
   chains, supported casts, and `sizeof(type)` expressions are emitted as Mojo
   code.
-- **JSON IR output:** the CLI can emit serialized parser IR for debugging,
-  testing, or downstream tooling.
+- **Debug IR output:** the CLI has hidden maintainer flags for serialized parser
+  and Mojo IR sidecars.
 
 ## Current limitations
 
@@ -191,9 +192,10 @@ verify emitted layouts and symbols against your target toolchain.
 - **Linkage and compiler edge cases:** `inline`, compiler-specific linkage
   hints, and other extension-heavy cases can still require manual review and
   may lead to symbol mismatches at runtime.
-- **Emit-header model:** declarations are emitted from the primary header
-  you pass to the tool plus any headers named with `--emit-header`. Other
-  headers included by those files are parsed as dependencies but not emitted.
+- **Public-header model:** the primary header and any `--public-header` values
+  are included in an internal umbrella header. Transitive `#include` files are
+  also visible to Clang and may contribute declarations because source-file
+  filtering is not applied yet.
 
 ## Real-world examples
 
@@ -207,8 +209,8 @@ The repository includes worked examples and smoke programs for:
 
 These examples do more than generate bindings: their `generate.sh` scripts also
 build smoke artifacts or run small functional tests to check the usability of
-the generated bindings. They also emit layout-test sidecars when file output is
-generated.
+the generated bindings. They pass `--layout-tests` explicitly when they need
+layout-test sidecars.
 
 The test suite also has end-to-end runtime coverage for:
 
@@ -228,23 +230,25 @@ matrix.
 
 ### The generated module is empty or missing declarations
 
-`mojo-bindgen` emits declarations from the primary header you pass in and any
-headers listed with `--emit-header`. If a thin wrapper only includes another
-header whose declarations should be emitted, pass that included header with
-`--emit-header` or use it as the primary header directly.
+`mojo-bindgen` parses the primary header plus any headers listed with
+`--public-header` through an internal umbrella header. If a thin wrapper only
+includes another header whose declarations you care about, pass that included
+header with `--public-header` or use it as the primary header directly. Normal
+transitive `#include` files are also visible to Clang and may appear in output.
 
 ### Parsing fails on project headers
 
 Most parser failures are missing include paths, target flags, or defines. Add
-the same flags your C build uses with `--include-dir`, `--define`,
-`--undefine`, `--target`, `--sysroot`, `--std`, or repeated `--clang-arg`.
+the same flags your C build uses with `-I` / `--include`, `-D` / `--define`,
+`-U` / `--undefine`, `--target`, `--sysroot`, `--std`, or repeated
+`--clang-arg`.
 
 ### Debugging parser failures
 
 Print the normalized Clang arguments that `mojo-bindgen` will use:
 
 ```bash
-mojo-bindgen include/mylib.h --include-dir ./include --dump-clang-args
+mojo-bindgen include/mylib.h -I ./include --print-clang-args
 ```
 
 Write diagnostics as JSON while still generating normal output:
@@ -253,16 +257,16 @@ Write diagnostics as JSON while still generating normal output:
 mojo-bindgen include/mylib.h \
   --diagnostics json \
   --diagnostics-output diagnostics.json \
-  --output mylib_bindings.mojo
+  -o mylib_bindings.mojo
 ```
 
 Dump the preprocessed input that Clang sees:
 
 ```bash
 mojo-bindgen include/mylib.h \
-  --include-dir ./include \
+  -I ./include \
   --dump-preprocessed mylib.preprocessed.c \
-  --output mylib_bindings.mojo
+  -o mylib_bindings.mojo
 ```
 
 ### Build succeeds but symbols are missing at runtime

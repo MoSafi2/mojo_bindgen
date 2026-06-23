@@ -16,22 +16,30 @@ from mojo_bindgen.parsing.parser import ParseError
 
 stderr_console = Console(stderr=True)
 
-OutputFormat = Literal["mojo", "cir-json", "mojo-ir-json"]
 LinkModeOption = Literal["external-call", "owned-dl-handle"]
 DiagnosticsMode = Literal["text", "json", "silent"]
 
 
 def run(
-    header: Annotated[Path, typer.Argument(help="Path to the primary C header file")],
-    emit_header: Annotated[
+    header: Annotated[
+        Path,
+        typer.Argument(
+            help=(
+                "Primary C header. It drives default names and is included first when "
+                "--public-header is used."
+            )
+        ),
+    ],
+    public_header: Annotated[
         list[Path] | None,
         typer.Option(
-            "--emit-header",
+            "--public-header",
             metavar="PATH",
             help=(
-                "Additional public C header to emit from (repeatable). "
-                "Private dependencies remain parsed but not emitted."
+                "Additional C header to include in the generated umbrella header. "
+                "Repeat for sibling public headers"
             ),
+            rich_help_panel="Input",
         ),
     ] = None,
     clang_arg: Annotated[
@@ -39,59 +47,88 @@ def run(
         typer.Option(
             "--clang-arg",
             metavar="FLAG",
-            help="Raw Clang flag escape hatch (repeatable).",
+            help="Pass one raw flag to Clang unchanged after structured flags. Repeat as needed.",
+            rich_help_panel="Clang",
         ),
     ] = None,
     include_dir: Annotated[
         list[Path] | None,
-        typer.Option("--include-dir", metavar="PATH", help="Add a Clang include directory."),
+        typer.Option(
+            "-I",
+            "--include",
+            metavar="PATH",
+            help=(
+                "Add a #include search directory for parsing, equivalent to Clang -I. "
+                "Repeat as needed."
+            ),
+            rich_help_panel="Clang",
+        ),
     ] = None,
     define: Annotated[
         list[str] | None,
-        typer.Option("--define", metavar="NAME[=VALUE]", help="Define a C preprocessor macro."),
+        typer.Option(
+            "-D",
+            "--define",
+            metavar="NAME[=VALUE]",
+            help="Define a C preprocessor macro for parsing, equivalent to Clang -D.",
+            rich_help_panel="Clang",
+        ),
     ] = None,
     undefine: Annotated[
         list[str] | None,
-        typer.Option("--undefine", metavar="NAME", help="Undefine a C preprocessor macro."),
+        typer.Option(
+            "-U",
+            "--undefine",
+            metavar="NAME",
+            help="Undefine a C preprocessor macro for parsing, equivalent to Clang -U.",
+            rich_help_panel="Clang",
+        ),
     ] = None,
     sysroot: Annotated[
         Path | None,
-        typer.Option("--sysroot", metavar="PATH", help="Set the Clang sysroot."),
+        typer.Option(
+            "--sysroot",
+            metavar="PATH",
+            help="Set the target sysroot for parsing, equivalent to Clang --sysroot.",
+            rich_help_panel="Clang",
+        ),
     ] = None,
     target: Annotated[
         str | None,
-        typer.Option("--target", metavar="TRIPLE", help="Set the Clang target triple."),
+        typer.Option(
+            "--target",
+            metavar="TRIPLE",
+            help="Set the target triple for parsing, equivalent to Clang --target.",
+            rich_help_panel="Clang",
+        ),
     ] = None,
     std: Annotated[
         str | None,
-        typer.Option("--std", metavar="STD", help="Set the C language standard."),
+        typer.Option(
+            "--std",
+            metavar="STD",
+            help="Set the C language standard for parsing, equivalent to Clang -std.",
+            rich_help_panel="Clang",
+        ),
     ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
+            "-o",
             "--output",
             help="Write primary output to this file (default: stdout).",
             show_default=False,
+            rich_help_panel="Output",
         ),
     ] = None,
-    output_format: Annotated[
-        OutputFormat,
-        typer.Option("--format", help="Primary output format.", case_sensitive=False),
-    ] = "mojo",
-    layout_test_output: Annotated[
+    layout_tests: Annotated[
         Path | None,
         typer.Option(
-            "--layout-test-output",
+            "--layout-tests",
             metavar="PATH",
-            help="Write layout-test sidecar to this path.",
+            help="Write a Mojo record-layout test sidecar to this path.",
             show_default=False,
-        ),
-    ] = None,
-    emit_layout_tests: Annotated[
-        bool | None,
-        typer.Option(
-            "--emit-layout-tests/--no-emit-layout-tests",
-            help="Write a Mojo record-layout test sidecar with file output.",
+            rich_help_panel="Output",
         ),
     ] = None,
     library: Annotated[
@@ -99,7 +136,8 @@ def run(
         typer.Option(
             "--library",
             metavar="NAME",
-            help="Logical library name in the IR (default: stem of the header path).",
+            help="Logical library/module name in generated metadata.",
+            rich_help_panel="Linking",
         ),
     ] = None,
     link_name: Annotated[
@@ -107,24 +145,36 @@ def run(
         typer.Option(
             "--link-name",
             metavar="NAME",
-            help="Shared-library link name (default: same as --library).",
+            help="Native library name used for generated FFI calls.",
+            rich_help_panel="Linking",
         ),
     ] = None,
     link_mode: Annotated[
         LinkModeOption,
-        typer.Option("--link-mode", help="FFI linking mode for Mojo output.", case_sensitive=False),
+        typer.Option(
+            "--link-mode",
+            help="Use external_call or runtime OwnedDLHandle symbol lookup.",
+            case_sensitive=False,
+            rich_help_panel="Linking",
+        ),
     ] = "external-call",
     library_path: Annotated[
         str | None,
         typer.Option(
             "--library-path",
             metavar="PATH",
-            help="Shared-library candidate path for --link-mode owned-dl-handle.",
+            help="Shared-library path candidate embedded for --link-mode owned-dl-handle.",
+            rich_help_panel="Linking",
         ),
     ] = None,
     diagnostics: Annotated[
         DiagnosticsMode,
-        typer.Option("--diagnostics", help="Diagnostic output mode.", case_sensitive=False),
+        typer.Option(
+            "--diagnostics",
+            help="Choose diagnostic output: text, json, or silent.",
+            case_sensitive=False,
+            rich_help_panel="Diagnostics",
+        ),
     ] = "text",
     diagnostics_output: Annotated[
         Path | None,
@@ -133,31 +183,42 @@ def run(
             metavar="PATH",
             help="Write diagnostics to this path instead of stderr.",
             show_default=False,
+            rich_help_panel="Diagnostics",
         ),
     ] = None,
     warnings_as_errors: Annotated[
         bool,
-        typer.Option("--warnings-as-errors", help="Exit nonzero when warnings are reported."),
+        typer.Option(
+            "--warnings-as-errors",
+            help="Exit nonzero after generation if any warning diagnostics are reported.",
+            rich_help_panel="Diagnostics",
+        ),
     ] = False,
-    keep_going: Annotated[
+    print_clang_args: Annotated[
         bool,
-        typer.Option("--keep-going", help="Emit partial artifacts when frontend errors permit it."),
-    ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Run the pipeline without writing files."),
-    ] = False,
-    dump_clang_args: Annotated[
-        bool,
-        typer.Option("--dump-clang-args", help="Print normalized Clang arguments and exit."),
+        typer.Option(
+            "--print-clang-args",
+            help="Print normalized Clang arguments and exit.",
+            hidden=True,
+        ),
     ] = False,
     dump_cir: Annotated[
         Path | None,
-        typer.Option("--dump-cir", metavar="PATH", help="Write raw parsed CIR JSON sidecar."),
+        typer.Option(
+            "--dump-cir",
+            metavar="PATH",
+            help="Write raw parsed CIR JSON sidecar.",
+            hidden=True,
+        ),
     ] = None,
     dump_mojo_ir: Annotated[
         Path | None,
-        typer.Option("--dump-mojo-ir", metavar="PATH", help="Write finalized MojoIR JSON sidecar."),
+        typer.Option(
+            "--dump-mojo-ir",
+            metavar="PATH",
+            help="Write finalized MojoIR JSON sidecar.",
+            hidden=True,
+        ),
     ] = None,
     dump_preprocessed: Annotated[
         Path | None,
@@ -165,53 +226,29 @@ def run(
             "--dump-preprocessed",
             metavar="PATH",
             help="Write Clang-preprocessed source sidecar.",
+            hidden=True,
         ),
     ] = None,
-    doc_comments: Annotated[
+    no_doc_comments: Annotated[
         bool,
         typer.Option(
-            "--doc-comments/--no-doc-comments",
-            help="Emit captured C documentation comments into Mojo output.",
-        ),
-    ] = True,
-    module_comment: Annotated[
-        bool,
-        typer.Option(
-            "--module-comment/--no-module-comment",
-            help="Emit generated-module header comments into Mojo output.",
-        ),
-    ] = True,
-    strict_abi: Annotated[
-        bool,
-        typer.Option(
-            "--strict-abi/--no-strict-abi",
-            help="Preserve parsed C alignment emission behavior.",
+            "--no-doc-comments",
+            help="Do not emit captured C documentation comments into Mojo output.",
+            rich_help_panel="Output",
         ),
     ] = False,
-    clang_macro_fallback: Annotated[
-        bool,
-        typer.Option(
-            "--clang-macro-fallback/--no-clang-macro-fallback",
-            help="Evaluate unsupported object-like integer macros through Clang.",
-        ),
-    ] = False,
-    clang_macro_fallback_dir: Annotated[
-        Path | None,
-        typer.Option(
-            "--clang-macro-fallback-dir",
-            metavar="PATH",
-            help="Directory for temporary Clang macro fallback probe files.",
-            show_default=False,
-        ),
-    ] = None,
 ) -> int:
     """Generate Mojo FFI from a C header using libclang.
 
     Examples:
-      mojo-bindgen path/to/header.h --output bindings.mojo
-      mojo-bindgen path/to/header.h --format cir-json --output unit.json
-      mojo-bindgen include/me.h --emit-header include/me_extra.h --output out.mojo
-      mojo-bindgen include/me.h --include-dir ./include --define FEATURE=1 --std c11
+      mojo-bindgen path/to/header.h -o bindings.mojo
+      mojo-bindgen include/me.h --public-header include/me_extra.h -o out.mojo
+      mojo-bindgen include/me.h -I ./include -D FEATURE=1 --std c11 -o out.mojo
+      mojo-bindgen include/me.h --layout-tests layout_tests.mojo -o out.mojo
+
+    The primary header and --public-header values are included in an internal
+    umbrella header. Transitive #include files are parsed by Clang and may
+    contribute declarations; no source-file filtering is applied yet.
     """
     clang_options = ClangOptions(
         std=std,
@@ -224,33 +261,33 @@ def run(
     )
     options = BindgenOptions(
         header=header,
-        include_headers=emit_header,
+        include_headers=public_header,
         library=library,
         link_name=link_name,
         clang_options=clang_options,
         linking=_internal_link_mode(link_mode),
         library_path_hint=library_path,
-        strict_abi=strict_abi,
-        module_comment=module_comment,
-        emit_doc_comments=doc_comments,
-        layout_tests=emit_layout_tests,
-        json_output=output_format != "mojo",
+        strict_abi=False,
+        module_comment=True,
+        emit_doc_comments=not no_doc_comments,
+        layout_tests=layout_tests is not None,
+        json_output=False,
         output=output,
-        layout_test_output=layout_test_output,
-        clang_macro_fallback=clang_macro_fallback,
-        clang_macro_fallback_build_dir=clang_macro_fallback_dir,
-        keep_going=keep_going,
+        layout_test_output=layout_tests,
+        clang_macro_fallback=False,
+        clang_macro_fallback_build_dir=None,
+        keep_going=False,
     )
     orchestrator = BindgenOrchestrator(options)
 
-    if dump_clang_args:
+    if print_clang_args:
         sys.stdout.write(json.dumps(orchestrator.normalized_clang_args(), indent=2))
         sys.stdout.write("\n")
         return 0
 
     try:
         if dump_preprocessed is not None:
-            _write_text(dump_preprocessed, orchestrator.dump_preprocessed(), dry_run=dry_run)
+            _write_text(dump_preprocessed, orchestrator.dump_preprocessed())
         result = orchestrator.run()
     except (ParseError, FileNotFoundError, OSError, RuntimeError) as e:
         args = orchestrator.normalized_clang_args()
@@ -264,28 +301,25 @@ def run(
         result.unit.diagnostics,
         mode=diagnostics,
         output=diagnostics_output,
-        dry_run=dry_run,
     )
 
     if dump_cir is not None:
-        _write_text(dump_cir, result.unit.to_json(), dry_run=dry_run)
+        _write_text(dump_cir, result.unit.to_json())
     if dump_mojo_ir is not None:
-        _write_text(dump_mojo_ir, result.mojo_module.to_json(), dry_run=dry_run)
+        _write_text(dump_mojo_ir, result.mojo_module.to_json())
 
-    text = _primary_output(result, output_format)
+    text = result.bindings_source
     if output is None:
         sys.stdout.write(text)
         if not text.endswith("\n"):
             sys.stdout.write("\n")
     else:
-        _write_text(output, text, dry_run=dry_run)
+        _write_text(output, text)
 
     if result.layout_test_source is not None:
-        sidecar = layout_test_output
-        if sidecar is None and output is not None:
-            sidecar = output.with_name(f"{output.stem}_layout_tests.mojo")
+        sidecar = layout_tests
         if sidecar is not None:
-            _write_text(sidecar, result.layout_test_source, dry_run=dry_run)
+            _write_text(sidecar, result.layout_test_source)
 
     if warnings_as_errors and any(d.severity == "warning" for d in result.unit.diagnostics):
         raise typer.Exit(code=1)
@@ -296,17 +330,7 @@ def _internal_link_mode(link_mode: LinkModeOption) -> Literal["external_call", "
     return "owned_dl_handle" if link_mode == "owned-dl-handle" else "external_call"
 
 
-def _primary_output(result, output_format: OutputFormat) -> str:
-    if output_format == "cir-json":
-        return result.unit.to_json()
-    if output_format == "mojo-ir-json":
-        return result.mojo_module.to_json()
-    return result.bindings_source
-
-
-def _write_text(path: Path, text: str, *, dry_run: bool) -> None:
-    if dry_run:
-        return
+def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
@@ -315,7 +339,6 @@ def _emit_diagnostics(
     *,
     mode: DiagnosticsMode,
     output: Path | None,
-    dry_run: bool,
 ) -> None:
     if mode == "silent" or not diagnostics:
         return
@@ -336,7 +359,7 @@ def _emit_diagnostics(
     else:
         text = "\n".join(_format_diagnostic(d) for d in diagnostics)
     if output is not None:
-        _write_text(output, text + "\n", dry_run=dry_run)
+        _write_text(output, text + "\n")
     else:
         stderr_console.print(text)
 

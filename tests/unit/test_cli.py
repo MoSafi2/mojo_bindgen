@@ -48,7 +48,7 @@ def test_help_includes_examples(capsys) -> None:
     assert "--clang-arg" in plain
 
 
-def test_json_mode_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_cli_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: Path) -> None:
     calls: dict[str, object] = {}
 
     class DummyResult:
@@ -74,16 +74,14 @@ def test_json_mode_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: P
     rc = cli.main(
         [
             str(header),
-            "--format",
-            "cir-json",
-            "--emit-header",
+            "--public-header",
             str(extra),
             "--clang-arg=-Werror",
-            "--include-dir",
+            "-I",
             "./include",
-            "--define",
+            "-D",
             "FEATURE=1",
-            "--undefine",
+            "-U",
             "OLD",
             "--std",
             "c11",
@@ -91,7 +89,7 @@ def test_json_mode_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: P
     )
     captured = capsys.readouterr()
     assert rc == 0
-    assert captured.out == '{"ok": true}\n'
+    assert captured.out == "generated\n"
     options = calls["options"]
     assert options.header == header
     assert options.include_headers == [extra]
@@ -106,10 +104,10 @@ def test_json_mode_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: P
         "-UOLD",
         "-Werror",
     ]
-    assert options.json_output is True
+    assert options.json_output is False
 
 
-def test_dump_clang_args_prints_normalized_argv(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_print_clang_args_prints_normalized_argv(monkeypatch, capsys, tmp_path: Path) -> None:
     class DummyOrchestrator:
         def __init__(self, options) -> None:
             self.options = options
@@ -128,50 +126,14 @@ def test_dump_clang_args_prints_normalized_argv(monkeypatch, capsys, tmp_path: P
             "x86_64-unknown-linux-gnu",
             "--sysroot",
             "/sdk",
-            "--include-dir",
+            "--include",
             "/sdk/include",
-            "--dump-clang-args",
+            "--print-clang-args",
         ]
     )
 
     assert rc == 0
     assert '"-std=c99"' in capsys.readouterr().out
-
-
-def test_cli_passes_clang_macro_fallback_options(monkeypatch, capsys, tmp_path: Path) -> None:
-    calls: dict[str, object] = {}
-
-    class DummyResult:
-        unit = _DummyUnit()
-        mojo_module = _DummyMojoModule()
-        bindings_source = "generated"
-        layout_test_source = None
-
-    class DummyOrchestrator:
-        def __init__(self, options) -> None:
-            calls["options"] = options
-
-        def run(self) -> DummyResult:
-            return DummyResult()
-
-    monkeypatch.setattr(cli, "BindgenOrchestrator", DummyOrchestrator)
-
-    build_dir = tmp_path / "macro-build"
-    rc = cli.main(
-        [
-            str(tmp_path / "demo.h"),
-            "--clang-macro-fallback",
-            "--clang-macro-fallback-dir",
-            str(build_dir),
-        ]
-    )
-    captured = capsys.readouterr()
-
-    assert rc == 0
-    assert captured.out == "generated\n"
-    options = calls["options"]
-    assert options.clang_macro_fallback is True
-    assert options.clang_macro_fallback_build_dir == build_dir
 
 
 def test_mojo_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -203,8 +165,6 @@ def test_mojo_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) -> N
             "owned-dl-handle",
             "--library-path",
             "/tmp/libsample.so",
-            "--strict-abi",
-            "--no-module-comment",
         ]
     )
     captured = capsys.readouterr()
@@ -212,12 +172,14 @@ def test_mojo_mode_passes_emit_options(monkeypatch, capsys, tmp_path: Path) -> N
     assert captured.out == "generated\n"
     assert calls["linking"] == "owned_dl_handle"
     assert calls["library_path_hint"] == "/tmp/libsample.so"
-    assert calls["strict_abi"] is True
+    assert calls["strict_abi"] is False
     assert calls["options"].json_output is False
-    assert calls["options"].module_comment is False
+    assert calls["options"].module_comment is True
 
 
-def test_output_mode_writes_default_layout_test_sidecar(monkeypatch, tmp_path: Path) -> None:
+def test_output_mode_does_not_write_layout_test_sidecar_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
     class DummyResult:
         bindings_source = "bindings"
         layout_test_source = "layout tests"
@@ -238,36 +200,10 @@ def test_output_mode_writes_default_layout_test_sidecar(monkeypatch, tmp_path: P
 
     assert rc == 0
     assert output.read_text(encoding="utf-8") == "bindings"
-    assert (tmp_path / "demo_bindings_layout_tests.mojo").read_text(
-        encoding="utf-8"
-    ) == "layout tests"
+    assert not (tmp_path / "demo_bindings_layout_tests.mojo").exists()
 
 
-def test_no_layout_tests_suppresses_default_sidecar(monkeypatch, tmp_path: Path) -> None:
-    class DummyResult:
-        unit = _DummyUnit()
-        mojo_module = _DummyMojoModule()
-        bindings_source = "bindings"
-        layout_test_source = None
-
-    class DummyOrchestrator:
-        def __init__(self, _options) -> None:
-            pass
-
-        def run(self) -> DummyResult:
-            return DummyResult()
-
-    monkeypatch.setattr(cli, "BindgenOrchestrator", DummyOrchestrator)
-
-    output = tmp_path / "demo.mojo"
-    rc = cli.main([str(tmp_path / "demo.h"), "--output", str(output), "--no-emit-layout-tests"])
-
-    assert rc == 0
-    assert output.read_text(encoding="utf-8") == "bindings"
-    assert not (tmp_path / "demo_layout_tests.mojo").exists()
-
-
-def test_custom_layout_test_output_writes_requested_sidecar(monkeypatch, tmp_path: Path) -> None:
+def test_layout_tests_writes_requested_sidecar(monkeypatch, tmp_path: Path) -> None:
     class DummyResult:
         bindings_source = "bindings"
         layout_test_source = "custom layout"
@@ -290,7 +226,7 @@ def test_custom_layout_test_output_writes_requested_sidecar(monkeypatch, tmp_pat
             str(tmp_path / "demo.h"),
             "--output",
             str(output),
-            "--layout-test-output",
+            "--layout-tests",
             str(sidecar),
         ]
     )
@@ -299,7 +235,7 @@ def test_custom_layout_test_output_writes_requested_sidecar(monkeypatch, tmp_pat
     assert sidecar.read_text(encoding="utf-8") == "custom layout"
 
 
-def test_mojo_ir_format_and_dump_sidecars(monkeypatch, tmp_path: Path) -> None:
+def test_dump_sidecars(monkeypatch, tmp_path: Path) -> None:
     class DummyResult:
         bindings_source = "bindings"
         layout_test_source = None
@@ -318,15 +254,13 @@ def test_mojo_ir_format_and_dump_sidecars(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(cli, "BindgenOrchestrator", DummyOrchestrator)
 
-    output = tmp_path / "module.json"
+    output = tmp_path / "module.mojo"
     cir = tmp_path / "cir.json"
     mojo_ir = tmp_path / "mojo-ir.json"
     preprocessed = tmp_path / "demo.i"
     rc = cli.main(
         [
             str(tmp_path / "demo.h"),
-            "--format",
-            "mojo-ir-json",
             "--output",
             str(output),
             "--dump-cir",
@@ -339,15 +273,13 @@ def test_mojo_ir_format_and_dump_sidecars(monkeypatch, tmp_path: Path) -> None:
     )
 
     assert rc == 0
-    assert output.read_text(encoding="utf-8") == '{"mojo": true}'
+    assert output.read_text(encoding="utf-8") == "bindings"
     assert cir.read_text(encoding="utf-8") == '{"ok": true}'
     assert mojo_ir.read_text(encoding="utf-8") == '{"mojo": true}'
     assert preprocessed.read_text(encoding="utf-8") == "preprocessed"
 
 
-def test_dry_run_writes_no_files_and_warnings_as_errors_exits_1(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_warnings_as_errors_exits_1_after_writing_outputs(monkeypatch, tmp_path: Path) -> None:
     class DummyUnit(_DummyUnit):
         diagnostics = [_DummyDiagnostic("warning", "careful")]
 
@@ -378,13 +310,12 @@ def test_dry_run_writes_no_files_and_warnings_as_errors_exits_1(
             "--diagnostics-output",
             str(diagnostics),
             "--warnings-as-errors",
-            "--dry-run",
         ]
     )
 
     assert rc == 1
-    assert not output.exists()
-    assert not diagnostics.exists()
+    assert output.read_text(encoding="utf-8") == "bindings"
+    assert diagnostics.exists()
 
 
 def test_stdout_does_not_write_layout_tests_by_default(monkeypatch, capsys, tmp_path: Path) -> None:
