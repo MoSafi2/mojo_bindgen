@@ -2,10 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## [0.3.2] - 2026-06-23
 
 ### Changed
 
+- Simplify and clarify the CLI surface: keep `--public-header` and
+  `--clang-arg`, add conventional `-o`, `-I`, `-D`, and `-U` forms, make
+  layout-test output explicit with `--layout-tests PATH`, and hide maintainer
+  debug sidecars from normal help.
+- Improve CLI help grouping and wording for input headers, Clang pass-through
+  flags, output, linking, diagnostics, and the current transitive `#include`
+  behavior.
 - Make `owned_dl_handle` dynamic-library loading portable by trying generated
   and generic environment overrides, Pixi/Conda environment locations, and
   Linux/macOS fallback names, and move generated Mojo support blocks into
