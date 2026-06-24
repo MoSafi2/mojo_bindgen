@@ -40,9 +40,13 @@ from clang.enums import ErrorCode
 from mojo.utils import build_c_parse_args, normalize_std_flag
 from std.memory import alloc, UnsafePointer
 from std.ffi import c_char, c_int, c_uint
+from std.os.path import dirname
+from std.os.process import Process
 from std.pathlib import Path, cwd
 from std.python import Python
 from std.subprocess import run
+from std.tempfile import TemporaryDirectory
+from std.io import FileHandle
 
 
 # ─────────────────────────────────────────────
@@ -228,58 +232,78 @@ struct ClangFrontend(Copyable, Movable):
             )
             var unsaved_files: List[UnsavedFile] = [unsaved^]
             return idx.parse(umbrella_path, args, unsaved_files, options)
-            # return _parse_translation_unit_direct(
-            #     idx, umbrella_path, args, unsaved_files, options
-            # )
 
         return idx.parse(self._config.header, args, List[UnsavedFile](), options)
-        # return _parse_translation_unit_direct(
-        #     idx, self._config.header, args, List[UnsavedFile](), options
-        # )
 
     def dump_preprocessed(self) raises -> String:
-        """Return preprocessed source for the configured header."""
+        """Return preprocessed source for the configured header.
+
+        Uses std.os.process.Process with a temporary directory for I/O
+        capture, avoiding Python subprocess. The Process.run argv builder
+        corrupts shared-prefix strings (posix_spawnp bug), so we route
+        through ``sh -c`` with a single shell-escaped command string.
+
+        Note: TemporaryDirectory is used without ``with`` because its
+        ``__exit__(err) -> Bool`` returns True on successful cleanup,
+        which suppresses errors raised inside the context.
+        """
         var args = self.normalized_parse_args()
-        if len(self._config.include_headers) > 0:
-            var input_path = self._umbrella_header_path()
-            var source = self._umbrella_header()
-            var cmd = "clang -E " + _join_args(args) + " -"
-            # Use Python subprocess for stdin piping
-            var py = Python()
-            var subprocess = Python.import_module("subprocess")
-            var proc = subprocess.run(
-                cmd.split(), input=source, capture_output=True, text=True
+        var display_path = self._config.header
+        var result = ""
+
+        var tmpdir_obj = TemporaryDirectory()
+        var tmpdir = tmpdir_obj.name
+
+        try:
+            var clang_input = self._config.header
+
+            if len(self._config.include_headers) > 0:
+                display_path = self._umbrella_header_path()
+                clang_input = tmpdir + "/__mojo_bindgen_input__.h"
+                var in_file = FileHandle(clang_input, "w")
+                in_file.write(self._umbrella_header())
+                in_file.close()
+
+            var out_path = tmpdir + "/__mojo_bindgen_preprocessed__.i"
+            var err_path = tmpdir + "/__mojo_bindgen_stderr__.txt"
+
+            var cmd_parts: List[String] = ["clang", "-E"]
+            for arg in args:
+                cmd_parts.append(arg)
+            cmd_parts.append("-o")
+            cmd_parts.append(out_path)
+            cmd_parts.append(clang_input)
+
+            var cmd = _join_shell_command(cmd_parts) + " 2>" + _shell_escape(
+                err_path
             )
-            if not Python.is_true(proc.returncode == 0):
-                var stderr_str = String(py.as_string_slice(proc.stderr))
+
+            var argv: List[String] = ["-c", cmd]
+            var p = Process.run("sh", argv)
+            var st = p.wait()
+
+            var exit_code = 0
+            if st.exit_code:
+                exit_code = st.exit_code.value()
+            else:
+                exit_code = -1
+
+            if exit_code != 0:
+                var stderr_str = _read_file_or_empty(err_path)
                 raise Error(
                     "clang preprocessing failed for "
-                    + input_path
+                    + display_path
                     + " with args "
                     + _join_args(args)
                     + ":\n"
                     + stderr_str
                 )
-            return String(py.as_string_slice(proc.stdout))
-        else:
-            var input_path = self._config.header
-            var cmd = "clang -E " + _join_args(args) + " " + input_path
-            var py = Python()
-            var subprocess = Python.import_module("subprocess")
-            var proc = subprocess.run(
-                cmd.split(), capture_output=True, text=True
-            )
-            if not Python.is_true(proc.returncode == 0):
-                var stderr_str = String(py.as_string_slice(proc.stderr))
-                raise Error(
-                    "clang preprocessing failed for "
-                    + input_path
-                    + " with args "
-                    + _join_args(args)
-                    + ":\n"
-                    + stderr_str
-                )
-            return String(py.as_string_slice(proc.stdout))
+
+            result = _read_file_or_empty(out_path)
+        finally:
+            _ = tmpdir_obj
+
+        return result
 
     def collect_diagnostics(
         self, tu: TranslationUnit
@@ -316,8 +340,7 @@ struct ClangFrontend(Copyable, Movable):
 
     def _umbrella_header_path(self) -> String:
         """Return a stable virtual header path for multi-header parsing."""
-        var p = Path(self._config.header)
-        return String(p.parent()) + "/__mojo_bindgen_include_headers__.h"
+        return dirname(self._config.header) + "/__mojo_bindgen_include_headers__.h"
 
     def _umbrella_header(self) -> String:
         var lines: List[String] = []
@@ -448,6 +471,34 @@ def _join_strings(strings: List[String], separator: String) -> String:
         result += s
         first = False
     return result
+
+
+def _shell_escape(s: String) -> String:
+    """Single-quote-escape a string for safe inclusion in a shell command."""
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _join_shell_command(parts: List[String]) -> String:
+    """Join parts into a shell command string, escaping each element."""
+    var result = ""
+    var first = True
+    for part in parts:
+        if not first:
+            result += " "
+        result += _shell_escape(part)
+        first = False
+    return result
+
+
+def _read_file_or_empty(path: String) raises -> String:
+    """Read a file's contents, or return empty string if unreadable."""
+    try:
+        var f = FileHandle(path, "r")
+        var content = f.read()
+        f.close()
+        return content
+    except:
+        return ""
 
 
 # ─────────────────────────────────────────────
