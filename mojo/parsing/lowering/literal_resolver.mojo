@@ -11,8 +11,7 @@ from clang.cindex import (
     TranslationUnitFlags,
     UnsavedFile,
 )
-from emberjson import Value, serialize
-from mojo.ir import IntKind, IntType, deserialize_ir
+from mojo.ir import IntKind, IntType, Value
 from mojo.parsing.frontend import _parse_translation_unit_direct
 from mojo.parsing.lowering.primitive import (
     PrimitiveResolver,
@@ -114,7 +113,35 @@ def _extract_int_type(value: Value) raises -> Optional[IntType]:
     if String(obj["kind"].string().copy()) != "IntType":
         return None
 
-    return Optional[IntType](deserialize_ir[IntType](serialize(value)))
+    var int_kind = IntKind.INT
+    if "int_kind" in obj:
+        int_kind = IntKind(String(obj["int_kind"].string().copy()))
+
+    var size_bytes = 0
+    if "size_bytes" in obj:
+        size_bytes = obj["size_bytes"].int()
+
+    var align_bytes: Optional[Int] = None
+    if "align_bytes" in obj:
+        var raw = obj["align_bytes"].copy()
+        if not raw.is_null():
+            align_bytes = Optional[Int](raw.int())
+
+    var ext_bits: Optional[Int] = None
+    if "ext_bits" in obj:
+        var raw = obj["ext_bits"].copy()
+        if not raw.is_null():
+            ext_bits = Optional[Int](raw.int())
+
+    return Optional[IntType](
+        IntType(
+            kind="IntType",
+            int_kind=int_kind,
+            size_bytes=size_bytes,
+            align_bytes=align_bytes,
+            ext_bits=ext_bits,
+        )
+    )
 
 
 def _extract_probed_int_type(tu: TranslationUnit) raises -> Optional[IntType]:

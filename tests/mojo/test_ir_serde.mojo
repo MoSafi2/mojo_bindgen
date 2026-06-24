@@ -3,9 +3,13 @@
 #
 #   pixi run mojo -I . -I .pixi/envs/default/lib/mojo tests/mojo/test_ir_serde.mojo
 
-from mojo.ir import (
+from mojo.serde import (
     serialize,
     deserialize_ir,
+    unit_to_json,
+    unit_from_json,
+)
+from mojo.ir import (
     VoidType,
     IntType,
     FloatType,
@@ -23,7 +27,7 @@ from mojo.ir import (
     TypeRef,
     IntLiteral as IRIntLiteral,
     FloatLiteral as IRFloatLiteral,
-    StringLiteral as IRStringLiteral,
+    IRString as IRStringLiteral,
     CharLiteral as IRCharLiteral,
     NullPtrLiteral,
     RefExpr,
@@ -77,7 +81,7 @@ from mojo.ir import (
     IntKind,
     ByteOrder,
 )
-from std.testing import assert_equal, assert_true
+from std.testing import assert_equal, assert_true, TestSuite
 from emberjson import parse
 
 
@@ -119,7 +123,7 @@ def test_every_node_serializes_with_kind() raises:
     _check_kind("TypeRef", serialize(TypeRef().copy()))
     _check_kind("IntLiteral", serialize(IRIntLiteral().copy()))
     _check_kind("FloatLiteral", serialize(IRFloatLiteral().copy()))
-    _check_kind("StringLiteral", serialize(IRStringLiteral().copy()))
+    _check_kind("IRString", serialize(IRStringLiteral().copy()))
     _check_kind("CharLiteral", serialize(IRCharLiteral().copy()))
     _check_kind("NullPtrLiteral", serialize(NullPtrLiteral().copy()))
     _check_kind("RefExpr", serialize(RefExpr().copy()))
@@ -234,8 +238,8 @@ def test_unit_roundtrip() raises:
     u.target_abi.pointer_align_bytes = 8
     u.target_abi.byte_order = ByteOrder.LITTLE
 
-    var json = u.to_json[pretty=False]()
-    var round = Unit.from_json(json)
+    var json = unit_to_json[pretty=False](u)
+    var round = unit_from_json(json)
     assert_equal(round.source_header, "zlib.h")
     assert_equal(round.library, "zlib")
     assert_equal(round.link_name, "z")

@@ -40,6 +40,11 @@ pip = ">=26.0.1,<27"
 rich = ">=15.0.0,<16"
 typer = ">=0.25.1,<0.26"
 libclang_mojo = { git = "https://github.com/MoSafi2/mojo_libclang", rev = "d2281962978f172cce85bc7c46d39f8fea4dc787" }
+# EmberJson: currently a top-level dep because `mojo/ir.mojo` uses its `Value`/
+# `Object` as the storage representation for recursive IR union fields. SerDe
+# functions (serialize/deserialize/parse) are isolated in `mojo/serde.mojo`
+# (optional debug feature). Moving EmberJson to a `[feature.serde]` env is
+# deferred until `Value` is replaced with tagged-union structs.
 emberjson = { git = "https://github.com/bgreni/EmberJson.git", tag = "0.3.3" }
 
 [pypi-dependencies]

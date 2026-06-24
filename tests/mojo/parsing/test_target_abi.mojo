@@ -4,6 +4,7 @@
 from std.testing import assert_true, assert_equal, TestSuite
 from mojo.parsing.target_abi import probe_target_abi
 from mojo.parsing.parser import ClangParser
+from mojo.serde import unit_to_json, unit_from_json
 from mojo.ir import ByteOrder
 
 comptime _FIXTURES = "tests/mojo/parsing/fixtures"
@@ -39,8 +40,8 @@ def test_unit_json_roundtrip_preserves_target_abi() raises:
         compile_args=List[String](),
     ).run()
 
-    var json = unit.to_json()
-    var restored = Unit.from_json(json)
+    var json = unit_to_json(unit)
+    var restored = unit_from_json(json)
 
     assert_equal(restored.target_abi.pointer_size_bytes, unit.target_abi.pointer_size_bytes)
     assert_equal(restored.target_abi.pointer_align_bytes, unit.target_abi.pointer_align_bytes)

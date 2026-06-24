@@ -17,8 +17,7 @@ from mojo.parsing.frontend import (
 from mojo.parsing.diagnostics import ParserDiagnosticSink
 from mojo.parsing.registry import RecordRegistry
 from mojo.parsing.target_abi import probe_target_abi
-from emberjson import Value
-from mojo.ir import Unit, TargetABI
+from mojo.ir import Unit, TargetABI, Value
 from std.pathlib import Path
 
 

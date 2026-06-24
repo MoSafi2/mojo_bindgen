@@ -14,6 +14,7 @@ from mojo.ir import (
     StructRef,
     TypeRef,
     UnsupportedType,
+    Value,
     VectorType,
     VoidType,
 )

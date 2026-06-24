@@ -9,11 +9,17 @@ Core source lives in `mojo_bindgen/`.
 - `mojo_bindgen/codegen/`: Mojo emission and generator orchestration
 - `mojo_bindgen/ir.py`: unified C-facing and Mojo-facing IR schemas
 
-A Mojo port of the IR (with EmberJson-backed SerDe) lives in `mojo/`:
+A Mojo port of the IR lives in `mojo/`:
 
-- `mojo/ir.mojo`: Mojo `@fieldwise_init` structs mirroring `mojo_bindgen/ir.py`,
-  with JSON serialization/deserialization via the `emberjson` pixi git dependency
-  (pinned to tag `0.3.3`). All IR nodes are `Copyable` via `.copy()`.
+- `mojo/ir.mojo`: Mojo `@fieldwise_init` structs mirroring `mojo_bindgen/ir.py`.
+  Uses EmberJson's `Value`/`Object` (pinned to tag `0.3.3`) only as the storage
+  representation for recursive IR union fields. All IR nodes are `Copyable`
+  via `.copy()`. No SerDe logic lives here.
+- `mojo/serde.mojo`: optional debug SerDe — the only Mojo module importing
+  EmberJson's `serialize`/`deserialize`/`parse`. Exposes `serialize`,
+  `deserialize_ir`, `to_value`, `unit_to_json`/`unit_from_json`, and
+  `mojo_module_to_json`/`mojo_module_from_json`. No parsing/lowering module
+  imports this.
 - `mojo/__init__.mojo`: re-exports from `ir`.
 
 Tests live under `tests/`:

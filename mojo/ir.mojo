@@ -1,25 +1,25 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # mojo_bindgen IR (intermediate representation) — Mojo port.
 #
-# This module ports the Python `mojo_bindgen/ir.py` IR schema to Mojo and adds
-# JSON serialization/deserialization backed by EmberJson (v0.3.3).
+# This module ports the Python `mojo_bindgen/ir.py` IR schema to Mojo. JSON
+# serialization/deserialization is an OPTIONAL DEBUG FEATURE, isolated in
+# `mojo/serde.mojo` (the only Mojo module that imports EmberJson's `serialize`/
+# `deserialize`/`parse`). This module imports just `Value`/`Object` from
+# EmberJson, used purely as the storage representation for recursive IR union
+# fields — no SerDe logic lives here.
 #
 # Design notes:
 #   * discriminated unions (Type / ConstExpr / Decl / MojoDecl / ParametricArg /
 #     StructMember) are represented at the storage level by EmberJson's
 #     `Value`. Each concrete variant is a `@fieldwise_init` struct carrying a
-#     `kind: String` discriminator (its class name) so JSON round-trips match
-#     the Python IR wire format.
-#   * `deserialize_ir[T](s)` tolerates omitted fields by injecting defaults
-#     from a default-constructed `T` before delegating to EmberJson's native
-#     reflection-based `deserialize`. This mirrors the Python SerDe's
-#     `omit_if_default` semantics when consuming Python-produced JSON.
+#     `kind: String` discriminator (its class name) so JSON round-trips (via
+#     `mojo/serde.mojo`) match the Python IR wire format.
 #   * enum-like discriminants (IntKind, FloatKind, ...) are modeled as
 #     `comptime` String constants grouped inside small structs, so they
 #     serialize as bare JSON strings exactly like Python's StrEnum.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from emberjson import serialize, deserialize, parse, Value
+from emberjson import Value, Object
 
 # ============================================================================
 # Type-union aliases.
@@ -29,7 +29,6 @@ from emberjson import serialize, deserialize, parse, Value
 # contains the struct). Typed accessors can be layered on top later; for now
 # `Value` gives faithful JSON round-trips for every variant.
 # ============================================================================
-comptime TypeNode = Value
 comptime ConstExprNode = Value
 comptime DeclNode = Value
 comptime MojoDeclNode = Value
@@ -233,21 +232,23 @@ struct SupportDeclKind(EnumBase):
 comptime IRBase = Defaultable & Movable & ImplicitlyDestructible & Copyable
 
 
-# Deserialize `s` into `T`, tolerating fields omitted by the Python SerDe's
-# `omit_if_default`/`omit_when` rules. Missing keys are first back-filled
-# from a default-constructed `T`; then EmberJson's native reflection-based
-# `deserialize` does the actual field-by-field construction.
-def deserialize_ir[T: IRBase](s: String) raises -> T:
-    var v = parse(s)
-    if v.is_object():
-        var defaults = parse(serialize(T()))
-        var keys_to_add: List[String] = []
-        for key in defaults.object().copy():
-            if not (key in v.object()):
-                keys_to_add.append(key)
-        for key in keys_to_add:
-            v[key] = parse(serialize(defaults.object().copy()[key].copy()))
-    return deserialize[T](serialize(v))
+# ============================================================================
+# TypeNode — marker trait mirroring Python's `Type = Union[...]`.
+#
+# Mojo has no tagged-union type, so the 18 concrete variants of the C/Mojo
+# type tree conform to this trait. Generic functions constrained with
+# `[T: TypeNode]` are statically restricted to those variants only — a
+# ConstExpr or Decl node will not satisfy the bound (compile error),
+# matching the safety of Python's `: Type` annotation.
+#
+# Storage of recursive type fields stays `Value` (see header notes); the
+# trait is for generic-function parameter restriction and polymorphic
+# dispatch via `node_kind()`. The `to_value()` lift and `deserialize_*`
+# helpers live in `mojo/serde.mojo` (optional debug SerDe).
+# ============================================================================
+trait TypeNode:
+    def node_kind(self) -> String:
+        return ""
 
 
 # ─────────────────────────────────────────────
@@ -382,15 +383,17 @@ struct PrimitiveDType(IRBase):
 # ─────────────────────────────────────────────
 
 @fieldwise_init
-struct VoidType(IRBase):
+struct VoidType(IRBase, TypeNode):
     var kind: String
 
     def __init__(out self):
         self.kind = "VoidType"
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct IntType(IRBase):
+struct IntType(IRBase, TypeNode):
     var kind: String
     var int_kind: String
     var size_bytes: Int
@@ -404,9 +407,11 @@ struct IntType(IRBase):
         self.align_bytes = None
         self.ext_bits = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct FloatType(IRBase):
+struct FloatType(IRBase, TypeNode):
     var kind: String
     var float_kind: String
     var size_bytes: Int
@@ -418,9 +423,11 @@ struct FloatType(IRBase):
         self.size_bytes = 0
         self.align_bytes = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct QualifiedType(IRBase):
+struct QualifiedType(IRBase, TypeNode):
     var kind: String
     var unqualified: Value
     var qualifiers: Qualifiers
@@ -430,9 +437,11 @@ struct QualifiedType(IRBase):
         self.unqualified = Value()
         self.qualifiers = Qualifiers()
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct AtomicType(IRBase):
+struct AtomicType(IRBase, TypeNode):
     var kind: String
     var value_type: Value
 
@@ -440,9 +449,11 @@ struct AtomicType(IRBase):
         self.kind = "AtomicType"
         self.value_type = Value()
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct Pointer(IRBase):
+struct Pointer(IRBase, TypeNode):
     var kind: String
     var pointee: Optional[Value]
     var size_bytes: Int
@@ -460,9 +471,11 @@ struct Pointer(IRBase):
         self.origin = PointerOrigin.EXTERNAL
         self.nullable = False
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct Array(IRBase):
+struct Array(IRBase, TypeNode):
     var kind: String
     var element: Value
     var size: Optional[Int]
@@ -478,9 +491,11 @@ struct Array(IRBase):
         self.size_bytes = 0
         self.align_bytes = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct FunctionPtr(IRBase):
+struct FunctionPtr(IRBase, TypeNode):
     var kind: String
     var ret: Value
     var params: List[Param]
@@ -508,6 +523,8 @@ struct FunctionPtr(IRBase):
         self.thin = True
         self.raises = False
 
+    def node_kind(self) -> String:
+        return self.kind
 
 # Forward declaration trick: `Param` is defined below the Decl section but is
 # referenced by `FunctionPtr`. Mojo resolves structs at module scope, so the
@@ -515,7 +532,7 @@ struct FunctionPtr(IRBase):
 
 
 @fieldwise_init
-struct OpaqueRecordRef(IRBase):
+struct OpaqueRecordRef(IRBase, TypeNode):
     var kind: String
     var decl_id: String
     var name: String
@@ -533,9 +550,11 @@ struct OpaqueRecordRef(IRBase):
         self.size_bytes = None
         self.align_bytes = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct UnsupportedType(IRBase):
+struct UnsupportedType(IRBase, TypeNode):
     var kind: String
     var category: String
     var spelling: String
@@ -551,9 +570,11 @@ struct UnsupportedType(IRBase):
         self.size_bytes = None
         self.align_bytes = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct ComplexType(IRBase):
+struct ComplexType(IRBase, TypeNode):
     var kind: String
     var element: FloatType
     var size_bytes: Int
@@ -565,9 +586,11 @@ struct ComplexType(IRBase):
         self.size_bytes = 0
         self.align_bytes = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct VectorType(IRBase):
+struct VectorType(IRBase, TypeNode):
     var kind: String
     var element: Value
     var count: Optional[Int]
@@ -583,9 +606,11 @@ struct VectorType(IRBase):
         self.is_ext_vector = False
         self.align_bytes = None
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct StructRef(IRBase):
+struct StructRef(IRBase, TypeNode):
     var kind: String
     var decl_id: String
     var name: String
@@ -605,9 +630,11 @@ struct StructRef(IRBase):
         self.align_bytes = None
         self.is_anonymous = False
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct EnumRef(IRBase):
+struct EnumRef(IRBase, TypeNode):
     var kind: String
     var decl_id: String
     var name: String
@@ -621,9 +648,11 @@ struct EnumRef(IRBase):
         self.c_name = ""
         self.underlying = IntType()
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct TypeRef(IRBase):
+struct TypeRef(IRBase, TypeNode):
     var kind: String
     var decl_id: String
     var name: String
@@ -635,6 +664,8 @@ struct TypeRef(IRBase):
         self.name = ""
         self.canonical = Value()
 
+    def node_kind(self) -> String:
+        return self.kind
 
 # ─────────────────────────────────────────────
 # ConstExpr — structured constant-expression subset.
@@ -1002,20 +1033,12 @@ struct Unit(IRBase):
         self.diagnostics = List[IRDiagnostic]()
 
 
-    def to_json[*, pretty: Bool = True](self) raises -> String:
-        return serialize[pretty=pretty](self)
-
-    @staticmethod
-    def from_json(s: String) raises -> Unit:
-        return deserialize_ir[Unit](s)
-
-
 # ─────────────────────────────────────────────
 # Mojo-facing IR nodes.
 # ─────────────────────────────────────────────
 
 @fieldwise_init
-struct BuiltinType(IRBase):
+struct BuiltinType(IRBase, TypeNode):
     var kind: String
     var name: String
 
@@ -1023,9 +1046,11 @@ struct BuiltinType(IRBase):
         self.kind = "BuiltinType"
         self.name = MojoBuiltin.NONE
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
-struct NamedType(IRBase):
+struct NamedType(IRBase, TypeNode):
     var kind: String
     var name: String
 
@@ -1033,6 +1058,8 @@ struct NamedType(IRBase):
         self.kind = "NamedType"
         self.name = ""
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
 struct DTypeArg(IRBase):
@@ -1075,7 +1102,7 @@ struct TypeArg(IRBase):
 
 
 @fieldwise_init
-struct ParametricType(IRBase):
+struct ParametricType(IRBase, TypeNode):
     var kind: String
     var base: String
     var args: List[Value]
@@ -1085,6 +1112,8 @@ struct ParametricType(IRBase):
         self.base = ParametricBase.SIMD
         self.args = List[Value]()
 
+    def node_kind(self) -> String:
+        return self.kind
 
 @fieldwise_init
 struct StoredMember(IRBase):
@@ -1369,12 +1398,4 @@ struct MojoModule(IRBase):
         self.library_path_hint = None
         self.dependencies = ModuleDependencies()
         self.decls = List[Value]()
-
-    def to_json[*, pretty: Bool = True](self) raises -> String:
-        return serialize[pretty=pretty](self)
-
-    @staticmethod
-    def from_json(s: String) raises -> MojoModule:
-        return deserialize_ir[MojoModule](s)
-
 

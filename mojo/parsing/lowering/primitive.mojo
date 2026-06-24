@@ -5,8 +5,7 @@ This targets `libclang_mojo`, which closely mirrors the Python bindings.
 """
 
 import clang.cindex as cx
-from emberjson import Value, parse, serialize
-from mojo.ir import FloatKind, FloatType, IntKind, IntType, VoidType
+from mojo.ir import FloatKind, FloatType, IntKind, IntType, VoidType, Value, Object
 
 
 def default_signed_int_primitive() -> IntType:
@@ -21,15 +20,37 @@ def default_signed_int_primitive() -> IntType:
 
 
 def _void_type_node() raises -> Value:
-    return parse(serialize(VoidType()))
+    var ob = Object()
+    ob["kind"] = "VoidType"
+    return Value(ob^)
 
 
 def _int_type_node(node: IntType) raises -> Value:
-    return parse(serialize(node))
+    var ob = Object()
+    ob["kind"] = "IntType"
+    ob["int_kind"] = node.int_kind
+    ob["size_bytes"] = node.size_bytes
+    if node.align_bytes:
+        ob["align_bytes"] = node.align_bytes.value()
+    else:
+        ob["align_bytes"] = None
+    if node.ext_bits:
+        ob["ext_bits"] = node.ext_bits.value()
+    else:
+        ob["ext_bits"] = None
+    return Value(ob^)
 
 
 def _float_type_node(node: FloatType) raises -> Value:
-    return parse(serialize(node))
+    var ob = Object()
+    ob["kind"] = "FloatType"
+    ob["float_kind"] = node.float_kind
+    ob["size_bytes"] = node.size_bytes
+    if node.align_bytes:
+        ob["align_bytes"] = node.align_bytes.value()
+    else:
+        ob["align_bytes"] = None
+    return Value(ob^)
 
 
 def _normalize_spelling(spelling: String) -> String:
