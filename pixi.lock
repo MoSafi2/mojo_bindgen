@@ -199,7 +199,7 @@ environments:
       - conda: https://conda.modular.com/max/noarch/mblack-26.4.0-release.conda
       - conda: https://conda.modular.com/max/noarch/mojo-python-1.0.0b2-release.conda
       - conda_source: emberjson[b90fc42f] @ git+https://github.com/bgreni/emberjson?tag=0.3.3#fd0bf236a92f65365709bb0fe908c5def5a0fd16
-      - conda_source: libclang_mojo[1ac6abbf] @ git+https://github.com/mosafi2/mojo_libclang?rev=17ae6e999f258dbbc13252a9aeae82812ca0f232#17ae6e999f258dbbc13252a9aeae82812ca0f232
+      - conda_source: libclang_mojo[656db4cf] @ git+https://github.com/mosafi2/mojo_libclang?rev=d2281962978f172cce85bc7c46d39f8fea4dc787#d2281962978f172cce85bc7c46d39f8fea4dc787
       - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0d/fe/6bea5c9162869c5beba5d9c8abbed835ec85bf1ec1fba05a3822325c45f3/build-1.5.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1d/fc/716c1e62e512ef1c160e7984a73a5fc7df45166f2ff3f254e71c58076f7c/libclang-18.1.1-py2.py3-none-manylinux2010_x86_64.whl
@@ -285,7 +285,7 @@ environments:
       - conda: https://conda.modular.com/max/noarch/mblack-26.4.0-release.conda
       - conda: https://conda.modular.com/max/noarch/mojo-python-1.0.0b2-release.conda
       - conda_source: emberjson[b90fc42f] @ git+https://github.com/bgreni/emberjson?tag=0.3.3#fd0bf236a92f65365709bb0fe908c5def5a0fd16
-      - conda_source: libclang_mojo[1ac6abbf] @ git+https://github.com/mosafi2/mojo_libclang?rev=17ae6e999f258dbbc13252a9aeae82812ca0f232#17ae6e999f258dbbc13252a9aeae82812ca0f232
+      - conda_source: libclang_mojo[656db4cf] @ git+https://github.com/mosafi2/mojo_libclang?rev=d2281962978f172cce85bc7c46d39f8fea4dc787#d2281962978f172cce85bc7c46d39f8fea4dc787
       - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0d/fe/6bea5c9162869c5beba5d9c8abbed835ec85bf1ec1fba05a3822325c45f3/build-1.5.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1d/fc/716c1e62e512ef1c160e7984a73a5fc7df45166f2ff3f254e71c58076f7c/libclang-18.1.1-py2.py3-none-manylinux2010_x86_64.whl
@@ -3108,7 +3108,7 @@ packages:
   - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
   - conda: https://conda.modular.com/max/linux-64/mojo-compiler-1.0.0b2-release.conda
   - conda: https://conda.modular.com/max/noarch/mojo-python-1.0.0b2-release.conda
-- conda_source: libclang_mojo[1ac6abbf] @ git+https://github.com/mosafi2/mojo_libclang?rev=17ae6e999f258dbbc13252a9aeae82812ca0f232#17ae6e999f258dbbc13252a9aeae82812ca0f232
+- conda_source: libclang_mojo[656db4cf] @ git+https://github.com/mosafi2/mojo_libclang?rev=d2281962978f172cce85bc7c46d39f8fea4dc787#d2281962978f172cce85bc7c46d39f8fea4dc787
   version: 0.1.0
   build: hb0f4dca_0
   subdir: linux-64

@@ -4,21 +4,78 @@
 #   pixi run mojo -I . -I .pixi/envs/default/lib/mojo tests/mojo/test_ir_serde.mojo
 
 from mojo.ir import (
-    serialize, deserialize_ir,
-    VoidType, IntType, FloatType, QualifiedType, AtomicType, Pointer, Array,
-    FunctionPtr, OpaqueRecordRef, UnsupportedType, ComplexType, VectorType,
-    StructRef, EnumRef, TypeRef,
-    IntLiteral as IRIntLiteral, FloatLiteral as IRFloatLiteral,
-    StringLiteral as IRStringLiteral, CharLiteral as IRCharLiteral,
-    NullPtrLiteral, RefExpr, UnaryExpr, BinaryExpr, CastExpr, SizeOfExpr,
-    CallExpr, Field, Struct, Enum, Typedef, Function, Const, MacroDecl,
-    GlobalVar, Unit, BuiltinType, NamedType, DTypeArg, ConstArg, NameArg,
-    TypeArg, ParametricType, StoredMember, PaddingMember, OpaqueStorageMember,
-    BitfieldField, BitfieldGroupMember, ComptimeMember, InitializerParam,
-    Initializer, FlexibleTail, StructDecl, AliasDecl, CallTarget, FunctionDecl,
-    GlobalDecl, MojoModule, Qualifiers, DocComment, TargetABI, IRDiagnostic,
-    MappingNote, ModuleImport, SupportDecl, ModuleDependencies, PrimitiveDType,
-    Enumerant, Param, IntKind, ByteOrder,
+    serialize,
+    deserialize_ir,
+    VoidType,
+    IntType,
+    FloatType,
+    QualifiedType,
+    AtomicType,
+    Pointer,
+    Array,
+    FunctionPtr,
+    OpaqueRecordRef,
+    UnsupportedType,
+    ComplexType,
+    VectorType,
+    StructRef,
+    EnumRef,
+    TypeRef,
+    IntLiteral as IRIntLiteral,
+    FloatLiteral as IRFloatLiteral,
+    StringLiteral as IRStringLiteral,
+    CharLiteral as IRCharLiteral,
+    NullPtrLiteral,
+    RefExpr,
+    UnaryExpr,
+    BinaryExpr,
+    CastExpr,
+    SizeOfExpr,
+    CallExpr,
+    Field,
+    Struct,
+    Enum,
+    Typedef,
+    Function,
+    Const,
+    MacroDecl,
+    GlobalVar,
+    Unit,
+    BuiltinType,
+    NamedType,
+    DTypeArg,
+    ConstArg,
+    NameArg,
+    TypeArg,
+    ParametricType,
+    StoredMember,
+    PaddingMember,
+    OpaqueStorageMember,
+    BitfieldField,
+    BitfieldGroupMember,
+    ComptimeMember,
+    InitializerParam,
+    Initializer,
+    FlexibleTail,
+    StructDecl,
+    AliasDecl,
+    CallTarget,
+    FunctionDecl,
+    GlobalDecl,
+    MojoModule,
+    Qualifiers,
+    DocComment,
+    TargetABI,
+    IRDiagnostic,
+    MappingNote,
+    ModuleImport,
+    SupportDecl,
+    ModuleDependencies,
+    PrimitiveDType,
+    Enumerant,
+    Param,
+    IntKind,
+    ByteOrder,
 )
 from std.testing import assert_equal, assert_true
 from emberjson import parse
@@ -89,13 +146,9 @@ def test_every_node_serializes_with_kind() raises:
     _check_kind("ParametricType", serialize(ParametricType().copy()))
     _check_kind("StoredMember", serialize(StoredMember().copy()))
     _check_kind("PaddingMember", serialize(PaddingMember().copy()))
-    _check_kind(
-        "OpaqueStorageMember", serialize(OpaqueStorageMember().copy())
-    )
+    _check_kind("OpaqueStorageMember", serialize(OpaqueStorageMember().copy()))
     _check_kind("BitfieldField", serialize(BitfieldField().copy()))
-    _check_kind(
-        "BitfieldGroupMember", serialize(BitfieldGroupMember().copy())
-    )
+    _check_kind("BitfieldGroupMember", serialize(BitfieldGroupMember().copy()))
     _check_kind("ComptimeMember", serialize(ComptimeMember().copy()))
     _check_kind("InitializerParam", serialize(InitializerParam().copy()))
     _check_kind("Initializer", serialize(Initializer().copy()))
@@ -191,9 +244,4 @@ def test_unit_roundtrip() raises:
 
 
 def main() raises:
-    test_every_node_serializes_with_kind()
-    test_inttype_roundtrip_tolerant()
-    test_copy_is_independent()
-    test_pointer_with_nested_pointee()
-    test_unit_roundtrip()
-    print("OK: all ir.serde smoke tests passed")
+    var suite = TestSuite.discover_tests[__functions_in_module()]().run()

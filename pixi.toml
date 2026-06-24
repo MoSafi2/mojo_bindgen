@@ -39,7 +39,7 @@ python = ">=3.14.4,<3.15"
 pip = ">=26.0.1,<27"
 rich = ">=15.0.0,<16"
 typer = ">=0.25.1,<0.26"
-libclang_mojo = { git = "https://github.com/MoSafi2/mojo_libclang", rev = "17ae6e999f258dbbc13252a9aeae82812ca0f232" }
+libclang_mojo = { git = "https://github.com/MoSafi2/mojo_libclang", rev = "d2281962978f172cce85bc7c46d39f8fea4dc787" }
 emberjson = { git = "https://github.com/bgreni/EmberJson.git", tag = "0.3.3" }
 
 [pypi-dependencies]

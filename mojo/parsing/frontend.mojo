@@ -227,13 +227,15 @@ struct ClangFrontend(Copyable, Movable):
                 filename=umbrella_path, contents=self._umbrella_header()
             )
             var unsaved_files: List[UnsavedFile] = [unsaved^]
-            return _parse_translation_unit_direct(
-                idx, umbrella_path, args, unsaved_files, options
-            )
+            return idx.parse(umbrella_path, args, unsaved_files, options)
+            # return _parse_translation_unit_direct(
+            #     idx, umbrella_path, args, unsaved_files, options
+            # )
 
-        return _parse_translation_unit_direct(
-            idx, self._config.header, args, List[UnsavedFile](), options
-        )
+        return idx.parse(self._config.header, args, List[UnsavedFile](), options)
+        # return _parse_translation_unit_direct(
+        #     idx, self._config.header, args, List[UnsavedFile](), options
+        # )
 
     def dump_preprocessed(self) raises -> String:
         """Return preprocessed source for the configured header."""

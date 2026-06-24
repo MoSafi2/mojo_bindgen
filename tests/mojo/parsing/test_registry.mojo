@@ -128,8 +128,4 @@ def test_registry_distinguishes_sibling_anonymous_record_definitions() raises:
 
 
 def main() raises:
-    var suite = TestSuite("parsing/registry")
-    suite.run(test_registry_unifies_forward_decl_and_definition)
-    suite.run(test_registry_synthesizes_anonymous_record_identity)
-    suite.run(test_registry_distinguishes_sibling_anonymous_record_definitions)
-    suite.report()
+    var suite = TestSuite.discover_tests[__functions_in_module()]().run()

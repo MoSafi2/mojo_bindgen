@@ -91,9 +91,4 @@ def test_parser_captures_docs_on_function() raises:
 
 
 def main() raises:
-    var suite = TestSuite("parsing/doc_comments")
-    suite.run(test_parser_captures_docs_on_struct)
-    suite.run(test_parser_captures_docs_on_enum)
-    suite.run(test_parser_captures_docs_on_field)
-    suite.run(test_parser_captures_docs_on_function)
-    suite.report()
+    var suite = TestSuite.discover_tests[__functions_in_module()]().run()

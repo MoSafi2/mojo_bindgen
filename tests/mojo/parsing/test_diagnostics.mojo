@@ -3,7 +3,9 @@
 
 from std.testing import assert_equal, assert_true, TestSuite
 from mojo.parsing.frontend import (
-    FrontendDiagnostic, ClangFrontend, ClangFrontendConfig,
+    FrontendDiagnostic,
+    ClangFrontend,
+    ClangFrontendConfig,
 )
 from mojo.parsing.diagnostics import ParserDiagnosticSink
 
@@ -37,11 +39,13 @@ def test_sink_collects_frontend_diagnostics() raises:
 
 def test_sink_to_ir_diagnostics() raises:
     var sink = ParserDiagnosticSink()
-    sink.add_frontend_diagnostics([
-        FrontendDiagnostic(
-            severity="error", file="a.h", line=1, col=2, message="oops"
-        ),
-    ])
+    sink.add_frontend_diagnostics(
+        [
+            FrontendDiagnostic(
+                severity="error", file="a.h", line=1, col=2, message="oops"
+            ),
+        ]
+    )
     var ir = sink.to_ir_diagnostics()
     assert_equal(len(ir), 1)
     assert_equal(ir[0].severity, "error")
@@ -53,11 +57,13 @@ def test_sink_to_ir_diagnostics() raises:
 
 def test_clang_parser_collects_no_fatal_diags_for_clean_header() raises:
     var header = "/home/mmabrouk/mojo_bindgen/" + _FIXTURES + "/probe.h"
-    var frontend = ClangFrontend(ClangFrontendConfig(
-        header=header,
-        compile_args=List[String](),
-        include_headers=List[String](),
-    ))
+    var frontend = ClangFrontend(
+        ClangFrontendConfig(
+            header=header,
+            compile_args=List[String](),
+            include_headers=List[String](),
+        )
+    )
     var tu = frontend.parse_translation_unit()
     var diags = frontend.collect_diagnostics(tu)
     # Clean header should have no fatal diagnostics
@@ -69,9 +75,4 @@ def test_clang_parser_collects_no_fatal_diags_for_clean_header() raises:
 
 
 def main() raises:
-    var suite = TestSuite("parsing/diagnostics")
-    suite.run(test_frontend_diagnostic_str)
-    suite.run(test_sink_collects_frontend_diagnostics)
-    suite.run(test_sink_to_ir_diagnostics)
-    suite.run(test_clang_parser_collects_no_fatal_diags_for_clean_header)
-    suite.report()
+    var suite = TestSuite.discover_tests[__functions_in_module()]().run()

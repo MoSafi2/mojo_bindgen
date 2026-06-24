@@ -51,8 +51,4 @@ from mojo.ir import Unit
 
 
 def main() raises:
-    var suite = TestSuite("parsing/target_abi")
-    suite.run(test_probe_target_abi_returns_sensible_facts)
-    suite.run(test_clang_parser_records_target_abi_on_unit)
-    suite.run(test_unit_json_roundtrip_preserves_target_abi)
-    suite.report()
+    var suite = TestSuite.discover_tests[__functions_in_module()]().run()
