@@ -19,61 +19,47 @@
 #     serialize as bare JSON strings exactly like Python's StrEnum.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from emberjson import Value, Object
-
-# ============================================================================
-# Type-union aliases.
-#
-# Recursive C/Mojo IR unions are stored as `Value` to side-step Mojo's
-# finite-size struct restriction (a struct cannot directly embed a union that
-# contains the struct). Typed accessors can be layered on top later; for now
-# `Value` gives faithful JSON round-trips for every variant.
-# ============================================================================
-comptime ConstExprNode = Value
-comptime DeclNode = Value
-comptime MojoDeclNode = Value
-comptime ParametricArgNode = Value
-comptime StructMemberNode = Value
-
+from emberjson import Value, Object, JsonSerializable, JsonDeserializable, Serializer, Parser, ParseOptions
+from emberjson.utils import write_escaped_string
 
 # ============================================================================
 # Enum-like discriminants (Python StrEnum → comptime String constants).
 # ============================================================================
 
 
-comptime EnumBase = Copyable & ImplicitlyDestructible & Hashable & Equatable
+comptime EnumBase = ImplicitlyCopyable & ImplicitlyDestructible & Hashable & Equatable & Writable
 
 @fieldwise_init
 struct IntKind(EnumBase):
     var value: String
-    comptime BOOL = "BOOL"
-    comptime CHAR_S = "CHAR_S"
-    comptime CHAR_U = "CHAR_U"
-    comptime SCHAR = "SCHAR"
-    comptime UCHAR = "UCHAR"
-    comptime SHORT = "SHORT"
-    comptime USHORT = "USHORT"
-    comptime INT = "INT"
-    comptime UINT = "UINT"
-    comptime LONG = "LONG"
-    comptime ULONG = "ULONG"
-    comptime LONGLONG = "LONGLONG"
-    comptime ULONGLONG = "ULONGLONG"
-    comptime INT128 = "INT128"
-    comptime UINT128 = "UINT128"
-    comptime WCHAR = "WCHAR"
-    comptime CHAR16 = "CHAR16"
-    comptime CHAR32 = "CHAR32"
-    comptime EXT_INT = "EXT_INT"
+    comptime BOOL = IntKind("BOOL")
+    comptime CHAR_S = IntKind("CHAR_S")
+    comptime CHAR_U = IntKind("CHAR_U")
+    comptime SCHAR = IntKind("SCHAR")
+    comptime UCHAR = IntKind("UCHAR")
+    comptime SHORT = IntKind("SHORT")
+    comptime USHORT = IntKind("USHORT")
+    comptime INT = IntKind("INT")
+    comptime UINT = IntKind("UINT")
+    comptime LONG = IntKind("LONG")
+    comptime ULONG = IntKind("ULONG")
+    comptime LONGLONG = IntKind("LONGLONG")
+    comptime ULONGLONG = IntKind("ULONGLONG")
+    comptime INT128 = IntKind("INT128")
+    comptime UINT128 = IntKind("UINT128")
+    comptime WCHAR = IntKind("WCHAR")
+    comptime CHAR16 = IntKind("CHAR16")
+    comptime CHAR32 = IntKind("CHAR32")
+    comptime EXT_INT = IntKind("EXT_INT")
 
 @fieldwise_init
 struct FloatKind(EnumBase):
     var value: String
-    comptime FLOAT16 = "FLOAT16"
-    comptime FLOAT = "FLOAT"
-    comptime DOUBLE = "DOUBLE"
-    comptime LONG_DOUBLE = "LONG_DOUBLE"
-    comptime FLOAT128 = "FLOAT128"
+    comptime FLOAT16 = FloatKind("FLOAT16")
+    comptime FLOAT = FloatKind("FLOAT")
+    comptime DOUBLE = FloatKind("DOUBLE")
+    comptime LONG_DOUBLE = FloatKind("LONG_DOUBLE")
+    comptime FLOAT128 = FloatKind("FLOAT128")
 
 @fieldwise_init
 struct UnsupportedTypeCategory(EnumBase):
@@ -222,6 +208,240 @@ struct SupportDeclKind(EnumBase):
     comptime GLOBAL_SYMBOL_HELPERS = "global_symbol_helpers"
 
 
+@fieldwise_init
+struct NodeKind(EnumBase, Defaultable, ImplicitlyCopyable, JsonSerializable, JsonDeserializable):
+    """Discriminator for IR node structs (replaces Python's `KIND: ClassVar[str]`).
+
+    String-backed so EmberJson reflection serializes it as a bare JSON string
+    matching the Python IR wire format (e.g. `{"kind": "VoidType", ...}`).
+    Conforms to `EnumBase` like the other enum-like structs (`IntKind`, ...).
+    `Defaultable` + `ImplicitlyCopyable` are needed for EmberJson reflection and
+    comptime constant materialization. `JsonSerializable`/`JsonDeserializable`
+    are implemented so EmberJson treats `NodeKind` as a bare JSON string (not
+    a `{"value": "..."}` object), preserving the Python wire format.
+    """
+
+    var value: String
+
+    def __init__(out self):
+        self.value = ""
+
+    def name(self) -> String:
+        return self.value
+
+    def write_json(self, mut writer: Some[Serializer]):
+        write_escaped_string(self.value, writer)
+
+    @staticmethod
+    def from_json[
+        origin: ImmutOrigin, options: ParseOptions, //
+    ](mut p: Parser[origin, options], out s: NodeKind) raises:
+        s = NodeKind(p.read_string())
+
+    comptime DOC_COMMENT = NodeKind("DocComment")
+    comptime TARGET_ABI = NodeKind("TargetABI")
+    comptime MAPPING_NOTE = NodeKind("MappingNote")
+    comptime MODULE_IMPORT = NodeKind("ModuleImport")
+    comptime SUPPORT_DECL = NodeKind("SupportDecl")
+    comptime MODULE_DEPENDENCIES = NodeKind("ModuleDependencies")
+    comptime PRIMITIVE_DTYPE = NodeKind("PrimitiveDType")
+
+    comptime VOID_TYPE = NodeKind("VoidType")
+    comptime INT_TYPE = NodeKind("IntType")
+    comptime FLOAT_TYPE = NodeKind("FloatType")
+    comptime QUALIFIED_TYPE = NodeKind("QualifiedType")
+    comptime ATOMIC_TYPE = NodeKind("AtomicType")
+    comptime POINTER = NodeKind("Pointer")
+    comptime ARRAY = NodeKind("Array")
+    comptime FUNCTION_PTR = NodeKind("FunctionPtr")
+    comptime OPAQUE_RECORD_REF = NodeKind("OpaqueRecordRef")
+    comptime UNSUPPORTED_TYPE = NodeKind("UnsupportedType")
+    comptime COMPLEX_TYPE = NodeKind("ComplexType")
+    comptime VECTOR_TYPE = NodeKind("VectorType")
+    comptime STRUCT_REF = NodeKind("StructRef")
+    comptime ENUM_REF = NodeKind("EnumRef")
+    comptime TYPE_REF = NodeKind("TypeRef")
+
+    comptime INT_LITERAL = NodeKind("IntLiteral")
+    comptime FLOAT_LITERAL = NodeKind("FloatLiteral")
+    comptime IR_STRING = NodeKind("IRString")
+    comptime CHAR_LITERAL = NodeKind("CharLiteral")
+    comptime NULL_PTR_LITERAL = NodeKind("NullPtrLiteral")
+    comptime REF_EXPR = NodeKind("RefExpr")
+    comptime UNARY_EXPR = NodeKind("UnaryExpr")
+    comptime BINARY_EXPR = NodeKind("BinaryExpr")
+    comptime CAST_EXPR = NodeKind("CastExpr")
+    comptime SIZE_OF_EXPR = NodeKind("SizeOfExpr")
+    comptime CALL_EXPR = NodeKind("CallExpr")
+
+    comptime FIELD = NodeKind("Field")
+    comptime STRUCT = NodeKind("Struct")
+    comptime ENUM = NodeKind("Enum")
+    comptime TYPEDEF = NodeKind("Typedef")
+    comptime FUNCTION = NodeKind("Function")
+    comptime CONST = NodeKind("Const")
+    comptime MACRO_DECL = NodeKind("MacroDecl")
+    comptime GLOBAL_VAR = NodeKind("GlobalVar")
+    comptime UNIT = NodeKind("Unit")
+
+    comptime BUILTIN_TYPE = NodeKind("BuiltinType")
+    comptime NAMED_TYPE = NodeKind("NamedType")
+    comptime DTYPE_ARG = NodeKind("DTypeArg")
+    comptime CONST_ARG = NodeKind("ConstArg")
+    comptime NAME_ARG = NodeKind("NameArg")
+    comptime TYPE_ARG = NodeKind("TypeArg")
+    comptime PARAMETRIC_TYPE = NodeKind("ParametricType")
+
+    comptime STORED_MEMBER = NodeKind("StoredMember")
+    comptime PADDING_MEMBER = NodeKind("PaddingMember")
+    comptime OPAQUE_STORAGE_MEMBER = NodeKind("OpaqueStorageMember")
+    comptime BITFIELD_FIELD = NodeKind("BitfieldField")
+    comptime BITFIELD_GROUP_MEMBER = NodeKind("BitfieldGroupMember")
+    comptime COMPTIME_MEMBER = NodeKind("ComptimeMember")
+    comptime INITIALIZER_PARAM = NodeKind("InitializerParam")
+    comptime INITIALIZER = NodeKind("Initializer")
+    comptime FLEXIBLE_TAIL = NodeKind("FlexibleTail")
+
+    comptime STRUCT_DECL = NodeKind("StructDecl")
+    comptime ALIAS_DECL = NodeKind("AliasDecl")
+    comptime CALL_TARGET = NodeKind("CallTarget")
+    comptime FUNCTION_DECL = NodeKind("FunctionDecl")
+    comptime GLOBAL_DECL = NodeKind("GlobalDecl")
+    comptime MOJO_MODULE = NodeKind("MojoModule")
+
+    @staticmethod
+    def from_name(s: String) raises -> NodeKind:
+        if s == "DocComment":
+            return NodeKind.DOC_COMMENT
+        if s == "TargetABI":
+            return NodeKind.TARGET_ABI
+        if s == "MappingNote":
+            return NodeKind.MAPPING_NOTE
+        if s == "ModuleImport":
+            return NodeKind.MODULE_IMPORT
+        if s == "SupportDecl":
+            return NodeKind.SUPPORT_DECL
+        if s == "ModuleDependencies":
+            return NodeKind.MODULE_DEPENDENCIES
+        if s == "PrimitiveDType":
+            return NodeKind.PRIMITIVE_DTYPE
+        if s == "VoidType":
+            return NodeKind.VOID_TYPE
+        if s == "IntType":
+            return NodeKind.INT_TYPE
+        if s == "FloatType":
+            return NodeKind.FLOAT_TYPE
+        if s == "QualifiedType":
+            return NodeKind.QUALIFIED_TYPE
+        if s == "AtomicType":
+            return NodeKind.ATOMIC_TYPE
+        if s == "Pointer":
+            return NodeKind.POINTER
+        if s == "Array":
+            return NodeKind.ARRAY
+        if s == "FunctionPtr":
+            return NodeKind.FUNCTION_PTR
+        if s == "OpaqueRecordRef":
+            return NodeKind.OPAQUE_RECORD_REF
+        if s == "UnsupportedType":
+            return NodeKind.UNSUPPORTED_TYPE
+        if s == "ComplexType":
+            return NodeKind.COMPLEX_TYPE
+        if s == "VectorType":
+            return NodeKind.VECTOR_TYPE
+        if s == "StructRef":
+            return NodeKind.STRUCT_REF
+        if s == "EnumRef":
+            return NodeKind.ENUM_REF
+        if s == "TypeRef":
+            return NodeKind.TYPE_REF
+        if s == "IntLiteral":
+            return NodeKind.INT_LITERAL
+        if s == "FloatLiteral":
+            return NodeKind.FLOAT_LITERAL
+        if s == "IRString":
+            return NodeKind.IR_STRING
+        if s == "CharLiteral":
+            return NodeKind.CHAR_LITERAL
+        if s == "NullPtrLiteral":
+            return NodeKind.NULL_PTR_LITERAL
+        if s == "RefExpr":
+            return NodeKind.REF_EXPR
+        if s == "UnaryExpr":
+            return NodeKind.UNARY_EXPR
+        if s == "BinaryExpr":
+            return NodeKind.BINARY_EXPR
+        if s == "CastExpr":
+            return NodeKind.CAST_EXPR
+        if s == "SizeOfExpr":
+            return NodeKind.SIZE_OF_EXPR
+        if s == "CallExpr":
+            return NodeKind.CALL_EXPR
+        if s == "Field":
+            return NodeKind.FIELD
+        if s == "Struct":
+            return NodeKind.STRUCT
+        if s == "Enum":
+            return NodeKind.ENUM
+        if s == "Typedef":
+            return NodeKind.TYPEDEF
+        if s == "Function":
+            return NodeKind.FUNCTION
+        if s == "Const":
+            return NodeKind.CONST
+        if s == "MacroDecl":
+            return NodeKind.MACRO_DECL
+        if s == "GlobalVar":
+            return NodeKind.GLOBAL_VAR
+        if s == "Unit":
+            return NodeKind.UNIT
+        if s == "BuiltinType":
+            return NodeKind.BUILTIN_TYPE
+        if s == "NamedType":
+            return NodeKind.NAMED_TYPE
+        if s == "DTypeArg":
+            return NodeKind.DTYPE_ARG
+        if s == "ConstArg":
+            return NodeKind.CONST_ARG
+        if s == "NameArg":
+            return NodeKind.NAME_ARG
+        if s == "TypeArg":
+            return NodeKind.TYPE_ARG
+        if s == "ParametricType":
+            return NodeKind.PARAMETRIC_TYPE
+        if s == "StoredMember":
+            return NodeKind.STORED_MEMBER
+        if s == "PaddingMember":
+            return NodeKind.PADDING_MEMBER
+        if s == "OpaqueStorageMember":
+            return NodeKind.OPAQUE_STORAGE_MEMBER
+        if s == "BitfieldField":
+            return NodeKind.BITFIELD_FIELD
+        if s == "BitfieldGroupMember":
+            return NodeKind.BITFIELD_GROUP_MEMBER
+        if s == "ComptimeMember":
+            return NodeKind.COMPTIME_MEMBER
+        if s == "InitializerParam":
+            return NodeKind.INITIALIZER_PARAM
+        if s == "Initializer":
+            return NodeKind.INITIALIZER
+        if s == "FlexibleTail":
+            return NodeKind.FLEXIBLE_TAIL
+        if s == "StructDecl":
+            return NodeKind.STRUCT_DECL
+        if s == "AliasDecl":
+            return NodeKind.ALIAS_DECL
+        if s == "CallTarget":
+            return NodeKind.CALL_TARGET
+        if s == "FunctionDecl":
+            return NodeKind.FUNCTION_DECL
+        if s == "GlobalDecl":
+            return NodeKind.GLOBAL_DECL
+        if s == "MojoModule":
+            return NodeKind.MOJO_MODULE
+        raise Error("unknown NodeKind name: " + s)
+
+
 # ============================================================================
 # SerDe helpers.
 # ============================================================================
@@ -247,8 +467,8 @@ comptime IRBase = Defaultable & Movable & ImplicitlyDestructible & Copyable
 # helpers live in `mojo/serde.mojo` (optional debug SerDe).
 # ============================================================================
 trait TypeNode:
-    def node_kind(self) -> String:
-        return ""
+    def node_kind(self) -> NodeKind:
+        return NodeKind.VOID_TYPE
 
 
 # ─────────────────────────────────────────────
@@ -270,26 +490,26 @@ struct Qualifiers(IRBase):
 
 @fieldwise_init
 struct DocComment(IRBase):
-    var kind: String
+    var kind: NodeKind
     var text: String
     var brief: Optional[String]
     var source: String
 
     def __init__(out self):
-        self.kind = "DocComment"
+        self.kind = NodeKind.DOC_COMMENT
         self.text = ""
         self.brief = None
         self.source = "clang_raw"
 
 
 struct TargetABI(IRBase):
-    var kind: String
+    var kind: NodeKind
     var pointer_size_bytes: Int
     var pointer_align_bytes: Int
     var byte_order: String
 
     def __init__(out self):
-        self.kind = "TargetABI"
+        self.kind = NodeKind.TARGET_ABI
         self.pointer_size_bytes = 0
         self.pointer_align_bytes = 0
         self.byte_order = ByteOrder.LITTLE
@@ -316,13 +536,13 @@ struct IRDiagnostic(IRBase):
 
 @fieldwise_init
 struct MappingNote(IRBase):
-    var kind: String
+    var kind: NodeKind
     var severity: String
     var message: String
     var category: String
 
     def __init__(out self):
-        self.kind = "MappingNote"
+        self.kind = NodeKind.MAPPING_NOTE
         self.severity = MappingSeverity.NOTE
         self.message = ""
         self.category = ""
@@ -330,49 +550,49 @@ struct MappingNote(IRBase):
 
 @fieldwise_init
 struct ModuleImport(IRBase):
-    var kind: String
+    var kind: NodeKind
     var module: String
     var names: List[String]
 
     def __init__(out self):
-        self.kind = "ModuleImport"
+        self.kind = NodeKind.MODULE_IMPORT
         self.module = ""
         self.names = List[String]()
 
 
 @fieldwise_init
 struct SupportDecl(IRBase):
-    var kind: String
+    var kind: NodeKind
     var kind_value: String
 
     def __init__(out self):
-        self.kind = "SupportDecl"
+        self.kind = NodeKind.SUPPORT_DECL
         self.kind_value = SupportDeclKind.DL_HANDLE_HELPERS
 
 
 @fieldwise_init
 struct ModuleDependencies(IRBase):
-    var kind: String
+    var kind: NodeKind
     var imports: List[ModuleImport]
     var support_decls: List[SupportDecl]
 
     def __init__(out self):
-        self.kind = "ModuleDependencies"
+        self.kind = NodeKind.MODULE_DEPENDENCIES
         self.imports = List[ModuleImport]()
         self.support_decls = List[SupportDecl]()
 
 
 @fieldwise_init
 struct PrimitiveDType(IRBase):
-    var kind: String
+    var kind: NodeKind
     var kind_field: String
     var signed: Bool
     var dtype: String
     var width_bytes: Int
 
     def __init__(out self):
-        self.kind = "PrimitiveDType"
-        self.kind_field = IntKind.INT
+        self.kind = NodeKind.PRIMITIVE_DTYPE
+        self.kind_field = String(IntKind.INT)
         self.signed = True
         self.dtype = "DType.int32"
         self.width_bytes = 4
@@ -384,77 +604,77 @@ struct PrimitiveDType(IRBase):
 
 @fieldwise_init
 struct VoidType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
 
     def __init__(out self):
-        self.kind = "VoidType"
+        self.kind = NodeKind.VOID_TYPE
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct IntType(IRBase, TypeNode):
-    var kind: String
-    var int_kind: String
+    var kind: NodeKind
+    var int_kind: IntKind
     var size_bytes: Int
     var align_bytes: Optional[Int]
     var ext_bits: Optional[Int]
 
     def __init__(out self):
-        self.kind = "IntType"
+        self.kind = NodeKind.INT_TYPE
         self.int_kind = IntKind.INT
         self.size_bytes = 0
         self.align_bytes = None
         self.ext_bits = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct FloatType(IRBase, TypeNode):
-    var kind: String
-    var float_kind: String
+    var kind: NodeKind
+    var float_kind: FloatKind
     var size_bytes: Int
     var align_bytes: Optional[Int]
 
     def __init__(out self):
-        self.kind = "FloatType"
+        self.kind = NodeKind.FLOAT_TYPE
         self.float_kind = FloatKind.FLOAT
         self.size_bytes = 0
         self.align_bytes = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct QualifiedType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var unqualified: Value
     var qualifiers: Qualifiers
 
     def __init__(out self):
-        self.kind = "QualifiedType"
+        self.kind = NodeKind.QUALIFIED_TYPE
         self.unqualified = Value()
         self.qualifiers = Qualifiers()
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct AtomicType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var value_type: Value
 
     def __init__(out self):
-        self.kind = "AtomicType"
+        self.kind = NodeKind.ATOMIC_TYPE
         self.value_type = Value()
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct Pointer(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var pointee: Optional[Value]
     var size_bytes: Int
     var align_bytes: Optional[Int]
@@ -463,7 +683,7 @@ struct Pointer(IRBase, TypeNode):
     var nullable: Bool
 
     def __init__(out self):
-        self.kind = "Pointer"
+        self.kind = NodeKind.POINTER
         self.pointee = None
         self.size_bytes = 0
         self.align_bytes = None
@@ -471,12 +691,12 @@ struct Pointer(IRBase, TypeNode):
         self.origin = PointerOrigin.EXTERNAL
         self.nullable = False
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct Array(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var element: Value
     var size: Optional[Int]
     var array_kind: String
@@ -484,19 +704,19 @@ struct Array(IRBase, TypeNode):
     var align_bytes: Optional[Int]
 
     def __init__(out self):
-        self.kind = "Array"
+        self.kind = NodeKind.ARRAY
         self.element = Value()
         self.size = None
         self.array_kind = ArrayKind.FIXED
         self.size_bytes = 0
         self.align_bytes = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct FunctionPtr(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var ret: Value
     var params: List[Param]
     var param_names: Optional[List[String]]
@@ -510,7 +730,7 @@ struct FunctionPtr(IRBase, TypeNode):
     var raises: Bool
 
     def __init__(out self):
-        self.kind = "FunctionPtr"
+        self.kind = NodeKind.FUNCTION_PTR
         self.ret = Value()
         self.params = List[Param]()
         self.param_names = None
@@ -523,7 +743,7 @@ struct FunctionPtr(IRBase, TypeNode):
         self.thin = True
         self.raises = False
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 # Forward declaration trick: `Param` is defined below the Decl section but is
@@ -533,7 +753,7 @@ struct FunctionPtr(IRBase, TypeNode):
 
 @fieldwise_init
 struct OpaqueRecordRef(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var c_name: String
@@ -542,7 +762,7 @@ struct OpaqueRecordRef(IRBase, TypeNode):
     var align_bytes: Optional[Int]
 
     def __init__(out self):
-        self.kind = "OpaqueRecordRef"
+        self.kind = NodeKind.OPAQUE_RECORD_REF
         self.decl_id = ""
         self.name = ""
         self.c_name = ""
@@ -550,12 +770,12 @@ struct OpaqueRecordRef(IRBase, TypeNode):
         self.size_bytes = None
         self.align_bytes = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct UnsupportedType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var category: String
     var spelling: String
     var reason: String
@@ -563,35 +783,35 @@ struct UnsupportedType(IRBase, TypeNode):
     var align_bytes: Optional[Int]
 
     def __init__(out self):
-        self.kind = "UnsupportedType"
+        self.kind = NodeKind.UNSUPPORTED_TYPE
         self.category = UnsupportedTypeCategory.UNKNOWN
         self.spelling = ""
         self.reason = ""
         self.size_bytes = None
         self.align_bytes = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct ComplexType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var element: FloatType
     var size_bytes: Int
     var align_bytes: Optional[Int]
 
     def __init__(out self):
-        self.kind = "ComplexType"
+        self.kind = NodeKind.COMPLEX_TYPE
         self.element = FloatType()
         self.size_bytes = 0
         self.align_bytes = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct VectorType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var element: Value
     var count: Optional[Int]
     var size_bytes: Int
@@ -599,19 +819,19 @@ struct VectorType(IRBase, TypeNode):
     var align_bytes: Optional[Int]
 
     def __init__(out self):
-        self.kind = "VectorType"
+        self.kind = NodeKind.VECTOR_TYPE
         self.element = Value()
         self.count = None
         self.size_bytes = 0
         self.is_ext_vector = False
         self.align_bytes = None
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct StructRef(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var c_name: String
@@ -621,7 +841,7 @@ struct StructRef(IRBase, TypeNode):
     var is_anonymous: Bool
 
     def __init__(out self):
-        self.kind = "StructRef"
+        self.kind = NodeKind.STRUCT_REF
         self.decl_id = ""
         self.name = ""
         self.c_name = ""
@@ -630,41 +850,41 @@ struct StructRef(IRBase, TypeNode):
         self.align_bytes = None
         self.is_anonymous = False
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct EnumRef(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var c_name: String
     var underlying: IntType
 
     def __init__(out self):
-        self.kind = "EnumRef"
+        self.kind = NodeKind.ENUM_REF
         self.decl_id = ""
         self.name = ""
         self.c_name = ""
         self.underlying = IntType()
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct TypeRef(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var canonical: Value
 
     def __init__(out self):
-        self.kind = "TypeRef"
+        self.kind = NodeKind.TYPE_REF
         self.decl_id = ""
         self.name = ""
         self.canonical = Value()
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 # ─────────────────────────────────────────────
@@ -673,83 +893,83 @@ struct TypeRef(IRBase, TypeNode):
 
 @fieldwise_init
 struct IntLiteral(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: Int
 
     def __init__(out self):
-        self.kind = "IntLiteral"
+        self.kind = NodeKind.INT_LITERAL
         self.value = 0
 
 
 @fieldwise_init
 struct FloatLiteral(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: Value
 
     def __init__(out self):
-        self.kind = "FloatLiteral"
+        self.kind = NodeKind.FLOAT_LITERAL
         self.value = Value()
 
 
 @fieldwise_init
 struct IRString(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: String
 
     def __init__(out self):
-        self.kind = "IRString"
+        self.kind = NodeKind.IR_STRING
         self.value = ""
 
 
 @fieldwise_init
 struct CharLiteral(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: String
 
     def __init__(out self):
-        self.kind = "CharLiteral"
+        self.kind = NodeKind.CHAR_LITERAL
         self.value = ""
 
 
 @fieldwise_init
 struct NullPtrLiteral(IRBase):
-    var kind: String
+    var kind: NodeKind
 
     def __init__(out self):
-        self.kind = "NullPtrLiteral"
+        self.kind = NodeKind.NULL_PTR_LITERAL
 
 
 @fieldwise_init
 struct RefExpr(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
 
     def __init__(out self):
-        self.kind = "RefExpr"
+        self.kind = NodeKind.REF_EXPR
         self.name = ""
 
 
 @fieldwise_init
 struct UnaryExpr(IRBase):
-    var kind: String
+    var kind: NodeKind
     var op: String
     var operand: Value
 
     def __init__(out self):
-        self.kind = "UnaryExpr"
+        self.kind = NodeKind.UNARY_EXPR
         self.op = ""
         self.operand = Value()
 
 
 @fieldwise_init
 struct BinaryExpr(IRBase):
-    var kind: String
+    var kind: NodeKind
     var op: String
     var lhs: Value
     var rhs: Value
 
     def __init__(out self):
-        self.kind = "BinaryExpr"
+        self.kind = NodeKind.BINARY_EXPR
         self.op = ""
         self.lhs = Value()
         self.rhs = Value()
@@ -757,34 +977,34 @@ struct BinaryExpr(IRBase):
 
 @fieldwise_init
 struct CastExpr(IRBase):
-    var kind: String
+    var kind: NodeKind
     var target: Value
     var expr: Value
 
     def __init__(out self):
-        self.kind = "CastExpr"
+        self.kind = NodeKind.CAST_EXPR
         self.target = Value()
         self.expr = Value()
 
 
 @fieldwise_init
 struct SizeOfExpr(IRBase):
-    var kind: String
+    var kind: NodeKind
     var target: Value
 
     def __init__(out self):
-        self.kind = "SizeOfExpr"
+        self.kind = NodeKind.SIZE_OF_EXPR
         self.target = Value()
 
 
 @fieldwise_init
 struct CallExpr(IRBase):
-    var kind: String
+    var kind: NodeKind
     var callee: Value
     var args: List[Value]
 
     def __init__(out self):
-        self.kind = "CallExpr"
+        self.kind = NodeKind.CALL_EXPR
         self.callee = Value()
         self.args = List[Value]()
 
@@ -795,7 +1015,7 @@ struct CallExpr(IRBase):
 
 @fieldwise_init
 struct Field(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var source_name: String
     var type_field: Value
@@ -809,7 +1029,7 @@ struct Field(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "Field"
+        self.kind = NodeKind.FIELD
         self.name = ""
         self.source_name = ""
         self.type_field = Value()
@@ -855,7 +1075,7 @@ struct Param(IRBase):
 
 @fieldwise_init
 struct Struct(IRBase):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var c_name: String
@@ -870,7 +1090,7 @@ struct Struct(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "Struct"
+        self.kind = NodeKind.STRUCT
         self.decl_id = ""
         self.name = ""
         self.c_name = ""
@@ -887,7 +1107,7 @@ struct Struct(IRBase):
 
 @fieldwise_init
 struct Enum(IRBase):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var c_name: String
@@ -898,7 +1118,7 @@ struct Enum(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "Enum"
+        self.kind = NodeKind.ENUM
         self.decl_id = ""
         self.name = ""
         self.c_name = ""
@@ -911,7 +1131,7 @@ struct Enum(IRBase):
 
 @fieldwise_init
 struct Typedef(IRBase):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var aliased: Value
@@ -919,7 +1139,7 @@ struct Typedef(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "Typedef"
+        self.kind = NodeKind.TYPEDEF
         self.decl_id = ""
         self.name = ""
         self.aliased = Value()
@@ -929,7 +1149,7 @@ struct Typedef(IRBase):
 
 @fieldwise_init
 struct Function(IRBase):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var link_name: String
@@ -941,7 +1161,7 @@ struct Function(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "Function"
+        self.kind = NodeKind.FUNCTION
         self.decl_id = ""
         self.name = ""
         self.link_name = ""
@@ -955,14 +1175,14 @@ struct Function(IRBase):
 
 @fieldwise_init
 struct Const(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var type_field: Value
     var expr: Value
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "Const"
+        self.kind = NodeKind.CONST
         self.name = ""
         self.type_field = Value()
         self.expr = Value()
@@ -971,7 +1191,7 @@ struct Const(IRBase):
 
 @fieldwise_init
 struct MacroDecl(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var tokens: List[String]
     var macro_kind: String
@@ -981,7 +1201,7 @@ struct MacroDecl(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "MacroDecl"
+        self.kind = NodeKind.MACRO_DECL
         self.name = ""
         self.tokens = List[String]()
         self.macro_kind = MacroDeclKind.INVALID
@@ -993,7 +1213,7 @@ struct MacroDecl(IRBase):
 
 @fieldwise_init
 struct GlobalVar(IRBase):
-    var kind: String
+    var kind: NodeKind
     var decl_id: String
     var name: String
     var link_name: String
@@ -1003,7 +1223,7 @@ struct GlobalVar(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "GlobalVar"
+        self.kind = NodeKind.GLOBAL_VAR
         self.decl_id = ""
         self.name = ""
         self.link_name = ""
@@ -1015,7 +1235,7 @@ struct GlobalVar(IRBase):
 
 @fieldwise_init
 struct Unit(IRBase):
-    var kind: String
+    var kind: NodeKind
     var source_header: String
     var library: String
     var link_name: String
@@ -1024,7 +1244,7 @@ struct Unit(IRBase):
     var diagnostics: List[IRDiagnostic]
 
     def __init__(out self):
-        self.kind = "Unit"
+        self.kind = NodeKind.UNIT
         self.source_header = ""
         self.library = ""
         self.link_name = ""
@@ -1039,85 +1259,85 @@ struct Unit(IRBase):
 
 @fieldwise_init
 struct BuiltinType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var name: String
 
     def __init__(out self):
-        self.kind = "BuiltinType"
+        self.kind = NodeKind.BUILTIN_TYPE
         self.name = MojoBuiltin.NONE
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct NamedType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var name: String
 
     def __init__(out self):
-        self.kind = "NamedType"
+        self.kind = NodeKind.NAMED_TYPE
         self.name = ""
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct DTypeArg(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: String
 
     def __init__(out self):
-        self.kind = "DTypeArg"
+        self.kind = NodeKind.DTYPE_ARG
         self.value = ""
 
 
 @fieldwise_init
 struct ConstArg(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: Int
 
     def __init__(out self):
-        self.kind = "ConstArg"
+        self.kind = NodeKind.CONST_ARG
         self.value = 0
 
 
 @fieldwise_init
 struct NameArg(IRBase):
-    var kind: String
+    var kind: NodeKind
     var value: String
 
     def __init__(out self):
-        self.kind = "NameArg"
+        self.kind = NodeKind.NAME_ARG
         self.value = ""
 
 
 @fieldwise_init
 struct TypeArg(IRBase):
-    var kind: String
+    var kind: NodeKind
     var type_field: Value
 
     def __init__(out self):
-        self.kind = "TypeArg"
+        self.kind = NodeKind.TYPE_ARG
         self.type_field = Value()
 
 
 @fieldwise_init
 struct ParametricType(IRBase, TypeNode):
-    var kind: String
+    var kind: NodeKind
     var base: String
     var args: List[Value]
 
     def __init__(out self):
-        self.kind = "ParametricType"
+        self.kind = NodeKind.PARAMETRIC_TYPE
         self.base = ParametricBase.SIMD
         self.args = List[Value]()
 
-    def node_kind(self) -> String:
+    def node_kind(self) -> NodeKind:
         return self.kind
 
 @fieldwise_init
 struct StoredMember(IRBase):
-    var kind: String
+    var kind: NodeKind
     var index: Int
     var name: String
     var type_field: Value
@@ -1125,7 +1345,7 @@ struct StoredMember(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "StoredMember"
+        self.kind = NodeKind.STORED_MEMBER
         self.index = 0
         self.name = ""
         self.type_field = Value()
@@ -1135,13 +1355,13 @@ struct StoredMember(IRBase):
 
 @fieldwise_init
 struct PaddingMember(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var size_bytes: Int
     var byte_offset: Int
 
     def __init__(out self):
-        self.kind = "PaddingMember"
+        self.kind = NodeKind.PADDING_MEMBER
         self.name = ""
         self.size_bytes = 0
         self.byte_offset = 0
@@ -1149,19 +1369,19 @@ struct PaddingMember(IRBase):
 
 @fieldwise_init
 struct OpaqueStorageMember(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var size_bytes: Int
 
     def __init__(out self):
-        self.kind = "OpaqueStorageMember"
+        self.kind = NodeKind.OPAQUE_STORAGE_MEMBER
         self.name = ""
         self.size_bytes = 0
 
 
 @fieldwise_init
 struct BitfieldField(IRBase):
-    var kind: String
+    var kind: NodeKind
     var index: Int
     var name: String
     var logical_type: Value
@@ -1172,7 +1392,7 @@ struct BitfieldField(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "BitfieldField"
+        self.kind = NodeKind.BITFIELD_FIELD
         self.index = 0
         self.name = ""
         self.logical_type = Value()
@@ -1185,7 +1405,7 @@ struct BitfieldField(IRBase):
 
 @fieldwise_init
 struct BitfieldGroupMember(IRBase):
-    var kind: String
+    var kind: NodeKind
     var storage_name: String
     var storage_type: Value
     var byte_offset: Int
@@ -1194,7 +1414,7 @@ struct BitfieldGroupMember(IRBase):
     var fields: List[BitfieldField]
 
     def __init__(out self):
-        self.kind = "BitfieldGroupMember"
+        self.kind = NodeKind.BITFIELD_GROUP_MEMBER
         self.storage_name = ""
         self.storage_type = Value()
         self.byte_offset = 0
@@ -1205,13 +1425,13 @@ struct BitfieldGroupMember(IRBase):
 
 @fieldwise_init
 struct ComptimeMember(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var type_value: Optional[Value]
     var const_value: Optional[Value]
 
     def __init__(out self):
-        self.kind = "ComptimeMember"
+        self.kind = NodeKind.COMPTIME_MEMBER
         self.name = ""
         self.type_value = None
         self.const_value = None
@@ -1219,36 +1439,36 @@ struct ComptimeMember(IRBase):
 
 @fieldwise_init
 struct InitializerParam(IRBase):
-    var kind: String
+    var kind: NodeKind
     var name: String
     var type_field: Value
 
     def __init__(out self):
-        self.kind = "InitializerParam"
+        self.kind = NodeKind.INITIALIZER_PARAM
         self.name = ""
         self.type_field = Value()
 
 
 @fieldwise_init
 struct Initializer(IRBase):
-    var kind: String
+    var kind: NodeKind
     var params: List[InitializerParam]
 
     def __init__(out self):
-        self.kind = "Initializer"
+        self.kind = NodeKind.INITIALIZER
         self.params = List[InitializerParam]()
 
 
 @fieldwise_init
 struct FlexibleTail(IRBase):
-    var kind: String
+    var kind: NodeKind
     var field_name: String
     var element_type: Value
     var pattern: String
     var byte_offset: Int
 
     def __init__(out self):
-        self.kind = "FlexibleTail"
+        self.kind = NodeKind.FLEXIBLE_TAIL
         self.field_name = ""
         self.element_type = Value()
         self.pattern = ""
@@ -1257,7 +1477,7 @@ struct FlexibleTail(IRBase):
 
 @fieldwise_init
 struct StructDecl(IRBase):
-    var kind: String
+    var kind: NodeKind
     var struct_kind: String
     var name: String
     var traits: List[String]
@@ -1273,7 +1493,7 @@ struct StructDecl(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "StructDecl"
+        self.kind = NodeKind.STRUCT_DECL
         self.struct_kind = StructKind.PLAIN
         self.name = ""
         self.traits = List[String]()
@@ -1291,7 +1511,7 @@ struct StructDecl(IRBase):
 
 @fieldwise_init
 struct AliasDecl(IRBase):
-    var kind: String
+    var kind: NodeKind
     var alias_kind: String
     var name: String
     var type_value: Optional[Value]
@@ -1301,7 +1521,7 @@ struct AliasDecl(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "AliasDecl"
+        self.kind = NodeKind.ALIAS_DECL
         self.alias_kind = AliasKind.TYPE_ALIAS
         self.name = ""
         self.type_value = None
@@ -1322,19 +1542,19 @@ struct AliasDecl(IRBase):
 
 @fieldwise_init
 struct CallTarget(IRBase):
-    var kind: String
+    var kind: NodeKind
     var link_mode: String
     var symbol: String
 
     def __init__(out self):
-        self.kind = "CallTarget"
+        self.kind = NodeKind.CALL_TARGET
         self.link_mode = LinkMode.EXTERNAL_CALL
         self.symbol = ""
 
 
 @fieldwise_init
 struct FunctionDecl(IRBase):
-    var kind: String
+    var kind: NodeKind
     var function_kind: String
     var name: String
     var link_name: String
@@ -1345,7 +1565,7 @@ struct FunctionDecl(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "FunctionDecl"
+        self.kind = NodeKind.FUNCTION_DECL
         self.function_kind = FunctionKind.WRAPPER
         self.name = ""
         self.link_name = ""
@@ -1358,7 +1578,7 @@ struct FunctionDecl(IRBase):
 
 @fieldwise_init
 struct GlobalDecl(IRBase):
-    var kind: String
+    var kind: NodeKind
     var global_kind: String
     var name: String
     var link_name: String
@@ -1368,7 +1588,7 @@ struct GlobalDecl(IRBase):
     var doc: Optional[DocComment]
 
     def __init__(out self):
-        self.kind = "GlobalDecl"
+        self.kind = NodeKind.GLOBAL_DECL
         self.global_kind = GlobalKind.WRAPPER
         self.name = ""
         self.link_name = ""
@@ -1380,7 +1600,7 @@ struct GlobalDecl(IRBase):
 
 @fieldwise_init
 struct MojoModule(IRBase):
-    var kind: String
+    var kind: NodeKind
     var source_header: String
     var library: String
     var link_name: String
@@ -1390,7 +1610,7 @@ struct MojoModule(IRBase):
     var decls: List[Value]
 
     def __init__(out self):
-        self.kind = "MojoModule"
+        self.kind = NodeKind.MOJO_MODULE
         self.source_header = ""
         self.library = ""
         self.link_name = ""

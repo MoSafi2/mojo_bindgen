@@ -52,7 +52,7 @@ def to_value[T: TypeNode & IRBase](node: T) raises -> Value:
 # Proof-of-concept: any function constrained by `[T: TypeNode]` is statically
 # restricted to the type-tree variants. Passing a ConstExpr or Decl node
 # (which do not conform to TypeNode) is a compile-time error.
-def type_node_kind[T: TypeNode](node: T) -> String:
+def type_node_kind[T: TypeNode](node: T) -> NodeKind:
     return node.node_kind()
 
 
