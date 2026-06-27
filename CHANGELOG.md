@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.3] - 2026-06-27
+
+### Changed
+
+- Add `mojo-bindgen --version` so scripts and users can inspect the installed
+  package version directly from the CLI.
+- Make `mojo-bindgen` with no arguments print the help message instead of
+  failing on the missing header argument.
+
 ## [0.3.2] - 2026-06-23
 
 ### Changed

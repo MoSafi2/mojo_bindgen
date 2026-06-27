@@ -48,6 +48,34 @@ def test_help_includes_examples(capsys) -> None:
     assert "--clang-arg" in plain
 
 
+def test_no_args_prints_help_without_running_orchestrator(monkeypatch, capsys) -> None:
+    def fail_orchestrator(_options):
+        raise AssertionError("orchestrator should not be constructed")
+
+    monkeypatch.setattr(cli, "BindgenOrchestrator", fail_orchestrator)
+
+    rc = cli.main([])
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    plain = _strip_ansi(captured.out)
+    assert "Generate Mojo FFI" in plain
+    assert "Examples:" in plain
+
+
+def test_version_prints_package_version_without_running_orchestrator(monkeypatch, capsys) -> None:
+    def fail_orchestrator(_options):
+        raise AssertionError("orchestrator should not be constructed")
+
+    monkeypatch.setattr(cli, "BindgenOrchestrator", fail_orchestrator)
+
+    rc = cli.main(["--version"])
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert captured.out == f"mojo-bindgen {cli.__version__}\n"
+
+
 def test_cli_uses_orchestrator_and_stdout(monkeypatch, capsys, tmp_path: Path) -> None:
     calls: dict[str, object] = {}
 

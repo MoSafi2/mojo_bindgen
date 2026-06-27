@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 import typer
 from rich.console import Console
 
+from mojo_bindgen import __version__
 from mojo_bindgen.orchestrator import BindgenOptions, BindgenOrchestrator
 from mojo_bindgen.parsing.frontend import ClangOptions
 from mojo_bindgen.parsing.parser import ParseError
@@ -18,6 +19,12 @@ stderr_console = Console(stderr=True)
 
 LinkModeOption = Literal["external-call", "owned-dl-handle"]
 DiagnosticsMode = Literal["text", "json", "silent"]
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        sys.stdout.write(f"mojo-bindgen {__version__}\n")
+        raise typer.Exit()
 
 
 def run(
@@ -237,6 +244,15 @@ def run(
             rich_help_panel="Output",
         ),
     ] = False,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the mojo-bindgen version and exit.",
+        ),
+    ] = False,
 ) -> int:
     """Generate Mojo FFI from a C header using libclang.
 
@@ -373,6 +389,8 @@ def _format_diagnostic(d) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     cli_args = argv if argv is not None else sys.argv[1:]
+    if not cli_args:
+        cli_args = ["--help"]
     previous_argv = sys.argv[:]
     sys.argv = ["mojo-bindgen", *cli_args]
     try:
