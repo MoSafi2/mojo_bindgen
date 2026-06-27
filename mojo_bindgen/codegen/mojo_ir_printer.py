@@ -170,7 +170,7 @@ def _dedent_doc_lines(lines: list[str]) -> list[str]:
 
 
 def _escape_docstring_line(line: str) -> str:
-    return line.replace('"""', '\\"\\"\\"')
+    return line.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
 
 
 class CodeBuilder:

@@ -28,6 +28,7 @@ from mojo_bindgen.ir import (
     CallTarget,
     CastExpr,
     ConstArg,
+    DocComment,
     DTypeArg,
     Field,
     FlexibleTail,
@@ -1087,3 +1088,68 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
     )
     assert 'def install(cb: binary_cb_t) abi("C") -> None:' in rendered
     assert "def load_widget() -> UnsafePointer[Widget, MutUntrackedOrigin]:" in rendered
+
+
+@pytest.mark.skipif(shutil.which("pixi") is None, reason="requires pixi with mojo toolchain")
+def test_rendered_docstring_comments_escape_backslashes_for_mojo(tmp_path: Path) -> None:
+    module = MojoModule(
+        source_header="docs.h",
+        library="docs",
+        link_name="docs",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            FunctionDecl(
+                name="sam_hdr_pg_id",
+                link_name="sam_hdr_pg_id",
+                params=[],
+                return_type=BuiltinType(MojoBuiltin.NONE),
+                kind=FunctionKind.WRAPPER,
+                call_target=CallTarget(
+                    link_mode=LinkMode.EXTERNAL_CALL,
+                    symbol="sam_hdr_pg_id",
+                ),
+                doc=DocComment(
+                    text=r'''/*!
+                     * Generate a unique \@PG ID: value
+                     * \param name  Name of the program. Eg. samtools
+                     * Path example: C:\tmp\samtools
+                     * Literal newline escape: \n
+                     * Embedded delimiter: """
+                     */'''
+                ),
+            ),
+        ],
+    )
+
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
+    module_path = tmp_path / "docs_bindings.mojo"
+    output_path = tmp_path / "docs_bindings.so"
+    module_path.write_text(rendered, encoding="utf-8")
+
+    proc = subprocess.run(
+        [
+            "pixi",
+            "run",
+            "mojo",
+            "build",
+            "--emit",
+            "shared-lib",
+            str(module_path),
+            "-o",
+            str(output_path),
+        ],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "Generate a unique \\\\@PG ID: value" in rendered
+    assert "\\\\param name  Name of the program. Eg. samtools" in rendered
+    assert "Path example: C:\\\\tmp\\\\samtools" in rendered
+    assert "Literal newline escape: \\\\n" in rendered
+    assert 'Embedded delimiter: \\"\\"\\"' in rendered

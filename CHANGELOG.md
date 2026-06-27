@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.4] - 2026-06-27
+
+### Fixed
+
+- Escape backslashes in generated Mojo docstrings so C documentation comments
+  containing text such as `\@PG`, `\param`, paths, or literal escape-looking
+  snippets do not produce invalid Mojo escape sequences.
+
 ## [0.3.3] - 2026-06-27
 
 ### Changed
