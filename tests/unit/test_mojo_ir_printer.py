@@ -371,14 +371,15 @@ def test_render_bitfield_accessors_branch_on_target_endianness_comptime() -> Non
     normalized = normalize_mojo_module(module)
     assert normalized.dependencies.imports == [
         ModuleImport(module="std.ffi", names=["external_call", "c_uint"]),
-        ModuleImport(module="std.sys.info", names=["is_big_endian", "is_little_endian"]),
+        ModuleImport(module="std.sys.info", names=["is_big_endian"]),
     ]
 
     rendered = render_mojo_module(normalized, MojoIRPrintOptions(module_comment=False))
 
-    assert "from std.sys.info import is_big_endian, is_little_endian" in rendered
-    assert "comptime if is_little_endian():" in rendered
-    assert "elif is_big_endian():" in rendered
+    assert "from std.sys.info import is_big_endian" in rendered
+    assert "is_little_endian" not in rendered
+    assert "comptime if is_big_endian():" in rendered
+    assert "else:" in rendered
     assert "self.__bf0 >> 0" in rendered
     assert "self.__bf0 >> 1" in rendered
     assert "self.__bf0 >> 31" in rendered

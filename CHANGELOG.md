@@ -10,6 +10,9 @@ All notable changes to this project are documented in this file.
   package version directly from the CLI.
 - Make `mojo-bindgen` with no arguments print the help message instead of
   failing on the missing header argument.
+- Emit bitfield accessors with a `comptime if is_big_endian()` branch and an
+  `else` little-endian path, avoiding invalid Mojo functions with no fallback
+  return path.
 
 ## [0.3.2] - 2026-06-23
 

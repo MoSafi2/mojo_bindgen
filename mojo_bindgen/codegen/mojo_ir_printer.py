@@ -422,19 +422,7 @@ class MojoIRPrinter:
         mask_text: str,
     ) -> None:
         little_shift, big_shift = self._bitfield_shifts(group, bitfield)
-        b.add("comptime if is_little_endian():")
-        b.indent()
-        self._render_bitfield_accessor_read_branch(
-            b,
-            group.storage_name,
-            logical_type,
-            storage_type,
-            mask_text,
-            little_shift,
-            bitfield,
-        )
-        b.dedent()
-        b.add("elif is_big_endian():")
+        b.add("comptime if is_big_endian():")
         b.indent()
         self._render_bitfield_accessor_read_branch(
             b,
@@ -443,6 +431,18 @@ class MojoIRPrinter:
             storage_type,
             mask_text,
             big_shift,
+            bitfield,
+        )
+        b.dedent()
+        b.add("else:")
+        b.indent()
+        self._render_bitfield_accessor_read_branch(
+            b,
+            group.storage_name,
+            logical_type,
+            storage_type,
+            mask_text,
+            little_shift,
             bitfield,
         )
         b.dedent()
@@ -479,18 +479,7 @@ class MojoIRPrinter:
         mask_text: str,
     ) -> None:
         little_shift, big_shift = self._bitfield_shifts(group, bitfield)
-        b.add("comptime if is_little_endian():")
-        b.indent()
-        self._render_bitfield_accessor_write_branch(
-            b,
-            group.storage_name,
-            storage_type,
-            mask_text,
-            little_shift,
-            bitfield,
-        )
-        b.dedent()
-        b.add("elif is_big_endian():")
+        b.add("comptime if is_big_endian():")
         b.indent()
         self._render_bitfield_accessor_write_branch(
             b,
@@ -498,6 +487,17 @@ class MojoIRPrinter:
             storage_type,
             mask_text,
             big_shift,
+            bitfield,
+        )
+        b.dedent()
+        b.add("else:")
+        b.indent()
+        self._render_bitfield_accessor_write_branch(
+            b,
+            group.storage_name,
+            storage_type,
+            mask_text,
+            little_shift,
             bitfield,
         )
         b.dedent()
