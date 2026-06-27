@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Preserve typedef-backed integer bitfields such as `uint32_t flags:3` during
+  record lowering, keep their typedef surface names in generated accessors, and
+  stop silently dropping them before bitfield layout/codegen.
 - Simplify and clarify the CLI surface: keep `--public-header` and
   `--clang-arg`, add conventional `-o`, `-I`, `-D`, and `-U` forms, make
   layout-test output explicit with `--layout-tests PATH`, and hide maintainer

@@ -7,6 +7,8 @@ from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AtomicType,
     BinaryExpr,
+    BitfieldGroupMember,
+    BuiltinType,
     ByteOrder,
     CastExpr,
     ComplexType,
@@ -22,6 +24,8 @@ from mojo_bindgen.ir import (
     IntLiteral,
     IntType,
     MacroDecl,
+    MojoBuiltin,
+    NamedType,
     NullPtrLiteral,
     Param,
     Pointer,
@@ -296,6 +300,70 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
     assert "def __init__(out self" not in out
     assert "def ready(self) -> c_uint:" in out
     assert "def set_ready(mut self, value: c_uint):" in out
+
+
+def test_generator_preserves_typedef_names_for_bitfield_accessors() -> None:
+    uint32_ref = TypeRef(
+        decl_id="typedef:uint32_t",
+        name="uint32_t",
+        canonical=_u32(),
+    )
+    st = Struct(
+        decl_id="struct:TypedefBits",
+        name="TypedefBits",
+        c_name="TypedefBits",
+        fields=[
+            Field(
+                name="ready",
+                source_name="ready",
+                type=uint32_ref,
+                byte_offset=0,
+                is_bitfield=True,
+                bit_offset=0,
+                bit_width=1,
+            ),
+            Field(
+                name="state",
+                source_name="state",
+                type=uint32_ref,
+                byte_offset=0,
+                is_bitfield=True,
+                bit_offset=1,
+                bit_width=3,
+            ),
+        ],
+        size_bytes=4,
+        align_bytes=4,
+        is_union=False,
+    )
+    unit = Unit(
+        source_header="t.h",
+        library="t",
+        link_name="t",
+        target_abi=_abi(),
+        decls=[st],
+    )
+
+    mapped = map_unit(unit, options=MojoEmitOptions())
+    typedef_bits = next(
+        decl for decl in mapped.decls if isinstance(decl, StructDecl) and decl.name == "TypedefBits"
+    )
+
+    assert isinstance(typedef_bits.members[0], BitfieldGroupMember)
+    assert typedef_bits.members[0].storage_type == BuiltinType(name=MojoBuiltin.C_UINT)
+    assert [field.logical_type for field in typedef_bits.members[0].fields] == [
+        NamedType("uint32_t"),
+        NamedType("uint32_t"),
+    ]
+
+    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+
+    assert "comptime uint32_t = UInt32" in out
+    assert "var __bf0: c_uint" in out
+    assert "def ready(self) -> uint32_t:" in out
+    assert "def set_ready(mut self, value: uint32_t):" in out
+    assert "def state(self) -> uint32_t:" in out
+    assert "def set_state(mut self, value: uint32_t):" in out
 
 
 def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_struct() -> None:

@@ -12,7 +12,18 @@ from typing import cast
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import Array, FamPattern, Field, IntType, Struct, StructRef, Type
+from mojo_bindgen.ir import (
+    Array,
+    AtomicType,
+    FamPattern,
+    Field,
+    IntType,
+    QualifiedType,
+    Struct,
+    StructRef,
+    Type,
+    TypeRef,
+)
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
@@ -307,7 +318,14 @@ class RecordLowerer:
         """Lower one normalized field site into one IR field."""
         if site.is_bitfield:
             backing = self.type_lowerer.lower(site.field_type, TypeContext.FIELD)
-            if not isinstance(backing, IntType):
+            integer_backing = self._peel_bitfield_backing(backing)
+            if integer_backing is None:
+                if site.field_cursor is not None:
+                    self.diagnostics.add_cursor_diag(
+                        "warning",
+                        site.field_cursor,
+                        "bitfield backing type is not an integer after typedef/cv/atomic peeling; field skipped",
+                    )
                 return None
             return Field(
                 name=site.name,
@@ -352,6 +370,22 @@ class RecordLowerer:
                 else None
             ),
         )
+
+    @staticmethod
+    def _peel_bitfield_backing(field_type: Type) -> IntType | None:
+        """Unwrap layout-transparent wrappers to find the integer bitfield backing type."""
+        while True:
+            if isinstance(field_type, TypeRef):
+                field_type = field_type.canonical
+                continue
+            if isinstance(field_type, QualifiedType):
+                field_type = field_type.unqualified
+                continue
+            if isinstance(field_type, AtomicType):
+                field_type = field_type.value_type
+                continue
+            break
+        return field_type if isinstance(field_type, IntType) else None
 
     def _lower_field_site_type(self, site: FieldSite) -> Type:
         """Lower the type of one normalized field site."""

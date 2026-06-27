@@ -237,6 +237,48 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
     assert zero_width.size_bytes == zero_width.type.size_bytes
 
 
+def test_record_lowering_preserves_typedef_backed_bitfields(tmp_path: Path) -> None:
+    header = tmp_path / "typedef_bitfields.h"
+    header.write_text(
+        (
+            "#include <stdint.h>\n"
+            "struct typedef_bits_t {\n"
+            "  uint32_t ready:1;\n"
+            "  uint32_t state:3;\n"
+            "};\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    bits = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "typedef_bits_t")
+
+    assert [field.name for field in bits.fields] == ["ready", "state"]
+    ready = bits.fields[0]
+    state = bits.fields[1]
+
+    assert ready.is_bitfield is True
+    assert ready.bit_offset == 0
+    assert ready.bit_width == 1
+    assert isinstance(ready.type, TypeRef)
+    assert ready.type.name == "uint32_t"
+    assert isinstance(ready.type.canonical, IntType)
+    assert ready.type.canonical.int_kind == IntKind.UINT
+
+    assert state.is_bitfield is True
+    assert state.bit_offset == 1
+    assert state.bit_width == 3
+    assert isinstance(state.type, TypeRef)
+    assert state.type.name == "uint32_t"
+    assert isinstance(state.type.canonical, IntType)
+    assert state.type.canonical.int_kind == IntKind.UINT
+
+
 def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_path: Path) -> None:
     inner = tmp_path / "inner.h"
     outer = tmp_path / "outer.h"
