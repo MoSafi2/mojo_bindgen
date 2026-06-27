@@ -6,7 +6,7 @@
 comptime uint32_t = UInt32
 
 @align(4)
-struct nft_packet_tail(Copyable, Movable):
+struct nft_packet_tail:
     var len: uint32_t
     var payload: InlineArray[c_uchar, 0]
     @staticmethod
@@ -22,7 +22,7 @@ struct nft_packet_tail(Copyable, Movable):
         return raw + 4
 
 @align(4)
-struct nft_packet_wrapper(Copyable, Movable):
+struct nft_packet_wrapper:
     var tag: uint32_t
     var tail: nft_packet_tail
     @staticmethod

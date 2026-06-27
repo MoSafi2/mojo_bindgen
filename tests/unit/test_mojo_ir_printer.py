@@ -132,6 +132,31 @@ def test_struct_decl_roundtrip_keeps_explicit_align_decorator() -> None:
     assert restored.align_decorator == 16
 
 
+def test_render_struct_decl_preserves_trait_order() -> None:
+    rendered = render_mojo_module(
+        MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+            decls=[
+                StructDecl(
+                    name="Widget",
+                    traits=[
+                        StructTraits.REGISTER_PASSABLE,
+                        StructTraits.COPYABLE,
+                        StructTraits.MOVABLE,
+                    ],
+                    members=[],
+                )
+            ],
+        ),
+        MojoIRPrintOptions(module_comment=False),
+    )
+
+    assert "struct Widget(RegisterPassable, Copyable, Movable):" in rendered
+
+
 def test_render_mojo_module_external_surface_with_synthesized_callback_aliases() -> None:
     module = MojoModule(
         source_header="demo.h",

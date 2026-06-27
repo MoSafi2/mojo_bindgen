@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis import assign_record_policies, map_unit
 from mojo_bindgen.ir import (
+    AliasDecl,
+    AliasKind,
     Array,
     AtomicType,
     BuiltinType,
@@ -15,6 +17,8 @@ from mojo_bindgen.ir import (
     MojoPassability,
     NamedType,
     OpaqueStorageMember,
+    ParametricBase,
+    ParametricType,
     Pointer,
     PointerMutability,
     StoredMember,
@@ -23,6 +27,7 @@ from mojo_bindgen.ir import (
     StructRef,
     StructTraits,
     TargetABI,
+    TypeArg,
     Unit,
 )
 
@@ -104,7 +109,11 @@ def test_assign_record_policies_marks_fieldwise_exact_struct_register_passable()
 
     assert widget.fieldwise_init is True
     assert widget.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert widget.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
+    assert widget.traits == [
+        StructTraits.TRIVIAL_REGISTER_PASSABLE,
+        StructTraits.COPYABLE,
+        StructTraits.MOVABLE,
+    ]
 
 
 def test_assign_record_policies_keeps_padding_struct_register_passable() -> None:
@@ -125,7 +134,11 @@ def test_assign_record_policies_keeps_padding_struct_register_passable() -> None
 
     assert padded.fieldwise_init is True
     assert padded.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert padded.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
+    assert padded.traits == [
+        StructTraits.TRIVIAL_REGISTER_PASSABLE,
+        StructTraits.COPYABLE,
+        StructTraits.MOVABLE,
+    ]
 
 
 def test_assign_record_policies_marks_fam_struct_memory_only() -> None:
@@ -159,7 +172,7 @@ def test_assign_record_policies_marks_fam_struct_memory_only() -> None:
     assert packet.flexible_tail is not None
     assert packet.fieldwise_init is False
     assert packet.passability == MojoPassability.MEMORY_ONLY
-    assert packet.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert packet.traits == []
 
 
 def test_assign_record_policies_keeps_incomplete_struct_copyable_only() -> None:
@@ -241,7 +254,11 @@ def test_assign_record_policies_keeps_pure_bitfield_struct_non_fieldwise_init() 
 
     assert bits.fieldwise_init is False
     assert bits.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert bits.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
+    assert bits.traits == [
+        StructTraits.TRIVIAL_REGISTER_PASSABLE,
+        StructTraits.COPYABLE,
+        StructTraits.MOVABLE,
+    ]
 
 
 def test_assign_record_policies_treats_pointer_value_as_trivial() -> None:
@@ -276,8 +293,13 @@ def test_assign_record_policies_treats_pointer_value_as_trivial() -> None:
 
     blob, blob_ref = [decl for decl in module.decls if isinstance(decl, StructDecl)]
     assert blob.passability == MojoPassability.MEMORY_ONLY
+    assert blob.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
     assert blob_ref.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert blob_ref.traits == [StructTraits.TRIVIAL_REGISTER_PASSABLE]
+    assert blob_ref.traits == [
+        StructTraits.TRIVIAL_REGISTER_PASSABLE,
+        StructTraits.COPYABLE,
+        StructTraits.MOVABLE,
+    ]
 
 
 def test_assign_record_policies_keeps_inline_array_backed_types_memory_only() -> None:
@@ -312,6 +334,61 @@ def test_assign_record_policies_keeps_inline_array_backed_types_memory_only() ->
 
     assert array_holder.passability == MojoPassability.MEMORY_ONLY
     assert array_holder.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+
+
+def test_assign_record_policies_recurses_through_union_layout_types() -> None:
+    module = assign_record_policies(
+        MojoModule(
+            source_header="demo.h",
+            library="demo",
+            link_name="demo",
+            link_mode=LinkMode.EXTERNAL_CALL,
+            decls=[
+                AliasDecl(
+                    name="MaybePtr",
+                    kind=AliasKind.UNION_LAYOUT,
+                    type_value=ParametricType(
+                        base=ParametricBase.UNSAFE_UNION,
+                        args=[
+                            TypeArg(
+                                type=Pointer(
+                                    pointee=BuiltinType(MojoBuiltin.C_CHAR),
+                                    nullable=True,
+                                )
+                            ),
+                            TypeArg(
+                                type=Pointer(
+                                    pointee=NamedType("Blob"),
+                                    mutability=PointerMutability.MUT,
+                                    nullable=True,
+                                )
+                            ),
+                        ],
+                    ),
+                ),
+                StructDecl(
+                    name="Blob",
+                    members=[OpaqueStorageMember(name="storage", size_bytes=8)],
+                ),
+                StructDecl(
+                    name="Holder",
+                    members=[
+                        StoredMember(
+                            index=0,
+                            name="value",
+                            type=NamedType("MaybePtr"),
+                            byte_offset=0,
+                        )
+                    ],
+                ),
+            ],
+        )
+    )
+
+    blob, holder = [decl for decl in module.decls if isinstance(decl, StructDecl)]
+    assert blob.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert holder.passability == MojoPassability.MEMORY_ONLY
+    assert holder.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
 
 
 def test_assign_record_policies_breaks_recursive_register_passable_cycles() -> None:

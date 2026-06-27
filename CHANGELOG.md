@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Split struct trait inference from register-passability inference so generated
+  records now derive `Copyable` and `Movable` recursively through named types,
+  fixed arrays, and `UnsafeUnion` arms, keep atomics and flexible-tail records
+  non-copyable/non-movable, and document opaque-storage transfer traits as an
+  experimental default.
 - Preserve typedef-backed integer bitfields such as `uint32_t flags:3` during
   record lowering, keep their typedef surface names in generated accessors, and
   stop silently dropping them before bitfield layout/codegen.

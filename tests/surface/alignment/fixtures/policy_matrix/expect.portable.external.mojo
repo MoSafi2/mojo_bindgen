@@ -11,25 +11,25 @@ comptime uint32_t = UInt32
 
 @align(4)
 @fieldwise_init
-struct ag_plain(TrivialRegisterPassable):
+struct ag_plain(TrivialRegisterPassable, Copyable, Movable):
     var tag: c_char
     var value: c_int
 
 @align(4)
 @fieldwise_init
-struct ag_alignas_record(TrivialRegisterPassable):
+struct ag_alignas_record(TrivialRegisterPassable, Copyable, Movable):
     var tag: c_char
     var value: c_int
 
 @align(16)
 @fieldwise_init
-struct ag_explicit_align(TrivialRegisterPassable):
+struct ag_explicit_align(TrivialRegisterPassable, Copyable, Movable):
     var tag: c_char
     var value: c_int
 
 @align(32)
 @fieldwise_init
-struct ag_alignas_field(TrivialRegisterPassable):
+struct ag_alignas_field(TrivialRegisterPassable, Copyable, Movable):
     var tag: c_char
     var __pad0_0: UInt32
     var __pad0_1: UInt64
@@ -39,7 +39,7 @@ struct ag_alignas_field(TrivialRegisterPassable):
 
 @align(16)
 @fieldwise_init
-struct ag_field_align(TrivialRegisterPassable):
+struct ag_field_align(TrivialRegisterPassable, Copyable, Movable):
     var tag: c_char
     var __pad0_0: UInt32
     var __pad0_1: UInt64
