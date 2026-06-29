@@ -17,11 +17,13 @@ from mojo_bindgen.ir import (
     Enumerant,
     Field,
     Function,
+    FunctionAttrs,
     FunctionDecl,
     FunctionKind,
     FunctionPtr,
     GlobalDecl,
     GlobalVar,
+    InlineDisposition,
     IntKind,
     IntLiteral,
     IntType,
@@ -285,6 +287,34 @@ def test_map_unit_maps_function_and_global() -> None:
     assert fn_decl.call_target.symbol == "install"
     assert isinstance(global_decl, GlobalDecl)
     assert global_decl.is_const is True
+
+
+def test_map_unit_stubs_inline_functions_and_preserves_attrs() -> None:
+    unit = Unit(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        target_abi=_abi(),
+        decls=[
+            Function(
+                decl_id="fn:inline",
+                name="inline_add",
+                link_name="inline_add",
+                ret=_i32(),
+                params=[CIRParam(name="value", type=_i32())],
+                attrs=FunctionAttrs(inline_disposition=InlineDisposition.INLINE),
+            ),
+        ],
+    )
+
+    mapped = map_unit(unit)
+
+    fn_decl = mapped.decls[0]
+    assert isinstance(fn_decl, FunctionDecl)
+    assert fn_decl.kind == FunctionKind.DIRECTIVE_STUB
+    assert fn_decl.attrs == FunctionAttrs(inline_disposition=InlineDisposition.INLINE)
+    assert fn_decl.diagnostics
+    assert "stable external symbol" in fn_decl.diagnostics[0].message
 
 
 def test_map_unit_maps_const_and_supported_macro_to_aliases() -> None:

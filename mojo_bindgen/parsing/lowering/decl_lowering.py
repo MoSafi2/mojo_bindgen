@@ -15,7 +15,9 @@ from mojo_bindgen.ir import (
     Enum,
     Enumerant,
     Function,
+    FunctionAttrs,
     GlobalVar,
+    InlineDisposition,
     IntLiteral,
     IntType,
     MacroDecl,
@@ -183,8 +185,15 @@ class DeclLowerer:
             params=params,
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(fn_type),
-            is_noreturn=self._function_is_noreturn(cursor),
+            attrs=self._function_attrs(cursor),
             doc=cursor_doc_comment(cursor),
+        )
+
+    @staticmethod
+    def _function_attrs(cursor: cx.Cursor) -> FunctionAttrs:
+        return FunctionAttrs(
+            inline_disposition=DeclLowerer._function_inline_disposition(cursor),
+            is_noreturn=DeclLowerer._function_is_noreturn(cursor),
         )
 
     @staticmethod
@@ -199,6 +208,16 @@ class DeclLowerer:
                 if tokens == ["_Noreturn"]:
                     return True
         return False
+
+    @staticmethod
+    def _function_inline_disposition(cursor: cx.Cursor) -> InlineDisposition:
+        tokens = [token.spelling for token in cursor.get_tokens()]
+        inline_tokens = {"inline", "__inline", "__inline__"}
+        if not any(token in inline_tokens for token in tokens):
+            return InlineDisposition.NONE
+        if "extern" in tokens:
+            return InlineDisposition.EXTERN_INLINE
+        return InlineDisposition.INLINE
 
     def _anonymous_enum_as_consts(self, cursor: cx.Cursor) -> list[Decl]:
         underlying = self.primitive_resolver.resolve_primitive(cursor.enum_type)

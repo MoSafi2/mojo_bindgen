@@ -8,6 +8,8 @@ from mojo_bindgen.ir import (
     Const,
     Field,
     Function,
+    FunctionAttrs,
+    InlineDisposition,
     IntKind,
     IntLiteral,
     IntType,
@@ -101,6 +103,29 @@ def test_canonicalizer_dedupes_identical_functions_only() -> None:
 
     functions = [decl for decl in out.decls if isinstance(decl, Function)]
     assert [fn.decl_id for fn in functions] == ["f:1", "f:3"]
+
+
+def test_canonicalizer_keeps_functions_with_different_attrs_distinct() -> None:
+    plain = Function(
+        decl_id="f:1",
+        name="read_value",
+        link_name="read_value",
+        ret=_i32(),
+        params=[Param(name="value", type=_i32())],
+    )
+    inline = Function(
+        decl_id="f:2",
+        name="read_value",
+        link_name="read_value",
+        ret=_i32(),
+        params=[Param(name="value", type=_i32())],
+        attrs=FunctionAttrs(inline_disposition=InlineDisposition.INLINE),
+    )
+
+    out = CIRCanonicalizer().canonicalize(_unit([plain, inline]))
+
+    functions = [decl for decl in out.decls if isinstance(decl, Function)]
+    assert [fn.decl_id for fn in functions] == ["f:1", "f:2"]
 
 
 def test_canonicalizer_drops_self_alias_macro_when_const_claims_name() -> None:

@@ -32,6 +32,7 @@ from mojo_bindgen.ir import (
     DTypeArg,
     Field,
     FlexibleTail,
+    FunctionAttrs,
     FunctionDecl,
     FunctionKind,
     FunctionPtr,
@@ -39,6 +40,7 @@ from mojo_bindgen.ir import (
     GlobalKind,
     Initializer,
     InitializerParam,
+    InlineDisposition,
     IntKind,
     IntLiteral,
     IntType,
@@ -726,6 +728,34 @@ def test_render_owned_dl_handle_function_local_does_not_collide_with_parameters(
     ) in rendered
     assert "_bindgen_c_fn_1(fn_, _bindgen_c_fn)" in rendered
     assert "var fn_ =" not in rendered
+
+
+def test_render_mojo_module_emits_inline_directive_stub_comments() -> None:
+    module = MojoModule(
+        source_header="demo.h",
+        library="demo",
+        link_name="demo",
+        link_mode=LinkMode.EXTERNAL_CALL,
+        decls=[
+            FunctionDecl(
+                name="inline_add",
+                link_name="inline_add",
+                params=[Param(name="value", type=BuiltinType(MojoBuiltin.C_INT))],
+                return_type=BuiltinType(MojoBuiltin.C_INT),
+                kind=FunctionKind.DIRECTIVE_STUB,
+                attrs=FunctionAttrs(inline_disposition=InlineDisposition.EXTERN_INLINE),
+            )
+        ],
+    )
+
+    rendered = render_mojo_module(
+        normalize_mojo_module(module),
+        MojoIRPrintOptions(module_comment=False),
+    )
+
+    assert "source directives: extern inline" in rendered
+    assert "# c_int inline_add(value: c_int)" in rendered
+    assert "def inline_add(" not in rendered
 
 
 def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:

@@ -129,6 +129,12 @@ class PointerOrigin(StrEnum):
     ANY = "any"
 
 
+class InlineDisposition(StrEnum):
+    NONE = "none"
+    INLINE = "inline"
+    EXTERN_INLINE = "extern_inline"
+
+
 @dataclass(frozen=True)
 class DocComment(SerDeMixin):
     """Source documentation associated with a C declaration cursor."""
@@ -294,6 +300,19 @@ class FunctionPtr(SerDeMixin):
     abi: str = "C"
     thin: bool = True
     raises: bool = False
+
+
+@dataclass(frozen=True)
+class FunctionAttrs(SerDeMixin):
+    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
+        fields={
+            "inline_disposition": SerdeFieldSpec(omit_if_default=True),
+            "is_noreturn": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
+    inline_disposition: InlineDisposition = InlineDisposition.NONE
+    is_noreturn: bool = False
 
 
 @dataclass
@@ -691,11 +710,12 @@ class Function(SerDeMixin):
             "params",
             "is_variadic",
             "calling_convention",
-            "is_noreturn",
+            "attrs",
             "doc",
         ),
         fields={
             "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
+            "attrs": SerdeFieldSpec(omit_if_default=True),
             "doc": SerdeFieldSpec(omit_if_default=True),
         },
     )
@@ -707,7 +727,7 @@ class Function(SerDeMixin):
     is_variadic: bool = False
     decl_id: str = ""
     calling_convention: str | None = None
-    is_noreturn: bool = False
+    attrs: FunctionAttrs = field(default_factory=FunctionAttrs)
     doc: DocComment | None = None
 
 
@@ -1013,6 +1033,7 @@ class GlobalKind(StrEnum):
 class FunctionKind(StrEnum):
     WRAPPER = "wrapper"
     VARIADIC_STUB = "variadic_stub"
+    DIRECTIVE_STUB = "directive_stub"
     NON_REGISTER_RETURN_STUB = "non_register_return_stub"
 
 
@@ -1310,6 +1331,7 @@ class FunctionDecl(SerDeMixin):
     SERDE = SerdeSpec(
         fields={
             "kind": SerdeFieldSpec(json_key="function_kind"),
+            "attrs": SerdeFieldSpec(omit_if_default=True),
             "doc": SerdeFieldSpec(omit_if_default=True),
         }
     )
@@ -1322,6 +1344,7 @@ class FunctionDecl(SerDeMixin):
     call_target: CallTarget = field(
         default_factory=lambda: CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="")
     )
+    attrs: FunctionAttrs = field(default_factory=FunctionAttrs)
     diagnostics: list[MappingNote] = field(default_factory=list)
     doc: DocComment | None = None
 

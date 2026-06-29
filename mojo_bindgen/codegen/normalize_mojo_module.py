@@ -399,7 +399,9 @@ class NormalizeMojoModulePass:
             )
 
         if self._module.link_mode == LinkMode.EXTERNAL_CALL and any(
-            not isinstance(decl, AliasDecl) for decl in decls
+            not isinstance(decl, AliasDecl)
+            and not (isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.DIRECTIVE_STUB)
+            for decl in decls
         ):
             self._record_import("std.ffi", "external_call")
 

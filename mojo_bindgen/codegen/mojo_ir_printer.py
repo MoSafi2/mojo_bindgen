@@ -34,6 +34,7 @@ from mojo_bindgen.ir import (
     GlobalDecl,
     GlobalKind,
     Initializer,
+    InlineDisposition,
     IntLiteral,
     LinkMode,
     MappingNote,
@@ -580,6 +581,19 @@ class MojoIRPrinter:
             b.add("# variadic C function - not callable from thin FFI:")
             b.add(f"# {return_type} {symbol}({params_text}, ...)")
             return b.render()
+        if decl.kind == FunctionKind.DIRECTIVE_STUB:
+            b.extend(self._doc_comment_lines(decl.doc))
+            b.extend(self._diagnostic_lines(decl.diagnostics))
+            directives = self._render_function_directives(decl)
+            if directives:
+                b.add(
+                    "# C function declaration carries source directives that are not emitted as a callable wrapper:"
+                )
+                b.add(f"# source directives: {directives}")
+            else:
+                b.add("# C function declaration is not emitted as a callable wrapper:")
+            b.add(f"# {return_type} {symbol}({params_text})")
+            return b.render()
         if decl.kind == FunctionKind.NON_REGISTER_RETURN_STUB:
             b.extend(self._doc_comment_lines(decl.doc))
             b.extend(self._diagnostic_lines(decl.diagnostics))
@@ -617,6 +631,17 @@ class MojoIRPrinter:
                 b.add(f"return {fn_local}({call_args})")
         b.dedent()
         return b.render()
+
+    @staticmethod
+    def _render_function_directives(decl: FunctionDecl) -> str:
+        directives: list[str] = []
+        if decl.attrs.inline_disposition == InlineDisposition.INLINE:
+            directives.append("inline")
+        elif decl.attrs.inline_disposition == InlineDisposition.EXTERN_INLINE:
+            directives.append("extern inline")
+        if decl.attrs.is_noreturn:
+            directives.append("noreturn")
+        return ", ".join(directives)
 
     def _render_c_abi_function_pointer_type(self, decl: FunctionDecl) -> str:
         params = ", ".join(self._render_type(param.type) for param in decl.params)

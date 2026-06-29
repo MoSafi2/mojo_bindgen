@@ -107,7 +107,7 @@ def _same_function_identity(a: Function, b: Function) -> bool:
         and [p.type for p in a.params] == [p.type for p in b.params]
         and a.is_variadic == b.is_variadic
         and a.calling_convention == b.calling_convention
-        and a.is_noreturn == b.is_noreturn
+        and a.attrs == b.attrs
     )
 
 

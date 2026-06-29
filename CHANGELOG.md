@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Preserve top-level C function source attributes such as `inline`, `extern inline`,
+  and `_Noreturn` in CIR and MojoIR, and emit conservative stub comments instead
+  of callable wrappers for inline declarations that may not provide a stable
+  external symbol.
+
 ## [0.3.4] - 2026-06-27
 
 ### Fixed

@@ -18,6 +18,28 @@
         "kind": "Function",
         "name": "il_inline"
       },
+      "path": "attrs",
+      "attrs": {
+        "kind": "FunctionAttrs",
+        "inline_disposition": "inline"
+      }
+    },
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "il_extern_inline"
+      },
+      "path": "attrs",
+      "attrs": {
+        "kind": "FunctionAttrs",
+        "inline_disposition": "extern_inline"
+      }
+    },
+    {
+      "selector": {
+        "kind": "Function",
+        "name": "il_inline"
+      },
       "path": "params.0.type",
       "attrs": {
         "kind": "IntType",

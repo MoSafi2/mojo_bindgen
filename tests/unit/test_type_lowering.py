@@ -12,7 +12,9 @@ from mojo_bindgen.ir import (
     AtomicType,
     EnumRef,
     Function,
+    FunctionAttrs,
     FunctionPtr,
+    InlineDisposition,
     IntKind,
     IntType,
     Pointer,
@@ -127,6 +129,38 @@ def test_type_lowering_preserves_callback_parameter_names_across_positions(tmp_p
 
     assert isinstance(chooser.ret, FunctionPtr)
     assert chooser.ret.param_names == ["timeout_ms", "userdata"]
+
+
+def test_decl_lowering_preserves_inline_and_noreturn_function_attrs(tmp_path: Path) -> None:
+    header = tmp_path / "function_attrs.h"
+    header.write_text(
+        (
+            "inline int local_inline(int x);\n"
+            "extern inline int exported_inline(int x);\n"
+            "_Noreturn void fail_now(void);\n"
+        ),
+        encoding="utf-8",
+    )
+    unit = ClangParser(
+        header=header,
+        library="ctx",
+        link_name="ctx",
+        compile_args=[],
+    ).run()
+
+    local_inline = next(
+        d for d in unit.decls if isinstance(d, Function) and d.name == "local_inline"
+    )
+    exported_inline = next(
+        d for d in unit.decls if isinstance(d, Function) and d.name == "exported_inline"
+    )
+    fail_now = next(d for d in unit.decls if isinstance(d, Function) and d.name == "fail_now")
+
+    assert local_inline.attrs == FunctionAttrs(inline_disposition=InlineDisposition.INLINE)
+    assert exported_inline.attrs == FunctionAttrs(
+        inline_disposition=InlineDisposition.EXTERN_INLINE
+    )
+    assert fail_now.attrs == FunctionAttrs(is_noreturn=True)
 
 
 def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(

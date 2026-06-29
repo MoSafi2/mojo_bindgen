@@ -29,11 +29,13 @@ from mojo_bindgen.ir import (
     Decl,
     Enum,
     Function,
+    FunctionAttrs,
     FunctionDecl,
     FunctionKind,
     GlobalDecl,
     GlobalKind,
     GlobalVar,
+    InlineDisposition,
     IntLiteral,
     LinkMode,
     MacroDecl,
@@ -149,6 +151,17 @@ class UnitDeclMapper:
         return [enum_decl, *aliases, *enumerants]
 
     def _map_function(self, decl: Function) -> FunctionDecl:
+        kind = FunctionKind.WRAPPER
+        diagnostics = []
+        if decl.is_variadic:
+            kind = FunctionKind.VARIADIC_STUB
+        elif decl.attrs.inline_disposition != InlineDisposition.NONE:
+            kind = FunctionKind.DIRECTIVE_STUB
+            diagnostics.append(
+                stub_note(
+                    "inline declaration may not provide a stable external symbol; wrapper omitted"
+                )
+            )
         return FunctionDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
@@ -161,11 +174,16 @@ class UnitDeclMapper:
                 for i, param in enumerate(decl.params)
             ],
             return_type=self.session.type_mapper.run(decl.ret),
-            kind=(FunctionKind.VARIADIC_STUB if decl.is_variadic else FunctionKind.WRAPPER),
+            kind=kind,
             call_target=CallTarget(
                 link_mode=_link_mode_for_options(self.session.options),
                 symbol=decl.link_name,
             ),
+            attrs=FunctionAttrs(
+                inline_disposition=decl.attrs.inline_disposition,
+                is_noreturn=decl.attrs.is_noreturn,
+            ),
+            diagnostics=diagnostics,
             doc=decl.doc,
         )
 
