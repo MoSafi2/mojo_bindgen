@@ -10,7 +10,8 @@ from mojo_bindgen.serde import (
     encode_mojo_type,
     decode_target_abi,
 )
-from mojo_bindgen.type_mapping import MapTypePass, TargetQueries
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.facts.target import TargetQueries
 
 
 def main() raises:

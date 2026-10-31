@@ -42,4 +42,4 @@ about:
   repository: https://github.com/MoSafi2/mojo_bindgen
   license: MIT
   license_file: LICENSE
-  summary: Native Mojo bindgen recursive type-mapping library (first rewrite slice)
+  summary: Native Mojo bindgen recursive IR backend

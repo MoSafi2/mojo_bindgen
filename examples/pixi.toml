@@ -1,0 +1,15 @@
+[workspace]
+name = "mojo-bindgen-examples"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# Headers and runtime libraries only. Compilers stay in the root/native manifests.
+[dependencies]
+cairo = "*"
+libpng = "*"
+libsqlite = "*"
+zlib = "*"
+pkg-config = "*"
+
+[tasks]
+test-native = "pixi run --manifest-path ../pixi.toml --locked pytest -q ../tests/parity/test_native_examples.py"

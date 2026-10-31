@@ -26,6 +26,7 @@ native-build = "pixi run --manifest-path mojo/pixi.toml --locked build"
 native-test = "pixi run --manifest-path mojo/pixi.toml --locked test"
 native-format-check = "pixi run --manifest-path mojo/pixi.toml --locked format-check"
 native-parity = "pytest -q tests/parity"
+native-example-parity = "pixi run --manifest-path examples/pixi.toml --locked test-native"
 check-native = { depends-on = ["native-format-check", "native-build", "native-test", "native-parity"] }
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"

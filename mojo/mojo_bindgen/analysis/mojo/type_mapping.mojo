@@ -1,69 +1,10 @@
 """Pure CIR-to-MojoIR type mapping with explicit, fixed target queries."""
 
 from std.memory import ArcPointer
-from .ir import *
-from .names import normalized_name
-
-
-@fieldwise_init
-struct TargetQueries(Copyable, Movable):
-    var abi: TargetABI
-
-    def default_char_is_unsigned(self) -> Optional[Bool]:
-        if not self.abi.target_triple:
-            return {}
-        var triple = self.abi.target_triple.value().copy()
-        return "linux" in triple and (
-            triple.startswith("aarch64") or triple.startswith("arm") or triple.startswith("thumb")
-        )
-
-
-def _children(t: CType) -> List[ArcPointer[CType]]:
-    var result = List[ArcPointer[CType]]()
-    match t:
-        case .qualified_type(v):
-            result.append(v.unqualified.copy())
-        case .atomic_type(v):
-            result.append(v.value_type.copy())
-        case .type_ref(v):
-            result.append(v.canonical.copy())
-        case .c_pointer(v):
-            if v.pointee:
-                result.append(v.pointee.value().copy())
-        case .c_array(v):
-            result.append(v.element.copy())
-        case .vector_type(v):
-            result.append(v.element.copy())
-        case .complex_type(v):
-            result.append(ArcPointer(CType.float_type(v.element.copy())))
-        case .enum_ref(v):
-            result.append(ArcPointer(CType.int_type(v.underlying.copy())))
-        case .c_function_ptr(v):
-            result.append(v.ret.copy())
-            for p in v.params:
-                result.append(p.type.copy())
-        case .void_type(_) | .int_type(_) | .float_type(_) | .struct_ref(_) | .opaque_record_ref(
-            _
-        ) | .unsupported_type(_):
-            pass
-    return result^
-
-
-def _validate(node: ArcPointer[CType], mut active: List[ArcPointer[CType]]) raises:
-    for parent in active:
-        if node.ptr() == parent.ptr():
-            raise Error("structural CIR type cycle")
-    active.append(node.copy())
-    for child in _children(node.ptr()[]):
-        _validate(child, active)
-    _ = active.pop()
-
-
-def validate_type_tree(root: CType) raises:
-    """Follow owning children only; shared DAG nodes and nominal recursion are valid."""
-    var active = List[ArcPointer[CType]]()
-    for child in _children(root):
-        _validate(child, active)
+from ...ir import *
+from ..common import normalized_name
+from ..facts.target import TargetQueries
+from ..type_walk import validate_type_tree
 
 
 def _opaque_bytes(size: Int) -> MojoType:
@@ -393,3 +334,29 @@ struct MapTypePass(Copyable, Movable):
 
 def map_type(t: CType, queries: TargetQueries) raises -> MojoType:
     return MapTypePass(queries.copy()).run(t)
+
+
+def exact_width_stdint_alias_type(name: String) -> Optional[NamedType]:
+    match name:
+        case "int8_t":
+            return NamedType("Int8")
+        case "uint8_t":
+            return NamedType("UInt8")
+        case "int16_t":
+            return NamedType("Int16")
+        case "uint16_t":
+            return NamedType("UInt16")
+        case "int32_t":
+            return NamedType("Int32")
+        case "uint32_t":
+            return NamedType("UInt32")
+        case "int64_t":
+            return NamedType("Int64")
+        case "uint64_t":
+            return NamedType("UInt64")
+        case "size_t":
+            return NamedType("UInt")
+        case "ssize_t":
+            return NamedType("Int")
+        case _:
+            return {}

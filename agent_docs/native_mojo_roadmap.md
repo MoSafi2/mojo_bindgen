@@ -37,9 +37,10 @@ historical experiment ledger remain unchanged.
 | 4: previews | Installable native Conda previews, Mojo API, full differential CI, small Python wrapper API and old-API deprecation | Clean installed-package, native API/CLI, wrapper and generated-binding runtime tests pass |
 | 5: cutover | Make native CLI canonical, remove Python algorithms by subsystem and keep the thin wrapper | Native execution needs no Python implementation and shared acceptance coverage remains active |
 
-The first authorized implementation slice is stages 0–1. Do not implement later
-stages or restore experiment code as part of it. The CLI skeleton must describe
-its limited capability honestly and keep Python's command unchanged.
+Stages 0–1 are complete. Stage 2 is implemented and validated, described in
+[native_backend_plan.md](native_backend_plan.md). Native parsing, CLI compatibility,
+and distribution transition remain later work. Keep the CLI skeleton honest about
+its capabilities and preserve Python's command.
 
 ## Packaging and transition
 
@@ -67,7 +68,7 @@ commits. No package uploads or default switches occur in the first slice.
 
 ## Acceptance and current implementation
 
-Stages 0–1 now have production sources, native tests, a shared-fixture differential
+Stages 0–2 now have production sources, native tests, a shared-fixture differential
 harness, separate CI and local installed-package checks. Detailed usage and the
 compiler/Unicode constraints are in [the native README](../mojo/README.md).
 
@@ -109,3 +110,41 @@ Sources: [nightly release](https://mojolang.org/releases/nightly/),
   refactor plan and historical experiment ledger remain unchanged. No native C
   frontend, complete binding generator, wrapper cutover, or platform expansion is
   claimed by this slice.
+
+
+## Backend-slice validation (2026-11-01, Linux x86-64)
+
+The native backend now generates bindings and layout-test source from constructed
+CIR. Production modules mirror Python's analysis/CIR/facts/mapping/codegen/layout
+boundaries. Full declaration/expression/root codecs remain unversioned debug data.
+The production Python generator and root stable toolchain remain unchanged.
+
+- Full suite: **456 passed**, including 20 backend differential/runtime tests and
+  14 type differential/compiler-contract tests.
+- Light gate: formatting, Ruff, Pyright and **396 tests passed; 60 deselected**.
+- Native build/formatting passed. All 12 native ownership/codec/recovery tests
+  passed at both O0 and O3.
+- 49 shared headers match Python's intermediate IR and byte-identical binding and
+  layout sources in both link modes at both optimization levels. Constructed IR
+  additionally covers large exact integers, numeric edge cases, options and ABI
+  differences, Unicode, structural cycles, sharing, and error recovery.
+- Native-generated bindings passed stable-toolchain runtime checks for three
+  representative fixtures in both modes. A local Conda package passed installed
+  import and backend-generation checks outside the checkout; nothing was uploaded.
+
+The existing system `max_align_t`/long-double mismatch and split-padding reflected
+index bug remain unchanged. Their exact acceptance scope is recorded in
+[native_backend_plan.md](native_backend_plan.md#preserved-reference-limitations).
+Native parsing and CLI header generation remain stage 3 work; wrapper/distribution
+transition remains stages 4–5.
+
+
+## Real example JSON follow-up (2026-11-01)
+
+Actual Python CLI CIR and MojoIR dumps for zlib, Cairo, libpng, and SQLite now
+continue through a standalone native driver. All 16 example/mode/optimization
+cases passed, including 32 JSON-stage handoffs, exact source parity, and stable
+runtime smoke tests. The full suite now passes **472 tests**; the light gate
+passes **396 tests with 76 deselected**. See [commands, scope and measured results](
+native_json_handoff.md). Example headers and runtimes use an independent locked
+environment; both compiler dependency locks remain unchanged.

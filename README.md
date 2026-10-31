@@ -12,9 +12,9 @@ correctly.
 
 ## Native rewrite
 
-A native Mojo implementation is being developed alongside Python. The first slice
-provides recursive type IR and type mapping; Python remains the supported binding
-generator. See [native development and packaging](mojo/README.md) and the
+A native Mojo implementation is being developed alongside Python. Its library
+provides a complete backend from constructed CIR; Python remains the supported
+header-to-binding generator. See [native development and packaging](mojo/README.md) and the
 [staged roadmap](agent_docs/native_mojo_roadmap.md).
 
 ## Requirements

@@ -22,3 +22,6 @@ todo.md
 *.mojoc
 io_uring.json
 io_uring.rs
+
+# Isolated example headers/runtime libraries
+/examples/.pixi/

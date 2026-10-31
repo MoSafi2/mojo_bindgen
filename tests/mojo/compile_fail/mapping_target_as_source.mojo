@@ -1,5 +1,6 @@
 from mojo_bindgen.ir import *
-from mojo_bindgen.type_mapping import MapTypePass, TargetQueries
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.facts.target import TargetQueries
 
 
 def main() raises:

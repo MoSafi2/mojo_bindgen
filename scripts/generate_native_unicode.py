@@ -40,7 +40,12 @@ def main() -> None:
         "    return False",
         "",
     ]
-    for name, predicate in [("alnum", str.isalnum), ("digit", str.isdigit), ("space", str.isspace)]:
+    for name, predicate in [
+        ("alnum", str.isalnum),
+        ("digit", str.isdigit),
+        ("space", str.isspace),
+        ("printable", str.isprintable),
+    ]:
         bounds = ranges(predicate)
         lines += [f"comptime _{name.upper()} = StaticTuple[Int, {len(bounds)}]("]
         lines += [

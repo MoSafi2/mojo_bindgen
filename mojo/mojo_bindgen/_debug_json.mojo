@@ -2,12 +2,15 @@
 
 from std.collections.string import chr
 from std.memory import ArcPointer
+from ._numbers import IntegerValue, float_text, parse_float
+from std.utils.numerics import isnan, isinf
 
 
 __enum JSON(Copyable, Movable):
     case null
     case boolean(Bool)
-    case integer(Int)
+    case integer(IntegerValue)
+    case floating(Float64)
     case string(String)
     case array(List[ArcPointer[JSON]])
     case object(Dict[String, ArcPointer[JSON]])
@@ -25,9 +28,28 @@ __enum JSON(Copyable, Movable):
     def int_value(self) raises -> Int:
         match self:
             case .integer(v):
-                return v
+                return v.to_int()
             case _:
                 raise Error("expected JSON integer")
+
+    def integer_value(self) raises -> IntegerValue:
+        match self:
+            case .integer(v):
+                return v.copy()
+            case _:
+                raise Error("expected JSON integer")
+
+    def float_value(self) raises -> Float64:
+        match self:
+            case .floating(v):
+                return v
+            case .integer(v):
+                var result = parse_float(v.digits)
+                if isinf(result):
+                    raise Error("int too large to convert to float")
+                return result
+            case _:
+                raise Error("expected JSON number")
 
     def bool_value(self) raises -> Bool:
         match self:
@@ -104,7 +126,13 @@ def dump_json(value: JSON) -> String:
         case .boolean(v):
             return String("true" if v else "false")
         case .integer(v):
-            return String(v)
+            return v.digits.copy()
+        case .floating(v):
+            if isnan(v):
+                return String("NaN")
+            if isinf(v):
+                return String("-Infinity" if v < 0 else "Infinity")
+            return float_text(v)
         case .string(v):
             return quote(v)
         case .array(v):
@@ -262,9 +290,17 @@ struct _Parser(Movable):
         if ch == 45:
             number += "-"
             self.pos += 1
+        if self._peek() == 73:
+            for c in "Infinity".codepoints():
+                self._take(Int(c))
+            return JSON.floating(parse_float(number + "inf"))
+        if self._peek() == 78 and number.byte_length() == 0:
+            for c in "NaN".codepoints():
+                self._take(Int(c))
+            return JSON.floating(parse_float("nan"))
         ch = self._peek()
         if ch < 48 or ch > 57:
-            raise Error("expected integer JSON number")
+            raise Error("expected JSON number")
         if ch == 48:
             number += "0"
             self.pos += 1
@@ -272,7 +308,31 @@ struct _Parser(Movable):
             while self._peek() >= 48 and self._peek() <= 57:
                 number += chr(self._peek())
                 self.pos += 1
-        return JSON.integer(Int(number))
+        var floating = False
+        if self._peek() == 46:
+            floating = True
+            number += "."
+            self.pos += 1
+            if self._peek() < 48 or self._peek() > 57:
+                raise Error("expected fraction digits")
+            while self._peek() >= 48 and self._peek() <= 57:
+                number += chr(self._peek())
+                self.pos += 1
+        if self._peek() == 101 or self._peek() == 69:
+            floating = True
+            number += "e"
+            self.pos += 1
+            if self._peek() == 43 or self._peek() == 45:
+                number += chr(self._peek())
+                self.pos += 1
+            if self._peek() < 48 or self._peek() > 57:
+                raise Error("expected exponent digits")
+            while self._peek() >= 48 and self._peek() <= 57:
+                number += chr(self._peek())
+                self.pos += 1
+        if floating:
+            return JSON.floating(parse_float(number))
+        return JSON.integer(IntegerValue.from_decimal(number))
 
 
 def parse_json(text: String) raises -> JSON:

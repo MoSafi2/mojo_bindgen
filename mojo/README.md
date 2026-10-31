@@ -1,9 +1,9 @@
 # Native Mojo rewrite
 
-The native implementation lives beside Python and currently provides **recursive
-type IR and pure type mapping**. C parsing, declaration/expression mapping, binding
-emission, and the replacement Python wrapper are later stages. Use the existing
-`mojo-bindgen` command to generate bindings.
+The native implementation lives beside Python and provides a **complete backend
+from constructed CIR**: validation, canonicalization, analysis, mapping, target
+normalization, bindings, and layout-test source. Direct C parsing and the replacement
+Python wrapper are later stages. Use the existing `mojo-bindgen` command for headers.
 
 ## Development
 
@@ -14,6 +14,7 @@ pixi install --manifest-path mojo/pixi.toml --locked
 pixi run --locked native-build
 pixi run --locked native-test
 pixi run --locked native-parity
+pixi run --locked native-example-parity
 pixi run --locked check-native
 ```
 
@@ -41,7 +42,13 @@ pixi run --manifest-path mojo/pixi.toml --locked format-check
 
 Import `CType`, `MojoType`, and payload structs from `mojo_bindgen.ir`, and use
 `MapTypePass(TargetQueries(target_abi)).run(source)` or `map_type(source, queries)`.
-The package facade exports the type families and mapping entry points as well.
+The package facade also exports `AnalysisOrchestrator`, `MojoEmitOptions`,
+`render_mojo_module`, `render_layout_test_module`, and `generate_from_unit`.
+`generate_from_unit(unit, emit_options, layout_module_name=String("bindings"))`
+returns a `BackendResult` containing `normalized_unit`, `mojo_module`,
+`bindings_source`, and optional `layout_test_source`. Parsing is not required for
+this API. The module tree mirrors the Python backend's analysis, facts, mapping,
+codegen, and layout-test boundaries.
 
 - Closed native payload enums represent the two stages. The pinned compiler
   requires the `__enum` spelling; plain `enum` is rejected. Recursive enum types
@@ -61,14 +68,30 @@ The package facade exports the type families and mapping entry points as well.
   historical ledger. Lifecycle and unwind behavior are checked at both optimization
   levels; no unchecked origin casts or custom ownership wrappers are used.
 
-The type debug codecs preserve the current Python `kind`/`fields` JSON shape,
+The type, expression, declaration, and root debug codecs preserve the current
+Python `kind`/`fields` JSON shape,
 including defaults and nulls. Unknown fields/tags, wrong-stage children and invalid
 field values are rejected. JSON is unversioned, for debugging/testing, and changes
-with the model. The private JSON parser handles precisely the integer-valued type
-schema; it is not a general floating-point JSON library. Geometry/count fields use
-machine `Int`; out-of-range numbers fail rather than truncate. It rejects duplicate
-keys, malformed escapes and excessive nesting. No runtime Python or EmberSerde
-reflection is used. Full-unit/expression codecs belong to the backend stage.
+with the model. Literal integers use exact canonical decimal digits; arithmetic
+remains symbolic.
+Geometry/count fields use checked machine `Int`. Floating values use binary64,
+including signed zero and Python debug JSON's nonfinite spellings. The private
+parser rejects duplicate keys, malformed escapes and excessive nesting. No runtime
+Python or EmberSerde reflection is used.
+
+## Consuming Python debug JSON
+
+Yes: load Python's `--dump-cir` output with `loads_cir` from `mojo_bindgen.serde`,
+then call `generate_from_unit`. Load `--dump-mojo-ir` output with `loads_mojo_ir`
+and print it with `render_mojo_module`. These are current-model debug formats,
+not a versioned interchange API. Raw CIR needs generation options separately;
+finalized MojoIR already contains its linking options and dependencies.
+
+`pixi run --locked native-example-parity` provisions the independent locked
+example-library environment and checks real zlib, Cairo, libpng, and SQLite CLI
+dumps at O0/O3 in both linking modes. The native outputs are compared in full and
+compiled/run on the stable SDK. See [the handoff guide and measured results](
+../agent_docs/native_json_handoff.md) for direct file-driver commands and scope.
 
 ## Unicode support
 
@@ -77,8 +100,8 @@ On the pinned compiler, Unicode `isalnum`/`isdigit` equivalents are unavailable,
 `Codepoint.is_python_space()` is narrower than Python's whitespace classification,
 and `String.strip()` leaves U+2003 EM SPACE and U+00A0 NO-BREAK SPACE intact.
 
-The small generated property tables in `_unicode.mojo` preserve Python's Unicode
-17.0.0 behavior without calling Python at runtime. The generator is development
+The generated name-classification and diagnostic-printability tables in `_unicode.mojo` preserve Python's Unicode
+16.0.0 behavior without calling Python at runtime. The generator is development
 only; regenerate after an intentional Unicode-data update, then format:
 
 ```bash
@@ -115,5 +138,22 @@ Before the frontend stage, publish/pin the sibling wrapper's compatibility fixes
 and validate them against this compiler; do not depend on an uncommitted sibling
 checkout.
 
-See [the staged roadmap](../agent_docs/native_mojo_roadmap.md) and
+See [the backend slice](../agent_docs/native_backend_plan.md),
+[the staged roadmap](../agent_docs/native_mojo_roadmap.md) and
 [historical evidence](../agent_docs/mojo_rewrite_results.md).
+
+
+## Preserved layout-test limitations
+
+Full-header parity intentionally preserves two Python-backend limitations found
+by the new runtime checks. On this host, system `max_align_t` contains a 16-byte
+`long double`, which currently maps to an 8-byte target type. Also, a padding IR
+member can print multiple scalar fields while the layout-test generator counts it
+as one field, giving an incorrect reflected index for a following field.
+
+The `large_alignment` fixture records the latter failure explicitly. Native
+binding runtime checks still run in both modes; passing layout runtime checks cover
+other fixture records. The runtime fixtures omit the unrelated system
+`max_align_t` declaration, while full-header intermediate and byte comparisons
+include it. Fixing these behaviors requires a coordinated Python/native change;
+this rewrite preserves the existing output contract.

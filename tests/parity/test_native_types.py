@@ -85,7 +85,7 @@ def native_driver(request, tmp_path_factory):
             "-I",
             str(ROOT / "mojo"),
             f"-O{request.param}",
-            str(ROOT / "tests/mojo/type_mapping_driver.mojo"),
+            str(ROOT / "tests/mojo/drivers/type_mapping_driver.mojo"),
             "-o",
             str(executable),
         ],
@@ -365,7 +365,14 @@ def test_unicode_normalization_and_utf8_json(native_driver):
 
 @pytest.mark.parametrize(
     "source",
-    ["mapping_target_as_source.mojo", "source_child_in_target.mojo", "missing_type_case.mojo"],
+    [
+        "mapping_target_as_source.mojo",
+        "source_child_in_target.mojo",
+        "missing_type_case.mojo",
+        "source_expression_in_target.mojo",
+        "printer_source_module.mojo",
+        "missing_expression_case.mojo",
+    ],
 )
 def test_native_compiler_enforces_stage_and_dispatch_contracts(source, tmp_path):
     completed = subprocess.run(
@@ -393,4 +400,6 @@ def test_native_compiler_enforces_stage_and_dispatch_contracts(source, tmp_path)
         "CType" in completed.stderr
         or "MojoType" in completed.stderr
         or "return" in completed.stderr
+        or "MojoConstExpr" in completed.stderr
+        or "MojoModule" in completed.stderr
     )

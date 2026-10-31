@@ -4,9 +4,11 @@ from std.memory import ArcPointer, OwnedPointer
 from std.testing import assert_equal, assert_true, assert_false, assert_raises, TestSuite
 from mojo_bindgen.ir import *
 from mojo_bindgen.serde import dumps_c_type, dumps_mojo_type, loads_c_type, loads_mojo_type
-from mojo_bindgen.type_mapping import MapTypePass, TargetQueries, validate_type_tree
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.facts.target import TargetQueries
+from mojo_bindgen.analysis.type_walk import validate_type_tree
 from mojo_bindgen._debug_json import parse_json, dump_json
-from mojo_bindgen.names import normalized_name, mojo_ident
+from mojo_bindgen.analysis.common import normalized_name, mojo_ident
 
 
 def _mapper(var triple: Optional[String] = {}) -> MapTypePass:
@@ -109,7 +111,7 @@ def test_unicode_and_json_validation() raises:
     assert_equal(normalized_name("std"), "std_")
     assert_equal(normalized_name("\U0001F600x"), "_x")
     assert_equal(dump_json(parse_json('"\\ud83d\\ude00"')), '"😀"')
-    for invalid in ['{"x":0,"x":1}', '"\\ud800"', "[1,]", "01", "1.5", "true false"]:
+    for invalid in ['{"x":0,"x":1}', '"\\ud800"', "[1,]", "01", "1.", "1e", "true false"]:
         with assert_raises():
             _ = parse_json(invalid)
 

@@ -58,5 +58,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang libclang1
       - name: Install pinned native nightly
         run: pixi install --manifest-path mojo/pixi.toml --locked
+      - name: Install locked example headers and runtime libraries
+        run: pixi install --manifest-path examples/pixi.toml --locked
       - name: Validate native library and Python parity
         run: pixi run --locked check-native
