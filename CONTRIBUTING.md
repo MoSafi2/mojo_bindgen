@@ -14,6 +14,7 @@ emits Mojo FFI bindings. Most contribution work falls into one of three areas:
 The repository currently targets:
 
 - Python 3.14+
+- Mojo 1.2+ (1.x), with the exact development version selected by `pixi.lock`
 - a system `libclang` compatible with the Python `libclang` wheel
 - Linux for the full Pixi + Mojo workflow
 
@@ -25,7 +26,7 @@ The workspace is currently locked for `linux-64` only. On other platforms, use
 a normal virtualenv and `pip install -e ".[dev]"` instead.
 
 ```bash
-pixi install
+pixi install --locked
 pixi shell
 pixi run lint
 pixi run format
@@ -38,6 +39,8 @@ Useful Pixi tasks:
 - `pixi run test`: full pytest suite
 - `pixi run test-light`: pytest excluding `expensive` tests
 - `pixi run check-light`: CI-aligned validation (`format-check`, lint, pyright, `test-light`)
+- `pixi run --locked pytest -q tests/e2e`: the separate FFI runtime CI gate,
+  including compiler warnings as errors and negative vararg compilation checks
 - `pixi run build`: build sdist and wheel
 - `pixi run example-sqlite` / `example-cairo` / `example-libpng` / `example-zlib`: generate and exercise example bindings
 

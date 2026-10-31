@@ -172,7 +172,7 @@ def test_assign_record_policies_marks_fam_struct_memory_only() -> None:
     assert packet.flexible_tail is not None
     assert packet.fieldwise_init is False
     assert packet.passability == MojoPassability.MEMORY_ONLY
-    assert packet.traits == []
+    assert packet.traits == [StructTraits.NOT_MOVABLE]
 
 
 def test_assign_record_policies_keeps_incomplete_struct_copyable_only() -> None:
@@ -217,7 +217,7 @@ def test_assign_record_policies_drops_traits_for_representable_atomic_storage() 
 
     assert atomic_holder.fieldwise_init is False
     assert atomic_holder.passability == MojoPassability.MEMORY_ONLY
-    assert atomic_holder.traits == []
+    assert atomic_holder.traits == [StructTraits.NOT_MOVABLE]
 
 
 def test_assign_record_policies_keeps_pure_bitfield_struct_non_fieldwise_init() -> None:

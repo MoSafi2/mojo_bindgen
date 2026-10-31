@@ -7,5 +7,12 @@ from std.ffi import external_call
 
 comptime int32_t = Int32
 
-# variadic C function - not callable from thin FFI:
-# int32_t vs_sum(count: int32_t, ...)
+def vs_sum[*_BindgenArgs: AnyType](*args: *_BindgenArgs) -> int32_t:
+    comptime assert _BindgenArgs.length >= 1, "vs_sum: missing fixed C arguments"
+    comptime if _BindgenArgs.length >= 1:
+        comptime assert _BindgenArgs[0] == int32_t, "vs_sum: fixed argument 0 must have its declared C type"
+        comptime for i in range(1, _BindgenArgs.length):
+            _bindgen_check_vararg[_BindgenArgs[i]]()
+        return external_call["vs_sum", int32_t, num_fixed_args=1](*args)
+    else:
+        abort("bindgen: invalid variadic arity")

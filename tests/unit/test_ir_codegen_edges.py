@@ -249,17 +249,17 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
     assert "var __bf1: c_uchar" in out
     assert "var __bf2:" not in out
     assert "var ready: c_uint" not in out
-    assert "def __init__(out self):" in out
-    assert "def __init__(out self, ready: c_uint, state: c_uint, enabled: Bool):" in out
+    assert "def __init__(out self: Self):" in out
+    assert "def __init__(out self: Self, ready: c_uint, state: c_uint, enabled: Bool):" in out
     assert "self.__bf0 = c_uint(0)" in out
     assert "self.__bf1 = c_uchar(0)" in out
     assert "self.set_ready(ready)" in out
     assert "self.set_state(state)" in out
     assert "self.set_enabled(enabled)" in out
-    assert "def ready(self) -> c_uint:" in out
-    assert "def set_ready(mut self, value: c_uint):" in out
-    assert "def enabled(self) -> Bool:" in out
-    assert "def set_enabled(mut self, value: Bool):" in out
+    assert "def ready(self: Self) -> c_uint:" in out
+    assert "def set_ready(mut self: Self, value: c_uint):" in out
+    assert "def enabled(self: Self) -> Bool:" in out
+    assert "def set_enabled(mut self: Self, value: Bool):" in out
 
 
 def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> None:
@@ -298,8 +298,8 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
     assert "var ready: c_uint" not in out
     assert "var __bf0: c_uint" in out
     assert "def __init__(out self" not in out
-    assert "def ready(self) -> c_uint:" in out
-    assert "def set_ready(mut self, value: c_uint):" in out
+    assert "def ready(self: Self) -> c_uint:" in out
+    assert "def set_ready(mut self: Self, value: c_uint):" in out
 
 
 def test_generator_preserves_typedef_names_for_bitfield_accessors() -> None:
@@ -360,10 +360,10 @@ def test_generator_preserves_typedef_names_for_bitfield_accessors() -> None:
 
     assert "comptime uint32_t = UInt32" in out
     assert "var __bf0: c_uint" in out
-    assert "def ready(self) -> uint32_t:" in out
-    assert "def set_ready(mut self, value: uint32_t):" in out
-    assert "def state(self) -> uint32_t:" in out
-    assert "def set_state(mut self, value: uint32_t):" in out
+    assert "def ready(self: Self) -> uint32_t:" in out
+    assert "def set_ready(mut self: Self, value: uint32_t):" in out
+    assert "def state(self: Self) -> uint32_t:" in out
+    assert "def set_state(mut self: Self, value: uint32_t):" in out
 
 
 def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_struct() -> None:
@@ -418,8 +418,8 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
     )
     assert "var __bf0: c_uint" in out
     assert "var __bf1: c_uint" in out
-    assert "def left(self) -> c_uint:" in out
-    assert "def right(self) -> c_uint:" in out
+    assert "def left(self: Self) -> c_uint:" in out
+    assert "def right(self: Self) -> c_uint:" in out
 
 
 def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct() -> None:
@@ -454,8 +454,8 @@ def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct(
         )
     )
     assert "@fieldwise_init\nstruct OnlyAnonBits" not in out
-    assert "def __init__(out self):" in out
-    assert "def __init__(out self," not in out
+    assert "def __init__(out self: Self):" in out
+    assert "def __init__(out self: Self," not in out
 
 
 def test_generator_omits_self_alias_typedef_for_complete_union_name() -> None:
@@ -577,7 +577,7 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
     assert (
         "external_call" in import_line and "OwnedDLHandle" in import_line and "c_int" in import_line
     )
-    assert "def _bindgen_dylib() -> _DLHandle:" in out
+    assert "def _bindgen_dylib() -> Pointer[OwnedDLHandle, MutUntrackedOrigin]:" in out
     assert "struct GlobalVar[T: Copyable & Deinitable, //, link: StaticString]:" in out
     assert "struct GlobalConst[T: Copyable & Deinitable, //, link: StaticString]:" in out
     assert 'comptime global_counter = GlobalVar[T=c_int, link="global_counter"]' in out
@@ -697,13 +697,9 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> Non
     )
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "from std.builtin.simd import SIMD" in out
-    assert "from std.complex import ComplexSIMD" in out
-    assert "from std.os import Atomic" not in out
-    assert "var lanes: SIMD[DType.float32, 4]" in out
-    assert "var complex_value: ComplexSIMD[DType.float32, 1]" in out
-    assert "var fallback_atomic: Int32" in out
-    assert "atomic types were mapped to their underlying non-atomic Mojo type" in out
+    assert "var storage: Array[UInt8, 32]" in out
+    assert "atomic field `fallback_atomic` has no layout-compatible Atomic[T]" in out
+    assert "var fallback_atomic: Int32" not in out
 
 
 def test_generator_imports_atomic_for_representable_atomic_types() -> None:
@@ -725,7 +721,7 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.atomic import Atomic" in out
     assert (
-        "# global variable counter: Atomic[DType.int32] (atomic global requires manual "
+        "# global variable counter: Atomic[c_int] (atomic global requires manual "
         "binding (use Atomic APIs on a pointer))" in out
     )
 
@@ -775,9 +771,9 @@ def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields
     assert "@fieldwise_init\nstruct AtomicHolder" not in out
     assert "struct AtomicHolder(Copyable" not in out
     assert "struct AtomicHolder(Movable" not in out
-    assert "struct AtomicHolder:" in out
-    assert "var counter: Atomic[DType.int32]" in out
-    assert "var flags: Atomic[DType.uint32]" in out
+    assert "struct AtomicHolder(not Movable):" in out
+    assert "var counter: Atomic[c_int]" in out
+    assert "var flags: Atomic[c_uint]" in out
 
 
 def test_generator_emits_global_const_wrapper_for_const_qualified_scalar() -> None:
@@ -939,17 +935,13 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     assert "def pfr_select_add() -> pfr_binary_op_t:" in dl_out
     assert ("def pfr_select_add_direct() -> pfr_select_add_direct_return_cb:") in dl_out
     assert (
-        'var _bindgen_c_fn = _bindgen_function[def() thin abi("C") -> pfr_binary_op_t]('
-        'StringSpan("pfr_select_add"))'
+        'var _bindgen_c_fn = _bindgen_owner[].get_function[pfr_binary_op_t]("pfr_select_add")'
     ) in dl_out
     assert (
-        'var _bindgen_c_fn = _bindgen_function[def() thin abi("C") -> '
-        'pfr_select_add_direct_return_cb](StringSpan("pfr_select_add_direct"))' in dl_out
+        "var _bindgen_c_fn = _bindgen_owner[].get_function["
+        'pfr_select_add_direct_return_cb]("pfr_select_add_direct")' in dl_out
     )
-    assert (
-        "var _bindgen_c_fn = _bindgen_function[def(pfr_binary_op_t, c_int, c_int) "
-        'thin abi("C") -> c_int](StringSpan("pfr_call"))' in dl_out
-    )
+    assert 'var _bindgen_c_fn = _bindgen_owner[].get_function[c_int]("pfr_call")' in dl_out
     assert "return _bindgen_c_fn(op, lhs, rhs)" in dl_out
 
 

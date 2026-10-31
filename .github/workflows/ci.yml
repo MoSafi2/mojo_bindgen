@@ -27,7 +27,22 @@ jobs:
           sudo apt-get install -y clang libclang1
 
       - name: Validate repository
-        run: pixi run check-light
+        run: pixi run --locked check-light
         env:
           # Help libclang find the system shared library on Ubuntu runners.
+          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
+
+  ffi-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pixi
+        uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          cache: true
+      - name: Install C toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang libclang1
+      - name: Verify generated FFI on locked Mojo
+        run: pixi run --locked pytest -q tests/e2e
+        env:
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu

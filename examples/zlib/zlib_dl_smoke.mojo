@@ -1,3 +1,5 @@
+from std.ffi import c_char
+
 # Smoke test for owned-dl-handle bindings: dynamic load of libz and runtime FFI calls.
 from zlib_bindings import (
     Z_OK,
@@ -11,8 +13,8 @@ from zlib_bindings import (
 )
 
 
-def _cstr(s: StaticString) -> Pointer[Int8, ImmUntrackedOrigin]:
-    return rebind[Pointer[Int8, ImmUntrackedOrigin]](s.unsafe_ptr())
+def _cstr(s: StaticString) -> Pointer[c_char, ImmUntrackedOrigin]:
+    return rebind[Pointer[c_char, ImmUntrackedOrigin]](s.unsafe_ptr())
 
 
 def main() raises:

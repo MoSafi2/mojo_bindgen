@@ -60,7 +60,7 @@ class RecordLayoutFacts:
 def analyze_record_layout(
     decl: Struct,
     *,
-    target_abi: TargetABI,
+    target_abi: TargetABI | None = None,
     record_map: dict[str, Struct],
 ) -> RecordLayoutFacts:
     # Kept in the public signature for callers that pass whole-unit ABI/index

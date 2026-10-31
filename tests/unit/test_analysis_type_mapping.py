@@ -25,6 +25,7 @@ from mojo_bindgen.ir import (
     QualifiedType,
     Qualifiers,
     StructRef,
+    TypeArg,
     TypeRef,
     UnsupportedType,
     VectorType,
@@ -147,7 +148,7 @@ def test_map_type_maps_representable_atomic_to_atomic_surface_type() -> None:
 
     assert map_type(atomic) == ParametricType(
         base=ParametricBase.ATOMIC,
-        args=[DTypeArg("DType.uint32")],
+        args=[TypeArg(BuiltinType(MojoBuiltin.C_UINT))],
     )
 
 

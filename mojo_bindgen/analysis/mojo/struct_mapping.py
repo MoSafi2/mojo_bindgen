@@ -33,7 +33,6 @@ from mojo_bindgen.ir import (
     Struct,
     StructDecl,
     StructKind,
-    TargetABI,
 )
 
 
@@ -44,7 +43,6 @@ class StructMappingError(ValueError):
 @dataclass
 class StructMappingContext:
     record_map: dict[str, Struct]
-    target_abi: TargetABI
     type_mapper: MapTypePass
     record_layouts: dict[str, RecordLayoutFacts] = field(default_factory=dict)
     record_storage: dict[str, RecordStorageFacts] = field(default_factory=dict)
@@ -161,12 +159,9 @@ def _map_plain_fields(
         if isinstance(field.type, AtomicType) and not (
             isinstance(mapped_type, ParametricType) and mapped_type.base == ParametricBase.ATOMIC
         ):
-            note = (
-                "some atomic types were mapped to their underlying non-atomic Mojo type "
-                "because Atomic[dtype] was not representable"
+            fallback_reasons.append(
+                f"atomic field `{display_name}` has no layout-compatible Atomic[T]; opaque storage emitted"
             )
-            if note not in diagnostic_notes:
-                diagnostic_notes.append(note)
         plain_fields.append(
             StoredMember(
                 index=field_fact.index,
@@ -268,7 +263,6 @@ def _record_storage(
             layouts[record.decl_id] = analyze_record_layout(
                 record,
                 record_map=context.record_map,
-                target_abi=context.target_abi,
             )
     context.record_layouts = layouts
     context.record_storage = analyze_record_storage_facts(

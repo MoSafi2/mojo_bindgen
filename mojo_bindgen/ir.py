@@ -208,7 +208,16 @@ class QualifiedType(SerDeMixin):
 class AtomicType(SerDeMixin):
     """A C11 ``_Atomic(T)`` wrapper around an underlying value type."""
 
+    SERDE = SerdeSpec(
+        fields={
+            "size_bytes": SerdeFieldSpec(omit_if_default=True),
+            "align_bytes": SerdeFieldSpec(omit_if_default=True),
+        }
+    )
+
     value_type: Type
+    size_bytes: int | None = None
+    align_bytes: int | None = None
 
 
 @dataclass
@@ -817,9 +826,12 @@ class IRDiagnostic(SerDeMixin):
 class TargetABI(SerDeMixin):
     """Target ABI facts derived from the Clang parse configuration."""
 
+    SERDE = SerdeSpec(fields={"target_triple": SerdeFieldSpec(omit_if_default=True)})
+
     pointer_size_bytes: int
     pointer_align_bytes: int
     byte_order: ByteOrder
+    target_triple: str | None = None
 
 
 type Decl = Union[
@@ -938,6 +950,7 @@ def decl_from_json(d: dict[str, Any]) -> Decl:
 class MojoBuiltin(StrEnum):
     NONE = "NoneType"
     BOOL = "Bool"
+    INT8 = "Int8"
     UINT8 = "UInt8"
     INT128 = "Int128"
     UINT128 = "UInt128"
@@ -961,7 +974,7 @@ PRIMITIVE_BUILTINS: dict[IntKind | FloatKind | str, MojoBuiltin] = {
     "void": MojoBuiltin.NONE,
     IntKind.BOOL: MojoBuiltin.BOOL,
     IntKind.CHAR_S: MojoBuiltin.C_CHAR,
-    IntKind.SCHAR: MojoBuiltin.C_CHAR,
+    IntKind.SCHAR: MojoBuiltin.INT8,
     IntKind.CHAR_U: MojoBuiltin.C_UCHAR,
     IntKind.UCHAR: MojoBuiltin.C_UCHAR,
     IntKind.SHORT: MojoBuiltin.C_SHORT,
@@ -1002,6 +1015,7 @@ _FLOAT_DTYPE_TABLE: dict[FloatKind, str] = {
 
 
 _MOJO_INT_TYPES = (
+    MojoBuiltin.INT8,
     MojoBuiltin.C_CHAR,
     MojoBuiltin.C_UCHAR,
     MojoBuiltin.C_SHORT,
@@ -1064,6 +1078,7 @@ class ModuleImport(SerDeMixin):
 class SupportDeclKind(StrEnum):
     DL_HANDLE_HELPERS = "dl_handle_helpers"
     GLOBAL_SYMBOL_HELPERS = "global_symbol_helpers"
+    VARIADIC_HELPERS = "variadic_helpers"
 
 
 @dataclass(frozen=True)
@@ -1240,6 +1255,7 @@ class FlexibleTail(SerDeMixin):
 
 
 class StructTraits(StrEnum):
+    NOT_MOVABLE = "not Movable"
     COPYABLE = "Copyable"
     IMPLICITLY_COPYABLE = "ImplicitlyCopyable"
     MOVABLE = "Movable"
@@ -1333,6 +1349,7 @@ class FunctionDecl(SerDeMixin):
             "kind": SerdeFieldSpec(json_key="function_kind"),
             "attrs": SerdeFieldSpec(omit_if_default=True),
             "doc": SerdeFieldSpec(omit_if_default=True),
+            "num_fixed_args": SerdeFieldSpec(omit_if_default=True),
         }
     )
 
@@ -1345,6 +1362,7 @@ class FunctionDecl(SerDeMixin):
         default_factory=lambda: CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="")
     )
     attrs: FunctionAttrs = field(default_factory=FunctionAttrs)
+    num_fixed_args: int | None = None
     diagnostics: list[MappingNote] = field(default_factory=list)
     doc: DocComment | None = None
 

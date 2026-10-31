@@ -38,6 +38,7 @@ def _extract_pointer_abi(tu: cx.TranslationUnit) -> TargetABI | None:
                 pointer_size_bytes=size_bytes,
                 pointer_align_bytes=align_bytes,
                 byte_order=byte_order,
+                target_triple=_target_triple_text(target_info),
             )
         return None
     finally:

@@ -72,7 +72,6 @@ def _layout_record_check(
 
     facts = analyze_record_layout(
         decl,
-        target_abi=unit.target_abi,
         record_map=record_map,
     )
     if not facts.is_complete:

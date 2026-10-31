@@ -45,7 +45,7 @@ class MapUnitPass:
         context = self._context or build_analysis_context(unit)
         if context.unit is not unit:
             context = build_analysis_context(unit)
-        type_mapper = MapTypePass()
+        type_mapper = MapTypePass(queries=context.target_queries)
         session = MappingSession(
             unit=unit,
             options=self._options,
@@ -55,7 +55,6 @@ class MapUnitPass:
                 record_map=context.records_by_decl_id,
                 record_layouts=context.record_layouts,
                 record_storage=context.record_storage,
-                target_abi=unit.target_abi,
                 type_mapper=type_mapper,
             ),
         )

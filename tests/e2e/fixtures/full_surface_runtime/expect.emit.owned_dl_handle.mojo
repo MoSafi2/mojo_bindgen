@@ -1,5 +1,5 @@
 def _bindgen_dylib(
-_bindgen_function[
+.get_function[
 struct surf_point
 struct surf_pair
 struct surf_flags

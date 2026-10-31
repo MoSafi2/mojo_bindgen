@@ -23,13 +23,11 @@ from mojo_bindgen.ir import (
 
 def peel_layout_wrappers(t: Type) -> Type:
     """Strip layout-transparent wrappers from a CIR type."""
-    while isinstance(t, (TypeRef, QualifiedType, AtomicType)):
+    while isinstance(t, (TypeRef, QualifiedType)):
         if isinstance(t, TypeRef):
             t = t.canonical
         elif isinstance(t, QualifiedType):
             t = t.unqualified
-        else:  # AtomicType
-            t = t.value_type
     return t
 
 
@@ -46,6 +44,9 @@ def type_align(t: Type) -> int | None:
 
 def _layout_of(t: Type) -> tuple[int, int] | None:
     t = peel_layout_wrappers(t)
+
+    if isinstance(t, AtomicType):
+        return _explicit_layout(t.size_bytes, t.align_bytes) or type_layout(t.value_type)
 
     if isinstance(
         t,

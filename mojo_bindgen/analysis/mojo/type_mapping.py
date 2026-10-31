@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.facts.target import TargetQueries
 from mojo_bindgen.ir import (
     _FLOAT_DTYPE_TABLE,
     _INT_DTYPE_TABLE,
@@ -35,6 +36,7 @@ from mojo_bindgen.ir import (
     QualifiedType,
     StructRef,
     Type,
+    TypeArg,
     TypeRef,
     UnsupportedType,
     VectorType,
@@ -146,6 +148,7 @@ def exact_width_stdint_alias_type(name: str) -> NamedType | None:
 class MapTypePass:
     """Map CIR types into surface-oriented MojoIR type nodes."""
 
+    queries: TargetQueries | None = None
     _cache: dict[int, Type] = field(default_factory=dict, init=False, repr=False)
     _active: set[int] = field(default_factory=set, init=False, repr=False)
     # ------------------------
@@ -206,6 +209,12 @@ class MapTypePass:
         if isinstance(t, VoidType):
             key = "void"
         elif isinstance(t, IntType):
+            if t.int_kind in (IntKind.CHAR_S, IntKind.CHAR_U) and self.queries:
+                unsigned = self.queries.default_char_is_unsigned()
+                if unsigned is not None:
+                    if (t.int_kind == IntKind.CHAR_U) == unsigned:
+                        return BuiltinType(MojoBuiltin.C_CHAR)
+                    return NamedType("UInt8" if t.int_kind == IntKind.CHAR_U else "Int8")
             fixed_width_name = _fixed_width_int_name(t)
             if fixed_width_name == "Int128":
                 return BuiltinType(name=MojoBuiltin.INT128)
@@ -231,12 +240,20 @@ class MapTypePass:
 
     def _map_atomic(self, t: AtomicType) -> Type:
         dtype = self._dtype_arg(t.value_type)
-        if dtype is not None:
+        scalar = self._scalar_for_dtype(t.value_type)
+        compatible = scalar is not None and (
+            (t.size_bytes is None or t.size_bytes == getattr(scalar, "size_bytes", None))
+            and (t.align_bytes is None or t.align_bytes == getattr(scalar, "align_bytes", None))
+        )
+        if dtype is not None and compatible:
             return ParametricType(
                 base=ParametricBase.ATOMIC,
-                args=[DTypeArg(dtype)],
+                args=[TypeArg(self.run(t.value_type))],
             )
-        return self.run(t.value_type)
+        size = t.size_bytes or getattr(_strip_for_dtype(t.value_type), "size_bytes", None)
+        if size:
+            return self._opaque_bytes(size)
+        raise TypeMappingError("atomic storage has no representable scalar type or known size")
 
     def _named(self, name: str) -> NamedType:
         return NamedType(name=mojo_ident(name.strip()))

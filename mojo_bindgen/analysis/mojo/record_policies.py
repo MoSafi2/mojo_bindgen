@@ -10,6 +10,8 @@ from mojo_bindgen.ir import (
     Array,
     BitfieldGroupMember,
     BuiltinType,
+    FunctionDecl,
+    FunctionKind,
     FunctionPtr,
     MojoBuiltin,
     MojoDecl,
@@ -82,10 +84,15 @@ class PolicyInferencePass:
         self._transfer_cache: dict[str, TransferTraits] = {}
         self._transfer_computing: set[str] = set()
 
-        return replace(
-            module,
-            decls=[self._assign_decl_policies(decl) for decl in module.decls],
-        )
+        records = [self._assign_decl_policies(decl) for decl in module.decls]
+        return replace(module, decls=[self._assign_function_policy(decl) for decl in records])
+
+    def _assign_function_policy(self, decl: MojoDecl) -> MojoDecl:
+        if not isinstance(decl, FunctionDecl) or decl.kind != FunctionKind.WRAPPER:
+            return decl
+        if self._type_passability(decl.return_type) == MojoPassability.MEMORY_ONLY:
+            return replace(decl, kind=FunctionKind.NON_REGISTER_RETURN_STUB)
+        return decl
 
     def _assign_decl_policies(self, decl: MojoDecl) -> MojoDecl:
         if not isinstance(decl, StructDecl):
@@ -96,7 +103,7 @@ class PolicyInferencePass:
             return replace(
                 decl,
                 passability=passability,
-                traits=[],
+                traits=[StructTraits.NOT_MOVABLE],
                 fieldwise_init=False,
             )
 
@@ -336,6 +343,8 @@ class PolicyInferencePass:
                 traits.append(StructTraits.COPYABLE)
             if transfer_traits.movable:
                 traits.append(StructTraits.MOVABLE)
+            else:
+                traits.append(StructTraits.NOT_MOVABLE)
         return traits
 
     @staticmethod

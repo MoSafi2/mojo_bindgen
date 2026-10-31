@@ -330,7 +330,7 @@ def test_mojo_module_roundtrip() -> None:
         dependencies=ModuleDependencies(
             imports=[
                 ModuleImport(module="std.ffi", names=["c_int"]),
-                ModuleImport(module="std.builtin.simd", names=["SIMD"]),
+                ModuleImport(module="std.simd", names=["SIMD"]),
             ],
             support_decls=[SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS)],
         ),

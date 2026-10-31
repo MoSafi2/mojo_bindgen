@@ -21,6 +21,7 @@ from mojo_bindgen.analysis.mojo.union_mapping import MapUnionPass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
+    AtomicType,
     CallExpr,
     CallTarget,
     CastExpr,
@@ -42,11 +43,11 @@ from mojo_bindgen.ir import (
     MojoDecl,
     NamedType,
     Param,
-    ParametricBase,
-    ParametricType,
+    QualifiedType,
     RefExpr,
     Struct,
     Typedef,
+    TypeRef,
     Unit,
 )
 
@@ -153,15 +154,16 @@ class UnitDeclMapper:
     def _map_function(self, decl: Function) -> FunctionDecl:
         kind = FunctionKind.WRAPPER
         diagnostics = []
-        if decl.is_variadic:
-            kind = FunctionKind.VARIADIC_STUB
-        elif decl.attrs.inline_disposition != InlineDisposition.NONE:
+        if decl.attrs.inline_disposition != InlineDisposition.NONE:
             kind = FunctionKind.DIRECTIVE_STUB
             diagnostics.append(
                 stub_note(
                     "inline declaration may not provide a stable external symbol; wrapper omitted"
                 )
             )
+        elif decl.is_variadic and self.session.options.linking == "owned_dl_handle":
+            kind = FunctionKind.VARIADIC_STUB
+            diagnostics.append(stub_note("OwnedDLHandle does not expose variadic C ABI metadata"))
         return FunctionDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
@@ -183,15 +185,21 @@ class UnitDeclMapper:
                 inline_disposition=decl.attrs.inline_disposition,
                 is_noreturn=decl.attrs.is_noreturn,
             ),
+            num_fixed_args=len(decl.params) if decl.is_variadic else None,
             diagnostics=diagnostics,
             doc=decl.doc,
         )
 
     def _map_global(self, decl: GlobalVar) -> GlobalDecl:
         mapped_type = self.session.type_mapper.run(decl.type)
-        is_atomic = (
-            isinstance(mapped_type, ParametricType) and mapped_type.base == ParametricBase.ATOMIC
-        )
+        source_type = decl.type
+        while isinstance(source_type, (QualifiedType, TypeRef)):
+            source_type = (
+                source_type.unqualified
+                if isinstance(source_type, QualifiedType)
+                else source_type.canonical
+            )
+        is_atomic = isinstance(source_type, AtomicType)
         return GlobalDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,

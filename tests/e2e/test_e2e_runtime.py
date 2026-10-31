@@ -237,6 +237,7 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         [
             *mojo,
             "build",
+            "--Werror",
             str(runner_external),
             "-I",
             str(tmp_path),
@@ -260,6 +261,7 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         [
             *mojo,
             "build",
+            "--Werror",
             str(runner_dl),
             "-I",
             str(tmp_path),

@@ -21,12 +21,12 @@ pixi run pytest -q -m "not expensive"
 Run only the new golden runtime suite:
 
 ```bash
-pixi run pytest tests/e2e/test_golden_runtime.py -v -s
+pixi run pytest tests/e2e/test_e2e_runtime.py -v -s
 ```
 
 ## Golden Runtime Corpus
 
-`tests/e2e/golden` is a runtime-first golden corpus. Every case must include:
+`tests/e2e/fixtures` is a runtime-first golden corpus. Every case must include:
 
 - `input.h`
 - `impl.c`
@@ -55,9 +55,10 @@ The test runner reports:
 
 ## Existing Coverage
 
-- `test_runtime_ffi.py`: legacy fixture-based runtime checks.
 - parser/emit surface checks now live under `tests/unit/` and `tests/stress/`.
-- `test_golden_runtime.py`: comprehensive golden runtime suite with explicit failure attribution.
+- `test_e2e_runtime.py`: comprehensive golden runtime suite with explicit failure attribution.
+- `test_mojo_12.py`: checked varargs, over-aligned arrays, dynamic globals, loader
+  override precedence, and failure diagnostics. Both runtime suites compile with `--Werror`.
 
 ## Golden Case Matrix
 
