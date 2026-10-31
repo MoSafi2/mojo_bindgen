@@ -282,7 +282,8 @@ def test_map_unit_maps_function_and_global() -> None:
     global_decl = mapped.decls[1]
 
     assert isinstance(fn_decl, FunctionDecl)
-    assert fn_decl.kind == FunctionKind.VARIADIC_STUB
+    assert fn_decl.kind == FunctionKind.WRAPPER
+    assert fn_decl.num_fixed_args == len(fn_decl.params)
     assert fn_decl.params[0].name == "a0"
     assert fn_decl.call_target.symbol == "install"
     assert isinstance(global_decl, GlobalDecl)

@@ -6,8 +6,8 @@ set -euo pipefail
 example_init() {
   HERE="$(cd "$(dirname "$1")" && pwd)"
   REPO_ROOT="$(cd "$HERE/../.." && pwd)"
-  BG=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
-  MOJO=(pixi run --manifest-path "$REPO_ROOT/pixi.toml" mojo)
+  BG=(pixi run --locked --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
+  MOJO=(pixi run --locked --manifest-path "$REPO_ROOT/pixi.toml" mojo)
   cd "$HERE"
 }
 
@@ -35,6 +35,14 @@ pkg_header() {
   local pkg="$1"
   local relative="$2"
   shift 2
+
+  local header_dirs=()
+  local include_dir
+  IFS=: read -r -a header_dirs <<< "${CPATH:-}"
+  for include_dir in "${header_dirs[@]}"; do
+    [[ -z "$include_dir" ]] && continue
+    first_existing "$include_dir/$relative" "$include_dir/$(basename "$relative")" && return 0
+  done
 
   local flag dir
   if command -v pkg-config >/dev/null 2>&1; then
@@ -75,6 +83,12 @@ find_dylib() {
   local link_name="$1"
   local pkg="${2:-}"
   local name path flag dir
+  local token="${link_name//[^a-zA-Z0-9]/_}"
+  local override="MOJO_BINDGEN_${token^^}_LIBRARY_PATH"
+  if [[ -n "${!override:-}" ]]; then
+    echo "${!override}"
+    return 0
+  fi
   local names=("lib${link_name}.so" "lib${link_name}.so.1" "lib${link_name}.dylib")
 
   if [[ -n "$pkg" ]] && command -v pkg-config >/dev/null 2>&1; then
@@ -131,5 +145,5 @@ generate_owned_bindings() {
 build_smoke() {
   local source="$1"
   local output="${2:-${source%.mojo}}"
-  "${MOJO[@]}" build "$source" -I "$HERE" -o "$output"
+  "${MOJO[@]}" build --Werror "$source" -I "$HERE" -o "$output"
 }

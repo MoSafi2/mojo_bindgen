@@ -6,7 +6,7 @@
 comptime uint32_t = UInt32
 
 @align(4)
-struct nft_packet_tail:
+struct nft_packet_tail(not Movable):
     var len: uint32_t
     var payload: Array[c_uchar, 0]
     @staticmethod
@@ -22,7 +22,7 @@ struct nft_packet_tail:
         return raw.unsafe_offset(4)
 
 @align(4)
-struct nft_packet_wrapper:
+struct nft_packet_wrapper(not Movable):
     var tag: uint32_t
     var tail: nft_packet_tail
     @staticmethod

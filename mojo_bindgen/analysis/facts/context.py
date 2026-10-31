@@ -15,6 +15,8 @@ from mojo_bindgen.analysis.facts.record_storage import (
     RecordStorageFacts,
     analyze_record_storage_facts,
 )
+from mojo_bindgen.analysis.facts.target import TargetQueries
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import Const, Enum, Function, GlobalVar, MacroDecl, Struct, Typedef, Unit
 
 
@@ -23,6 +25,7 @@ class AnalysisContext:
     """Reusable facts computed after CIR normalization and before MojoIR mapping."""
 
     unit: Unit
+    target_queries: TargetQueries
     records_by_decl_id: dict[str, Struct]
     typedefs_by_decl_id: dict[str, Typedef]
     enums_by_decl_id: dict[str, Enum]
@@ -40,6 +43,7 @@ def build_analysis_context(unit: Unit) -> AnalysisContext:
     """Build shared declaration indexes and analysis facts for ``unit``."""
 
     indexes = build_decl_indexes(unit)
+    target_queries = TargetQueries(unit.target_abi)
     # First compute C ABI geometry: offsets, sizes, alignment, padding, and
     # bitfield runs.
     record_layouts = _build_record_layouts(unit, indexes)
@@ -47,9 +51,14 @@ def build_analysis_context(unit: Unit) -> AnalysisContext:
     alias_classification = classify_aliases(unit)
     # Then decide Mojo storage eligibility using layout facts plus recursive
     # record/type context.
-    record_storage = analyze_record_storage_facts(indexes.records_by_decl_id, record_layouts)
+    record_storage = analyze_record_storage_facts(
+        indexes.records_by_decl_id,
+        record_layouts,
+        type_mapper=MapTypePass(queries=target_queries),
+    )
     return AnalysisContext(
         unit=unit,
+        target_queries=target_queries,
         records_by_decl_id=indexes.records_by_decl_id,
         typedefs_by_decl_id=indexes.typedefs_by_decl_id,
         enums_by_decl_id=indexes.enums_by_decl_id,
@@ -71,7 +80,6 @@ def _build_record_layouts(
     return {
         decl_id: analyze_record_layout(
             record,
-            target_abi=unit.target_abi,
             record_map=indexes.records_by_decl_id,
         )
         for decl_id, record in indexes.records_by_decl_id.items()

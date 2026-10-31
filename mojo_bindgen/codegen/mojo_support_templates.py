@@ -19,181 +19,149 @@ def escape_mojo_string(value: str) -> str:
 
 
 def render_dl_handle_helpers(module: MojoModule) -> str:
-    library_lit = escape_mojo_string(module.library)
-    link_lit = escape_mojo_string(module.link_name)
+    library = escape_mojo_string(module.library)
+    header = (
+        f'comptime _BINDGEN_LIB_NAME = "{library}"\n'
+        f'comptime _BINDGEN_LINK_NAME = "{escape_mojo_string(module.link_name)}"\n'
+    )
     if module.link_mode == LinkMode.EXTERNAL_CALL:
-        return _render_external_call_dl_handle_helpers(library_lit, link_lit)
-    return _render_owned_dl_handle_helpers(module, library_lit, link_lit)
+        loader = """
+def _bindgen_init_dylib() -> OwnedDLHandle:
+    try:
+        return OwnedDLHandle()
+    except e:
+        abort(t"bindgen: failed to open process dynamic symbol table: {e}")
+"""
+    else:
+        header += (
+            f'comptime _BINDGEN_LIB_PATH_CANDIDATE: String = "{escape_mojo_string(module.library_path_hint or "")}"\n'
+            f'comptime _BINDGEN_LIB_PATH_ENV = "{_library_path_env_var(module.link_name)}"\n'
+            'comptime _BINDGEN_GENERIC_LIB_PATH_ENV = "MOJO_BINDGEN_LIBRARY_PATH"\n'
+        )
+        loader = _DYNAMIC_LIBRARY_LOADER
+    return (
+        header
+        + loader
+        + "\n# Private storage adapter: keep the owner alive for existing free-function bindings.\n"
+        + f'comptime _BINDGEN_DYLIB = _Global["mojo_bindgen/{library}", _bindgen_init_dylib]\n\n'
+        + _CACHED_DL_HELPERS
+    )
 
 
 def render_global_symbol_helpers() -> str:
     return _GLOBAL_SYMBOL_HELPERS
 
 
-def _render_external_call_dl_handle_helpers(library_lit: str, link_lit: str) -> str:
-    return (
-        f'comptime _BINDGEN_LIB_NAME = "{library_lit}"\n'
-        f'comptime _BINDGEN_LINK_NAME = "{link_lit}"\n'
-        "\n"
-        "def _bindgen_init_dylib() -> OwnedDLHandle:\n"
-        "    try:\n"
-        "        return OwnedDLHandle(DEFAULT_RTLD)\n"
-        "    except e:\n"
-        '        abort(t"bindgen: failed to open process dynamic symbol table: {e}")\n'
-        "\n"
-        'comptime _BINDGEN_DYLIB = _Global["mojo_bindgen/'
-        f'{library_lit}", _bindgen_init_dylib]\n'
-        "\n" + _CACHED_DL_HELPERS
-    )
-
-
-def _render_owned_dl_handle_helpers(
-    module: MojoModule,
-    library_lit: str,
-    link_lit: str,
-) -> str:
-    path_lit = escape_mojo_string(module.library_path_hint or "")
-    env_name_lit = escape_mojo_string(_library_path_env_var(module.link_name))
-    return (
-        f'comptime _BINDGEN_LIB_NAME = "{library_lit}"\n'
-        f'comptime _BINDGEN_LINK_NAME = "{link_lit}"\n'
-        f'comptime _BINDGEN_LIB_PATH_CANDIDATE: String = "{path_lit}"\n'
-        f'comptime _BINDGEN_LIB_PATH_ENV = "{env_name_lit}"\n'
-        'comptime _BINDGEN_GENERIC_LIB_PATH_ENV = "MOJO_BINDGEN_LIBRARY_PATH"\n'
-        "\n"
-        "def _bindgen_env_path(name: String) -> String:\n"
-        "    var value = getenv(name)\n"
-        "    if value:\n"
-        "        return value\n"
-        '    return ""\n'
-        "\n"
-        "def _bindgen_prefix_lib_path(prefix_name: String, subdir: String) -> String:\n"
-        "    var prefix = getenv(prefix_name)\n"
-        "    if prefix:\n"
-        '        return prefix + "/" + subdir\n'
-        '    return ""\n'
-        "\n"
-        "def _bindgen_pixi_env_lib_path(subdir: String) -> String:\n"
-        '    var project_root = getenv("PIXI_PROJECT_ROOT")\n'
-        '    var env_name = getenv("PIXI_ENVIRONMENT_NAME")\n'
-        "    if project_root and env_name:\n"
-        '        return project_root + "/.pixi/envs/" + env_name + "/" + subdir\n'
-        '    return ""\n'
-        "\n"
-        "def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String) -> None:\n"
-        '    if path != "":\n'
-        "        paths.append(Path(path))\n"
-        "\n"
-        "def _bindgen_dylib_candidates() -> List[Path]:\n"
-        "    var paths = List[Path]()\n"
-        "    _bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_LIB_PATH_ENV))\n"
-        "    _bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))\n"
-        "    _bindgen_append_dylib_candidate(paths, _BINDGEN_LIB_PATH_CANDIDATE)\n"
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "bin/lib" + String(_BINDGEN_LINK_NAME) + ".so"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_prefix_lib_path("CONDA_PREFIX", "bin/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"))\n'
-        '    _bindgen_append_dylib_candidate(paths, _bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"))\n'
-        "    _bindgen_append_dylib_candidate(paths, String(_BINDGEN_LINK_NAME))\n"
-        '    _bindgen_append_dylib_candidate(paths, "lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
-        '    _bindgen_append_dylib_candidate(paths, "lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
-        '    _bindgen_append_dylib_candidate(paths, "lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/local/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/opt/homebrew/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
-        '    _bindgen_append_dylib_candidate(paths, "/usr/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib")\n'
-        "    return paths^\n"
-        "\n"
-        "def _bindgen_init_dylib() -> OwnedDLHandle:\n"
-        "    var paths = _bindgen_dylib_candidates()\n"
-        "    return _find_dylib[_BINDGEN_LIB_NAME](paths)\n"
-        "\n"
-        'comptime _BINDGEN_DYLIB = _Global["mojo_bindgen/'
-        f'{library_lit}", _bindgen_init_dylib]\n'
-        "\n" + _CACHED_DL_HELPERS
-    )
+def render_variadic_helpers() -> str:
+    return _VARIADIC_HELPERS
 
 
 def _library_path_env_var(link_name: str) -> str:
     token = re.sub(r"[^0-9A-Za-z]+", "_", link_name).strip("_").upper()
-    if not token:
-        token = "LIBRARY"
-    return f"MOJO_BINDGEN_{token}_LIBRARY_PATH"
+    return f"MOJO_BINDGEN_{token or 'LIBRARY'}_LIBRARY_PATH"
 
 
-_CACHED_DL_HELPERS = """# Returns a borrowed process-lifetime dynamic library handle; do not close it.
-def _bindgen_dylib() -> _DLHandle:
-    var dylib_ptr = _get_global[
-        _BINDGEN_DYLIB.name,
-        _BINDGEN_DYLIB._init_wrapper,
-        _BINDGEN_DYLIB._deinit_wrapper,
-    ]()
-    var dylib = unsafe_cast[Type=_BINDGEN_DYLIB.StorageType](dylib_ptr).value()[].borrow()
-    if not dylib:
-        abort(t"bindgen: failed to load dynamic library '{_BINDGEN_LIB_NAME}'")
-    return dylib
+_DYNAMIC_LIBRARY_LOADER = """
+def _bindgen_env_path(name: String) -> String:
+    var value = getenv(name)
+    if value:
+        return value
+    return ""
 
-def _bindgen_function[Fn: TrivialRegisterPassable](symbol: StringSpan) -> Fn:
-    var fn_ptr = _bindgen_dylib().get_symbol[NoneType](symbol)
-    if not fn_ptr:
-        abort(
-            t"bindgen: missing C function symbol '{symbol}' "
-            t"in dynamic library '{_BINDGEN_LIB_NAME}'"
-        )
-    return Pointer(to=fn_ptr.value()).unsafe_bitcast[Fn]()[]"""
+def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String):
+    if path != "":
+        paths.append(Path(path))
+
+def _bindgen_dylib_candidates() -> List[Path]:
+    var paths = List[Path]()
+    _bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_LIB_PATH_ENV))
+    _bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))
+    _bindgen_append_dylib_candidate(paths, _BINDGEN_LIB_PATH_CANDIDATE)
+    comptime suffix = platform_map["shared library suffix", linux=".so", macos=".dylib"]()
+    var filename = "lib" + String(_BINDGEN_LINK_NAME) + String(suffix)
+    var prefix = _bindgen_env_path("CONDA_PREFIX")
+    if prefix:
+        paths.append(Path(prefix + "/lib/" + filename))
+        paths.append(Path(prefix + "/bin/" + filename))
+    var project_root = _bindgen_env_path("PIXI_PROJECT_ROOT")
+    var env_name = _bindgen_env_path("PIXI_ENVIRONMENT_NAME")
+    if project_root and env_name:
+        paths.append(Path(project_root + "/.pixi/envs/" + env_name + "/lib/" + filename))
+    paths.append(Path(String(_BINDGEN_LINK_NAME)))
+    paths.append(Path(filename))
+    comptime if CompilationTarget.is_linux():
+        paths.append(Path(filename + ".1"))
+    elif CompilationTarget.is_macos():
+        paths.append(Path("/usr/local/lib/" + filename))
+        paths.append(Path("/opt/homebrew/lib/" + filename))
+    return paths^
+
+def _bindgen_init_dylib() -> OwnedDLHandle:
+    var paths = _bindgen_dylib_candidates()
+    for path in paths:
+        try:
+            return OwnedDLHandle(path)
+        except:
+            pass
+    abort(t"bindgen: failed to load dynamic library '{_BINDGEN_LIB_NAME}' from {paths}")
+"""
+
+
+_CACHED_DL_HELPERS = """# The cached owner lives until process teardown; do not close it.
+def _bindgen_dylib() -> Pointer[OwnedDLHandle, MutUntrackedOrigin]:
+    try:
+        return _BINDGEN_DYLIB.get_or_create_ptr()
+    except e:
+        abort(t"bindgen: failed to initialize dynamic library '{_BINDGEN_LIB_NAME}': {e}")"""
 
 
 _GLOBAL_SYMBOL_HELPERS = """struct GlobalVar[T: Copyable & Deinitable, //, link: StaticString]:
     @staticmethod
     def _raw() -> Pointer[Self.T, MutUntrackedOrigin]:
-        var opt: Optional[Pointer[Self.T, MutUntrackedOrigin]] = _bindgen_dylib().get_symbol[Self.T](StringSpan(Self.link))
-        if not opt:
-            abort(
-                t"bindgen: missing C global symbol '{Self.link}' "
-                t"in dynamic library '{_BINDGEN_LIB_NAME}'"
-            )
-        return opt.value()
+        var owner = _bindgen_dylib()
+        if case .Some(ptr) = owner[].get_symbol[Self.T](StringSpan(Self.link)):
+            return ptr
+        abort(t"bindgen: missing C global symbol '{Self.link}' in dynamic library '{_BINDGEN_LIB_NAME}'")
 
     @staticmethod
     def ptr() -> Pointer[Self.T, MutUntrackedOrigin]:
-        return rebind[Pointer[Self.T, MutUntrackedOrigin]](Self._raw())
+        return Self._raw()
 
     @staticmethod
     def load() -> Self.T:
         return Self._raw()[].copy()
 
     @staticmethod
-    def store(value: Self.T) -> None:
-        var p = rebind[Pointer[Self.T, MutUntrackedOrigin]](Self._raw())
+    def store(value: Self.T):
+        var p = Self._raw()
         p[] = value.copy()
 
 struct GlobalConst[T: Copyable & Deinitable, //, link: StaticString]:
     @staticmethod
-    def _raw() -> Pointer[Self.T, MutUntrackedOrigin]:
-        var opt: Optional[Pointer[Self.T, MutUntrackedOrigin]] = _bindgen_dylib().get_symbol[Self.T](StringSpan(Self.link))
-        if not opt:
-            abort(
-                t"bindgen: missing C global symbol '{Self.link}' "
-                t"in dynamic library '{_BINDGEN_LIB_NAME}'"
-            )
-        return opt.value()
+    def _raw() -> Pointer[Self.T, ImmUntrackedOrigin]:
+        var owner = _bindgen_dylib().as_imm()
+        if case .Some(ptr) = owner[].get_symbol[Self.T](StringSpan(Self.link)):
+            return ptr
+        abort(t"bindgen: missing C global symbol '{Self.link}' in dynamic library '{_BINDGEN_LIB_NAME}'")
 
     @staticmethod
     def ptr() -> Pointer[Self.T, ImmUntrackedOrigin]:
-        return rebind[Pointer[Self.T, ImmUntrackedOrigin]](Self._raw())
+        return Self._raw()
 
     @staticmethod
     def load() -> Self.T:
         return Self._raw()[].copy()"""
+
+
+_VARIADIC_HELPERS = """def _bindgen_check_vararg[T: AnyType]():
+    # Qualified reflection names identify std pointer families without accepting
+    # user structs named Pointer/Optional. Restrict pointers to generic address space.
+    comptime name = reflect[T].name[qualified_builtins=True]()
+    comptime pointer = name.startswith("std.memory.pointer.Pointer[") and name.endswith(", 0]")
+    comptime nullable_pointer = name.startswith("std.collections.optional.Optional[std.memory.pointer.Pointer[") and name.endswith(", 0]]")
+    comptime assert (
+        T == c_int or T == c_uint or T == c_long or T == c_ulong
+        or T == c_long_long or T == c_ulong_long or T == c_double
+        or ((pointer or nullable_pointer) and conforms_to(T, RegisterPassable))
+    ), "C vararg requires a promoted C integer, Float64, or raw pointer; promote narrow integers/Bool to c_int and Float32 to Float64"
+"""

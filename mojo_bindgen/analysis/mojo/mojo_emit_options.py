@@ -23,7 +23,7 @@ class MojoEmitOptions:
 
     linking: LinkingMode = "external_call"
     """external_call: link C symbols at mojo build time; emitted wrappers use ``abi("C")``.
-    owned_dl_handle: cache a dynamic library handle and resolve explicit C-ABI function pointers;
+    owned_dl_handle: cache a dynamic library owner and use public C-ABI callables;
     load or symbol failures abort."""
 
     library_path_hint: str | None = None
@@ -42,4 +42,4 @@ class MojoEmitOptions:
     """When true, preserve parsed C alignment emission behavior. When false, emit ``@align`` only for records with explicit layout intent such as packed or attribute-aligned declarations."""
 
     ffi_origin: FFIOriginStyle = "external"
-    """Pointer provenance for mapped types: ``external`` → Mut/Immut*ExternalOrigin (recommended for C FFI); ``any`` → *AnyOrigin."""
+    """Legacy option; generated C pointers use UntrackedOrigin. Pointer lifetimes remain caller-owned."""

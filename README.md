@@ -14,7 +14,7 @@ correctly.
 
 - Python 3.14+
 - a system `libclang` compatible with the `libclang` Python wheel
-- a Mojo 1.0+ toolchain if you want to build or run the generated bindings
+- a Mojo 1.2+ toolchain (1.x) to build or run generated bindings
 
 ## Installation
 
@@ -151,8 +151,9 @@ Current support includes:
 - **Callbacks and function pointers:** callback typedefs, function-pointer
   fields, and function-pointer parameters and returns are preserved in Mojo via
   emitted `comptime` callback declarations and synthesized aliases when needed.
-- **Functions:** thin wrappers are generated for non-variadic functions under
-  both `external_call` and `owned_dl_handle` link modes.
+- **Functions:** thin wrappers are generated under both link modes. Dynamic calls
+  use public, owner-borrowing `OwnedDLHandle` callables. Checked variadic wrappers
+  are available in `external_call` mode.
 - **Globals and constants:** because Mojo does not currently expose native C
   globals directly, supported globals map through generated `GlobalVar` /
   `GlobalConst` helper structs with synthesized `load()` / `store()` methods;
@@ -171,8 +172,9 @@ verify emitted layouts and symbols against your target toolchain.
 - **Macros:** function-like macros, predefined macros, and more complex
   preprocessor behavior are preserved but usually emitted as comments for
   end-user review.
-- **Variadics:** variadic C functions are not wrapped as callable thin-FFI
-  bindings yet and are emitted as comment stubs.
+- **Variadics:** direct-call wrappers require exact declared types for the fixed
+  prefix and explicitly promoted C types for the tail. Dynamic-mode variadics
+  remain comment stubs because `OwnedDLHandle` has no variadic ABI metadata.
 - **Non-prototype / K&R-style functions:** older C declaration styles are only
   partially modeled and should be treated with caution.
 - **Records with hostile layouts:** some packed, ABI-sensitive, or otherwise
@@ -184,7 +186,10 @@ verify emitted layouts and symbols against your target toolchain.
   record surface.
 - **Atomics:** atomic support is conservative. Representable atomic fields and
   pointer-based usage work, but atomic globals are still emitted as stubs and
-  some surfaces require manual handling.
+  some surfaces require manual handling. Bindings use `Atomic[T]`; incompatible
+  atomic storage is opaque and is never silently treated as non-atomic storage.
+- **By-value returns:** a mapped return type must be `RegisterPassable`. Returns
+  containing fixed arrays or opaque storage are emitted as diagnostic stubs.
 - **Linkage and compiler edge cases:** `inline`, compiler-specific linkage
   hints, and other extension-heavy cases can still require manual review and
   may lead to symbol mismatches at runtime.

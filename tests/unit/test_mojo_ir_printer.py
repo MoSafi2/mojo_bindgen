@@ -320,8 +320,8 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
     assert "comptime ERROR = Flags(c_int(2))" in out
     assert 'comptime Widget_handler_cb = def (arg0: c_int) thin abi("C") -> c_int' in out
     assert "var handler: Widget_handler_cb" in out
-    assert "def enabled(self) -> Bool:" in out
-    assert "def set_enabled(mut self, value: Bool):" in out
+    assert "def enabled(self: Self) -> Bool:" in out
+    assert "def set_enabled(mut self: Self, value: Bool):" in out
     assert "comptime Packet = UnsafeUnion[c_int, Widget]" in out
     assert "comptime LIMIT = (1 + 2)" in out
     assert (
@@ -374,14 +374,14 @@ def test_render_bitfield_accessors_branch_on_target_endianness_comptime() -> Non
     normalized = normalize_mojo_module(module)
     assert normalized.dependencies.imports == [
         ModuleImport(module="std.ffi", names=["external_call", "c_uint"]),
-        ModuleImport(module="std.sys.info", names=["is_big_endian"]),
+        ModuleImport(module="std.sys.info", names=["Endian"]),
     ]
 
     rendered = render_mojo_module(normalized, MojoIRPrintOptions(module_comment=False))
 
-    assert "from std.sys.info import is_big_endian" in rendered
+    assert "from std.sys.info import Endian" in rendered
     assert "is_little_endian" not in rendered
-    assert "comptime if is_big_endian():" in rendered
+    assert "comptime if Endian.native() == Endian.big:" in rendered
     assert "else:" in rendered
     assert "self.__bf0 >> 0" in rendered
     assert "self.__bf0 >> 1" in rendered
@@ -537,9 +537,9 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
     assert normalized.dependencies.imports == [
         ModuleImport(
             module="std.ffi",
-            names=["OwnedDLHandle", "_DLHandle", "_Global", "_find_dylib", "_get_global", "c_int"],
+            names=["OwnedDLHandle", "_Global", "c_int"],
         ),
-        ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
+        ModuleImport(module="std.sys.info", names=["CompilationTarget", "platform_map"]),
         ModuleImport(module="std.os", names=["abort", "getenv"]),
         ModuleImport(module="std.pathlib", names=["Path"]),
     ]
@@ -588,16 +588,12 @@ def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() ->
             module="std.ffi",
             names=[
                 "external_call",
-                "DEFAULT_RTLD",
                 "OwnedDLHandle",
-                "_DLHandle",
                 "_Global",
-                "_get_global",
                 "c_int",
             ],
         ),
         ModuleImport(module="std.sys.info", names=["size_of"]),
-        ModuleImport(module="std.memory.unsafe_pointer", names=["unsafe_cast"]),
         ModuleImport(module="std.os", names=["abort"]),
     ]
     assert normalized.dependencies.support_decls == [
@@ -633,11 +629,8 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
     assert 'comptime _BINDGEN_LIB_PATH_ENV = "MOJO_BINDGEN_DEMO_LIBRARY_PATH"' in rendered
     assert 'comptime _BINDGEN_GENERIC_LIB_PATH_ENV = "MOJO_BINDGEN_LIBRARY_PATH"' in rendered
     assert "def _bindgen_env_path(name: String) -> String:" in rendered
-    assert "def _bindgen_pixi_env_lib_path(subdir: String) -> String:" in rendered
-    assert (
-        "def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String) -> None:"
-        in rendered
-    )
+    assert 'var project_root = _bindgen_env_path("PIXI_PROJECT_ROOT")' in rendered
+    assert "def _bindgen_append_dylib_candidate(mut paths: List[Path], path: String):" in rendered
     assert 'if path != "":' in rendered
     assert "paths.append(Path(path))" in rendered
     assert "def _bindgen_dylib_candidates() -> List[Path]:" in rendered
@@ -650,17 +643,12 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
         "_bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))" in rendered
     )
     assert "_BINDGEN_LIB_PATH_CANDIDATE" in rendered
-    assert (
-        '_bindgen_prefix_lib_path("CONDA_PREFIX", "lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")'
-        in rendered
-    )
-    assert '_bindgen_pixi_env_lib_path("lib/lib" + String(_BINDGEN_LINK_NAME) + ".so")' in rendered
-    assert '"lib" + String(_BINDGEN_LINK_NAME) + ".dylib"' in rendered
-    assert '"/opt/homebrew/lib/lib" + String(_BINDGEN_LINK_NAME) + ".dylib"' in rendered
-    assert '"/usr/lib/x86_64-linux-gnu/lib" + String(_BINDGEN_LINK_NAME) + ".so.1"' in rendered
-    assert "var paths = _bindgen_dylib_candidates()" in rendered
-    assert "return _find_dylib[_BINDGEN_LIB_NAME](paths)" in rendered
-    assert "def _bindgen_dylib() -> _DLHandle:" in rendered
+    assert 'var prefix = _bindgen_env_path("CONDA_PREFIX")' in rendered
+    assert 'platform_map["shared library suffix", linux=".so", macos=".dylib"]()' in rendered
+    assert 'paths.append(Path("/opt/homebrew/lib/" + filename))' in rendered
+    assert "return OwnedDLHandle(path)" in rendered
+    assert "_find_dylib" not in rendered
+    assert "def _bindgen_dylib() -> Pointer[OwnedDLHandle, MutUntrackedOrigin]:" in rendered
 
 
 def test_render_owned_dl_handle_sanitizes_library_path_env_var() -> None:
@@ -723,8 +711,7 @@ def test_render_owned_dl_handle_function_local_does_not_collide_with_parameters(
         in rendered
     )
     assert (
-        "var _bindgen_c_fn_1 = _bindgen_function[def(execute_on_thread_cb, c_int) "
-        'thin abi("C") -> NoneType](StringSpan("execute_on_thread"))'
+        'var _bindgen_c_fn_1 = _bindgen_owner[].get_function[NoneType]("execute_on_thread")'
     ) in rendered
     assert "_bindgen_c_fn_1(fn_, _bindgen_c_fn)" in rendered
     assert "var fn_ =" not in rendered
@@ -965,8 +952,8 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
     assert "var __pad0: UInt32" in rendered
     assert "var storage: Array[UInt8, 5]" in rendered
     assert "var __bf0: c_uchar" in rendered
-    assert "def enabled(self) -> Bool:" in rendered
-    assert "def set_enabled(mut self, value: Bool):" in rendered
+    assert "def enabled(self: Self) -> Bool:" in rendered
+    assert "def set_enabled(mut self: Self, value: Bool):" in rendered
 
 
 @pytest.mark.skipif(shutil.which("pixi") is None, reason="requires pixi with mojo toolchain")
@@ -1111,7 +1098,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert "def _bindgen_dylib() -> _DLHandle:" in rendered
+    assert "def _bindgen_dylib() -> Pointer[OwnedDLHandle, MutUntrackedOrigin]:" in rendered
     assert "struct GlobalVar[T: Copyable & Deinitable, //, link: StaticString]:" in rendered
     assert 'def install(cb: binary_cb_t) abi("C") -> None:' in rendered
     assert "def load_widget() -> Pointer[Widget, MutUntrackedOrigin]:" in rendered

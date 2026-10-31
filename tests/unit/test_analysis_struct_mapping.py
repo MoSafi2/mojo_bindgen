@@ -12,7 +12,6 @@ from mojo_bindgen.ir import (
     BitfieldGroupMember,
     BuiltinType,
     ByteOrder,
-    DTypeArg,
     Field,
     Initializer,
     InitializerParam,
@@ -32,6 +31,7 @@ from mojo_bindgen.ir import (
     StructKind,
     StructRef,
     TargetABI,
+    TypeArg,
     UnsupportedType,
 )
 
@@ -81,7 +81,6 @@ def _context_for(*decls: Struct) -> StructMappingContext:
     record_map = {decl.decl_id: decl for decl in decls}
     return StructMappingContext(
         record_map=record_map,
-        target_abi=_abi(),
         type_mapper=MapTypePass(),
     )
 
@@ -115,7 +114,6 @@ def test_map_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
                 plain_fields=(PlainFieldFact(index=0, byte_offset=0, size_bytes=4, align_bytes=4),),
             )
         },
-        target_abi=_abi(),
         type_mapper=MapTypePass(),
     )
 
@@ -472,7 +470,9 @@ def test_map_struct_keeps_atomic_field_types_and_drops_traits() -> None:
     assert mapped.members[0] == StoredMember(
         index=0,
         name="counter",
-        type=ParametricType(base=ParametricBase.ATOMIC, args=[DTypeArg("DType.int32")]),
+        type=ParametricType(
+            base=ParametricBase.ATOMIC, args=[TypeArg(BuiltinType(MojoBuiltin.C_INT))]
+        ),
         byte_offset=0,
     )
 

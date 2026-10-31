@@ -429,9 +429,9 @@ class TypeLowerer:
         self.diagnostics.add_type_diag(
             "warning",
             t,
-            "_Atomic lowered to std.Atomic when the value is a representable scalar dtype, otherwise falls back to the underlying non-atomic type",
+            "_Atomic uses Atomic[T] for layout-compatible scalars; unsupported atomic storage remains opaque",
         )
-        return AtomicType(value_type=inner)
+        return AtomicType(value_type=inner, size_bytes=_safe_size(t), align_bytes=_safe_align(t))
 
     def _lower_atomic_value_type(self, t: cx.Type, ctx: TypeContext) -> Type:
         spelling = t.spelling.strip()

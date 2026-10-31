@@ -552,7 +552,7 @@ def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_pa
     assert payload.fields[0].type.canonical.count == 4
 
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-    assert "from std.builtin.simd import SIMD" in out
+    assert "from std.simd import SIMD" in out
     assert "comptime vet_float4 = SIMD[DType.float32, 4]" in out
 
 

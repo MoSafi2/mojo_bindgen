@@ -370,6 +370,20 @@ class NormalizeMojoModulePass:
 
         for decl in decls:
             if isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.WRAPPER:
+                if decl.num_fixed_args is not None:
+                    self._record_support_decl(SupportDeclKind.VARIADIC_HELPERS)
+                    self._record_import("std.reflection", "reflect")
+                    self._record_import("std.os", "abort")
+                    self._record_import(
+                        "std.ffi",
+                        "c_int",
+                        "c_uint",
+                        "c_long",
+                        "c_ulong",
+                        "c_long_long",
+                        "c_ulong_long",
+                        "c_double",
+                    )
                 if decl.call_target.link_mode == LinkMode.OWNED_DL_HANDLE:
                     self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
             elif isinstance(decl, GlobalDecl) and decl.kind == GlobalKind.WRAPPER:
@@ -377,17 +391,12 @@ class NormalizeMojoModulePass:
                 self._record_support_decl(SupportDeclKind.DL_HANDLE_HELPERS)
 
         if SupportDeclKind.DL_HANDLE_HELPERS in self._support_decl_kinds:
-            ffi_imports = ["OwnedDLHandle", "_DLHandle", "_Global", "_get_global"]
-            if self._module.link_mode == LinkMode.EXTERNAL_CALL:
-                ffi_imports.append("DEFAULT_RTLD")
-            else:
-                ffi_imports.append("_find_dylib")
-            self._record_import("std.ffi", *ffi_imports)
-            self._record_import("std.memory.unsafe_pointer", "unsafe_cast")
+            self._record_import("std.ffi", "OwnedDLHandle", "_Global")
             os_imports = ["abort"]
             if self._module.link_mode == LinkMode.OWNED_DL_HANDLE:
                 os_imports.append("getenv")
                 self._record_import("std.pathlib", "Path")
+                self._record_import("std.sys.info", "CompilationTarget", "platform_map")
             self._record_import("std.os", *os_imports)
 
         for decl in decls:
@@ -420,7 +429,7 @@ class NormalizeMojoModulePass:
             ordered_ffi.append("DEFAULT_RTLD")
         if "OwnedDLHandle" in ffi_names:
             ordered_ffi.append("OwnedDLHandle")
-        for private_name in ("_DLHandle", "_Global", "_find_dylib", "_get_global"):
+        for private_name in ("_Global",):
             if private_name in ffi_names:
                 ordered_ffi.append(private_name)
         if "UnsafeUnion" in ffi_names:
@@ -459,6 +468,7 @@ class NormalizeMojoModulePass:
         for kind in (
             SupportDeclKind.DL_HANDLE_HELPERS,
             SupportDeclKind.GLOBAL_SYMBOL_HELPERS,
+            SupportDeclKind.VARIADIC_HELPERS,
         ):
             if kind in self._support_decl_kinds:
                 ordered.append(SupportDecl(kind))
@@ -473,7 +483,7 @@ class NormalizeMojoModulePass:
                 if isinstance(member, StoredMember):
                     self._collect_type_imports(member.type)
                 elif isinstance(member, BitfieldGroupMember):
-                    self._record_import("std.sys.info", "is_big_endian")
+                    self._record_import("std.sys.info", "Endian")
                     self._collect_type_imports(member.storage_type)
                     for field in member.fields:
                         self._collect_type_imports(field.logical_type)
@@ -551,7 +561,7 @@ class NormalizeMojoModulePass:
             return
         if isinstance(t, ParametricType):
             if t.base.value == "SIMD":
-                self._record_import("std.builtin.simd", "SIMD")
+                self._record_import("std.simd", "SIMD")
             elif t.base.value == "ComplexSIMD":
                 self._record_import("std.complex", "ComplexSIMD")
             elif t.base.value == "Atomic":

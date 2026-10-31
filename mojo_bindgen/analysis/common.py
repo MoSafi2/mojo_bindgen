@@ -8,7 +8,7 @@ _MOJO_RESERVED = frozenset(
     """
     def struct fn var let inout out mut ref copy owned deinit self Self import from as
     pass return raise raises try except finally with if elif else for while break continue
-    and or not is in del alias comptime True False None
+    and or not is in del alias comptime True False None imm read thin abi match case where std
     """.split()
 )
 
