@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok
+from mojo_bindgen.analysis.facts.bitfield_layout import BitfieldRunLayout
 from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts, analyze_record_layout
 from mojo_bindgen.analysis.facts.record_storage import (
     RecordStorageFacts,
@@ -25,6 +26,7 @@ from mojo_bindgen.ir import (
     BitfieldGroupMember,
     Initializer,
     InitializerParam,
+    MojoType,
     OpaqueStorageMember,
     PaddingMember,
     ParametricBase,
@@ -85,21 +87,25 @@ def map_struct(decl: Struct, *, context: StructMappingContext) -> StructDecl:
     return StructDecl(
         name=record_name(decl),
         kind=StructKind.PLAIN,
-        traits=[],
+        traits=(),
         align=align,
         align_decorator=align_decorator,
         fieldwise_init=False,
-        members=_build_members(decl, facts, plain_fields, mapped_bitfield_groups),
-        initializers=_build_initializers(
-            facts,
-            mapped_bitfield_groups,
-            uses_opaque_storage=False,
+        members=tuple(_build_members(decl, facts, plain_fields, mapped_bitfield_groups)),
+        initializers=tuple(
+            _build_initializers(
+                facts,
+                mapped_bitfield_groups,
+                uses_opaque_storage=False,
+            )
         ),
         flexible_tail=storage.flexible_tail,
-        diagnostics=_build_diagnostics(
-            facts.layout_problems,
-            diagnostic_notes=diagnostic_notes,
-            fallback_reasons=(),
+        diagnostics=tuple(
+            _build_diagnostics(
+                facts.layout_problems,
+                diagnostic_notes=diagnostic_notes,
+                fallback_reasons=(),
+            )
         ),
         doc=decl.doc,
     )
@@ -199,13 +205,15 @@ def _map_bitfield_groups(
                 byte_offset=run_layout.byte_offset,
                 first_index=run_layout.first_index,
                 storage_width_bits=run_layout.storage_width_bits,
-                fields=mapped_fields,
+                fields=tuple(mapped_fields),
             )
         )
     return mapped_bitfield_groups, tuple(fallback_reasons)
 
 
-def _map_bitfield_storage(run_layout, *, context: StructMappingContext):
+def _map_bitfield_storage(
+    run_layout: BitfieldRunLayout, *, context: StructMappingContext
+) -> tuple[MojoType | None, str | None]:
     return try_map_type(
         context.type_mapper,
         run_layout.unsigned_storage_type,
@@ -215,7 +223,7 @@ def _map_bitfield_storage(run_layout, *, context: StructMappingContext):
 
 
 def _map_bitfield_fields(
-    run_layout,
+    run_layout: BitfieldRunLayout,
     *,
     context: StructMappingContext,
 ) -> tuple[list[BitfieldField], tuple[str, ...]]:
@@ -264,13 +272,14 @@ def _record_storage(
                 record,
                 record_map=context.record_map,
             )
-    context.record_layouts = layouts
-    context.record_storage = analyze_record_storage_facts(
+    storage = analyze_record_storage_facts(
         context.record_map,
         layouts,
         type_mapper=context.type_mapper,
     )
-    return context.record_storage[decl.decl_id]
+    context.record_layouts = layouts
+    context.record_storage = storage
+    return storage[decl.decl_id]
 
 
 def _build_members(
@@ -349,14 +358,14 @@ def _build_initializers(
         for group in mapped_bitfield_groups
         for member in sorted(group.fields, key=lambda item: item.index)
     ]
-    initializers = [Initializer(params=[])]
+    initializers = [Initializer(params=())]
     if named_members:
         initializers.append(
             Initializer(
-                params=[
+                params=tuple(
                     InitializerParam(name=member.name, type=member.logical_type)
                     for member in named_members
-                ]
+                )
             )
         )
     return initializers
@@ -366,13 +375,13 @@ def _incomplete_struct_decl(decl: Struct) -> StructDecl:
     return StructDecl(
         name=record_name(decl),
         kind=StructKind.OPAQUE,
-        traits=[],
+        traits=(),
         align=None,
         align_decorator=None,
         fieldwise_init=False,
-        members=[],
-        initializers=[],
-        diagnostics=[],
+        members=(),
+        initializers=(),
+        diagnostics=(),
         doc=decl.doc,
     )
 
@@ -388,16 +397,18 @@ def _opaque_storage_struct_decl(
     return StructDecl(
         name=record_name(decl),
         kind=StructKind.PLAIN,
-        traits=[],
+        traits=(),
         align=align,
         align_decorator=align_decorator,
         fieldwise_init=False,
-        members=[OpaqueStorageMember(name="storage", size_bytes=facts.size_bytes)],
-        initializers=[],
-        diagnostics=_build_diagnostics(
-            facts.layout_problems,
-            diagnostic_notes=diagnostic_notes,
-            fallback_reasons=fallback_reasons,
+        members=(OpaqueStorageMember(name="storage", size_bytes=facts.size_bytes),),
+        initializers=(),
+        diagnostics=tuple(
+            _build_diagnostics(
+                facts.layout_problems,
+                diagnostic_notes=diagnostic_notes,
+                fallback_reasons=fallback_reasons,
+            )
         ),
         doc=decl.doc,
     )

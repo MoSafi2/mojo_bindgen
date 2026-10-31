@@ -61,20 +61,14 @@ class MapUnitPass:
         decl_mapping = UnitDeclMapper(session)
         mapped_decls = self._synth_external_typedef_aliases(context, type_mapper)
         for decl in unit.decls:
-            mapped = decl_mapping.map_decl(decl)
-            if mapped is None:
-                continue
-            if isinstance(mapped, list):
-                mapped_decls.extend(mapped)
-            else:
-                mapped_decls.append(mapped)
+            mapped_decls.extend(decl_mapping.map_decl(decl))
         return MojoModule(
             source_header=unit.source_header,
             library=unit.library,
             link_name=unit.link_name,
             link_mode=_link_mode_for_options(self._options),
             library_path_hint=self._options.library_path_hint,
-            decls=mapped_decls,
+            decls=tuple(mapped_decls),
         )
 
     def _synth_external_typedef_aliases(

@@ -5,9 +5,13 @@
   "decls": [
     {
       "kind": "Struct",
-      "name": "bfw_flags",
+      "fields": {
+        "name": "bfw_flags"
+      },
       "attrs": {
-        "size_bytes": 8
+        "fields": {
+          "size_bytes": 8
+        }
       }
     }
   ],
@@ -15,36 +19,48 @@
     {
       "selector": {
         "kind": "Struct",
-        "name": "bfw_flags"
+        "fields": {
+          "name": "bfw_flags"
+        }
       },
-      "path": "fields.0",
+      "path": "fields.fields.0",
       "attrs": {
-        "is_bitfield": true,
-        "bit_width": 1
+        "fields": {
+          "is_bitfield": true,
+          "bit_width": 1
+        }
       }
     },
     {
       "selector": {
         "kind": "Struct",
-        "name": "bfw_flags"
+        "fields": {
+          "name": "bfw_flags"
+        }
       },
-      "path": "fields.1",
+      "path": "fields.fields.1",
       "attrs": {
-        "is_bitfield": true,
-        "is_anonymous": true,
-        "bit_width": 0
+        "fields": {
+          "is_bitfield": true,
+          "is_anonymous": true,
+          "bit_width": 0
+        }
       }
     },
     {
       "selector": {
         "kind": "Struct",
-        "name": "bfw_flags"
+        "fields": {
+          "name": "bfw_flags"
+        }
       },
-      "path": "fields.2",
+      "path": "fields.fields.2",
       "attrs": {
-        "is_bitfield": true,
-        "bit_width": 5,
-        "byte_offset": 4
+        "fields": {
+          "is_bitfield": true,
+          "bit_width": 5,
+          "byte_offset": 4
+        }
       }
     }
   ]

@@ -6,44 +6,68 @@
   "decls": [
     {
       "kind": "GlobalVar",
-      "name": "global_counter",
+      "fields": {
+        "name": "global_counter"
+      },
       "attrs": {
-        "is_const": false
+        "fields": {
+          "is_const": false
+        }
       }
     },
     {
       "kind": "GlobalVar",
-      "name": "global_name",
+      "fields": {
+        "name": "global_name"
+      },
       "attrs": {
-        "is_const": false
+        "fields": {
+          "is_const": false
+        }
       }
     },
     {
       "kind": "MacroDecl",
-      "name": "DEFAULT_LIMIT",
+      "fields": {
+        "name": "DEFAULT_LIMIT"
+      },
       "attrs": {
-        "macro_kind": "object_like_supported"
+        "fields": {
+          "kind": "object_like_supported"
+        }
       }
     },
     {
       "kind": "MacroDecl",
-      "name": "LIB_NAME",
+      "fields": {
+        "name": "LIB_NAME"
+      },
       "attrs": {
-        "macro_kind": "object_like_supported"
+        "fields": {
+          "kind": "object_like_supported"
+        }
       }
     },
     {
       "kind": "MacroDecl",
-      "name": "DEFAULT_ALIAS",
+      "fields": {
+        "name": "DEFAULT_ALIAS"
+      },
       "attrs": {
-        "macro_kind": "object_like_supported"
+        "fields": {
+          "kind": "object_like_supported"
+        }
       }
     },
     {
       "kind": "MacroDecl",
-      "name": "NULL_HANDLE",
+      "fields": {
+        "name": "NULL_HANDLE"
+      },
       "attrs": {
-        "macro_kind": "object_like_supported"
+        "fields": {
+          "kind": "object_like_supported"
+        }
       }
     }
   ],
@@ -51,56 +75,74 @@
     {
       "selector": {
         "kind": "GlobalVar",
-        "name": "global_name"
+        "fields": {
+          "name": "global_name"
+        }
       },
-      "path": "type",
+      "path": "fields.type",
       "attrs": {
-        "kind": "Pointer"
+        "kind": "CPointer"
       }
     },
     {
       "selector": {
         "kind": "GlobalVar",
-        "name": "global_name"
+        "fields": {
+          "name": "global_name"
+        }
       },
-      "path": "type.pointee",
+      "path": "fields.type.fields.pointee",
       "attrs": {
         "kind": "QualifiedType",
-        "qualifiers": {
-          "is_const": true
+        "fields": {
+          "qualifiers": {
+            "fields": {
+              "is_const": true
+            }
+          }
         }
       }
     },
     {
       "selector": {
         "kind": "MacroDecl",
-        "name": "LIB_NAME"
+        "fields": {
+          "name": "LIB_NAME"
+        }
       },
-      "path": "expr",
+      "path": "fields.expr",
       "attrs": {
         "kind": "StringLiteral",
-        "value": "bindgen"
+        "fields": {
+          "value": "bindgen"
+        }
       }
     },
     {
       "selector": {
         "kind": "MacroDecl",
-        "name": "DEFAULT_ALIAS"
+        "fields": {
+          "name": "DEFAULT_ALIAS"
+        }
       },
-      "path": "expr",
+      "path": "fields.expr",
       "attrs": {
         "kind": "IntLiteral",
-        "value": 42
+        "fields": {
+          "value": 42
+        }
       }
     },
     {
       "selector": {
         "kind": "MacroDecl",
-        "name": "NULL_HANDLE"
+        "fields": {
+          "name": "NULL_HANDLE"
+        }
       },
-      "path": "expr",
+      "path": "fields.expr",
       "attrs": {
-        "kind": "NullPtrLiteral"
+        "kind": "CNullPtrLiteral"
       }
     }
   ]

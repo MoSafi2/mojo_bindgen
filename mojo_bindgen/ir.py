@@ -1,38 +1,13 @@
 # pyright: reportUnsupportedDunderAll=false
-"""
-mojo-bindgen IR (intermediate representation) node definitions.
-
-IR node types (as Python classes / unions in this module):
-
-- Type nodes: `VoidType`, `IntType`, `FloatType`, `QualifiedType`, `AtomicType`,
-  `Pointer`, `Array`, `FunctionPtr`, `OpaqueRecordRef`, `UnsupportedType`,
-  `ComplexType`, `VectorType`, `StructRef`, `EnumRef`, `TypeRef`
-  (union alias: `Type`)
-- Constant-expression nodes: `IntLiteral`, `FloatLiteral`, `StringLiteral`,
-  `CharLiteral`, `NullPtrLiteral`, `RefExpr`, `UnaryExpr`, `BinaryExpr`, `CastExpr`,
-  `SizeOfExpr` (union alias: `ConstExpr`)
-- Declaration nodes: `Struct`, `Enum`, `Typedef`, `Function`, `Const`, `MacroDecl`,
-  `GlobalVar` (union alias: `Decl`)
-- Other: `TargetABI`, `IRDiagnostic`, `Unit`
-"""
+"""Immutable recursive CIR and MojoIR payloads. Debug codecs live in serde."""
 
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import (
-    Any,
-    ClassVar,
-    Literal,
-    Union,
-)
-
-from mojo_bindgen.serde import SerdeFieldSpec, SerDeMixin, SerdeSpec
+from typing import Literal, Union
 
 
-# Check for char and wchar_t in the IntKind enum
 class IntKind(StrEnum):
     """Discriminant for integer-like scalars and character-width integer types."""
 
@@ -76,7 +51,6 @@ _SIGNED_INT_KINDS = {
     IntKind.LONGLONG,
     IntKind.INT128,
 }
-
 _UNSIGNED_INT_KINDS = {
     IntKind.CHAR_U,
     IntKind.UCHAR,
@@ -86,28 +60,11 @@ _UNSIGNED_INT_KINDS = {
     IntKind.ULONGLONG,
     IntKind.UINT128,
 }
-
-
 UnsupportedTypeCategory = Literal[
-    "unexposed",
-    "vector",
-    "complex",
-    "block",
-    "objc",
-    "unsupported_extension",
-    "invalid",
-    "unknown",
+    "unexposed", "vector", "complex", "block", "objc", "unsupported_extension", "invalid", "unknown"
 ]
-# Categories for types recognized by the parser but not fully modeled.
-
-
 ArrayKind = Literal["fixed", "incomplete", "flexible", "variable"]
-# Array-shape categories that matter for ABI-faithful mapping.
-
 FamPattern = Literal["c99_empty", "gnu_zero"]
-# Flexible-tail field patterns recognized by parser record mapping.
-
-
 MacroDeclKind = Literal[
     "object_like_supported",
     "object_like_unsupported",
@@ -116,7 +73,6 @@ MacroDeclKind = Literal[
     "predefined",
     "invalid",
 ]
-# Classification of preserved preprocessor macro declarations.
 
 
 class PointerMutability(StrEnum):
@@ -136,7 +92,7 @@ class InlineDisposition(StrEnum):
 
 
 @dataclass(frozen=True)
-class DocComment(SerDeMixin):
+class DocComment:
     """Source documentation associated with a C declaration cursor."""
 
     text: str
@@ -152,33 +108,21 @@ class ByteOrder(StrEnum):
 
 
 @dataclass(frozen=True)
-class Qualifiers(SerDeMixin):
+class Qualifiers:
     """C type qualifiers preserved on pointee types and other referenced types."""
-
-    KIND: ClassVar[str | None] = None
 
     is_const: bool = False
     is_volatile: bool = False
     is_restrict: bool = False
 
 
-def _expect_kind(d: dict[str, Any], kind: str) -> None:
-    if d.get("kind") != kind:
-        raise ValueError(f"expected kind {kind!r}, got {d.get('kind')!r}")
-
-
-# ─────────────────────────────────────────────
-#  Type — recursive type tree
-# ─────────────────────────────────────────────
-
-
 @dataclass(frozen=True)
-class VoidType(SerDeMixin):
+class VoidType:
     """The unqualified C ``void`` type."""
 
 
 @dataclass(frozen=True)
-class IntType(SerDeMixin):
+class IntType:
     """Explicit integer-like scalar type with ABI width metadata."""
 
     int_kind: IntKind
@@ -188,7 +132,7 @@ class IntType(SerDeMixin):
 
 
 @dataclass(frozen=True)
-class FloatType(SerDeMixin):
+class FloatType:
     """Explicit floating-point scalar type with ABI width metadata."""
 
     float_kind: FloatKind
@@ -197,56 +141,49 @@ class FloatType(SerDeMixin):
 
 
 @dataclass(frozen=True)
-class QualifiedType(SerDeMixin):
+class QualifiedType:
     """A use-site application of C qualifiers to an underlying structural type."""
 
-    unqualified: Type
+    unqualified: CType
     qualifiers: Qualifiers = field(default_factory=Qualifiers)
 
 
 @dataclass(frozen=True)
-class AtomicType(SerDeMixin):
+class AtomicType:
     """A C11 ``_Atomic(T)`` wrapper around an underlying value type."""
 
-    SERDE = SerdeSpec(
-        fields={
-            "size_bytes": SerdeFieldSpec(omit_if_default=True),
-            "align_bytes": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
-    value_type: Type
+    value_type: CType
     size_bytes: int | None = None
     align_bytes: int | None = None
 
 
-@dataclass
-class Pointer(SerDeMixin):
+@dataclass(frozen=True)
+class CPointer:
     """
     T*.
     pointee=None means unqualified ``void*`` → emit OpaquePointer directly.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "size_bytes": SerdeFieldSpec(omit_if_default=True),
-            "align_bytes": SerdeFieldSpec(omit_if_default=True),
-            "mutability": SerdeFieldSpec(omit_if_default=True),
-            "origin": SerdeFieldSpec(omit_if_default=True),
-            "nullable": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
-    pointee: Type | None  # None == void*
+    pointee: CType | None
     size_bytes: int = 0
     align_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class MojoPointer:
+    """
+    T*.
+    pointee=None means unqualified ``void*`` → emit OpaquePointer directly.
+    """
+
+    pointee: MojoType | None
     mutability: PointerMutability = PointerMutability.MUT
     origin: PointerOrigin = PointerOrigin.EXTERNAL
     nullable: bool = False
 
 
-@dataclass
-class Array(SerDeMixin):
+@dataclass(frozen=True)
+class CArray:
     """
     Fixed-size, incomplete, flexible, or variable array.
 
@@ -255,77 +192,57 @@ class Array(SerDeMixin):
     incomplete array, or VLA-like construct.
     """
 
-    element: Type
+    element: CType
     size: int | None
     array_kind: ArrayKind = "fixed"
     size_bytes: int = 0
     align_bytes: int | None = None
 
 
-def _decode_function_ptr_params(raw: Any) -> list[Param]:
-    if not isinstance(raw, list):
-        raise TypeError(f"expected list, got {type(raw).__name__}")
-    params: list[Param] = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, dict):
-            raise TypeError(f"expected FunctionPtr parameter object, got {type(item).__name__}")
-        if "type" in item:
-            params.append(Param.from_json_dict({"kind": "Param", **item}))
-        else:
-            params.append(Param(name=f"arg{index}", type=type_from_json(item)))
-    return params
+@dataclass(frozen=True)
+class MojoArray:
+    """Resolved fixed-size target array, including modeled zero-length tails."""
+
+    element: MojoType
+    size: int
 
 
-@dataclass
-class FunctionPtr(SerDeMixin):
+@dataclass(frozen=True)
+class CFunctionPtr:
     """
     Function pointer type: ret (*)(p0, p1, ...).
     Full ret/params are retained for documentation and future tooling.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "params": SerdeFieldSpec(decoder=_decode_function_ptr_params),
-            "param_names": SerdeFieldSpec(omit_if_default=True),
-            "is_variadic": SerdeFieldSpec(omit_if_default=True),
-            "calling_convention": SerdeFieldSpec(omit_if_default=True),
-            "is_noreturn": SerdeFieldSpec(omit_if_default=True),
-            "size_bytes": SerdeFieldSpec(omit_if_default=True),
-            "align_bytes": SerdeFieldSpec(omit_if_default=True),
-            "thin": SerdeFieldSpec(omit_if_default=True),
-            "raises": SerdeFieldSpec(omit_if_default=True),
-            "abi": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
-    ret: Type
-    params: list[Param]
-    param_names: list[str] | None = None
+    ret: CType
+    params: tuple[CParam, ...]
+    param_names: tuple[str, ...] | None = None
     is_variadic: bool = False
     calling_convention: str | None = None
     is_noreturn: bool = False
     size_bytes: int = 0
     align_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class MojoFunctionPtr:
+    """Resolved callback signature and attributes used by Mojo emission."""
+
+    ret: MojoType
+    params: tuple[MojoParam, ...]
     abi: str = "C"
     thin: bool = True
     raises: bool = False
 
 
 @dataclass(frozen=True)
-class FunctionAttrs(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "inline_disposition": SerdeFieldSpec(omit_if_default=True),
-            "is_noreturn": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
+class FunctionAttrs:
     inline_disposition: InlineDisposition = InlineDisposition.NONE
     is_noreturn: bool = False
 
 
-@dataclass
-class OpaqueRecordRef(SerDeMixin):
+@dataclass(frozen=True)
+class OpaqueRecordRef:
     """Reference to a declared-but-incomplete struct or union type.
 
     This node represents intentionally opaque record handles such as
@@ -333,15 +250,6 @@ class OpaqueRecordRef(SerDeMixin):
     from :class:`UnsupportedType`, which means the parser saw a type it could
     not model faithfully.
     """
-
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "c_name": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "size_bytes": SerdeFieldSpec(omit_if_default=True),
-            "align_bytes": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
 
     decl_id: str
     name: str
@@ -351,8 +259,8 @@ class OpaqueRecordRef(SerDeMixin):
     align_bytes: int | None = None
 
 
-@dataclass
-class UnsupportedType(SerDeMixin):
+@dataclass(frozen=True)
+class UnsupportedType:
     """A type that the parser recognized but cannot model faithfully yet.
 
     Unlike :class:`OpaqueRecordRef`, this means the source type is known but
@@ -367,8 +275,8 @@ class UnsupportedType(SerDeMixin):
     align_bytes: int | None = None
 
 
-@dataclass
-class ComplexType(SerDeMixin):
+@dataclass(frozen=True)
+class ComplexType:
     """C complex scalar modeled as two primitive lanes.
 
     The element primitive captures the ABI lane type, while ``size_bytes``
@@ -380,15 +288,15 @@ class ComplexType(SerDeMixin):
     align_bytes: int | None = None
 
 
-@dataclass
-class VectorType(SerDeMixin):
+@dataclass(frozen=True)
+class VectorType:
     """SIMD or compiler-extension vector type.
 
     This preserves extension vector shapes as structured IR instead of
     collapsing them into unsupported opaque blobs.
     """
 
-    element: Type
+    element: CType
     count: int | None
     size_bytes: int
     is_ext_vector: bool = False
@@ -396,26 +304,18 @@ class VectorType(SerDeMixin):
 
 
 @dataclass(frozen=True)
-class StructRef(SerDeMixin):
+class StructRef:
     """
     Reference to a struct or union layout by name.
 
     Full :class:`Struct` definitions live only on :class:`Unit` as declarations;
-    field and parameter types use ``StructRef`` so :class:`Type` does not embed
+    field and parameter types use ``StructRef`` so :class:`CType` does not embed
     layouts. ``name`` and ``c_name`` are usually the same C tag; anonymous
     record bodies use a stable parent-scoped synthetic name from the parser.
 
     Unions carry ``is_union=True`` and ``size_bytes`` so the emitter can map
     by-value unions to ``Array[UInt8, size]`` without a separate lookup.
     """
-
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "size_bytes": SerdeFieldSpec(omit_if_default=True),
-            "align_bytes": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
 
     decl_id: str
     name: str
@@ -427,12 +327,8 @@ class StructRef(SerDeMixin):
 
 
 @dataclass(frozen=True)
-class EnumRef(SerDeMixin):
+class EnumRef:
     """Reference to a named enum declaration with its integer ABI type."""
-
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
-    )
 
     decl_id: str
     name: str
@@ -440,82 +336,54 @@ class EnumRef(SerDeMixin):
     underlying: IntType
 
 
-@dataclass
-class TypeRef(SerDeMixin):
+@dataclass(frozen=True)
+class TypeRef:
     """
     A named reference to a C typedef where the typedef name appears in a type
     position (parameter, field, pointer target, etc.).
 
-    ``canonical`` is the fully resolved :class:`Type` for ABI mapping; the
+    ``canonical`` is the fully resolved :class:`CType` for ABI mapping; the
     typedef ``name`` preserves the C API spelling for readable emission.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={"decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"])}
-    )
-
     decl_id: str
     name: str
-    canonical: Type
+    canonical: CType
 
 
-# ─────────────────────────────────────────────
-#  Decl — top-level declaration nodes
-# ─────────────────────────────────────────────
-
-
-@dataclass
-class Field(SerDeMixin):
+@dataclass(frozen=True)
+class Field:
     """One member of a struct or union."""
-
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "source_name": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "size_bytes": SerdeFieldSpec(omit_if_default=True),
-            "is_bitfield": SerdeFieldSpec(omit_if_default=True),
-            "bit_offset": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
-            "bit_width": SerdeFieldSpec(omit_when=lambda _v, obj: not obj.is_bitfield),
-            "fam_pattern": SerdeFieldSpec(omit_if_default=True),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
 
     name: str
     source_name: str
-    type: Type
-    byte_offset: int  # from clang Type.get_offset(field_name) // 8
+    type: CType
+    byte_offset: int
     size_bytes: int = 0
     is_anonymous: bool = False
     is_bitfield: bool = False
-    """If True, ``type`` is the backing integer :class:`Primitive` only."""
+    "If True, ``type`` is the backing integer :class:`Primitive` only."
     bit_offset: int = 0
-    """Bit offset within the storage unit (from clang). Meaningful if ``is_bitfield``."""
+    "Bit offset within the storage unit (from clang). Meaningful if ``is_bitfield``."
     bit_width: int = 0
-    """Width in bits. Meaningful if ``is_bitfield``."""
+    "Width in bits. Meaningful if ``is_bitfield``."
     fam_pattern: FamPattern | None = None
-    """Flexible-tail pattern when this field is recognized as a FAM-style tail."""
+    "Flexible-tail pattern when this field is recognized as a FAM-style tail."
     doc: DocComment | None = None
 
 
-@dataclass
-class Struct(SerDeMixin):
+@dataclass(frozen=True)
+class Struct:
     """
-    struct or union — always fully laid out.
+    Published struct or union, including valid incomplete forward declarations.
     is_union=True means all fields share offset 0; size is the largest member.
     Fields are in declaration order (clang cursor order).
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
     decl_id: str
-    name: str  # Mojo name
-    c_name: str  # original C name for cross-reference
-    fields: list[Field]
+    name: str
+    c_name: str
+    fields: tuple[Field, ...]
     size_bytes: int
     align_bytes: int
     is_union: bool = False
@@ -530,115 +398,177 @@ PRIMITIVES_KINDS = Union[IntKind, FloatKind, VoidType]
 
 
 @dataclass(frozen=True)
-class IntLiteral(SerDeMixin):
+class IntLiteral:
     """Integer constant expression leaf."""
 
     value: int
 
 
 @dataclass(frozen=True)
-class FloatLiteral(SerDeMixin):
+class CFloatLiteral:
     """Floating-point constant expression leaf, preserved as source text."""
 
-    value: str | float
+    spelling: str
 
 
 @dataclass(frozen=True)
-class StringLiteral(SerDeMixin):
+class MojoFloatLiteral:
+    """Mapped floating-point literal value."""
+
+    value: float
+
+
+@dataclass(frozen=True)
+class StringLiteral:
     """String-literal constant expression leaf without surrounding quotes."""
 
     value: str
 
 
 @dataclass(frozen=True)
-class CharLiteral(SerDeMixin):
+class CharLiteral:
     """Character-literal constant expression leaf without surrounding quotes."""
 
     value: str
 
 
 @dataclass(frozen=True)
-class NullPtrLiteral(SerDeMixin):
+class CNullPtrLiteral:
     """Null-pointer constant expression leaf."""
 
 
 @dataclass(frozen=True)
-class RefExpr(SerDeMixin):
+class CRefExpr:
     """Reference to another constant-like symbol in a constant expression."""
 
     name: str
 
 
 @dataclass(frozen=True)
-class UnaryExpr(SerDeMixin):
+class MojoRefExpr:
+    """Reference to another constant-like symbol in a constant expression."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class CUnaryExpr:
     """Unary constant expression such as ``-x`` or ``~x``."""
 
     op: str
-    operand: ConstExpr
+    operand: CConstExpr
 
 
 @dataclass(frozen=True)
-class BinaryExpr(SerDeMixin):
+class MojoUnaryExpr:
+    """Unary constant expression such as ``-x`` or ``~x``."""
+
+    op: str
+    operand: MojoConstExpr
+
+
+@dataclass(frozen=True)
+class CBinaryExpr:
     """Binary constant expression such as ``a | b`` or ``x << 2``."""
 
     op: str
-    lhs: ConstExpr
-    rhs: ConstExpr
+    lhs: CConstExpr
+    rhs: CConstExpr
 
 
 @dataclass(frozen=True)
-class CastExpr(SerDeMixin):
+class MojoBinaryExpr:
+    """Binary constant expression such as ``a | b`` or ``x << 2``."""
+
+    op: str
+    lhs: MojoConstExpr
+    rhs: MojoConstExpr
+
+
+@dataclass(frozen=True)
+class CCastExpr:
     """Cast applied inside a constant expression."""
 
-    target: Type
-    expr: ConstExpr
+    target: CType
+    expr: CConstExpr
 
 
 @dataclass(frozen=True)
-class SizeOfExpr(SerDeMixin):
+class MojoCastExpr:
+    """Cast applied inside a constant expression."""
+
+    target: MojoType
+    expr: MojoConstExpr
+
+
+@dataclass(frozen=True)
+class CSizeOfExpr:
     """``sizeof(T)`` constant expression."""
 
-    target: Type
+    target: CType
 
 
 @dataclass(frozen=True)
-class CallExpr(SerDeMixin):
+class MojoSizeOfExpr:
+    """``sizeof(T)`` constant expression."""
+
+    target: MojoType
+
+
+@dataclass(frozen=True)
+class CCallExpr:
     """Function-style constant expression such as enum constructor calls."""
 
-    callee: ConstExpr
-    args: list[ConstExpr] = field(default_factory=list)
+    callee: CConstExpr
+    args: tuple[CConstExpr, ...] = field(default_factory=tuple)
 
 
-type ConstExpr = Union[
+@dataclass(frozen=True)
+class MojoCallExpr:
+    """Function-style constant expression such as enum constructor calls."""
+
+    callee: MojoConstExpr
+    args: tuple[MojoConstExpr, ...] = field(default_factory=tuple)
+
+
+type CConstExpr = Union[
     IntLiteral,
-    FloatLiteral,
+    CFloatLiteral,
     StringLiteral,
     CharLiteral,
-    NullPtrLiteral,
-    RefExpr,
-    UnaryExpr,
-    BinaryExpr,
-    CastExpr,
-    SizeOfExpr,
-    CallExpr,
+    CNullPtrLiteral,
+    CRefExpr,
+    CUnaryExpr,
+    CBinaryExpr,
+    CCastExpr,
+    CSizeOfExpr,
+    CCallExpr,
 ]
-# Structured constant-expression subset used by macros, enums, and globals.
+type MojoConstExpr = Union[
+    IntLiteral,
+    MojoFloatLiteral,
+    StringLiteral,
+    CharLiteral,
+    MojoRefExpr,
+    MojoUnaryExpr,
+    MojoBinaryExpr,
+    MojoCastExpr,
+    MojoSizeOfExpr,
+    MojoCallExpr,
+]
 
 
-@dataclass
-class Enumerant(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
-
-    name: str  # Mojo-mapped constant name
-    c_name: str  # original C name
+@dataclass(frozen=True)
+class Enumerant:
+    name: str
+    c_name: str
     value: int
     enum_decl_id: str | None = None
     doc: DocComment | None = None
-    KIND: ClassVar[str | None] = None
 
 
-@dataclass
-class Enum(SerDeMixin):
+@dataclass(frozen=True)
+class Enum:
     """
     C enum mapped to a scalar type alias plus typed enumerator constants.
 
@@ -648,25 +578,18 @@ class Enum(SerDeMixin):
     ``underlying`` is always IntType (C enum base type is integer).
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
     decl_id: str
     name: str
     c_name: str
     underlying: IntType
-    enumerants: list[Enumerant]
-    alias_names: list[str] = field(default_factory=list)
+    enumerants: tuple[Enumerant, ...]
+    alias_names: tuple[str, ...] = field(default_factory=tuple)
     is_anonymous: bool = False
     doc: DocComment | None = None
 
 
-@dataclass
-class Typedef(SerDeMixin):
+@dataclass(frozen=True)
+class Typedef:
     """
     typedef <type> <name>.
 
@@ -677,62 +600,39 @@ class Typedef(SerDeMixin):
     inside compound positions (struct fields, function pointer signatures).
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "canonical": SerdeFieldSpec(missing_from=lambda d: d["aliased"]),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
     decl_id: str
     name: str
-    aliased: Type
-    canonical: Type
+    aliased: CType
+    canonical: CType
     doc: DocComment | None = None
 
 
-@dataclass
-class Param(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
-
-    name: str  # "" for anonymous params
-    type: Type
+@dataclass(frozen=True)
+class CParam:
+    name: str
+    type: CType
     doc: DocComment | None = None
-    KIND: ClassVar[str | None] = None
 
 
-@dataclass
-class Function(SerDeMixin):
+@dataclass(frozen=True)
+class MojoParam:
+    name: str
+    type: MojoType
+    doc: DocComment | None = None
+
+
+@dataclass(frozen=True)
+class Function:
     """
     Any top-level C function declaration.
     link_name is the actual symbol: may differ from name after NameMapper.
     is_variadic=True → emitted as a comment block, no body generated.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        field_order=(
-            "decl_id",
-            "name",
-            "link_name",
-            "ret",
-            "params",
-            "is_variadic",
-            "calling_convention",
-            "attrs",
-            "doc",
-        ),
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "attrs": SerdeFieldSpec(omit_if_default=True),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        },
-    )
-
-    name: str  # Mojo-mapped name (post NameMapper)
-    link_name: str  # original C symbol name (used in external_call)
-    ret: Type
-    params: list[Param]
+    name: str
+    link_name: str
+    ret: CType
+    params: tuple[CParam, ...]
     is_variadic: bool = False
     decl_id: str = ""
     calling_convention: str | None = None
@@ -740,8 +640,8 @@ class Function(SerDeMixin):
     doc: DocComment | None = None
 
 
-@dataclass
-class Const(SerDeMixin):
+@dataclass(frozen=True)
+class Const:
     """
     Top-level C constant or macro-like declaration with an unevaluated or partly
     evaluated constant expression.
@@ -750,42 +650,33 @@ class Const(SerDeMixin):
     preserves the expression shape when full evaluation is not desirable.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
-
     name: str
-    type: Type
-    expr: ConstExpr
+    type: CType
+    expr: CConstExpr
     doc: DocComment | None = None
 
 
-@dataclass
-class MacroDecl(SerDeMixin):
+@dataclass(frozen=True)
+class MacroDecl:
     """Source-backed preprocessor macro preserved from the parsed translation unit.
 
     Macros are preserved even when their replacement list cannot be mapped to
-    the supported :class:`ConstExpr` subset. ``tokens`` keeps the original
+    the supported :class:`CConstExpr` subset. ``tokens`` keeps the original
     replacement spelling, while ``expr`` and ``type`` are populated only for
     macros the parser can structurally understand today.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "kind": SerdeFieldSpec(json_key="macro_kind"),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
     name: str
-    tokens: list[str]
+    tokens: tuple[str, ...]
     kind: MacroDeclKind
-    expr: ConstExpr | None = None
-    type: Type | None = None
+    expr: CConstExpr | None = None
+    type: CType | None = None
     diagnostic: str | None = None
     doc: DocComment | None = None
 
 
-@dataclass
-class GlobalVar(SerDeMixin):
+@dataclass(frozen=True)
+class GlobalVar:
     """Top-level variable declaration exposed by the bound library.
 
     This covers exported globals and ``extern const`` declarations that should
@@ -793,24 +684,17 @@ class GlobalVar(SerDeMixin):
     compile-time constant.
     """
 
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "decl_id": SerdeFieldSpec(missing_from=lambda d: d["name"]),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
     decl_id: str
     name: str
     link_name: str
-    type: Type
+    type: CType
     is_const: bool = False
-    initializer: ConstExpr | None = None
+    initializer: CConstExpr | None = None
     doc: DocComment | None = None
 
 
 @dataclass(frozen=True)
-class IRDiagnostic(SerDeMixin):
+class IRDiagnostic:
     """Parser-side note about a recognized construct that cannot be modeled fully."""
 
     severity: str
@@ -819,14 +703,11 @@ class IRDiagnostic(SerDeMixin):
     line: int | None = None
     col: int | None = None
     decl_id: str | None = None
-    KIND: ClassVar[str | None] = None
 
 
 @dataclass(frozen=True)
-class TargetABI(SerDeMixin):
+class TargetABI:
     """Target ABI facts derived from the Clang parse configuration."""
-
-    SERDE = SerdeSpec(fields={"target_triple": SerdeFieldSpec(omit_if_default=True)})
 
     pointer_size_bytes: int
     pointer_align_bytes: int
@@ -834,117 +715,19 @@ class TargetABI(SerDeMixin):
     target_triple: str | None = None
 
 
-type Decl = Union[
-    Function,
-    Struct,
-    Enum,
-    Typedef,
-    Const,
-    MacroDecl,
-    GlobalVar,
-]
+type Decl = Union[Function, Struct, Enum, Typedef, Const, MacroDecl, GlobalVar]
 
 
-@dataclass
-class Unit(SerDeMixin):
+@dataclass(frozen=True)
+class Unit:
     """One parsed header translation unit plus its declarations and diagnostics."""
 
     source_header: str
-    library: str  # e.g. "zlib"
-    link_name: str  # e.g. "z"  (used in DLHandle)
+    library: str
+    link_name: str
     target_abi: TargetABI
-    decls: list[Decl] = field(default_factory=list)
-    diagnostics: list[IRDiagnostic] = field(default_factory=list)
-
-    def to_json(self, *, indent: int | None = 2) -> str:
-        """Serialize this unit to a JSON string (default: indented for readability)."""
-        return json.dumps(self.to_json_dict(), indent=indent)
-
-
-_TYPE_FROM_JSON: dict[str, Callable[[dict[str, Any]], Type]] = {
-    "VoidType": VoidType.from_json_dict,
-    "IntType": IntType.from_json_dict,
-    "FloatType": FloatType.from_json_dict,
-    "QualifiedType": QualifiedType.from_json_dict,
-    "AtomicType": AtomicType.from_json_dict,
-    "Pointer": Pointer.from_json_dict,
-    "Array": Array.from_json_dict,
-    "FunctionPtr": FunctionPtr.from_json_dict,
-    "OpaqueRecordRef": OpaqueRecordRef.from_json_dict,
-    "UnsupportedType": UnsupportedType.from_json_dict,
-    "ComplexType": ComplexType.from_json_dict,
-    "VectorType": VectorType.from_json_dict,
-    "StructRef": StructRef.from_json_dict,
-    "EnumRef": EnumRef.from_json_dict,
-    "TypeRef": TypeRef.from_json_dict,
-}
-
-
-def type_from_json(d: dict[str, Any]) -> Type:
-    """Deserialize a JSON dict produced by :meth:`Type.to_json_dict` back to a :class:`Type`."""
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown Type kind: {kind!r}")
-    try:
-        deser = _TYPE_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown Type kind: {kind!r}") from None
-    return deser(d)
-
-
-_CONST_EXPR_FROM_JSON: dict[str, Callable[[dict[str, Any]], ConstExpr]] = {
-    "IntLiteral": IntLiteral.from_json_dict,
-    "FloatLiteral": FloatLiteral.from_json_dict,
-    "StringLiteral": StringLiteral.from_json_dict,
-    "CharLiteral": CharLiteral.from_json_dict,
-    "NullPtrLiteral": NullPtrLiteral.from_json_dict,
-    "RefExpr": RefExpr.from_json_dict,
-    "UnaryExpr": UnaryExpr.from_json_dict,
-    "BinaryExpr": BinaryExpr.from_json_dict,
-    "CastExpr": CastExpr.from_json_dict,
-    "SizeOfExpr": SizeOfExpr.from_json_dict,
-    "CallExpr": CallExpr.from_json_dict,
-}
-
-
-def const_expr_from_json(d: dict[str, Any]) -> ConstExpr:
-    """Deserialize one JSON-encoded constant-expression node."""
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown ConstExpr kind: {kind!r}")
-    try:
-        deser = _CONST_EXPR_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown ConstExpr kind: {kind!r}") from None
-    return deser(d)
-
-
-_DECL_FROM_JSON: dict[str, Callable[[dict[str, Any]], Decl]] = {
-    "Function": Function.from_json_dict,
-    "Struct": Struct.from_json_dict,
-    "Enum": Enum.from_json_dict,
-    "Typedef": Typedef.from_json_dict,
-    "Const": Const.from_json_dict,
-    "MacroDecl": MacroDecl.from_json_dict,
-    "GlobalVar": GlobalVar.from_json_dict,
-}
-
-
-def decl_from_json(d: dict[str, Any]) -> Decl:
-    """Deserialize a JSON dict produced by :meth:`Decl.to_json_dict` back to a :class:`Decl`."""
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown Decl kind: {kind!r}")
-    try:
-        deser = _DECL_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown Decl kind: {kind!r}") from None
-    return deser(d)
-
-
-# ─────────────────────────────────────────────
-#  Mojo-specific IR nodes
-# ─────────────────────────────────────────────
+    decls: tuple[Decl, ...] = field(default_factory=tuple)
+    diagnostics: tuple[IRDiagnostic, ...] = field(default_factory=tuple)
 
 
 class MojoBuiltin(StrEnum):
@@ -991,8 +774,6 @@ PRIMITIVE_BUILTINS: dict[IntKind | FloatKind | str, MojoBuiltin] = {
     FloatKind.LONG_DOUBLE: MojoBuiltin.C_DOUBLE,
     FloatKind.FLOAT128: MojoBuiltin.UNSUPPORTED,
 }
-
-
 _INT_DTYPE_TABLE: dict[tuple[bool, int], str] = {
     (True, 1): "DType.int8",
     (False, 1): "DType.uint8",
@@ -1005,15 +786,11 @@ _INT_DTYPE_TABLE: dict[tuple[bool, int], str] = {
     (True, 16): "DType.int128",
     (False, 16): "DType.uint128",
 }
-
-
 _FLOAT_DTYPE_TABLE: dict[FloatKind, str] = {
     FloatKind.FLOAT16: "DType.float16",
     FloatKind.FLOAT: "DType.float32",
     FloatKind.DOUBLE: "DType.float64",
 }
-
-
 _MOJO_INT_TYPES = (
     MojoBuiltin.INT8,
     MojoBuiltin.C_CHAR,
@@ -1032,7 +809,7 @@ _MOJO_INT_TYPES = (
 
 
 @dataclass(frozen=True)
-class PrimitiveDType(SerDeMixin):
+class PrimitiveDType:
     kind: IntKind | FloatKind
     signed: bool
     dtype: str
@@ -1063,16 +840,16 @@ class MappingSeverity(StrEnum):
 
 
 @dataclass(frozen=True)
-class MappingNote(SerDeMixin):
+class MappingNote:
     severity: MappingSeverity
     message: str
     category: str
 
 
 @dataclass(frozen=True)
-class ModuleImport(SerDeMixin):
+class ModuleImport:
     module: str
-    names: list[str]
+    names: tuple[str, ...]
 
 
 class SupportDeclKind(StrEnum):
@@ -1082,25 +859,18 @@ class SupportDeclKind(StrEnum):
 
 
 @dataclass(frozen=True)
-class SupportDecl(SerDeMixin):
+class SupportDecl:
     kind: SupportDeclKind
 
 
-@dataclass
-class ModuleDependencies(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "imports": SerdeFieldSpec(omit_if_default=True),
-            "support_decls": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
-    imports: list[ModuleImport] = field(default_factory=list)
-    support_decls: list[SupportDecl] = field(default_factory=list)
+@dataclass(frozen=True)
+class ModuleDependencies:
+    imports: tuple[ModuleImport, ...] = field(default_factory=tuple)
+    support_decls: tuple[SupportDecl, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
-class BuiltinType(SerDeMixin):
+class BuiltinType:
     name: MojoBuiltin
 
     @property
@@ -1109,7 +879,7 @@ class BuiltinType(SerDeMixin):
 
 
 @dataclass(frozen=True)
-class NamedType(SerDeMixin):
+class NamedType:
     name: str
 
 
@@ -1121,43 +891,43 @@ class ParametricBase(StrEnum):
 
 
 @dataclass(frozen=True)
-class DTypeArg(SerDeMixin):
+class DTypeArg:
     value: str
 
 
 @dataclass(frozen=True)
-class ConstArg(SerDeMixin):
+class ConstArg:
     value: int
 
 
 @dataclass(frozen=True)
-class NameArg(SerDeMixin):
+class NameArg:
     value: str
 
 
 @dataclass(frozen=True)
-class TypeArg(SerDeMixin):
-    type: Type
+class TypeArg:
+    type: MojoType
 
 
 type ParametricArg = Union[DTypeArg, ConstArg, NameArg, TypeArg]
 
 
-@dataclass
-class ParametricType(SerDeMixin):
+@dataclass(frozen=True)
+class ParametricType:
     base: ParametricBase
-    args: list[ParametricArg] = field(default_factory=list)
+    args: tuple[ParametricArg, ...] = field(default_factory=tuple)
 
 
-type Type = Union[
+type CType = Union[
     VoidType,
     IntType,
     FloatType,
     QualifiedType,
     AtomicType,
-    Pointer,
-    Array,
-    FunctionPtr,
+    CPointer,
+    CArray,
+    CFunctionPtr,
     OpaqueRecordRef,
     UnsupportedType,
     ComplexType,
@@ -1165,44 +935,39 @@ type Type = Union[
     StructRef,
     EnumRef,
     TypeRef,
-    BuiltinType,
-    NamedType,
-    ParametricType,
+]
+type MojoType = Union[
+    BuiltinType, NamedType, MojoPointer, MojoArray, MojoFunctionPtr, ParametricType
 ]
 
 
-# TODO: check if size is needed here
 @dataclass(frozen=True)
-class StoredMember(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
-
+class StoredMember:
     index: int
     name: str
-    type: Type
+    type: MojoType
     byte_offset: int
     doc: DocComment | None = None
 
 
 @dataclass(frozen=True)
-class PaddingMember(SerDeMixin):
+class PaddingMember:
     name: str
     size_bytes: int
     byte_offset: int
 
 
 @dataclass(frozen=True)
-class OpaqueStorageMember(SerDeMixin):
+class OpaqueStorageMember:
     name: str
     size_bytes: int
 
 
 @dataclass(frozen=True)
-class BitfieldField(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(fields={"doc": SerdeFieldSpec(omit_if_default=True)})
-
+class BitfieldField:
     index: int
     name: str
-    logical_type: Type
+    logical_type: MojoType
     bit_offset: int
     bit_width: int
     signed: bool
@@ -1210,46 +975,41 @@ class BitfieldField(SerDeMixin):
     doc: DocComment | None = None
 
 
-@dataclass
-class BitfieldGroupMember(SerDeMixin):
+@dataclass(frozen=True)
+class BitfieldGroupMember:
     storage_name: str
-    storage_type: Type
+    storage_type: MojoType
     byte_offset: int
     first_index: int
     storage_width_bits: int
-    fields: list[BitfieldField] = field(default_factory=list)
+    fields: tuple[BitfieldField, ...] = field(default_factory=tuple)
 
 
-type StructMember = Union[
-    StoredMember,
-    PaddingMember,
-    OpaqueStorageMember,
-    BitfieldGroupMember,
-]
+type StructMember = Union[StoredMember, PaddingMember, OpaqueStorageMember, BitfieldGroupMember]
 
 
 @dataclass(frozen=True)
-class ComptimeMember(SerDeMixin):
+class ComptimeMember:
     name: str
-    type_value: Type | None = None
-    const_value: ConstExpr | None = None
+    type_value: MojoType | None = None
+    const_value: MojoConstExpr | None = None
 
 
 @dataclass(frozen=True)
-class InitializerParam(SerDeMixin):
+class InitializerParam:
     name: str
-    type: Type
-
-
-@dataclass
-class Initializer(SerDeMixin):
-    params: list[InitializerParam] = field(default_factory=list)
+    type: MojoType
 
 
 @dataclass(frozen=True)
-class FlexibleTail(SerDeMixin):
+class Initializer:
+    params: tuple[InitializerParam, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class FlexibleTail:
     field_name: str
-    element_type: Type
+    element_type: MojoType
     pattern: str
     byte_offset: int
 
@@ -1282,48 +1042,31 @@ class AliasKind(StrEnum):
     MACRO_VALUE = "macro_value"
 
 
-@dataclass
-class StructDecl(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "kind": SerdeFieldSpec(json_key="struct_kind"),
-            "align_decorator": SerdeFieldSpec(omit_if_default=True),
-            "passability": SerdeFieldSpec(omit_if_default=True),
-            "flexible_tail": SerdeFieldSpec(omit_if_default=True),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
+@dataclass(frozen=True)
+class StructDecl:
     name: str
-    traits: list[StructTraits] = field(default_factory=list)
+    traits: tuple[StructTraits, ...] = field(default_factory=tuple)
     passability: MojoPassability = MojoPassability.MEMORY_ONLY
     align: int | None = None
     align_decorator: int | None = None
     fieldwise_init: bool = False
     kind: StructKind = StructKind.PLAIN
-    members: list[StructMember] = field(default_factory=list)
-    comptime_members: list[ComptimeMember] = field(default_factory=list)
-    initializers: list[Initializer] = field(default_factory=list)
+    members: tuple[StructMember, ...] = field(default_factory=tuple)
+    comptime_members: tuple[ComptimeMember, ...] = field(default_factory=tuple)
+    initializers: tuple[Initializer, ...] = field(default_factory=tuple)
     flexible_tail: FlexibleTail | None = None
-    diagnostics: list[MappingNote] = field(default_factory=list)
+    diagnostics: tuple[MappingNote, ...] = field(default_factory=tuple)
     doc: DocComment | None = None
 
 
-@dataclass
-class AliasDecl(SerDeMixin):
-    SERDE = SerdeSpec(
-        fields={
-            "kind": SerdeFieldSpec(json_key="alias_kind"),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
+@dataclass(frozen=True)
+class AliasDecl:
     name: str
     kind: AliasKind
-    type_value: Type | None = None
-    const_type: Type | None = None
-    const_value: ConstExpr | None = None
-    diagnostics: list[MappingNote] = field(default_factory=list)
+    type_value: MojoType | None = None
+    const_type: MojoType | None = None
+    const_value: MojoConstExpr | None = None
+    diagnostics: tuple[MappingNote, ...] = field(default_factory=tuple)
     doc: DocComment | None = None
 
     def has_payload(self) -> bool:
@@ -1337,187 +1080,81 @@ class AliasDecl(SerDeMixin):
 
 
 @dataclass(frozen=True)
-class CallTarget(SerDeMixin):
+class CallTarget:
     link_mode: LinkMode
     symbol: str
 
 
-@dataclass
-class FunctionDecl(SerDeMixin):
-    SERDE = SerdeSpec(
-        fields={
-            "kind": SerdeFieldSpec(json_key="function_kind"),
-            "attrs": SerdeFieldSpec(omit_if_default=True),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-            "num_fixed_args": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
+@dataclass(frozen=True)
+class FunctionDecl:
     name: str
     link_name: str
-    params: list[Param] = field(default_factory=list)
-    return_type: Type = field(default_factory=lambda: BuiltinType(MojoBuiltin.NONE))
+    params: tuple[MojoParam, ...] = field(default_factory=tuple)
+    return_type: MojoType = field(default_factory=lambda: BuiltinType(MojoBuiltin.NONE))
     kind: FunctionKind = FunctionKind.WRAPPER
     call_target: CallTarget = field(
         default_factory=lambda: CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="")
     )
     attrs: FunctionAttrs = field(default_factory=FunctionAttrs)
     num_fixed_args: int | None = None
-    diagnostics: list[MappingNote] = field(default_factory=list)
+    diagnostics: tuple[MappingNote, ...] = field(default_factory=tuple)
     doc: DocComment | None = None
 
 
-@dataclass
-class GlobalDecl(SerDeMixin):
-    SERDE = SerdeSpec(
-        fields={
-            "kind": SerdeFieldSpec(json_key="global_kind"),
-            "doc": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
+@dataclass(frozen=True)
+class GlobalDecl:
     name: str
     link_name: str
-    value_type: Type
+    value_type: MojoType
     is_const: bool = False
     kind: GlobalKind = GlobalKind.WRAPPER
-    diagnostics: list[MappingNote] = field(default_factory=list)
+    diagnostics: tuple[MappingNote, ...] = field(default_factory=tuple)
     doc: DocComment | None = None
 
 
-type MojoDecl = Union[
-    StructDecl,
-    AliasDecl,
-    FunctionDecl,
-    GlobalDecl,
-]
+type MojoDecl = Union[StructDecl, AliasDecl, FunctionDecl, GlobalDecl]
 
 
-@dataclass
-class MojoModule(SerDeMixin):
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec(
-        fields={
-            "library_path_hint": SerdeFieldSpec(omit_if_default=True),
-            "dependencies": SerdeFieldSpec(omit_if_default=True),
-        }
-    )
-
+@dataclass(frozen=True)
+class MojoModule:
     source_header: str
     library: str
     link_name: str
     link_mode: LinkMode
     library_path_hint: str | None = None
     dependencies: ModuleDependencies = field(default_factory=ModuleDependencies)
-    decls: list[MojoDecl] = field(default_factory=list)
+    decls: tuple[MojoDecl, ...] = field(default_factory=tuple)
 
-    def to_json(self, *, indent: int | None = 2) -> str:
-        return json.dumps(self.to_json_dict(), indent=indent)
-
-
-_PARAMETRIC_ARG_FROM_JSON: dict[str, Callable[[dict[str, object]], ParametricArg]] = {
-    "DTypeArg": DTypeArg.from_json_dict,
-    "ConstArg": ConstArg.from_json_dict,
-    "NameArg": NameArg.from_json_dict,
-    "TypeArg": TypeArg.from_json_dict,
-}
-
-
-def parametric_arg_from_json(d: dict[str, object]) -> ParametricArg:
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown ParametricArg kind: {kind!r}")
-    try:
-        deser = _PARAMETRIC_ARG_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown ParametricArg kind: {kind!r}") from None
-    return deser(d)
-
-
-_TYPE_FROM_JSON.update(
-    {
-        "BuiltinType": BuiltinType.from_json_dict,
-        "NamedType": NamedType.from_json_dict,
-        "ParametricType": ParametricType.from_json_dict,
-    }
-)
-
-
-_COMPTIME_MEMBER_FROM_JSON: dict[str, Callable[[dict[str, object]], ComptimeMember]] = {
-    "ComptimeMember": ComptimeMember.from_json_dict,
-}
-
-
-def comptime_member_from_json(d: dict[str, object]) -> ComptimeMember:
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown ComptimeMember kind: {kind!r}")
-    try:
-        deser = _COMPTIME_MEMBER_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown ComptimeMember kind: {kind!r}") from None
-    return deser(d)
-
-
-_STRUCT_MEMBER_FROM_JSON: dict[str, Callable[[dict[str, object]], StructMember]] = {
-    "StoredMember": StoredMember.from_json_dict,
-    "PaddingMember": PaddingMember.from_json_dict,
-    "OpaqueStorageMember": OpaqueStorageMember.from_json_dict,
-    "BitfieldGroupMember": BitfieldGroupMember.from_json_dict,
-}
-
-
-def struct_member_from_json(d: dict[str, object]) -> StructMember:
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown StructMember kind: {kind!r}")
-    try:
-        deser = _STRUCT_MEMBER_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown StructMember kind: {kind!r}") from None
-    return deser(d)
-
-
-_MOJO_DECL_FROM_JSON: dict[str, Callable[[dict[str, object]], MojoDecl]] = {
-    "StructDecl": StructDecl.from_json_dict,
-    "AliasDecl": AliasDecl.from_json_dict,
-    "FunctionDecl": FunctionDecl.from_json_dict,
-    "GlobalDecl": GlobalDecl.from_json_dict,
-}
-
-
-def mojo_decl_from_json(d: dict[str, object]) -> MojoDecl:
-    kind = d.get("kind")
-    if not isinstance(kind, str):
-        raise ValueError(f"unknown MojoDecl kind: {kind!r}")
-    try:
-        deser = _MOJO_DECL_FROM_JSON[kind]
-    except KeyError:
-        raise ValueError(f"unknown MojoDecl kind: {kind!r}") from None
-    return deser(d)
-
-
-type IRDecl = Union[Decl, MojoDecl]
 
 __all__ = [
     "AliasDecl",
     "AliasKind",
-    "Array",
     "ArrayKind",
     "AtomicType",
-    "BinaryExpr",
     "BitfieldField",
     "BitfieldGroupMember",
     "BuiltinType",
     "ByteOrder",
-    "CallExpr",
+    "CArray",
+    "CBinaryExpr",
+    "CCallExpr",
+    "CCastExpr",
+    "CConstExpr",
+    "CFloatLiteral",
+    "CFunctionPtr",
+    "CNullPtrLiteral",
+    "CParam",
+    "CPointer",
+    "CRefExpr",
+    "CSizeOfExpr",
+    "CType",
+    "CUnaryExpr",
     "CallTarget",
-    "CastExpr",
     "CharLiteral",
     "ComplexType",
     "ComptimeMember",
     "Const",
     "ConstArg",
-    "ConstExpr",
     "DTypeArg",
     "Decl",
     "DocComment",
@@ -1528,53 +1165,58 @@ __all__ = [
     "Field",
     "FlexibleTail",
     "FloatKind",
-    "FloatLiteral",
     "FloatType",
     "Function",
+    "FunctionAttrs",
     "FunctionDecl",
     "FunctionKind",
-    "FunctionPtr",
     "GlobalDecl",
     "GlobalKind",
     "GlobalVar",
-    "IRDecl",
     "IRDiagnostic",
     "Initializer",
     "InitializerParam",
+    "InlineDisposition",
     "IntKind",
     "IntLiteral",
     "IntType",
     "LinkMode",
-    "MappingNote",
-    "MappingSeverity",
     "MacroDecl",
     "MacroDeclKind",
+    "MappingNote",
+    "MappingSeverity",
     "ModuleDependencies",
     "ModuleImport",
+    "MojoArray",
+    "MojoBinaryExpr",
     "MojoBuiltin",
+    "MojoCallExpr",
+    "MojoCastExpr",
+    "MojoConstExpr",
     "MojoDecl",
+    "MojoFloatLiteral",
+    "MojoFunctionPtr",
     "MojoModule",
+    "MojoParam",
     "MojoPassability",
+    "MojoPointer",
+    "MojoRefExpr",
+    "MojoSizeOfExpr",
+    "MojoType",
+    "MojoUnaryExpr",
     "NameArg",
     "NamedType",
-    "NullPtrLiteral",
     "OpaqueRecordRef",
     "OpaqueStorageMember",
-    "PRIMITIVE_BUILTINS",
-    "PRIMITIVES_KINDS",
     "PaddingMember",
-    "Param",
     "ParametricArg",
     "ParametricBase",
     "ParametricType",
-    "Pointer",
     "PointerMutability",
     "PointerOrigin",
     "PrimitiveDType",
     "QualifiedType",
     "Qualifiers",
-    "RefExpr",
-    "SizeOfExpr",
     "StoredMember",
     "StringLiteral",
     "Struct",
@@ -1586,21 +1228,12 @@ __all__ = [
     "SupportDecl",
     "SupportDeclKind",
     "TargetABI",
-    "Type",
     "TypeArg",
     "TypeRef",
     "Typedef",
-    "UnaryExpr",
     "Unit",
     "UnsupportedType",
     "UnsupportedTypeCategory",
     "VectorType",
     "VoidType",
-    "comptime_member_from_json",
-    "const_expr_from_json",
-    "decl_from_json",
-    "mojo_decl_from_json",
-    "parametric_arg_from_json",
-    "struct_member_from_json",
-    "type_from_json",
 ]

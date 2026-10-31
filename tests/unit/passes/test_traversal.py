@@ -8,17 +8,17 @@ from mojo_bindgen.analysis.traversal import (
     iter_unit_typerefs,
 )
 from mojo_bindgen.ir import (
-    BinaryExpr,
     ByteOrder,
-    CastExpr,
+    CBinaryExpr,
+    CCastExpr,
     Const,
+    CParam,
+    CRefExpr,
+    CSizeOfExpr,
     Function,
     IntKind,
     IntLiteral,
     IntType,
-    Param,
-    RefExpr,
-    SizeOfExpr,
     TargetABI,
     TypeRef,
     Unit,
@@ -36,50 +36,32 @@ def _unit(*decls) -> Unit:
         library="test",
         link_name="test",
         target_abi=TargetABI(
-            pointer_size_bytes=8,
-            pointer_align_bytes=8,
-            byte_order=ByteOrder.LITTLE,
+            pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE
         ),
-        decls=list(decls),
+        decls=tuple(list(decls)),
     )
 
 
 def test_decl_id_uses_decl_ids_for_declarations_and_names_for_constants() -> None:
-    fn = Function(
-        decl_id="function:f",
-        name="f",
-        link_name="f",
-        ret=VoidType(),
-        params=[],
-    )
+    fn = Function(decl_id="function:f", name="f", link_name="f", ret=VoidType(), params=())
     const = Const(name="SIZE", type=_i32(), expr=IntLiteral(1))
-
     assert decl_id(fn) == "function:f"
     assert decl_id(const) == "SIZE"
 
 
 def test_const_expr_traversal_yields_types_and_symbol_refs() -> None:
-    expr = BinaryExpr(
+    expr = CBinaryExpr(
         op="+",
-        lhs=CastExpr(target=_i32(), expr=RefExpr("BASE")),
-        rhs=SizeOfExpr(target=TypeRef("typedef:Alias", "Alias", _i32())),
+        lhs=CCastExpr(target=_i32(), expr=CRefExpr("BASE")),
+        rhs=CSizeOfExpr(target=TypeRef("typedef:Alias", "Alias", _i32())),
     )
-
-    assert tuple(type(t).__name__ for t in iter_const_expr_types(expr)) == (
-        "IntType",
-        "TypeRef",
-    )
+    assert tuple(type(t).__name__ for t in iter_const_expr_types(expr)) == ("IntType", "TypeRef")
     assert tuple(ref.name for ref in iter_const_expr_refs(expr)) == ("BASE",)
 
 
 def test_decl_referenced_types_include_signature_and_const_expr_type_slots() -> None:
     alias = TypeRef("typedef:Alias", "Alias", _i32())
-    const = Const(
-        name="SIZE",
-        type=alias,
-        expr=SizeOfExpr(target=alias),
-    )
-
+    const = Const(name="SIZE", type=alias, expr=CSizeOfExpr(target=alias))
     assert tuple(type(t).__name__ for t in iter_decl_referenced_types(const)) == (
         "TypeRef",
         "TypeRef",
@@ -93,10 +75,9 @@ def test_iter_unit_typerefs_finds_type_refs_inside_const_expressions() -> None:
         name="f",
         link_name="f",
         ret=VoidType(),
-        params=[Param(name="x", type=alias)],
+        params=(CParam(name="x", type=alias),),
     )
-    const = Const(name="SIZE", type=_i32(), expr=SizeOfExpr(target=alias))
-
+    const = Const(name="SIZE", type=_i32(), expr=CSizeOfExpr(target=alias))
     assert tuple(ref.decl_id for ref in iter_unit_typerefs(_unit(fn, const))) == (
         "typedef:Alias",
         "typedef:Alias",

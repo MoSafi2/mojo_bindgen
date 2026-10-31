@@ -100,8 +100,8 @@ class ClangParser:
             library=session.library,
             link_name=session.link_name,
             target_abi=session.target_abi,
-            decls=decls,
-            diagnostics=self.diagnostics.to_ir_diagnostics(),
+            decls=tuple(decls),
+            diagnostics=tuple(self.diagnostics.to_ir_diagnostics()),
         )
 
     def _build_parser_session(self) -> ParseSession:
@@ -172,10 +172,7 @@ class ClangParser:
         completed_marker = 0
         for cursor in session.frontend.iter_translation_unit_cursors(session.tu):
             lowered = decl_lowerer.lower_top_level_decl(cursor)
-            if lowered is None:
-                continue
-            if isinstance(lowered, list):
-                decls.extend(lowered)
+            if not lowered:
                 continue
             if cursor.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
                 if cursor.is_definition() and cursor.spelling:
@@ -184,9 +181,9 @@ class ClangParser:
                     )
                     decls.extend(completed_records)
                 else:
-                    decls.append(lowered)
+                    decls.extend(lowered)
             else:
-                decls.append(lowered)
+                decls.extend(lowered)
         decls.extend(decl_lowerer.collect_macros())
 
         return decls

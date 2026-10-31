@@ -79,6 +79,24 @@ class RecordNaming:
     is_anonymous: bool
 
 
+@dataclass(frozen=True)
+class DeclaredRecord:
+    header: Struct
+
+
+@dataclass(frozen=True)
+class BuildingRecord:
+    header: Struct
+
+
+@dataclass(frozen=True)
+class CompletedRecord:
+    record: Struct
+
+
+type RecordState = DeclaredRecord | BuildingRecord | CompletedRecord
+
+
 @dataclass
 class RecordRegistry:
     """Record-scoped lookup, cache, and raw materialization service for one translation unit."""
@@ -86,7 +104,7 @@ class RecordRegistry:
     top_level_cursors_in_order: tuple[cx.Cursor, ...]
     record_definition_by_decl_id: dict[str, cx.Cursor]
     anonymous_record_name_by_decl_id: dict[str, str]
-    _records_by_decl_id: dict[str, Struct] = field(default_factory=dict)
+    _records_by_decl_id: dict[str, RecordState] = field(default_factory=dict)
     _definition_lowerer: Callable[[cx.Cursor], Struct] | None = None
 
     @classmethod
@@ -154,12 +172,36 @@ class RecordRegistry:
         return RecordNaming(name=synth, c_name=synth, is_anonymous=True)
 
     def get(self, decl_id: str) -> Struct | None:
-        """Return a cached lowered record definition when available."""
-        return self._records_by_decl_id.get(decl_id)
+        state = self._records_by_decl_id.get(decl_id)
+        return state.record if isinstance(state, CompletedRecord) else None
 
-    def store(self, struct: Struct) -> None:
-        """Store a lowered record definition by declaration id."""
-        self._records_by_decl_id[struct.decl_id] = struct
+    def reference(self, decl_id: str) -> StructRef | None:
+        state = self._records_by_decl_id.get(decl_id)
+        if state is None:
+            return None
+        record = state.record if isinstance(state, CompletedRecord) else state.header
+        return self.make_struct_ref(record)
+
+    def declare(self, header: Struct) -> None:
+        self._records_by_decl_id.setdefault(header.decl_id, DeclaredRecord(header))
+
+    def begin(self, header: Struct) -> RecordState | None:
+        prior = self._records_by_decl_id.get(header.decl_id)
+        if isinstance(prior, BuildingRecord):
+            raise RuntimeError(f"record {header.name!r} is already being built")
+        self._records_by_decl_id[header.decl_id] = BuildingRecord(header)
+        return prior
+
+    def publish(self, record: Struct) -> None:
+        if not record.is_complete:
+            raise ValueError("cannot publish an unfinished record definition")
+        self._records_by_decl_id[record.decl_id] = CompletedRecord(record)
+
+    def abort(self, decl_id: str, prior: RecordState | None) -> None:
+        if prior is None:
+            self._records_by_decl_id.pop(decl_id, None)
+        else:
+            self._records_by_decl_id[decl_id] = prior
 
     @staticmethod
     def make_struct_ref(struct: Struct) -> StructRef:

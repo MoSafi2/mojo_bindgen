@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from mojo_bindgen.analysis import (
@@ -10,15 +12,15 @@ from mojo_bindgen.analysis import (
 )
 from mojo_bindgen.ir import (
     ByteOrder,
+    CFunctionPtr,
+    CParam,
+    CRefExpr,
     EnumRef,
     Field,
     Function,
-    FunctionPtr,
     IntKind,
     IntType,
     MacroDecl,
-    Param,
-    RefExpr,
     Struct,
     StructRef,
     TargetABI,
@@ -30,11 +32,7 @@ from mojo_bindgen.ir import (
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _i32() -> IntType:
@@ -46,30 +44,26 @@ def test_analysis_context_classifies_aliases_and_builds_dependency_graph() -> No
     callback = Typedef(
         decl_id="typedef:callback_t",
         name="callback_t",
-        aliased=FunctionPtr(ret=VoidType(), params=[Param(name="value", type=i32)]),
-        canonical=FunctionPtr(ret=VoidType(), params=[Param(name="value", type=i32)]),
+        aliased=CFunctionPtr(ret=VoidType(), params=(CParam(name="value", type=i32),)),
+        canonical=CFunctionPtr(ret=VoidType(), params=(CParam(name="value", type=i32),)),
     )
     payload = Struct(
         decl_id="struct:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[Field(name="value", source_name="value", type=i32, byte_offset=0, size_bytes=4)],
+        fields=(Field(name="value", source_name="value", type=i32, byte_offset=0, size_bytes=4),),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-    external_ref = TypeRef(
-        decl_id="typedef:external_size",
-        name="external_size",
-        canonical=i32,
-    )
+    external_ref = TypeRef(decl_id="typedef:external_size", name="external_size", canonical=i32)
     function = Function(
         decl_id="fn:take",
         name="take",
         link_name="take",
         ret=VoidType(),
-        params=[
-            Param(
+        params=(
+            CParam(
                 name="payload",
                 type=StructRef(
                     decl_id=payload.decl_id,
@@ -79,21 +73,20 @@ def test_analysis_context_classifies_aliases_and_builds_dependency_graph() -> No
                     align_bytes=payload.align_bytes,
                 ),
             ),
-            Param(name="size", type=external_ref),
-        ],
+            CParam(name="size", type=external_ref),
+        ),
     )
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[callback, payload, function],
+        decls=(callback, payload, function),
     )
-
     context = build_analysis_context(unit)
-
-    assert context.alias_classification.aliases_by_decl_id[callback.decl_id].alias_class == (
-        AliasClass.CALLBACK
+    assert (
+        context.alias_classification.aliases_by_decl_id[callback.decl_id].alias_class
+        == AliasClass.CALLBACK
     )
     assert (
         context.alias_classification.external_aliases_by_decl_id[external_ref.decl_id].alias_class
@@ -107,27 +100,17 @@ def test_analysis_context_classifies_aliases_and_builds_dependency_graph() -> No
 
 def test_validate_references_rejects_missing_enum_refs() -> None:
     missing_enum = EnumRef(
-        decl_id="enum:Missing",
-        name="Missing",
-        c_name="Missing",
-        underlying=_i32(),
+        decl_id="enum:Missing", name="Missing", c_name="Missing", underlying=_i32()
     )
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
-            Function(
-                decl_id="fn:get",
-                name="get",
-                link_name="get",
-                ret=missing_enum,
-                params=[],
-            )
-        ],
+        decls=(
+            Function(decl_id="fn:get", name="get", link_name="get", ret=missing_enum, params=()),
+        ),
     )
-
     with pytest.raises(ReferenceValidationError, match="EnumRef"):
         ValidateReferencesPass().run(unit)
 
@@ -138,32 +121,29 @@ def test_dependency_graph_tracks_const_symbol_edges() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
-            Typedef(
-                decl_id="typedef:my_int",
-                name="my_int",
-                aliased=_i32(),
-                canonical=_i32(),
-            ),
+        decls=(
+            Typedef(decl_id="typedef:my_int", name="my_int", aliased=_i32(), canonical=_i32()),
             Function(
                 decl_id="fn:f",
                 name="f",
                 link_name="f",
                 ret=VoidType(),
-                params=[Param(name="x", type=_i32())],
+                params=(CParam(name="x", type=_i32()),),
             ),
-        ],
+        ),
     )
-    unit.decls.append(
-        MacroDecl(
-            name="ALIAS",
-            tokens=["OTHER"],
-            kind="object_like_supported",
-            expr=RefExpr("OTHER"),
-            type=_i32(),
-        )
+    unit = replace(
+        unit,
+        decls=(
+            *unit.decls,
+            MacroDecl(
+                name="ALIAS",
+                tokens=("OTHER",),
+                kind="object_like_supported",
+                expr=CRefExpr("OTHER"),
+                type=_i32(),
+            ),
+        ),
     )
-
     context = build_analysis_context(unit)
-
     assert context.dependency_graph.symbol_edges_by_decl_id["ALIAS"] == frozenset({"OTHER"})

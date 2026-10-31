@@ -7,23 +7,33 @@
   "decls": [
     {
       "kind": "Struct",
-      "name": "foo",
+      "fields": {
+        "name": "foo"
+      },
       "attrs": {
-        "is_complete": false,
-        "is_union": false
+        "fields": {
+          "is_complete": false,
+          "is_union": false
+        }
       }
     },
     {
       "kind": "Struct",
-      "name": "bar",
+      "fields": {
+        "name": "bar"
+      },
       "attrs": {
-        "is_complete": false,
-        "is_union": true
+        "fields": {
+          "is_complete": false,
+          "is_union": true
+        }
       }
     },
     {
       "kind": "Typedef",
-      "name": "foo_t",
+      "fields": {
+        "name": "foo_t"
+      },
       "attrs": {}
     }
   ],
@@ -31,24 +41,32 @@
     {
       "selector": {
         "kind": "Function",
-        "name": "open_foo"
+        "fields": {
+          "name": "open_foo"
+        }
       },
-      "path": "ret.pointee.canonical",
+      "path": "fields.ret.fields.pointee.fields.canonical",
       "attrs": {
         "kind": "StructRef",
-        "name": "foo"
+        "fields": {
+          "name": "foo"
+        }
       }
     },
     {
       "selector": {
         "kind": "Function",
-        "name": "peek_bar"
+        "fields": {
+          "name": "peek_bar"
+        }
       },
-      "path": "ret.pointee",
+      "path": "fields.ret.fields.pointee",
       "attrs": {
         "kind": "StructRef",
-        "name": "bar",
-        "is_union": true
+        "fields": {
+          "name": "bar",
+          "is_union": true
+        }
       }
     }
   ]

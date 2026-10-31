@@ -10,17 +10,20 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-from mojo_bindgen.analysis.facts.record_layout import RecordLayoutFacts
+from mojo_bindgen.analysis.facts.record_layout import PlainFieldFact, RecordLayoutFacts
 from mojo_bindgen.analysis.mojo.mapping_support import field_display_name, try_map_type
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
-    Array,
+    CArray,
+    CType,
+    Field,
     FlexibleTail,
+    MojoArray,
+    MojoType,
     QualifiedType,
     Struct,
     StructRef,
-    Type,
     TypeRef,
 )
 
@@ -74,14 +77,14 @@ def analyze_record_storage_facts(
     records_by_decl_id: dict[str, Struct],
     record_layouts: dict[str, RecordLayoutFacts],
     *,
-    type_mapper: MapTypePass | None = None,
+    type_mapper: MapTypePass,
 ) -> dict[str, RecordStorageFacts]:
     """Analyze every CIR record's Mojo storage eligibility."""
 
     analyzer = RecordStorageAnalyzer(
         records_by_decl_id=records_by_decl_id,
         record_layouts=record_layouts,
-        type_mapper=type_mapper or MapTypePass(),
+        type_mapper=type_mapper,
     )
     return {
         decl_id: analyzer.analyze_record(record) for decl_id, record in records_by_decl_id.items()
@@ -94,11 +97,11 @@ def analyze_record_storage(
     *,
     records_by_decl_id: dict[str, Struct] | None = None,
     record_layouts: dict[str, RecordLayoutFacts] | None = None,
-    type_mapper: MapTypePass | None = None,
+    type_mapper: MapTypePass,
 ) -> RecordStorageFacts:
     """Analyze one CIR record.
 
-    Direct callers can pass only ``record`` and ``layout`` for isolated tests;
+    Callers supply a mapper with fixed target queries;
     recursive by-value checks use the optional maps when available.
     """
 
@@ -107,7 +110,7 @@ def analyze_record_storage(
     return RecordStorageAnalyzer(
         records_by_decl_id=records,
         record_layouts=layouts,
-        type_mapper=type_mapper or MapTypePass(),
+        type_mapper=type_mapper,
     ).analyze_record(record)
 
 
@@ -291,8 +294,8 @@ class RecordStorageAnalyzer:
 
     def _nested_record_field_decision(
         self,
-        field,
-        field_fact,
+        field: Field,
+        field_fact: PlainFieldFact,
         facts: RecordLayoutFacts,
         *,
         active: set[str],
@@ -350,14 +353,14 @@ class RecordStorageAnalyzer:
 
 
 def _map_flexible_tail_metadata(
-    field,
+    field: Field,
     index: int,
     byte_offset: int,
-    mapped_type,
+    mapped_type: MojoType,
 ) -> tuple[FlexibleTail | None, str | None]:
-    if not isinstance(field.type, Array):
+    if not isinstance(field.type, CArray) or field.fam_pattern is None:
         return None, "flexible tail field did not map from an array type; opaque storage emitted"
-    if not isinstance(mapped_type, Array) or mapped_type.size != 0:
+    if not isinstance(mapped_type, MojoArray) or mapped_type.size != 0:
         return (
             None,
             f"field `{field_display_name(field, index)}` did not map to Array[..., 0]; "
@@ -374,7 +377,9 @@ def _map_flexible_tail_metadata(
     )
 
 
-def _direct_flexible_tail_decision(field, field_fact, mapped_type) -> ByValueEmbeddingDecision:
+def _direct_flexible_tail_decision(
+    field: Field, field_fact: PlainFieldFact, mapped_type: MojoType
+) -> ByValueEmbeddingDecision:
     direct_tail, tail_reason = _map_flexible_tail_metadata(
         field,
         field_fact.index,
@@ -387,8 +392,8 @@ def _direct_flexible_tail_decision(field, field_fact, mapped_type) -> ByValueEmb
 
 
 def _embedded_record_failure(
-    field,
-    field_fact,
+    field: Field,
+    field_fact: PlainFieldFact,
     ref: StructRef,
     decision: ByValueEmbeddingDecision,
 ) -> ByValueEmbeddingDecision:
@@ -408,8 +413,8 @@ def _embedded_record_failure(
 
 
 def _embedded_flexible_tail_decision(
-    field,
-    field_fact,
+    field: Field,
+    field_fact: PlainFieldFact,
     facts: RecordLayoutFacts,
     nested_tail_decisions: list[tuple[StructRef, ByValueEmbeddingDecision]],
 ) -> ByValueEmbeddingDecision:
@@ -441,7 +446,9 @@ def _embedded_flexible_tail_decision(
     )
 
 
-def _non_direct_flexible_tail_failure(field, field_fact) -> ByValueEmbeddingDecision:
+def _non_direct_flexible_tail_failure(
+    field: Field, field_fact: PlainFieldFact
+) -> ByValueEmbeddingDecision:
     return ByValueEmbeddingDecision(
         False,
         (
@@ -451,7 +458,7 @@ def _non_direct_flexible_tail_failure(field, field_fact) -> ByValueEmbeddingDeci
     )
 
 
-def _direct_embedded_struct_ref(t: Type) -> StructRef | None:
+def _direct_embedded_struct_ref(t: CType) -> StructRef | None:
     while True:
         if isinstance(t, QualifiedType):
             t = t.unqualified
@@ -467,7 +474,7 @@ def _direct_embedded_struct_ref(t: Type) -> StructRef | None:
 
 def _field_is_terminal_in_enclosing_record(
     facts: RecordLayoutFacts,
-    field_fact,
+    field_fact: PlainFieldFact,
 ) -> bool:
     field_end = field_fact.byte_offset + field_fact.size_bytes
     if any(
@@ -481,7 +488,7 @@ def _field_is_terminal_in_enclosing_record(
     return True
 
 
-def _embedded_struct_refs(t: Type) -> tuple[StructRef, ...]:
+def _embedded_struct_refs(t: CType) -> tuple[StructRef, ...]:
     return tuple(
         node
         for node in collect_type_nodes(

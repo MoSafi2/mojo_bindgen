@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.mojo.alias_mapping import map_typedef_alias
@@ -22,11 +23,9 @@ from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
     AtomicType,
-    CallExpr,
     CallTarget,
-    CastExpr,
     Const,
-    ConstExpr,
+    CType,
     Decl,
     Enum,
     Function,
@@ -40,11 +39,14 @@ from mojo_bindgen.ir import (
     IntLiteral,
     LinkMode,
     MacroDecl,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoConstExpr,
     MojoDecl,
+    MojoParam,
+    MojoRefExpr,
     NamedType,
-    Param,
     QualifiedType,
-    RefExpr,
     Struct,
     Typedef,
     TypeRef,
@@ -86,22 +88,25 @@ class UnitDeclMapper:
             emitted_const_names=self._emitted_const_names,
         )
 
-    def map_decl(self, decl: Decl) -> MojoDecl | list[MojoDecl] | None:
-        if isinstance(decl, Typedef):
-            return self._map_typedef(decl)
-        if isinstance(decl, Enum):
-            return self._map_enum(decl)
-        if isinstance(decl, Function):
-            return self._map_function(decl)
-        if isinstance(decl, GlobalVar):
-            return self._map_global(decl)
-        if isinstance(decl, Const):
-            return self._map_const(decl)
-        if isinstance(decl, MacroDecl):
-            return self._map_macro(decl)
-        if isinstance(decl, Struct):
-            return self._map_struct(decl)
-        raise UnitMappingError(f"unsupported CIR declaration node: {type(decl).__name__!r}")
+    def map_decl(self, decl: Decl) -> tuple[MojoDecl, ...]:
+        match decl:
+            case Typedef():
+                alias = self._map_typedef(decl)
+                return () if alias is None else (alias,)
+            case Enum():
+                return tuple(self._map_enum(decl))
+            case Function():
+                return (self._map_function(decl),)
+            case GlobalVar():
+                return (self._map_global(decl),)
+            case Const():
+                return (self._map_const(decl),)
+            case MacroDecl():
+                macro = self._macro_mapper.map(decl)
+                return () if macro is None else (macro,)
+            case Struct():
+                return (self._map_struct(decl),)
+        assert_never(decl)
 
     def _map_typedef(self, decl: Typedef) -> AliasDecl | None:
         return map_typedef_alias(
@@ -133,14 +138,9 @@ class UnitDeclMapper:
                 name=mojo_ident(member.name),
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType(enum_name),
-                const_value=CallExpr(
-                    callee=RefExpr(enum_name),
-                    args=[
-                        CastExpr(
-                            target=underlying,
-                            expr=IntLiteral(member.value),
-                        )
-                    ],
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr(enum_name),
+                    args=(MojoCastExpr(target=underlying, expr=IntLiteral(member.value)),),
                 ),
                 doc=member.doc,
             )
@@ -167,14 +167,16 @@ class UnitDeclMapper:
         return FunctionDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
-            params=[
-                Param(
-                    name=(mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}"),
-                    type=self.session.type_mapper.run(param.type),
-                    doc=param.doc,
+            params=tuple(
+                (
+                    MojoParam(
+                        name=mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}",
+                        type=self.session.type_mapper.run(param.type),
+                        doc=param.doc,
+                    )
+                    for i, param in enumerate(decl.params)
                 )
-                for i, param in enumerate(decl.params)
-            ],
+            ),
             return_type=self.session.type_mapper.run(decl.ret),
             kind=kind,
             call_target=CallTarget(
@@ -186,7 +188,7 @@ class UnitDeclMapper:
                 is_noreturn=decl.attrs.is_noreturn,
             ),
             num_fixed_args=len(decl.params) if decl.is_variadic else None,
-            diagnostics=diagnostics,
+            diagnostics=tuple(diagnostics),
             doc=decl.doc,
         )
 
@@ -216,27 +218,25 @@ class UnitDeclMapper:
             return AliasDecl(
                 name=mojo_ident(decl.name),
                 kind=AliasKind.CONST_VALUE,
-                diagnostics=[
-                    stub_note("constant expression could not be mapped; placeholder alias emitted")
-                ],
+                diagnostics=(
+                    stub_note("constant expression could not be mapped; placeholder alias emitted"),
+                ),
                 doc=decl.doc,
             )
         name = mojo_ident(decl.name)
+        typed_value = self._typed_const_value(value, decl.type)
         self._emitted_const_names.add(name)
         return AliasDecl(
             name=name,
             kind=AliasKind.CONST_VALUE,
-            const_value=self._typed_const_value(value, decl.type),
+            const_value=typed_value,
             doc=decl.doc,
         )
-
-    def _map_macro(self, decl: MacroDecl) -> AliasDecl | None:
-        return self._macro_mapper.map(decl)
 
     def _map_struct(self, decl: Struct) -> MojoDecl:
         if decl.is_union:
             return self._union_mapper.run(decl)
         return map_struct(decl, context=self.session.struct_context)
 
-    def _typed_const_value(self, value: ConstExpr, decl_type) -> ConstExpr:
+    def _typed_const_value(self, value: MojoConstExpr, decl_type: CType) -> MojoConstExpr:
         return typed_const_value(value, decl_type, type_mapper=self.session.type_mapper)

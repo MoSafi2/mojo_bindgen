@@ -8,20 +8,20 @@ from enum import auto
 import clang.cindex as cx
 
 from mojo_bindgen.ir import (
-    Array,
     ArrayKind,
     AtomicType,
+    CArray,
+    CFunctionPtr,
     ComplexType,
+    CParam,
+    CPointer,
+    CType,
     EnumRef,
     FloatType,
-    FunctionPtr,
     IntType,
-    Param,
-    Pointer,
     QualifiedType,
     Qualifiers,
     StructRef,
-    Type,
     TypeRef,
     UnsupportedType,
     VectorType,
@@ -80,14 +80,14 @@ def _lower_void_pointer(
     *,
     size_bytes: int | None,
     align_bytes: int | None,
-) -> Type:
+) -> CType:
     if qualifiers == Qualifiers():
-        return Pointer(
+        return CPointer(
             pointee=None,
             size_bytes=size_bytes or 0,
             align_bytes=align_bytes,
         )
-    return Pointer(
+    return CPointer(
         pointee=QualifiedType(unqualified=VoidType(), qualifiers=qualifiers),
         size_bytes=size_bytes or 0,
         align_bytes=align_bytes,
@@ -102,7 +102,7 @@ class TypeLowerer:
     diagnostics: ParserDiagnosticSink
     primitive_resolver: PrimitiveResolver
     compat: ClangCompat = field(default_factory=ClangCompat)
-    _dispatch_by_kind: dict[object, Callable[[cx.Type, TypeContext], Type]] = field(
+    _dispatch_by_kind: dict[object, Callable[[cx.Type, TypeContext], CType]] = field(
         init=False, repr=False
     )
 
@@ -115,7 +115,7 @@ class TypeLowerer:
         ctx: TypeContext,
         *,
         source_cursor: cx.Cursor | None = None,
-    ) -> Type:
+    ) -> CType:
         t = _normalize(clang_type)
         fnptr = self._lower_function_pointer_with_cursor(t, ctx, source_cursor)
         if fnptr is not None:
@@ -127,8 +127,8 @@ class TypeLowerer:
 
     def _build_type_dispatch(
         self,
-    ) -> dict[object, Callable[[cx.Type, TypeContext], Type]]:
-        dispatch: dict[object, Callable[[cx.Type, TypeContext], Type]] = {
+    ) -> dict[object, Callable[[cx.Type, TypeContext], CType]]:
+        dispatch: dict[object, Callable[[cx.Type, TypeContext], CType]] = {
             cx.TypeKind.INVALID: self._lower_invalid,
             cx.TypeKind.UNEXPOSED: self._lower_unexposed,
             cx.TypeKind.TYPEDEF: self._lower_typedef,
@@ -143,17 +143,17 @@ class TypeLowerer:
             cx.TypeKind.FUNCTIONPROTO: self._lower_fnptr,
             cx.TypeKind.FUNCTIONNOPROTO: self._lower_fnptr,
         }
-        if (complex_kind := getattr(cx.TypeKind, "COMPLEX", None)) is not None:
+        if (complex_kind := self.compat.optional_type_kind("COMPLEX")) is not None:
             dispatch[complex_kind] = lambda t, _ctx: self._lower_complex(t)
-        if (vector_kind := getattr(cx.TypeKind, "VECTOR", None)) is not None:
+        if (vector_kind := self.compat.optional_type_kind("VECTOR")) is not None:
             dispatch[vector_kind] = lambda t, _ctx: self._lower_vector(t, is_ext_vector=False)
-        if (ext_vector_kind := getattr(cx.TypeKind, "EXTVECTOR", None)) is not None:
+        if (ext_vector_kind := self.compat.optional_type_kind("EXTVECTOR")) is not None:
             dispatch[ext_vector_kind] = lambda t, _ctx: self._lower_vector(t, is_ext_vector=True)
-        if (atomic_kind := getattr(cx.TypeKind, "ATOMIC", None)) is not None:
+        if (atomic_kind := self.compat.optional_type_kind("ATOMIC")) is not None:
             dispatch[atomic_kind] = self._lower_atomic
         return dispatch
 
-    def _lower_invalid(self, t: cx.Type, _ctx: TypeContext) -> Type:
+    def _lower_invalid(self, t: cx.Type, _ctx: TypeContext) -> CType:
         self.diagnostics.add_type_diag("warning", t, "invalid type kind")
         return UnsupportedType(
             category="invalid",
@@ -161,7 +161,7 @@ class TypeLowerer:
             reason="clang reported INVALID type kind",
         )
 
-    def _lower_unexposed(self, t: cx.Type, _ctx: TypeContext) -> Type:
+    def _lower_unexposed(self, t: cx.Type, _ctx: TypeContext) -> CType:
         self.diagnostics.add_type_diag("warning", t, "unexposed type kind")
         return UnsupportedType(
             category="unexposed",
@@ -171,10 +171,10 @@ class TypeLowerer:
             align_bytes=_safe_align(t),
         )
 
-    def _lower_void(self, _t: cx.Type, _ctx: TypeContext) -> Type:
+    def _lower_void(self, _t: cx.Type, _ctx: TypeContext) -> CType:
         return VoidType()
 
-    def _lower_typedef(self, t: cx.Type, ctx: TypeContext) -> Type:
+    def _lower_typedef(self, t: cx.Type, ctx: TypeContext) -> CType:
         decl = t.get_declaration()
         name = decl.spelling or t.spelling
         canonical = self.lower(t.get_canonical(), ctx)
@@ -189,7 +189,7 @@ class TypeLowerer:
         t: cx.Type,
         ctx: TypeContext,
         source_cursor: cx.Cursor | None = None,
-    ) -> Type:
+    ) -> CType:
         raw_pointee = t.get_pointee()
         qualifiers = _qualifiers(raw_pointee)
         pointee = _normalize(raw_pointee)
@@ -234,7 +234,7 @@ class TypeLowerer:
         t: cx.Type,
         ctx: TypeContext,
         source_cursor: cx.Cursor | None,
-    ) -> FunctionPtr | None:
+    ) -> CFunctionPtr | None:
         if source_cursor is None:
             return None
         if t.kind in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
@@ -247,11 +247,11 @@ class TypeLowerer:
         if canonical_pointee.kind not in (cx.TypeKind.FUNCTIONPROTO, cx.TypeKind.FUNCTIONNOPROTO):
             return None
         lowered = self._lower_pointer(t, ctx, source_cursor=source_cursor)
-        return lowered if isinstance(lowered, FunctionPtr) else None
+        return lowered if isinstance(lowered, CFunctionPtr) else None
 
     def _lower_fn_proto_parameter(
         self, sugared: cx.Type, canonical: cx.Type, ctx: TypeContext
-    ) -> Type:
+    ) -> CType:
         """Lower one function-prototype parameter.
 
         Prefer the sugared spelling so typedef names (e.g. ``curl_off_t``) become
@@ -274,12 +274,12 @@ class TypeLowerer:
         *,
         size_bytes: int | None = None,
         align_bytes: int | None = None,
-    ) -> FunctionPtr:
+    ) -> CFunctionPtr:
         ret = self.lower(t.get_result(), ctx)
         if t.kind == cx.TypeKind.FUNCTIONPROTO:
             canon = _normalize(t.get_canonical())
             params = [
-                Param(name="", type=self._lower_fn_proto_parameter(s, c, ctx))
+                CParam(name="", type=self._lower_fn_proto_parameter(s, c, ctx))
                 for s, c in zip(t.argument_types(), canon.argument_types(), strict=True)
             ]
             is_variadic = t.is_function_variadic()
@@ -287,10 +287,10 @@ class TypeLowerer:
             params = []
             is_variadic = False
         param_names = self._extract_function_ptr_param_names(source_cursor, len(params))
-        return FunctionPtr(
+        return CFunctionPtr(
             ret=ret,
-            params=params,
-            param_names=param_names,
+            params=tuple(params),
+            param_names=None if param_names is None else tuple(param_names),
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(t),
             size_bytes=size_bytes or 0,
@@ -329,20 +329,20 @@ class TypeLowerer:
         *,
         size_bytes: int | None,
         align_bytes: int | None,
-    ) -> Type:
+    ) -> CType:
         lowered = self.lower(pointee, ctx)
         if qualifiers != Qualifiers():
             lowered = QualifiedType(unqualified=lowered, qualifiers=qualifiers)
-        return Pointer(
+        return CPointer(
             pointee=lowered,
             size_bytes=size_bytes or 0,
             align_bytes=align_bytes,
         )
 
-    def _lower_array(self, t: cx.Type, ctx: TypeContext) -> Type:
+    def _lower_array(self, t: cx.Type, ctx: TypeContext) -> CType:
         element = self.lower(t.get_array_element_type(), ctx)
         size = t.get_array_size() if t.kind == cx.TypeKind.CONSTANTARRAY else None
-        return Array(
+        return CArray(
             element=element,
             size=size,
             array_kind=_array_kind(t, ctx),
@@ -350,13 +350,13 @@ class TypeLowerer:
             align_bytes=_safe_align(t),
         )
 
-    def _lower_record(self, t: cx.Type) -> Type:
+    def _lower_record(self, t: cx.Type) -> CType:
         decl = t.get_declaration()
         decl_id = self.registry.decl_id_for_cursor(decl)
 
-        cached = self.registry.get(decl_id)
-        if cached is not None:
-            return self.registry.make_struct_ref(cached)
+        reference = self.registry.reference(decl_id)
+        if reference is not None:
+            return reference
 
         definition = self.registry.record_definition_for_decl(decl)
         if decl.spelling:
@@ -380,7 +380,7 @@ class TypeLowerer:
             reason="anonymous incomplete record reference cannot be named",
         )
 
-    def _lower_enum(self, t: cx.Type) -> Type:
+    def _lower_enum(self, t: cx.Type) -> CType:
         decl = t.get_declaration()
         name = decl.spelling
         underlying = self.primitive_resolver.resolve_primitive(decl.enum_type)
@@ -398,7 +398,7 @@ class TypeLowerer:
             return underlying
         return default_signed_int_primitive()
 
-    def _lower_complex(self, t: cx.Type) -> Type:
+    def _lower_complex(self, t: cx.Type) -> CType:
         element = self.primitive_resolver.resolve_primitive(self.compat.get_element_type(t))
         if not isinstance(element, FloatType):
             return UnsupportedType(
@@ -414,7 +414,7 @@ class TypeLowerer:
             align_bytes=_safe_align(t),
         )
 
-    def _lower_vector(self, t: cx.Type, *, is_ext_vector: bool) -> Type:
+    def _lower_vector(self, t: cx.Type, *, is_ext_vector: bool) -> CType:
         element = self.lower(self.compat.get_element_type(t), TypeContext.FIELD)
         return VectorType(
             element=element,
@@ -424,7 +424,7 @@ class TypeLowerer:
             align_bytes=_safe_align(t),
         )
 
-    def _lower_atomic(self, t: cx.Type, ctx: TypeContext) -> Type:
+    def _lower_atomic(self, t: cx.Type, ctx: TypeContext) -> CType:
         inner = self._lower_atomic_value_type(t, ctx)
         self.diagnostics.add_type_diag(
             "warning",
@@ -433,7 +433,7 @@ class TypeLowerer:
         )
         return AtomicType(value_type=inner, size_bytes=_safe_size(t), align_bytes=_safe_align(t))
 
-    def _lower_atomic_value_type(self, t: cx.Type, ctx: TypeContext) -> Type:
+    def _lower_atomic_value_type(self, t: cx.Type, ctx: TypeContext) -> CType:
         spelling = t.spelling.strip()
         value_type = self.compat.get_value_type(t)
         if value_type is not None:
@@ -446,7 +446,7 @@ class TypeLowerer:
             align_bytes=_safe_align(t),
         )
 
-    def _lower_primitive(self, t: cx.Type) -> Type:
+    def _lower_primitive(self, t: cx.Type) -> CType:
         prim = self.primitive_resolver.resolve_primitive(t)
         if prim is not None:
             return prim

@@ -7,25 +7,25 @@ type lowerer, but it does not own post-parse normalization or semantic policy.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import cast
+from dataclasses import dataclass, replace
 
 import clang.cindex as cx
 
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
+    CArray,
+    CType,
     FamPattern,
     Field,
     IntType,
     QualifiedType,
     Struct,
     StructRef,
-    Type,
     TypeRef,
 )
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.doc_comments import cursor_doc_comment
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.type_lowering import TypeContext, TypeLowerer
 from mojo_bindgen.parsing.registry import RecordRegistry
 
@@ -74,7 +74,7 @@ class _FieldDiscovery:
     def _field_decl_site(self, parent_type: cx.Type, field_cursor: cx.Cursor) -> FieldSite:
         """Build a field site for one field declaration, including bitfields and inline records."""
         name = field_cursor.spelling
-        bit_offset = self._field_bit_offset(parent_type, field_cursor)
+        bit_offset = ClangCompat.field_bit_offset(parent_type, field_cursor)
         byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
         attached = self._attached_inline_record_definition(field_cursor)
 
@@ -114,7 +114,7 @@ class _FieldDiscovery:
     ) -> FieldSite | None:
         """Build a field site for an anonymous struct/union that is a direct member without a name."""
         implicit_field = self._find_implicit_record_field(parent_type, record_cursor)
-        bit_offset = self._field_bit_offset(parent_type, implicit_field)
+        bit_offset = ClangCompat.field_bit_offset(parent_type, implicit_field)
         byte_offset = bit_offset // 8 if bit_offset >= 0 else 0
         field_type = implicit_field.type if implicit_field is not None else record_cursor.type
         return FieldSite(
@@ -201,23 +201,6 @@ class _FieldDiscovery:
         )
 
     @staticmethod
-    def _field_bit_offset(parent_type: cx.Type, cursor: cx.Cursor | None) -> int:
-        """Bit offset of the field within the parent type, or -1 if unavailable."""
-        if cursor is None:
-            return -1
-        if cursor.spelling:
-            bit_offset = parent_type.get_offset(cursor.spelling)
-            if bit_offset >= 0:
-                return bit_offset
-        getter = getattr(cursor, "get_field_offsetof", None)
-        if callable(getter):
-            try:
-                return cast(int, getter())
-            except Exception:
-                return -1
-        return -1
-
-    @staticmethod
     def _field_size(field_type: cx.Type) -> int:
         """Physical size of the field as reported by Clang, or ``0`` when unsized."""
         return max(0, field_type.get_size())
@@ -251,20 +234,22 @@ class RecordLowerer:
             return self.lower_record_definition(cursor)
         if cursor.spelling and not self.registry.is_complete_record_decl(cursor):
             decl_id = self.registry.decl_id_for_cursor(cursor)
-            return Struct(
+            record = Struct(
                 decl_id=decl_id,
                 name=cursor.spelling,
                 c_name=cursor.spelling,
-                fields=[],
+                fields=(),
                 size_bytes=0,
                 align_bytes=0,
                 is_union=(cursor.kind == cx.CursorKind.UNION_DECL),
                 is_complete=False,
                 doc=cursor_doc_comment(cursor),
             )
+            self.registry.declare(record)
+            return record
         return None
 
-    def completed_records_since(self, start: int) -> tuple[int, list[Struct]]:
+    def completed_records_since(self, start: int) -> tuple[int, tuple[Struct, ...]]:
         """Return lowered record definitions completed after one marker index."""
         decl_ids = self._completed_record_decl_ids[start:]
         records: list[Struct] = []
@@ -272,7 +257,7 @@ class RecordLowerer:
             record = self.registry.get(decl_id)
             if record is not None:
                 records.append(record)
-        return len(self._completed_record_decl_ids), records
+        return len(self._completed_record_decl_ids), tuple(records)
 
     def lower_record_definition(self, cursor: cx.Cursor) -> Struct:
         """Lower one complete struct/union definition exactly once."""
@@ -286,24 +271,37 @@ class RecordLowerer:
             decl_id=decl_id,
             name=naming.name,
             c_name=naming.c_name,
-            fields=[],
+            fields=(),
             size_bytes=max(0, cursor.type.get_size()),
             align_bytes=max(1, cursor.type.get_align()),
             is_union=cursor.kind == cx.CursorKind.UNION_DECL,
             is_anonymous=naming.is_anonymous,
             doc=cursor_doc_comment(cursor),
         )
-        self.registry.store(record)
-
-        sites = self._field_discovery.discover(cursor)
-        record.fields = [
-            field
-            for field in (
-                self._lower_field_site(site, record, i, len(sites)) for i, site in enumerate(sites)
+        header = replace(record, is_complete=False)
+        prior = self.registry.begin(header)
+        try:
+            sites = self._field_discovery.discover(cursor)
+            fields = tuple(
+                field
+                for field in (
+                    self._lower_field_site(site, header, i, len(sites))
+                    for i, site in enumerate(sites)
+                )
+                if field is not None
             )
-            if field is not None
-        ]
-        self._apply_attributes(record, cursor)
+            packed, requested_align = self._record_attributes(header, cursor)
+            record = replace(
+                header,
+                fields=tuple(fields),
+                is_complete=True,
+                is_packed=packed,
+                requested_align_bytes=requested_align,
+            )
+            self.registry.publish(record)
+        except BaseException:
+            self.registry.abort(header.decl_id, prior)
+            raise
         if record.decl_id not in self._completed_record_decl_ids:
             self._completed_record_decl_ids.append(record.decl_id)
         return record
@@ -372,7 +370,7 @@ class RecordLowerer:
         )
 
     @staticmethod
-    def _peel_bitfield_backing(field_type: Type) -> IntType | None:
+    def _peel_bitfield_backing(field_type: CType) -> IntType | None:
         """Unwrap layout-transparent wrappers to find the integer bitfield backing type."""
         while True:
             if isinstance(field_type, TypeRef):
@@ -387,7 +385,7 @@ class RecordLowerer:
             break
         return field_type if isinstance(field_type, IntType) else None
 
-    def _lower_field_site_type(self, site: FieldSite) -> Type:
+    def _lower_field_site_type(self, site: FieldSite) -> CType:
         """Lower the type of one normalized field site."""
         if site.attached_record is not None:
             inner = self.lower_record_definition(site.attached_record)
@@ -402,7 +400,7 @@ class RecordLowerer:
     def _fam_pattern_for_site(
         self,
         site: FieldSite,
-        field_type: Type,
+        field_type: CType,
         *,
         record: Struct,
         index: int,
@@ -410,7 +408,7 @@ class RecordLowerer:
     ) -> FamPattern | None:
         if record.is_union or site.field_cursor is None:
             return None
-        if not isinstance(field_type, Array):
+        if not isinstance(field_type, CArray):
             return None
 
         pattern: FamPattern | None = None
@@ -432,7 +430,7 @@ class RecordLowerer:
         return None
 
     @staticmethod
-    def _apply_attributes(record: Struct, cursor: cx.Cursor) -> None:
+    def _record_attributes(record: Struct, cursor: cx.Cursor) -> tuple[bool, int | None]:
         """Set packed and requested alignment on the struct from Clang attribute children."""
         packed = False
         requested_align: int | None = None
@@ -448,5 +446,4 @@ class RecordLowerer:
                 token_spellings = ()
             if any(spelling in {"_Alignas", "alignas"} for spelling in token_spellings):
                 requested_align = record.align_bytes
-        record.is_packed = packed
-        record.requested_align_bytes = requested_align
+        return packed, requested_align

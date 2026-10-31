@@ -12,6 +12,7 @@ import re
 
 import clang.cindex as cx
 
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.const_expr import (
     _is_predefined_macro_name,
     looks_function_like_macro_body,
@@ -43,12 +44,7 @@ def collect_object_like_macro_env(tu: cx.TranslationUnit) -> dict[str, list[str]
             continue
         if len(body) == 1 and _is_predefined_macro_name(body[0]):
             continue
-        is_function_like = getattr(cursor, "is_macro_function_like", None)
-        if (callable(is_function_like) and is_function_like()) or (
-            is_function_like is not None
-            and not callable(is_function_like)
-            and bool(is_function_like)
-        ):
+        if ClangCompat.is_function_like_macro(cursor):
             continue
         if looks_function_like_macro_body(body):
             continue

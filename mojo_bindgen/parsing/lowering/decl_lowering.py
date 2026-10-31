@@ -11,6 +11,7 @@ import clang.cindex as cx
 
 from mojo_bindgen.ir import (
     Const,
+    CParam,
     Decl,
     Enum,
     Enumerant,
@@ -21,7 +22,6 @@ from mojo_bindgen.ir import (
     IntLiteral,
     IntType,
     MacroDecl,
-    Param,
     Typedef,
 )
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
@@ -66,26 +66,28 @@ class DeclLowerer:
         self.clang_macro_fallback = clang_macro_fallback
         self.compat = compat
 
-    def lower_top_level_decl(self, cursor: cx.Cursor) -> list[Decl] | Decl | None:
-        """Lower one top-level translation-unit cursor."""
+    def lower_top_level_decl(self, cursor: cx.Cursor) -> tuple[Decl, ...]:
+        """Lower one cursor to an ordered collection, including an empty result."""
         k = cursor.kind
         if k == cx.CursorKind.FUNCTION_DECL:
-            return self._build_function(cursor)
+            return (self._build_function(cursor),)
         if k in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
-            return self.record_lowerer.lower_top_level_record(cursor)
+            record = self.record_lowerer.lower_top_level_record(cursor)
+            return () if record is None else (record,)
         if k == cx.CursorKind.ENUM_DECL:
             if not cursor.is_definition():
-                return None
+                return ()
             if self._is_anonymous_enum(cursor):
-                return self._anonymous_enum_as_consts(cursor)
-            return self._build_enum(cursor)
+                return tuple(self._anonymous_enum_as_consts(cursor))
+            enum = self._build_enum(cursor)
+            return () if enum is None else (enum,)
         if k == cx.CursorKind.TYPEDEF_DECL:
-            return self._build_typedef(cursor)
+            return (self._build_typedef(cursor),)
         if k == cx.CursorKind.VAR_DECL:
-            return self._build_global_var(cursor)
-        return None
+            return (self._build_global_var(cursor),)
+        return ()
 
-    def collect_macros(self) -> list[Decl]:
+    def collect_macros(self) -> tuple[Decl, ...]:
         """Lower all source-backed translation-unit macro definitions into IR nodes."""
         out: list[Decl] = []
         macro_values: dict[str, ParsedConstExpr] = {}
@@ -137,7 +139,7 @@ class DeclLowerer:
             out.append(
                 MacroDecl(
                     name=cursor.spelling,
-                    tokens=parsed.tokens,
+                    tokens=tuple(parsed.tokens),
                     kind=parsed.kind,
                     expr=parsed.expr,
                     type=parsed.primitive,
@@ -145,7 +147,7 @@ class DeclLowerer:
                     doc=cursor_doc_comment(cursor),
                 )
             )
-        return out
+        return tuple(out)
 
     def _build_function(self, cursor: cx.Cursor) -> Function:
         fn_type = cursor.type
@@ -154,7 +156,7 @@ class DeclLowerer:
             TypeContext.RETURN,
             source_cursor=cursor,
         )
-        params: list[Param] = []
+        params: list[CParam] = []
         for child in cursor.get_children():
             if child.kind == cx.CursorKind.PARM_DECL:
                 param_type = self.type_lowerer.lower(
@@ -163,7 +165,7 @@ class DeclLowerer:
                     source_cursor=child,
                 )
                 params.append(
-                    Param(
+                    CParam(
                         name=child.spelling,
                         type=param_type,
                         doc=cursor_doc_comment(child),
@@ -182,7 +184,7 @@ class DeclLowerer:
             name=cursor.spelling,
             link_name=cursor.spelling,
             ret=ret_ir,
-            params=params,
+            params=tuple(params),
             is_variadic=is_variadic,
             calling_convention=self.compat.get_calling_convention(fn_type),
             attrs=self._function_attrs(cursor),
@@ -261,7 +263,7 @@ class DeclLowerer:
             name=c_name,
             c_name=c_name,
             underlying=underlying,
-            enumerants=enumerants,
+            enumerants=tuple(enumerants),
             is_anonymous=is_anonymous,
             doc=cursor_doc_comment(cursor),
         )

@@ -14,6 +14,7 @@ from mojo_bindgen import __version__
 from mojo_bindgen.orchestrator import BindgenOptions, BindgenOrchestrator
 from mojo_bindgen.parsing.frontend import ClangOptions
 from mojo_bindgen.parsing.parser import ParseError
+from mojo_bindgen.serde import dumps_cir, dumps_mojo_ir
 
 stderr_console = Console(stderr=True)
 
@@ -320,9 +321,9 @@ def run(
     )
 
     if dump_cir is not None:
-        _write_text(dump_cir, result.unit.to_json())
+        _write_text(dump_cir, dumps_cir(result.unit))
     if dump_mojo_ir is not None:
-        _write_text(dump_mojo_ir, result.mojo_module.to_json())
+        _write_text(dump_mojo_ir, dumps_mojo_ir(result.mojo_module))
 
     text = result.bindings_source
     if output is None:

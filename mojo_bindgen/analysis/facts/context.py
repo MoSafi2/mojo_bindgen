@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mojo_bindgen.analysis.cir.validate_ir import ValidateIRPass
 from mojo_bindgen.analysis.facts.alias_classification import AliasClassification, classify_aliases
 from mojo_bindgen.analysis.facts.dependency_graph import (
     DeclDependencyGraph,
@@ -42,6 +43,7 @@ class AnalysisContext:
 def build_analysis_context(unit: Unit) -> AnalysisContext:
     """Build shared declaration indexes and analysis facts for ``unit``."""
 
+    ValidateIRPass().run(unit)
     indexes = build_decl_indexes(unit)
     target_queries = TargetQueries(unit.target_abi)
     # First compute C ABI geometry: offsets, sizes, alignment, padding, and

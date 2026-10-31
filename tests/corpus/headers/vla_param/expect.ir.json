@@ -5,19 +5,25 @@
   "decls": [
     {
       "kind": "Function",
-      "name": "vla_fill"
+      "fields": {
+        "name": "vla_fill"
+      }
     }
   ],
   "paths": [
     {
       "selector": {
         "kind": "Function",
-        "name": "vla_fill"
+        "fields": {
+          "name": "vla_fill"
+        }
       },
-      "path": "params.1.type",
+      "path": "fields.params.1.fields.type",
       "attrs": {
-        "kind": "Array",
-        "array_kind": "variable"
+        "kind": "CArray",
+        "fields": {
+          "array_kind": "variable"
+        }
       }
     }
   ]

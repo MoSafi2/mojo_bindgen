@@ -1,34 +1,47 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
-    BinaryExpr,
-    CastExpr,
+    CArray,
+    CBinaryExpr,
+    CCallExpr,
+    CCastExpr,
+    CConstExpr,
+    CFloatLiteral,
+    CFunctionPtr,
+    CharLiteral,
+    CNullPtrLiteral,
     ComplexType,
     Const,
-    ConstExpr,
+    CPointer,
+    CRefExpr,
+    CSizeOfExpr,
+    CType,
+    CUnaryExpr,
     Decl,
     Enum,
     EnumRef,
     Field,
+    FloatType,
     Function,
-    FunctionPtr,
     GlobalVar,
+    IntLiteral,
+    IntType,
     MacroDecl,
-    Pointer,
+    OpaqueRecordRef,
     QualifiedType,
-    RefExpr,
-    SizeOfExpr,
+    StringLiteral,
     Struct,
-    Type,
+    StructRef,
     Typedef,
     TypeRef,
-    UnaryExpr,
+    UnsupportedType,
     VectorType,
+    VoidType,
 )
 from mojo_bindgen.parsing.parser import Unit
 
@@ -48,32 +61,26 @@ class CIRCanonicalizer:
     5. choose enum primary names and rewrite enum references to those names
     """
 
-    def __init__(
-        self,
-    ) -> None:
-        self._struct_by_usr: dict[str, Struct] = {}
-
     def canonicalize(self, unit: Unit) -> Unit:
         decls = self._dedupe_structs(unit)
         decls = _dedupe_functions(decls)
         decls = _dedupe_macros_last_wins(decls)
         decls = _drop_constant_self_alias_macros(decls)
         enum_names = _resolve_enum_names(decls)
-        return replace(unit, decls=[_rewrite_decl(decl, enum_names) for decl in decls])
+        return replace(unit, decls=tuple(_rewrite_decl(decl, enum_names) for decl in decls))
 
     def _dedupe_structs(self, unit: Unit) -> list[Decl]:
         out = list[Decl]()
+        struct_by_usr: dict[str, Struct] = {}
         for decl in unit.decls:
             if isinstance(decl, Struct):
-                if not self._struct_by_usr.get(decl.decl_id):
-                    self._struct_by_usr[decl.decl_id] = decl
+                if not struct_by_usr.get(decl.decl_id):
+                    struct_by_usr[decl.decl_id] = decl
 
-                self._struct_by_usr[decl.decl_id] = _compare(
-                    decl, self._struct_by_usr[decl.decl_id]
-                )
+                struct_by_usr[decl.decl_id] = _compare(decl, struct_by_usr[decl.decl_id])
             else:
                 out.append(decl)
-        out.extend(self._struct_by_usr.values())
+        out.extend(struct_by_usr.values())
         return out
 
 
@@ -131,7 +138,7 @@ def _drop_constant_self_alias_macros(decls: list[Decl]) -> list[Decl]:
         for decl in decls
         if not (
             isinstance(decl, MacroDecl)
-            and isinstance(decl.expr, RefExpr)
+            and isinstance(decl.expr, CRefExpr)
             and decl.expr.name == decl.name
             and decl.name in claimed
         )
@@ -190,7 +197,7 @@ def _resolve_enum_names(decls: list[Decl]) -> dict[str, EnumResolution]:
     return names
 
 
-def _enum_ref_from_type(t: Type) -> EnumRef | None:
+def _enum_ref_from_type(t: CType) -> EnumRef | None:
     if isinstance(t, EnumRef):
         return t
     if isinstance(t, TypeRef):
@@ -210,10 +217,10 @@ def _rewrite_decl(
         return replace(
             decl,
             name=primary_name,
-            alias_names=list(alias_names),
-            enumerants=[
+            alias_names=alias_names,
+            enumerants=tuple(
                 replace(enumerant, enum_decl_id=decl.decl_id) for enumerant in decl.enumerants
-            ],
+            ),
         )
     if isinstance(decl, Typedef):
         return replace(
@@ -224,15 +231,15 @@ def _rewrite_decl(
     if isinstance(decl, Struct):
         return replace(
             decl,
-            fields=[_rewrite_field(field, enum_names) for field in decl.fields],
+            fields=tuple(_rewrite_field(field, enum_names) for field in decl.fields),
         )
     if isinstance(decl, Function):
         return replace(
             decl,
             ret=_rewrite_type(decl.ret, enum_names),
-            params=[
+            params=tuple(
                 replace(param, type=_rewrite_type(param.type, enum_names)) for param in decl.params
-            ],
+            ),
         )
     if isinstance(decl, GlobalVar):
         return replace(decl, type=_rewrite_type(decl.type, enum_names))
@@ -248,7 +255,7 @@ def _rewrite_decl(
             type=(None if decl.type is None else _rewrite_type(decl.type, enum_names)),
             expr=(None if decl.expr is None else _rewrite_const_expr(decl.expr, enum_names)),
         )
-    return decl
+    assert_never(decl)
 
 
 def _rewrite_field(
@@ -259,9 +266,9 @@ def _rewrite_field(
 
 
 def _rewrite_type(
-    t: Type,
+    t: CType,
     enum_names: dict[str, EnumResolution],
-) -> Type:
+) -> CType:
     if isinstance(t, EnumRef):
         resolved = enum_names.get(t.decl_id)
         if resolved is None:
@@ -274,46 +281,58 @@ def _rewrite_type(
         return replace(t, unqualified=_rewrite_type(t.unqualified, enum_names))
     if isinstance(t, AtomicType):
         return replace(t, value_type=_rewrite_type(t.value_type, enum_names))
-    if isinstance(t, Pointer):
+    if isinstance(t, CPointer):
         return replace(
             t,
             pointee=(None if t.pointee is None else _rewrite_type(t.pointee, enum_names)),
         )
-    if isinstance(t, Array):
+    if isinstance(t, CArray):
         return replace(t, element=_rewrite_type(t.element, enum_names))
-    if isinstance(t, FunctionPtr):
+    if isinstance(t, CFunctionPtr):
         return replace(
             t,
             ret=_rewrite_type(t.ret, enum_names),
-            params=[
+            params=tuple(
                 replace(param, type=_rewrite_type(param.type, enum_names)) for param in t.params
-            ],
+            ),
         )
     if isinstance(t, ComplexType):
         return t
     if isinstance(t, VectorType):
         return replace(t, element=_rewrite_type(t.element, enum_names))
-    return t
+    if isinstance(t, (VoidType, IntType, FloatType, StructRef, OpaqueRecordRef, UnsupportedType)):
+        return t
+    assert_never(t)
 
 
 def _rewrite_const_expr(
-    expr: ConstExpr,
+    expr: CConstExpr,
     enum_names: dict[str, EnumResolution],
-) -> ConstExpr:
-    if isinstance(expr, CastExpr):
+) -> CConstExpr:
+    if isinstance(expr, CCastExpr):
         return replace(
             expr,
             target=_rewrite_type(expr.target, enum_names),
             expr=_rewrite_const_expr(expr.expr, enum_names),
         )
-    if isinstance(expr, SizeOfExpr):
+    if isinstance(expr, CSizeOfExpr):
         return replace(expr, target=_rewrite_type(expr.target, enum_names))
-    if isinstance(expr, UnaryExpr):
+    if isinstance(expr, CUnaryExpr):
         return replace(expr, operand=_rewrite_const_expr(expr.operand, enum_names))
-    if isinstance(expr, BinaryExpr):
+    if isinstance(expr, CBinaryExpr):
         return replace(
             expr,
             lhs=_rewrite_const_expr(expr.lhs, enum_names),
             rhs=_rewrite_const_expr(expr.rhs, enum_names),
         )
-    return expr
+    if isinstance(expr, CCallExpr):
+        return replace(
+            expr,
+            callee=_rewrite_const_expr(expr.callee, enum_names),
+            args=tuple(_rewrite_const_expr(arg, enum_names) for arg in expr.args),
+        )
+    if isinstance(
+        expr, (IntLiteral, CFloatLiteral, StringLiteral, CharLiteral, CNullPtrLiteral, CRefExpr)
+    ):
+        return expr
+    assert_never(expr)

@@ -145,7 +145,9 @@ These indexes are the basic lookup surface for later passes.
 
 Passes should use these helpers instead of each defining bespoke declaration or
 const-expression walkers. `analysis.type_walk` remains the lower-level helper
-for recursive `Type` trees only.
+for recursive `CType` trees only. Structural cycle validation follows every owning
+edge independently of the walker filtering options. Published CIR is frozen and
+uses tuple children; passes construct replacement values.
 
 ### `DeclDependencyGraph`
 

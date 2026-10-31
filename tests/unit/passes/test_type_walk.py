@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
+    CArray,
+    CFunctionPtr,
+    CParam,
+    CPointer,
     FloatKind,
     FloatType,
-    FunctionPtr,
     IntKind,
     IntType,
-    Param,
-    Pointer,
     QualifiedType,
     TypeRef,
     VectorType,
@@ -28,36 +28,22 @@ def test_iter_type_nodes_peels_common_wrappers_by_default() -> None:
         decl_id="typedef:wrapped",
         name="wrapped",
         canonical=QualifiedType(
-            unqualified=AtomicType(
-                value_type=Pointer(
-                    pointee=Array(element=inner, size=4),
-                )
-            )
+            unqualified=AtomicType(value_type=CPointer(pointee=CArray(element=inner, size=4)))
         ),
     )
-
     nodes = tuple(type(node).__name__ for node in iter_type_nodes(wrapped))
-    assert nodes == (
-        "TypeRef",
-        "QualifiedType",
-        "AtomicType",
-        "Pointer",
-        "Array",
-        "IntType",
-    )
+    assert nodes == ("TypeRef", "QualifiedType", "AtomicType", "CPointer", "CArray", "IntType")
 
 
 def test_iter_type_nodes_can_skip_function_pointer_descent() -> None:
-    fp = FunctionPtr(ret=VoidType(), params=[Param(name="", type=_i32())], is_variadic=False)
-
+    fp = CFunctionPtr(ret=VoidType(), params=(CParam(name="", type=_i32()),), is_variadic=False)
     shallow = tuple(
         type(node).__name__
         for node in iter_type_nodes(fp, options=TypeWalkOptions(descend_function_ptr=False))
     )
     deep = tuple(type(node).__name__ for node in iter_type_nodes(fp))
-
-    assert shallow == ("FunctionPtr",)
-    assert deep == ("FunctionPtr", "VoidType", "IntType")
+    assert shallow == ("CFunctionPtr",)
+    assert deep == ("CFunctionPtr", "VoidType", "IntType")
 
 
 def test_iter_type_nodes_can_descend_vector_elements_when_requested() -> None:
@@ -66,12 +52,10 @@ def test_iter_type_nodes_can_descend_vector_elements_when_requested() -> None:
         count=4,
         size_bytes=16,
     )
-
     shallow = tuple(type(node).__name__ for node in iter_type_nodes(vector))
     deep = tuple(
         type(node).__name__
         for node in iter_type_nodes(vector, options=TypeWalkOptions(descend_vector_element=True))
     )
-
     assert shallow == ("VectorType",)
     assert deep == ("VectorType", "FloatType")

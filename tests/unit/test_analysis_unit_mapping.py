@@ -7,12 +7,15 @@ from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    BinaryExpr,
     BuiltinType,
     ByteOrder,
-    CallExpr,
-    CastExpr,
+    CBinaryExpr,
+    CFunctionPtr,
+    CNullPtrLiteral,
     Const,
+    CPointer,
+    CRefExpr,
+    CUnaryExpr,
     Enum,
     Enumerant,
     Field,
@@ -20,7 +23,6 @@ from mojo_bindgen.ir import (
     FunctionAttrs,
     FunctionDecl,
     FunctionKind,
-    FunctionPtr,
     GlobalDecl,
     GlobalVar,
     InlineDisposition,
@@ -30,14 +32,16 @@ from mojo_bindgen.ir import (
     LinkMode,
     MacroDecl,
     MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoFunctionPtr,
+    MojoPointer,
+    MojoRefExpr,
     NamedType,
-    NullPtrLiteral,
     PaddingMember,
     ParametricBase,
     ParametricType,
-    Pointer,
     PointerMutability,
-    RefExpr,
     StoredMember,
     Struct,
     StructDecl,
@@ -47,13 +51,10 @@ from mojo_bindgen.ir import (
     TypeArg,
     Typedef,
     TypeRef,
-    UnaryExpr,
     Unit,
     VoidType,
 )
-from mojo_bindgen.ir import (
-    Param as CIRParam,
-)
+from mojo_bindgen.ir import CParam as CIRParam
 
 
 def _i32() -> IntType:
@@ -69,21 +70,11 @@ def _u64() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _field(
-    *,
-    name: str,
-    source_name: str,
-    type,
-    byte_offset: int,
-    size_bytes: int | None = None,
-    **kwargs,
+    *, name: str, source_name: str, type, byte_offset: int, size_bytes: int | None = None, **kwargs
 ) -> Field:
     if size_bytes is None:
         size_bytes = getattr(type, "size_bytes", 0) or 0
@@ -103,7 +94,7 @@ def test_map_unit_builds_module_metadata_and_preserves_decl_order() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Typedef(
                 decl_id="typedef:widget_t",
                 name="widget_t",
@@ -115,14 +106,14 @@ def test_map_unit_builds_module_metadata_and_preserves_decl_order() -> None:
                 name="Flags",
                 c_name="Flags",
                 underlying=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-                enumerants=[Enumerant(name="enum-value", c_name="enum-value", value=1)],
+                enumerants=(Enumerant(name="enum-value", c_name="enum-value", value=1),),
             ),
             Function(
                 decl_id="fn:install",
                 name="install",
                 link_name="c_install",
                 ret=VoidType(),
-                params=[CIRParam(name="", type=Pointer(pointee=None))],
+                params=(CIRParam(name="", type=CPointer(pointee=None)),),
             ),
             GlobalVar(
                 decl_id="global:counter",
@@ -131,11 +122,9 @@ def test_map_unit_builds_module_metadata_and_preserves_decl_order() -> None:
                 type=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
                 is_const=True,
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     assert mapped.source_header == "demo.h"
     assert mapped.library == "demo"
     assert mapped.link_name == "demo"
@@ -156,28 +145,23 @@ def test_map_unit_uses_owned_dl_handle_module_policy_for_wrappers() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
                 decl_id="fn:install",
                 name="install",
                 link_name="c_install",
                 ret=VoidType(),
-                params=[CIRParam(name="", type=Pointer(pointee=None))],
+                params=(CIRParam(name="", type=CPointer(pointee=None)),),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(
         unit,
         options=MojoEmitOptions(
-            linking="owned_dl_handle",
-            library_path_hint="/tmp/libdemo.so",
-            strict_abi=True,
+            linking="owned_dl_handle", library_path_hint="/tmp/libdemo.so", strict_abi=True
         ),
     )
-
     fn_decl = mapped.decls[0]
-
     assert mapped.link_mode == LinkMode.OWNED_DL_HANDLE
     assert mapped.library_path_hint == "/tmp/libdemo.so"
     assert isinstance(fn_decl, FunctionDecl)
@@ -190,63 +174,44 @@ def test_map_unit_maps_typedef_and_enum_surface_forms() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Typedef(
                 decl_id="typedef:size_t",
                 name="size_t",
                 aliased=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
                 canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
             ),
-            Typedef(
-                decl_id="typedef:ssize_t",
-                name="ssize_t",
-                aliased=_i64(),
-                canonical=_i64(),
-            ),
+            Typedef(decl_id="typedef:ssize_t", name="ssize_t", aliased=_i64(), canonical=_i64()),
             Enum(
                 decl_id="enum:flags",
                 name="Flags",
                 c_name="Flags",
                 underlying=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-                enumerants=[Enumerant(name="needs-work", c_name="NEEDS_WORK", value=7)],
+                enumerants=(Enumerant(name="needs-work", c_name="NEEDS_WORK", value=7),),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     typedef_decl = mapped.decls[0]
     signed_typedef_decl = mapped.decls[1]
     enum_decl = mapped.decls[2]
     enumerant_decl = mapped.decls[3]
-
     assert typedef_decl == AliasDecl(
-        name="size_t",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=NamedType("UInt"),
+        name="size_t", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("UInt")
     )
     assert signed_typedef_decl == AliasDecl(
-        name="ssize_t",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=NamedType("Int"),
+        name="ssize_t", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("Int")
     )
     assert enum_decl == AliasDecl(
-        name="Flags",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=BuiltinType(MojoBuiltin.C_INT),
+        name="Flags", kind=AliasKind.TYPE_ALIAS, type_value=BuiltinType(MojoBuiltin.C_INT)
     )
     assert enumerant_decl == AliasDecl(
         name="needs_work",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("Flags"),
-        const_value=CallExpr(
-            callee=RefExpr("Flags"),
-            args=[
-                CastExpr(
-                    target=BuiltinType(MojoBuiltin.C_INT),
-                    expr=IntLiteral(7),
-                )
-            ],
+        const_value=MojoCallExpr(
+            callee=MojoRefExpr("Flags"),
+            args=(MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(7)),),
         ),
     )
 
@@ -257,13 +222,13 @@ def test_map_unit_maps_function_and_global() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
                 decl_id="fn:install",
                 name="install",
                 link_name="install",
                 ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-                params=[CIRParam(name="", type=Pointer(pointee=None))],
+                params=(CIRParam(name="", type=CPointer(pointee=None)),),
                 is_variadic=True,
             ),
             GlobalVar(
@@ -273,14 +238,11 @@ def test_map_unit_maps_function_and_global() -> None:
                 type=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
                 is_const=True,
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     fn_decl = mapped.decls[0]
     global_decl = mapped.decls[1]
-
     assert isinstance(fn_decl, FunctionDecl)
     assert fn_decl.kind == FunctionKind.WRAPPER
     assert fn_decl.num_fixed_args == len(fn_decl.params)
@@ -296,20 +258,18 @@ def test_map_unit_stubs_inline_functions_and_preserves_attrs() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
                 decl_id="fn:inline",
                 name="inline_add",
                 link_name="inline_add",
                 ret=_i32(),
-                params=[CIRParam(name="value", type=_i32())],
+                params=(CIRParam(name="value", type=_i32()),),
                 attrs=FunctionAttrs(inline_disposition=InlineDisposition.INLINE),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     fn_decl = mapped.decls[0]
     assert isinstance(fn_decl, FunctionDecl)
     assert fn_decl.kind == FunctionKind.DIRECTIVE_STUB
@@ -324,7 +284,7 @@ def test_map_unit_maps_const_and_supported_macro_to_aliases() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Const(
                 name="LIMIT",
                 type=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
@@ -332,19 +292,16 @@ def test_map_unit_maps_const_and_supported_macro_to_aliases() -> None:
             ),
             MacroDecl(
                 name="SHIFT",
-                tokens=["42"],
+                tokens=("42",),
                 kind="object_like_supported",
                 expr=IntLiteral(7),
                 type=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     const_decl = mapped.decls[0]
     macro_decl = mapped.decls[1]
-
     assert isinstance(const_decl, AliasDecl)
     assert const_decl.kind == AliasKind.CONST_VALUE
     assert const_decl.const_value is not None
@@ -359,19 +316,17 @@ def test_map_unit_emits_placeholder_macro_when_not_parsed() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             MacroDecl(
                 name="BROKEN",
-                tokens=["foo", "(", ")"],
+                tokens=("foo", "(", ")"),
                 kind="object_like_unsupported",
                 diagnostic="unsupported macro body",
-            )
-        ],
+            ),
+        ),
     )
-
     mapped = map_unit(unit)
     decl = mapped.decls[0]
-
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.MACRO_VALUE
     assert decl.const_value is None
@@ -388,20 +343,18 @@ def test_map_unit_preserves_macro_with_unemitted_reference() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             MacroDecl(
                 name="DEPENDS_ON_UNEMITTED",
-                tokens=["UNEMITTED", "+", "1"],
+                tokens=("UNEMITTED", "+", "1"),
                 kind="object_like_supported",
-                expr=BinaryExpr(op="+", lhs=RefExpr("UNEMITTED"), rhs=IntLiteral(1)),
+                expr=CBinaryExpr(op="+", lhs=CRefExpr("UNEMITTED"), rhs=IntLiteral(1)),
                 type=_i32(),
-            )
-        ],
+            ),
+        ),
     )
-
     mapped = map_unit(unit)
     decl = mapped.decls[0]
-
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.MACRO_VALUE
     assert decl.const_value is None
@@ -415,20 +368,18 @@ def test_map_unit_preserves_macro_with_unfolded_c_logical_operator() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             MacroDecl(
                 name="LOGICAL",
-                tokens=["!", "FLAG"],
+                tokens=("!", "FLAG"),
                 kind="object_like_supported",
-                expr=UnaryExpr(op="!", operand=RefExpr("FLAG")),
+                expr=CUnaryExpr(op="!", operand=CRefExpr("FLAG")),
                 type=_i32(),
-            )
-        ],
+            ),
+        ),
     )
-
     mapped = map_unit(unit)
     decl = mapped.decls[0]
-
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.MACRO_VALUE
     assert decl.const_value is None
@@ -441,12 +392,12 @@ def test_map_unit_maps_structs_and_unions_with_real_record_layouts() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Struct(
                 decl_id="struct:opaque",
                 name="Opaque",
                 c_name="Opaque",
-                fields=[],
+                fields=(),
                 size_bytes=0,
                 align_bytes=1,
                 is_complete=False,
@@ -455,7 +406,7 @@ def test_map_unit_maps_structs_and_unions_with_real_record_layouts() -> None:
                 decl_id="struct:widget",
                 name="Widget",
                 c_name="Widget",
-                fields=[],
+                fields=(),
                 size_bytes=16,
                 align_bytes=8,
                 is_complete=True,
@@ -464,7 +415,7 @@ def test_map_unit_maps_structs_and_unions_with_real_record_layouts() -> None:
                 decl_id="union:payload",
                 name="Payload",
                 c_name="Payload",
-                fields=[
+                fields=(
                     _field(name="a", source_name="a", type=_i32(), byte_offset=0),
                     _field(
                         name="b",
@@ -478,46 +429,38 @@ def test_map_unit_maps_structs_and_unions_with_real_record_layouts() -> None:
                         ),
                         byte_offset=0,
                     ),
-                ],
+                ),
                 size_bytes=8,
                 align_bytes=8,
                 is_union=True,
                 is_complete=True,
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     opaque_decl = mapped.decls[0]
     plain_decl = mapped.decls[1]
     union_decl = mapped.decls[2]
-
     assert isinstance(opaque_decl, StructDecl)
     assert opaque_decl.kind == StructKind.OPAQUE
     assert opaque_decl.align is None
     assert opaque_decl.align_decorator is None
-    assert opaque_decl.members == []
-    assert opaque_decl.diagnostics == []
-
+    assert opaque_decl.members == ()
+    assert opaque_decl.diagnostics == ()
     assert isinstance(plain_decl, StructDecl)
     assert plain_decl.kind == StructKind.PLAIN
     assert plain_decl.align == 8
     assert plain_decl.align_decorator == 8
     assert plain_decl.fieldwise_init is False
-    assert plain_decl.members == [PaddingMember(name="__pad0", size_bytes=16, byte_offset=0)]
-    assert plain_decl.diagnostics == []
-
+    assert plain_decl.members == (PaddingMember(name="__pad0", size_bytes=16, byte_offset=0),)
+    assert plain_decl.diagnostics == ()
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
     assert union_decl.type_value == ParametricType(
         base=ParametricBase.UNSAFE_UNION,
-        args=[
-            TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),
-            TypeArg(type=NamedType("Widget")),
-        ],
+        args=(TypeArg(type=BuiltinType(MojoBuiltin.C_INT)), TypeArg(type=NamedType("Widget"))),
     )
-    assert union_decl.diagnostics == []
+    assert union_decl.diagnostics == ()
 
 
 def test_map_unit_uses_unsafe_union_for_repeated_types_union() -> None:
@@ -526,31 +469,28 @@ def test_map_unit_uses_unsafe_union_for_repeated_types_union() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Struct(
                 decl_id="union:dup",
                 name="Dup",
                 c_name="Dup",
-                fields=[
+                fields=(
                     _field(name="a", source_name="a", type=_i32(), byte_offset=0),
                     _field(name="b", source_name="b", type=_i32(), byte_offset=0),
-                ],
+                ),
                 size_bytes=4,
                 align_bytes=4,
                 is_union=True,
                 is_complete=True,
-            )
-        ],
+            ),
+        ),
     )
-
     mapped = map_unit(unit)
     union_decl = mapped.decls[0]
-
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
     assert union_decl.type_value == ParametricType(
-        base=ParametricBase.UNSAFE_UNION,
-        args=[TypeArg(type=BuiltinType(MojoBuiltin.C_INT))],
+        base=ParametricBase.UNSAFE_UNION, args=(TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),)
     )
     assert union_decl.diagnostics[0].category == "union_mapping"
 
@@ -561,23 +501,21 @@ def test_map_unit_keeps_incomplete_union_as_placeholder_alias() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Struct(
                 decl_id="union:opaque",
                 name="Opaque",
                 c_name="Opaque",
-                fields=[],
+                fields=(),
                 size_bytes=0,
                 align_bytes=1,
                 is_union=True,
                 is_complete=False,
-            )
-        ],
+            ),
+        ),
     )
-
     mapped = map_unit(unit)
     union_decl = mapped.decls[0]
-
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
     assert union_decl.type_value is None
@@ -594,12 +532,12 @@ def test_map_unit_maps_structs_that_store_union_members_by_named_alias() -> None
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Struct(
                 decl_id="union:payload",
                 name="Payload",
                 c_name="Payload",
-                fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+                fields=(_field(name="value", source_name="value", type=_i32(), byte_offset=0),),
                 size_bytes=8,
                 align_bytes=8,
                 is_union=True,
@@ -609,7 +547,7 @@ def test_map_unit_maps_structs_that_store_union_members_by_named_alias() -> None
                 decl_id="struct:holder",
                 name="Holder",
                 c_name="Holder",
-                fields=[
+                fields=(
                     _field(name="tag", source_name="tag", type=_i32(), byte_offset=0),
                     _field(
                         name="payload",
@@ -624,44 +562,41 @@ def test_map_unit_maps_structs_that_store_union_members_by_named_alias() -> None
                         ),
                         byte_offset=8,
                     ),
-                ],
+                ),
                 size_bytes=16,
                 align_bytes=8,
                 is_complete=True,
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
     union_decl = mapped.decls[0]
     holder_decl = mapped.decls[1]
-
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
     assert union_decl.type_value == ParametricType(
-        base=ParametricBase.UNSAFE_UNION,
-        args=[TypeArg(type=BuiltinType(MojoBuiltin.C_INT))],
+        base=ParametricBase.UNSAFE_UNION, args=(TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),)
     )
     assert isinstance(holder_decl, StructDecl)
     assert holder_decl.kind == StructKind.PLAIN
-    assert holder_decl.members == [
+    assert holder_decl.members == (
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
         StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
-    ]
-    assert holder_decl.diagnostics == []
+    )
+    assert holder_decl.diagnostics == ()
 
 
 def test_map_unit_keeps_raw_callback_types_inline() -> None:
-    callback = FunctionPtr(
+    callback = CFunctionPtr(
         ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-        params=[CIRParam(name="", type=Pointer(pointee=None))],
+        params=(CIRParam(name="", type=CPointer(pointee=None)),),
     )
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Typedef(
                 decl_id="typedef:callback_t",
                 name="callback_t",
@@ -673,60 +608,44 @@ def test_map_unit_keeps_raw_callback_types_inline() -> None:
                 name="install",
                 link_name="install",
                 ret=VoidType(),
-                params=[CIRParam(name="cb", type=callback)],
+                params=(CIRParam(name="cb", type=callback),),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     typedef_decl = mapped.decls[0]
     fn_decl = mapped.decls[1]
-
     assert isinstance(typedef_decl, AliasDecl)
-    assert isinstance(typedef_decl.type_value, FunctionPtr)
+    assert isinstance(typedef_decl.type_value, MojoFunctionPtr)
     assert isinstance(fn_decl, FunctionDecl)
-    assert isinstance(fn_decl.params[0].type, FunctionPtr)
-    assert fn_decl.params[0].type.params[0].type == Pointer(
-        pointee=None,
-        mutability=PointerMutability.MUT,
-        nullable=True,
+    assert isinstance(fn_decl.params[0].type, MojoFunctionPtr)
+    assert fn_decl.params[0].type.params[0].type == MojoPointer(
+        pointee=None, mutability=PointerMutability.MUT, nullable=True
     )
 
 
 def test_map_unit_synthesizes_aliases_for_external_typeref_uses() -> None:
-    int32_ref = TypeRef(
-        decl_id="typedef:int32_t",
-        name="int32_t",
-        canonical=_i32(),
-    )
+    int32_ref = TypeRef(decl_id="typedef:int32_t", name="int32_t", canonical=_i32())
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
                 decl_id="fn:sf_add",
                 name="sf_add",
                 link_name="sf_add",
                 ret=int32_ref,
-                params=[
-                    CIRParam(name="a", type=int32_ref),
-                    CIRParam(name="b", type=int32_ref),
-                ],
+                params=(CIRParam(name="a", type=int32_ref), CIRParam(name="b", type=int32_ref)),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
     typedef_decl = mapped.decls[0]
     fn_decl = mapped.decls[1]
-
     assert typedef_decl == AliasDecl(
-        name="int32_t",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=NamedType("Int32"),
+        name="int32_t", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("Int32")
     )
     assert isinstance(fn_decl, FunctionDecl)
     assert [param.type for param in fn_decl.params] == [NamedType("int32_t"), NamedType("int32_t")]
@@ -753,79 +672,51 @@ def test_map_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width() -> Non
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
                 decl_id="fn:take_all",
                 name="take_all",
                 link_name="take_all",
                 ret=VoidType(),
-                params=[CIRParam(name=f"a{i}", type=ref) for i, ref in enumerate(refs)],
+                params=tuple((CIRParam(name=f"a{i}", type=ref) for i, ref in enumerate(refs))),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
-    assert mapped.decls[: len(aliases)] == [
-        AliasDecl(
-            name=name,
-            kind=AliasKind.TYPE_ALIAS,
-            type_value=NamedType(mojo_name),
+    assert mapped.decls[: len(aliases)] == tuple(
+        (
+            AliasDecl(name=name, kind=AliasKind.TYPE_ALIAS, type_value=NamedType(mojo_name))
+            for name, (_canonical, mojo_name) in aliases.items()
         )
-        for name, (_canonical, mojo_name) in aliases.items()
-    ]
+    )
 
 
 def test_map_unit_maps_local_exact_width_typedef_and_chain() -> None:
-    int64_ref = TypeRef(
-        decl_id="typedef:int64_t",
-        name="int64_t",
-        canonical=_i64(),
-    )
-    alias_ref = TypeRef(
-        decl_id="typedef:my_i64",
-        name="my_i64",
-        canonical=_i64(),
-    )
+    int64_ref = TypeRef(decl_id="typedef:int64_t", name="int64_t", canonical=_i64())
+    alias_ref = TypeRef(decl_id="typedef:my_i64", name="my_i64", canonical=_i64())
     unit = Unit(
         source_header="demo.h",
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
-            Typedef(
-                decl_id="typedef:int64_t",
-                name="int64_t",
-                aliased=_i64(),
-                canonical=_i64(),
-            ),
-            Typedef(
-                decl_id="typedef:my_i64",
-                name="my_i64",
-                aliased=int64_ref,
-                canonical=_i64(),
-            ),
+        decls=(
+            Typedef(decl_id="typedef:int64_t", name="int64_t", aliased=_i64(), canonical=_i64()),
+            Typedef(decl_id="typedef:my_i64", name="my_i64", aliased=int64_ref, canonical=_i64()),
             Function(
                 decl_id="fn:use_i64",
                 name="use_i64",
                 link_name="use_i64",
                 ret=alias_ref,
-                params=[CIRParam(name="value", type=alias_ref)],
+                params=(CIRParam(name="value", type=alias_ref),),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     assert mapped.decls[0] == AliasDecl(
-        name="int64_t",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=NamedType("Int64"),
+        name="int64_t", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("Int64")
     )
     assert mapped.decls[1] == AliasDecl(
-        name="my_i64",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=NamedType("int64_t"),
+        name="my_i64", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("int64_t")
     )
 
 
@@ -835,22 +726,18 @@ def test_map_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Typedef(
                 decl_id="typedef:raw_uint_t",
                 name="raw_uint_t",
                 aliased=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
                 canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
-
     assert mapped.decls[0] == AliasDecl(
-        name="raw_uint_t",
-        kind=AliasKind.TYPE_ALIAS,
-        type_value=BuiltinType(MojoBuiltin.C_UINT),
+        name="raw_uint_t", kind=AliasKind.TYPE_ALIAS, type_value=BuiltinType(MojoBuiltin.C_UINT)
     )
 
 
@@ -860,20 +747,18 @@ def test_map_unit_keeps_ordinary_long_as_c_long() -> None:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
                 decl_id="fn:take_long",
                 name="take_long",
                 link_name="take_long",
                 ret=_i64(),
-                params=[CIRParam(name="value", type=_i64())],
+                params=(CIRParam(name="value", type=_i64()),),
             ),
-        ],
+        ),
     )
-
     mapped = map_unit(unit)
     fn_decl = mapped.decls[0]
-
     assert isinstance(fn_decl, FunctionDecl)
     assert fn_decl.return_type == BuiltinType(MojoBuiltin.C_LONG)
     assert fn_decl.params[0].type == BuiltinType(MojoBuiltin.C_LONG)
@@ -885,22 +770,15 @@ def test_map_unit_keeps_placeholder_const_when_const_expr_mapping_fails() -> Non
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
-            Const(
-                name="NULL_CB",
-                type=Pointer(pointee=None),
-                expr=NullPtrLiteral(),
-            )
-        ],
+        decls=(Const(name="NULL_CB", type=CPointer(pointee=None), expr=CNullPtrLiteral()),),
     )
-
     mapped = map_unit(unit)
     decl = mapped.decls[0]
-
     assert isinstance(decl, AliasDecl)
     assert decl.kind == AliasKind.CONST_VALUE
     assert decl.const_value is None
     assert decl.type_value is None
-    assert decl.diagnostics[0].message == (
-        "constant expression could not be mapped; placeholder alias emitted"
+    assert (
+        decl.diagnostics[0].message
+        == "constant expression could not be mapped; placeholder alias emitted"
     )

@@ -64,14 +64,17 @@ Source:
 
 ### `MapTypePass`
 
-`MapTypePass` converts one parser-facing `Type` into one valid Mojo-facing `Type`.
+`MapTypePass(queries=...)` converts one parser-facing `CType` into one valid
+`MojoType`. Target queries are fixed for the mapping context. Mapping is pure,
+with no result memoization or interning. Structural cycle validation runs before
+recursive mapping; declaration references remain nominal leaves.
 
 Important rules:
 - primitive C scalars map to `BuiltinType` or fixed-width `NamedType`
 - exact-width aliases such as `int32_t` and `uint64_t` map to Mojo fixed-width names
 - `size_t` and `ssize_t` map to `UInt` and `Int`
 - representable atomics map to `Atomic[...]`
-- data pointers map to nullable `Pointer`
+- source `CPointer` values map to nullable `MojoPointer` values
 - vectors map to `SIMD[...]` when lane metadata is usable
 - complex values map to `ComplexSIMD[...]`
 - unsupported fixed-size types fall back to byte arrays
@@ -83,7 +86,9 @@ Source:
 ### `UnitDeclMapper`
 
 `UnitDeclMapper` is the declaration-family dispatcher inside the mapping
-session.
+session. Its public `map_decl` returns `tuple[MojoDecl, ...]` for every
+cardinality. Published results use frozen payloads and tuple children; mutable
+output accumulation stays local to the run.
 
 Responsibilities:
 - map typedefs and enums into aliases and constants
@@ -147,3 +152,6 @@ leaking into emitted MojoIR.
 
 Those later concerns are handled by record-policy assignment and MojoIR
 normalization.
+
+See [IR contracts](ir_contracts.md) for stage families, immutable publication, and
+the unversioned debug JSON boundary.

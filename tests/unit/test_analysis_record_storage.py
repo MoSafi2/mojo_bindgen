@@ -6,10 +6,11 @@ from mojo_bindgen.analysis.facts.record_storage import (
     analyze_record_storage,
     analyze_record_storage_facts,
 )
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
-    Array,
     BuiltinType,
     ByteOrder,
+    CArray,
     Field,
     IntKind,
     IntType,
@@ -18,14 +19,11 @@ from mojo_bindgen.ir import (
     StructRef,
     TargetABI,
 )
+from tests.bindgen_helpers import DEFAULT_TARGET_QUERIES
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _i32() -> IntType:
@@ -46,14 +44,14 @@ def test_record_storage_marks_incomplete_records_as_incomplete_storage() -> None
         decl_id="struct:Opaque",
         name="Opaque",
         c_name="Opaque",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_complete=False,
     )
-
-    facts = analyze_record_storage(opaque, _layout(opaque))
-
+    facts = analyze_record_storage(
+        opaque, _layout(opaque), type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES)
+    )
     assert facts.storage_kind == RecordStorageKind.INCOMPLETE
     assert facts.uses_typed_storage is False
 
@@ -63,14 +61,14 @@ def test_record_storage_marks_layout_problems_as_opaque_storage() -> None:
         decl_id="struct:Broken",
         name="Broken",
         c_name="Broken",
-        fields=[Field(name="x", source_name="x", type=_i32(), byte_offset=1, size_bytes=4)],
+        fields=(Field(name="x", source_name="x", type=_i32(), byte_offset=1, size_bytes=4),),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
-    facts = analyze_record_storage(broken, _layout(broken))
-
+    facts = analyze_record_storage(
+        broken, _layout(broken), type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES)
+    )
     assert facts.storage_kind == RecordStorageKind.OPAQUE_STORAGE
     assert facts.fallback_reasons
 
@@ -80,30 +78,26 @@ def test_record_storage_extracts_direct_flexible_tail_metadata() -> None:
         decl_id="struct:Packet",
         name="Packet",
         c_name="Packet",
-        fields=[
+        fields=(
             Field(name="tag", source_name="tag", type=_i32(), byte_offset=0, size_bytes=4),
             Field(
                 name="payload",
                 source_name="payload",
-                type=Array(
-                    element=_u8(),
-                    size=None,
-                    array_kind="flexible",
-                    size_bytes=0,
-                    align_bytes=1,
+                type=CArray(
+                    element=_u8(), size=None, array_kind="flexible", size_bytes=0, align_bytes=1
                 ),
                 byte_offset=4,
                 size_bytes=0,
                 fam_pattern="c99_empty",
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-
-    facts = analyze_record_storage(packet, _layout(packet))
-
+    facts = analyze_record_storage(
+        packet, _layout(packet), type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES)
+    )
     assert facts.storage_kind == RecordStorageKind.TYPED
     assert facts.flexible_tail is not None
     assert facts.flexible_tail.field_name == "payload"
@@ -115,22 +109,18 @@ def test_record_storage_rejects_non_terminal_embedded_flexible_tail() -> None:
         decl_id="struct:Tail",
         name="Tail",
         c_name="Tail",
-        fields=[
+        fields=(
             Field(
                 name="payload",
                 source_name="payload",
-                type=Array(
-                    element=_u8(),
-                    size=None,
-                    array_kind="flexible",
-                    size_bytes=0,
-                    align_bytes=1,
+                type=CArray(
+                    element=_u8(), size=None, array_kind="flexible", size_bytes=0, align_bytes=1
                 ),
                 byte_offset=0,
                 size_bytes=0,
                 fam_pattern="c99_empty",
-            )
-        ],
+            ),
+        ),
         size_bytes=0,
         align_bytes=1,
         is_complete=True,
@@ -139,7 +129,7 @@ def test_record_storage_rejects_non_terminal_embedded_flexible_tail() -> None:
         decl_id="struct:Holder",
         name="Holder",
         c_name="Holder",
-        fields=[
+        fields=(
             Field(
                 name="tail",
                 source_name="tail",
@@ -154,15 +144,15 @@ def test_record_storage_rejects_non_terminal_embedded_flexible_tail() -> None:
                 size_bytes=0,
             ),
             Field(name="after", source_name="after", type=_i32(), byte_offset=0, size_bytes=4),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
     records = {tail.decl_id: tail, holder.decl_id: holder}
     layouts = {decl_id: _layout(record, records) for decl_id, record in records.items()}
-
-    facts = analyze_record_storage_facts(records, layouts)[holder.decl_id]
-
+    facts = analyze_record_storage_facts(
+        records, layouts, type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES)
+    )[holder.decl_id]
     assert facts.storage_kind == RecordStorageKind.OPAQUE_STORAGE
     assert "embedded flexible tail is not terminal" in facts.fallback_reasons[0]

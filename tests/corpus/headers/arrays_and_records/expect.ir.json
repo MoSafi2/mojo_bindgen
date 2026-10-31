@@ -6,16 +6,24 @@
   "decls": [
     {
       "kind": "Struct",
-      "name": "payload",
+      "fields": {
+        "name": "payload"
+      },
       "attrs": {
-        "is_complete": true
+        "fields": {
+          "is_complete": true
+        }
       }
     },
     {
       "kind": "Struct",
-      "name": "holder",
+      "fields": {
+        "name": "holder"
+      },
       "attrs": {
-        "size_bytes": 16
+        "fields": {
+          "size_bytes": 16
+        }
       }
     }
   ],
@@ -23,44 +31,58 @@
     {
       "selector": {
         "kind": "Struct",
-        "name": "payload"
+        "fields": {
+          "name": "payload"
+        }
       },
-      "path": "fields.1.fam_pattern",
+      "path": "fields.fields.1.fields.fam_pattern",
       "attrs": "c99_empty"
     },
     {
       "selector": {
         "kind": "Struct",
-        "name": "payload"
+        "fields": {
+          "name": "payload"
+        }
       },
-      "path": "fields.1.type",
+      "path": "fields.fields.1.fields.type",
       "attrs": {
-        "kind": "Array",
-        "array_kind": "flexible"
+        "kind": "CArray",
+        "fields": {
+          "array_kind": "flexible"
+        }
       }
     },
     {
       "selector": {
         "kind": "Struct",
-        "name": "holder"
+        "fields": {
+          "name": "holder"
+        }
       },
-      "path": "fields.0.type",
+      "path": "fields.fields.0.fields.type",
       "attrs": {
-        "kind": "Array",
-        "array_kind": "fixed",
-        "size": 4
+        "kind": "CArray",
+        "fields": {
+          "array_kind": "fixed",
+          "size": 4
+        }
       }
     },
     {
       "selector": {
         "kind": "Function",
-        "name": "take_ptr_to_array"
+        "fields": {
+          "name": "take_ptr_to_array"
+        }
       },
-      "path": "params.0.type.pointee",
+      "path": "fields.params.0.fields.type.fields.pointee",
       "attrs": {
-        "kind": "Array",
-        "array_kind": "fixed",
-        "size": 4
+        "kind": "CArray",
+        "fields": {
+          "array_kind": "fixed",
+          "size": 4
+        }
       }
     }
   ]

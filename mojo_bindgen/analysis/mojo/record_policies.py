@@ -3,32 +3,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import assert_never
 
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    Array,
     BitfieldGroupMember,
     BuiltinType,
     FunctionDecl,
     FunctionKind,
-    FunctionPtr,
+    MojoArray,
     MojoBuiltin,
     MojoDecl,
+    MojoFunctionPtr,
     MojoModule,
     MojoPassability,
+    MojoPointer,
+    MojoType,
     NamedType,
     OpaqueStorageMember,
     PaddingMember,
+    ParametricArg,
     ParametricBase,
     ParametricType,
-    Pointer,
     StoredMember,
     StructDecl,
     StructKind,
     StructMember,
     StructTraits,
-    Type,
     TypeArg,
 )
 
@@ -85,7 +87,7 @@ class PolicyInferencePass:
         self._transfer_computing: set[str] = set()
 
         records = [self._assign_decl_policies(decl) for decl in module.decls]
-        return replace(module, decls=[self._assign_function_policy(decl) for decl in records])
+        return replace(module, decls=tuple(self._assign_function_policy(decl) for decl in records))
 
     def _assign_function_policy(self, decl: MojoDecl) -> MojoDecl:
         if not isinstance(decl, FunctionDecl) or decl.kind != FunctionKind.WRAPPER:
@@ -103,14 +105,14 @@ class PolicyInferencePass:
             return replace(
                 decl,
                 passability=passability,
-                traits=[StructTraits.NOT_MOVABLE],
+                traits=(StructTraits.NOT_MOVABLE,),
                 fieldwise_init=False,
             )
 
         return replace(
             decl,
             passability=passability,
-            traits=self._traits_for_decl(decl, passability, transfer_traits),
+            traits=tuple(self._traits_for_decl(decl, passability, transfer_traits)),
             fieldwise_init=self._is_fieldwise_init_eligible(decl),
         )
 
@@ -218,9 +220,7 @@ class PolicyInferencePass:
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
         if isinstance(member, OpaqueStorageMember):
             return MojoPassability.MEMORY_ONLY
-        raise AssignRecordPoliciesError(
-            f"unsupported StructMember for passability: {type(member).__name__!r}"
-        )
+        assert_never(member)
 
     def _member_transfer_traits(self, member: StructMember) -> TransferTraits:
         if isinstance(member, StoredMember):
@@ -231,22 +231,20 @@ class PolicyInferencePass:
             return TransferTraits(copyable=True, movable=True)
         if isinstance(member, OpaqueStorageMember):
             return TransferTraits(copyable=True, movable=True)
-        raise AssignRecordPoliciesError(
-            f"unsupported StructMember for transfer traits: {type(member).__name__!r}"
-        )
+        assert_never(member)
 
-    def _type_passability(self, t: Type) -> MojoPassability:
+    def _type_passability(self, t: MojoType) -> MojoPassability:
         if isinstance(t, BuiltinType):
             if t.name in _TRIVIAL_BUILTINS:
                 return MojoPassability.TRIVIAL_REGISTER_PASSABLE
             return MojoPassability.MEMORY_ONLY
-        if isinstance(t, FunctionPtr):
+        if isinstance(t, MojoFunctionPtr):
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
-        if isinstance(t, Pointer):
+        if isinstance(t, MojoPointer):
             if t.nullable:
                 return MojoPassability.REGISTER_PASSABLE
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
-        if isinstance(t, Array):
+        if isinstance(t, MojoArray):
             return MojoPassability.MEMORY_ONLY
         if isinstance(t, ParametricType):
             if t.base in (ParametricBase.SIMD, ParametricBase.COMPLEX_SIMD):
@@ -270,7 +268,7 @@ class PolicyInferencePass:
             if alias_decl.kind != AliasKind.TYPE_ALIAS or alias_decl.type_value is None:
                 return MojoPassability.MEMORY_ONLY
             return self._type_passability(alias_decl.type_value)
-        raise AssignRecordPoliciesError(f"unsupported Type for passability: {type(t).__name__!r}")
+        assert_never(t)
 
     @staticmethod
     def _passability_traits(passability: MojoPassability) -> list[StructTraits]:
@@ -280,17 +278,15 @@ class PolicyInferencePass:
             return [StructTraits.REGISTER_PASSABLE]
         return []
 
-    def _type_transfer_traits(self, t: Type) -> TransferTraits:
+    def _type_transfer_traits(self, t: MojoType) -> TransferTraits:
         if isinstance(t, BuiltinType):
             supported = t.name in _TRIVIAL_BUILTINS
             return TransferTraits(copyable=supported, movable=supported)
-        if isinstance(t, FunctionPtr):
+        if isinstance(t, MojoFunctionPtr):
             return TransferTraits(copyable=True, movable=True)
-        if isinstance(t, Pointer):
+        if isinstance(t, MojoPointer):
             return TransferTraits(copyable=True, movable=True)
-        if isinstance(t, Array):
-            if t.array_kind != "fixed" or t.size is None:
-                return TransferTraits(copyable=False, movable=False)
+        if isinstance(t, MojoArray):
             return self._type_transfer_traits(t.element)
         if isinstance(t, ParametricType):
             if t.base == ParametricBase.ATOMIC:
@@ -322,11 +318,9 @@ class PolicyInferencePass:
                     return TransferTraits(copyable=False, movable=False)
                 return self._type_transfer_traits(alias_decl.type_value)
             return TransferTraits(copyable=False, movable=False)
-        raise AssignRecordPoliciesError(
-            f"unsupported Type for transfer traits: {type(t).__name__!r}"
-        )
+        assert_never(t)
 
-    def _transfer_traits_for_parametric_arg(self, arg) -> TransferTraits:
+    def _transfer_traits_for_parametric_arg(self, arg: ParametricArg) -> TransferTraits:
         if isinstance(arg, TypeArg):
             return self._type_transfer_traits(arg.type)
         return TransferTraits(copyable=True, movable=True)

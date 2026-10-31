@@ -6,13 +6,19 @@
   "decls": [
     {
       "kind": "Typedef",
-      "name": "vet_float4"
+      "fields": {
+        "name": "vet_float4"
+      }
     },
     {
       "kind": "Struct",
-      "name": "vet_payload",
+      "fields": {
+        "name": "vet_payload"
+      },
       "attrs": {
-        "align_bytes": 16
+        "fields": {
+          "align_bytes": 16
+        }
       }
     }
   ],
@@ -20,26 +26,36 @@
     {
       "selector": {
         "kind": "Typedef",
-        "name": "vet_float4"
+        "fields": {
+          "name": "vet_float4"
+        }
       },
-      "path": "canonical",
+      "path": "fields.canonical",
       "attrs": {
         "kind": "VectorType",
-        "size_bytes": 16
+        "fields": {
+          "size_bytes": 16
+        }
       }
     },
     {
       "selector": {
         "kind": "Struct",
-        "name": "vet_payload"
+        "fields": {
+          "name": "vet_payload"
+        }
       },
-      "path": "fields.0.type",
+      "path": "fields.fields.0.fields.type",
       "attrs": {
         "kind": "TypeRef",
-        "name": "vet_float4",
-        "canonical": {
-          "kind": "VectorType",
-          "size_bytes": 16
+        "fields": {
+          "name": "vet_float4",
+          "canonical": {
+            "kind": "VectorType",
+            "fields": {
+              "size_bytes": 16
+            }
+          }
         }
       }
     }

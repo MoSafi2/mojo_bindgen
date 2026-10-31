@@ -2,26 +2,29 @@
 
 from __future__ import annotations
 
+from typing import assert_never
+
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
+    CArray,
+    CFunctionPtr,
     ComplexType,
+    CPointer,
+    CType,
     EnumRef,
     FloatType,
-    FunctionPtr,
     IntType,
     OpaqueRecordRef,
-    Pointer,
     QualifiedType,
     StructRef,
-    Type,
     TypeRef,
     UnsupportedType,
     VectorType,
+    VoidType,
 )
 
 
-def peel_layout_wrappers(t: Type) -> Type:
+def peel_layout_wrappers(t: CType) -> CType:
     """Strip layout-transparent wrappers from a CIR type."""
     while isinstance(t, (TypeRef, QualifiedType)):
         if isinstance(t, TypeRef):
@@ -31,18 +34,18 @@ def peel_layout_wrappers(t: Type) -> Type:
     return t
 
 
-def type_layout(t: Type) -> tuple[int, int] | None:
+def type_layout(t: CType) -> tuple[int, int] | None:
     """Return ``(size_bytes, align_bytes)`` for ``t``, or ``None`` if unknown."""
     return _layout_of(peel_layout_wrappers(t))
 
 
-def type_align(t: Type) -> int | None:
+def type_align(t: CType) -> int | None:
     """Return alignment in bytes for ``t``, or ``None`` if unknown."""
     layout = type_layout(t)
     return None if layout is None else layout[1]
 
 
-def _layout_of(t: Type) -> tuple[int, int] | None:
+def _layout_of(t: CType) -> tuple[int, int] | None:
     t = peel_layout_wrappers(t)
 
     if isinstance(t, AtomicType):
@@ -55,11 +58,11 @@ def _layout_of(t: Type) -> tuple[int, int] | None:
             FloatType,
             VectorType,
             StructRef,
-            Pointer,
-            FunctionPtr,
+            CPointer,
+            CFunctionPtr,
             OpaqueRecordRef,
             UnsupportedType,
-            Array,
+            CArray,
         ),
     ):
         return _explicit_layout(t.size_bytes, t.align_bytes)
@@ -75,6 +78,11 @@ def _layout_of(t: Type) -> tuple[int, int] | None:
             return None
         _, elem_align = elem
         return t.size_bytes, elem_align
+    if isinstance(t, (TypeRef, QualifiedType)):
+        return type_layout(t)
+    if isinstance(t, VoidType):
+        return None
+    assert_never(t)
 
 
 def _explicit_layout(

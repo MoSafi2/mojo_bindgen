@@ -6,19 +6,23 @@ from mojo_bindgen.analysis import map_unit
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AtomicType,
-    BinaryExpr,
     BitfieldGroupMember,
     BuiltinType,
     ByteOrder,
-    CastExpr,
+    CBinaryExpr,
+    CCastExpr,
+    CFloatLiteral,
+    CFunctionPtr,
+    CNullPtrLiteral,
     ComplexType,
     Const,
+    CParam,
+    CPointer,
+    CRefExpr,
     Field,
     FloatKind,
-    FloatLiteral,
     FloatType,
     Function,
-    FunctionPtr,
     GlobalVar,
     IntKind,
     IntLiteral,
@@ -26,10 +30,6 @@ from mojo_bindgen.ir import (
     MacroDecl,
     MojoBuiltin,
     NamedType,
-    NullPtrLiteral,
-    Param,
-    Pointer,
-    RefExpr,
     StringLiteral,
     Struct,
     StructDecl,
@@ -62,21 +62,11 @@ def _bool() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _field(
-    *,
-    name: str,
-    source_name: str,
-    type,
-    byte_offset: int,
-    size_bytes: int | None = None,
-    **kwargs,
+    *, name: str, source_name: str, type, byte_offset: int, size_bytes: int | None = None, **kwargs
 ) -> Field:
     if size_bytes is None:
         size_bytes = getattr(type, "size_bytes", 0) or 0
@@ -90,8 +80,8 @@ def _field(
     )
 
 
-def _ptr(pointee, *, size_bytes: int = 8, align_bytes: int = 8) -> Pointer:
-    return Pointer(pointee=pointee, size_bytes=size_bytes, align_bytes=align_bytes)
+def _ptr(pointee, *, size_bytes: int = 8, align_bytes: int = 8) -> CPointer:
+    return CPointer(pointee=pointee, size_bytes=size_bytes, align_bytes=align_bytes)
 
 
 def _fnptr(
@@ -103,12 +93,12 @@ def _fnptr(
     calling_convention=None,
     size_bytes: int = 8,
     align_bytes: int = 8,
-) -> FunctionPtr:
-    return FunctionPtr(
+) -> CFunctionPtr:
+    return CFunctionPtr(
         ret=ret,
-        params=[
-            param if isinstance(param, Param) else Param(name="", type=param) for param in params
-        ],
+        params=tuple(
+            param if isinstance(param, CParam) else CParam(name="", type=param) for param in params
+        ),
         param_names=param_names,
         is_variadic=is_variadic,
         calling_convention=calling_convention,
@@ -144,15 +134,15 @@ def test_generator_emits_integer_cast_macro_as_single_scalar_call() -> None:
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             MacroDecl(
                 name="CURL_ZERO_TERMINATED",
-                tokens=["(", "(", "size_t", ")", "-", "1", ")"],
+                tokens=("(", "(", "size_t", ")", "-", "1", ")"),
                 kind="object_like_supported",
-                expr=CastExpr(target=size_t_like, expr=IntLiteral(-1)),
+                expr=CCastExpr(target=size_t_like, expr=IntLiteral(-1)),
                 type=size_t_like,
             ),
-        ],
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "comptime CURL_ZERO_TERMINATED = c_ulong(-1)" in out
@@ -163,26 +153,20 @@ def test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct() -> None
         decl_id="struct:foo",
         name="foo",
         c_name="foo",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=0,
         is_complete=False,
     )
     mapped = map_unit(
-        Unit(
-            source_header="t.h",
-            library="t",
-            link_name="t",
-            target_abi=_abi(),
-            decls=[st],
-        ),
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,)),
         options=MojoEmitOptions(),
     )
     structs = [decl for decl in mapped.decls if isinstance(decl, StructDecl)]
     assert len(structs) == 1
     assert structs[0].name == "foo"
     assert structs[0].kind == StructKind.OPAQUE
-    assert structs[0].members == []
+    assert structs[0].members == ()
 
 
 def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> None:
@@ -192,7 +176,7 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
         decl_id="struct:Bits",
         name="Bits",
         c_name="Bits",
-        fields=[
+        fields=(
             Field(
                 name="ready",
                 source_name="ready",
@@ -230,19 +214,13 @@ def test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors() -> Non
                 bit_offset=32,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(
-            source_header="t.h",
-            library="t",
-            link_name="t",
-            target_abi=_abi(),
-            decls=[st],
-        )
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     )
     assert "@fieldwise_init\nstruct Bits" not in out
     assert "var __bf0: c_uint" in out
@@ -268,7 +246,7 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
         decl_id="struct:MixedBits",
         name="MixedBits",
         c_name="MixedBits",
-        fields=[
+        fields=(
             _field(name="tag", source_name="tag", type=u32, byte_offset=0),
             _field(
                 name="ready",
@@ -279,19 +257,13 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
                 bit_offset=32,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(
-            source_header="t.h",
-            library="t",
-            link_name="t",
-            target_abi=_abi(),
-            decls=[st],
-        )
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     )
     assert "@fieldwise_init\nstruct MixedBits" in out
     assert "var tag: c_uint" in out
@@ -303,16 +275,12 @@ def test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors() -> N
 
 
 def test_generator_preserves_typedef_names_for_bitfield_accessors() -> None:
-    uint32_ref = TypeRef(
-        decl_id="typedef:uint32_t",
-        name="uint32_t",
-        canonical=_u32(),
-    )
+    uint32_ref = TypeRef(decl_id="typedef:uint32_t", name="uint32_t", canonical=_u32())
     st = Struct(
         decl_id="struct:TypedefBits",
         name="TypedefBits",
         c_name="TypedefBits",
-        fields=[
+        fields=(
             Field(
                 name="ready",
                 source_name="ready",
@@ -331,33 +299,23 @@ def test_generator_preserves_typedef_names_for_bitfield_accessors() -> None:
                 bit_offset=1,
                 bit_width=3,
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_union=False,
     )
-    unit = Unit(
-        source_header="t.h",
-        library="t",
-        link_name="t",
-        target_abi=_abi(),
-        decls=[st],
-    )
-
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     mapped = map_unit(unit, options=MojoEmitOptions())
     typedef_bits = next(
         decl for decl in mapped.decls if isinstance(decl, StructDecl) and decl.name == "TypedefBits"
     )
-
     assert isinstance(typedef_bits.members[0], BitfieldGroupMember)
     assert typedef_bits.members[0].storage_type == BuiltinType(name=MojoBuiltin.C_UINT)
     assert [field.logical_type for field in typedef_bits.members[0].fields] == [
         NamedType("uint32_t"),
         NamedType("uint32_t"),
     ]
-
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-
     assert "comptime uint32_t = UInt32" in out
     assert "var __bf0: c_uint" in out
     assert "def ready(self: Self) -> uint32_t:" in out
@@ -372,7 +330,7 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
         decl_id="struct:ZeroWidthMixed",
         name="ZeroWidthMixed",
         c_name="ZeroWidthMixed",
-        fields=[
+        fields=(
             _field(name="tag", source_name="tag", type=u32, byte_offset=0),
             _field(
                 name="left",
@@ -402,19 +360,13 @@ def test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_st
                 bit_offset=64,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=12,
         align_bytes=4,
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(
-            source_header="t.h",
-            library="t",
-            link_name="t",
-            target_abi=_abi(),
-            decls=[st],
-        )
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     )
     assert "var __bf0: c_uint" in out
     assert "var __bf1: c_uint" in out
@@ -428,7 +380,7 @@ def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct(
         decl_id="struct:OnlyAnonBits",
         name="OnlyAnonBits",
         c_name="OnlyAnonBits",
-        fields=[
+        fields=(
             Field(
                 name="",
                 source_name="",
@@ -439,19 +391,13 @@ def test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct(
                 bit_offset=0,
                 bit_width=8,
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_union=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(
-            source_header="t.h",
-            library="t",
-            link_name="t",
-            target_abi=_abi(),
-            decls=[st],
-        )
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     )
     assert "@fieldwise_init\nstruct OnlyAnonBits" not in out
     assert "def __init__(out self: Self):" in out
@@ -464,10 +410,10 @@ def test_generator_omits_self_alias_typedef_for_complete_union_name() -> None:
         decl_id="union:U",
         name="U",
         c_name="union U",
-        fields=[
+        fields=(
             Field(name="a", source_name="a", type=i32, byte_offset=0),
             Field(name="b", source_name="b", type=_u32(), byte_offset=0),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_union=True,
@@ -486,7 +432,7 @@ def test_generator_omits_self_alias_typedef_for_complete_union_name() -> None:
             library="t",
             link_name="t",
             target_abi=_abi(),
-            decls=[union_decl, td],
+            decls=(union_decl, td),
         )
     )
     assert "comptime U = UnsafeUnion[c_int, c_uint]" in out
@@ -500,82 +446,62 @@ def test_generator_renders_global_var_stub_and_macro_comments() -> None:
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             GlobalVar(
                 decl_id="var:global_counter",
                 name="global_counter",
                 link_name="global_counter",
                 type=i32,
             ),
-            Const(
-                name="LIB_NAME",
-                type=_char(),
-                expr=StringLiteral("bindgen"),
-            ),
+            Const(name="LIB_NAME", type=_char(), expr=StringLiteral("bindgen")),
             Const(name="LIMIT", type=i32, expr=IntLiteral(7)),
             Const(
                 name="FLAGS",
                 type=i32,
-                expr=BinaryExpr(op="|", lhs=IntLiteral(1), rhs=IntLiteral(2)),
+                expr=CBinaryExpr(op="|", lhs=IntLiteral(1), rhs=IntLiteral(2)),
             ),
             MacroDecl(
                 name="MACRO_OK",
-                tokens=["1u"],
+                tokens=("1u",),
                 kind="object_like_supported",
                 expr=IntLiteral(1),
                 type=i32,
             ),
             MacroDecl(
                 name="MACRO_FILE",
-                tokens=["__FILE__"],
+                tokens=("__FILE__",),
                 kind="predefined",
                 diagnostic="predefined macro preserved without evaluation",
             ),
-            MacroDecl(
-                name="MACRO_EMPTY",
-                tokens=[],
-                kind="empty",
-                diagnostic="empty macro body",
-            ),
+            MacroDecl(name="MACRO_EMPTY", tokens=(), kind="empty", diagnostic="empty macro body"),
             MacroDecl(
                 name="MACRO_NULL",
-                tokens=["(", "void", "*", ")", "0"],
+                tokens=("(", "void", "*", ")", "0"),
                 kind="object_like_supported",
-                expr=NullPtrLiteral(),
+                expr=CNullPtrLiteral(),
                 type=VoidType(),
             ),
             MacroDecl(
                 name="MACRO_GENERIC",
-                tokens=[
-                    "_Generic",
-                    "(",
-                    "0",
-                    ",",
-                    "int",
-                    ":",
-                    "42",
-                    ",",
-                    "default",
-                    ":",
-                    "0",
-                    ")",
-                ],
+                tokens=("_Generic", "(", "0", ",", "int", ":", "42", ",", "default", ":", "0", ")"),
                 kind="object_like_unsupported",
                 diagnostic="unsupported macro replacement list",
             ),
             MacroDecl(
                 name="MACRO_REF",
-                tokens=["MACRO_OK"],
+                tokens=("MACRO_OK",),
                 kind="object_like_supported",
-                expr=RefExpr("MACRO_OK"),
+                expr=CRefExpr("MACRO_OK"),
                 type=i32,
             ),
-        ],
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     import_line = [ln for ln in out.splitlines() if ln.startswith("from std.ffi import")][0]
     assert (
-        "external_call" in import_line and "OwnedDLHandle" in import_line and "c_int" in import_line
+        "external_call" in import_line
+        and "OwnedDLHandle" in import_line
+        and ("c_int" in import_line)
     )
     assert "def _bindgen_dylib() -> Pointer[OwnedDLHandle, MutUntrackedOrigin]:" in out
     assert "struct GlobalVar[T: Copyable & Deinitable, //, link: StaticString]:" in out
@@ -601,7 +527,7 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
         name="do_work",
         link_name="do_work",
         ret=i32,
-        params=[],
+        params=(),
         is_variadic=False,
     )
     unit = Unit(
@@ -609,7 +535,7 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             GlobalVar(
                 decl_id="var:global_counter",
                 name="global_counter",
@@ -619,13 +545,13 @@ def test_generator_emits_macro_and_const_before_global_and_function_sections() -
             fn,
             MacroDecl(
                 name="MACRO_OK",
-                tokens=["1"],
+                tokens=("1",),
                 kind="object_like_supported",
                 expr=IntLiteral(1),
                 type=i32,
             ),
             Const(name="LIMIT", type=i32, expr=IntLiteral(7)),
-        ],
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     macro_pos = out.index("comptime MACRO_OK = c_int(1)")
@@ -645,16 +571,16 @@ def test_generator_strips_c_float_suffix_in_macro_and_const() -> None:
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             MacroDecl(
                 name="PRIO_LOW",
-                tokens=["0.25", "f"],
+                tokens=("0.25", "f"),
                 kind="object_like_supported",
-                expr=FloatLiteral("0.25f"),
+                expr=CFloatLiteral("0.25f"),
                 type=f32,
             ),
-            Const(name="PRIO_HIGH", type=f32, expr=FloatLiteral("0.75F")),
-        ],
+            Const(name="PRIO_HIGH", type=f32, expr=CFloatLiteral("0.75F")),
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "comptime PRIO_LOW = 0.25" in out
@@ -670,7 +596,7 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> Non
         decl_id="struct:simd_holder",
         name="simd_holder",
         c_name="simd_holder",
-        fields=[
+        fields=(
             _field(
                 name="lanes",
                 source_name="lanes",
@@ -690,12 +616,12 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes() -> Non
                 byte_offset=24,
                 size_bytes=4,
             ),
-        ],
+        ),
         size_bytes=32,
         align_bytes=16,
         is_union=False,
     )
-    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=[st])
+    unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "var storage: Array[UInt8, 32]" in out
     assert "atomic field `fallback_atomic` has no layout-compatible Atomic[T]" in out
@@ -709,20 +635,20 @@ def test_generator_imports_atomic_for_representable_atomic_types() -> None:
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             GlobalVar(
                 decl_id="var:counter",
                 name="counter",
                 link_name="counter",
                 type=AtomicType(value_type=i32),
-            )
-        ],
+            ),
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.atomic import Atomic" in out
     assert (
-        "# global variable counter: Atomic[c_int] (atomic global requires manual "
-        "binding (use Atomic APIs on a pointer))" in out
+        "# global variable counter: Atomic[c_int] (atomic global requires manual binding (use Atomic APIs on a pointer))"
+        in out
     )
 
 
@@ -733,7 +659,7 @@ def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields
         decl_id="struct:AtomicHolder",
         name="AtomicHolder",
         c_name="AtomicHolder",
-        fields=[
+        fields=(
             _field(
                 name="counter",
                 source_name="counter",
@@ -748,13 +674,8 @@ def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields
                 byte_offset=4,
                 size_bytes=4,
             ),
-            _field(
-                name="user",
-                source_name="user",
-                type=_ptr(None),
-                byte_offset=8,
-            ),
-        ],
+            _field(name="user", source_name="user", type=_ptr(None), byte_offset=8),
+        ),
         size_bytes=16,
         align_bytes=8,
         is_union=False,
@@ -765,7 +686,7 @@ def test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields
             library="t",
             link_name="t",
             target_abi=_abi(),
-            decls=[atomic_holder],
+            decls=(atomic_holder,),
         )
     )
     assert "@fieldwise_init\nstruct AtomicHolder" not in out
@@ -783,15 +704,11 @@ def test_generator_emits_global_const_wrapper_for_const_qualified_scalar() -> No
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             GlobalVar(
-                decl_id="var:limit",
-                name="limit",
-                link_name="limit",
-                type=i32,
-                is_const=True,
+                decl_id="var:limit", name="limit", link_name="limit", type=i32, is_const=True
             ),
-        ],
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert 'comptime limit = GlobalConst[T=c_int, link="limit"]' in out
@@ -807,23 +724,19 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
         aliased=_ptr(my_uint_ref),
         canonical=_ptr(i32),
     )
-    my_uint_ptr_ref = TypeRef(
-        decl_id=my_uint_ptr.decl_id,
-        name="my_uint_ptr",
-        canonical=_ptr(i32),
-    )
+    my_uint_ptr_ref = TypeRef(decl_id=my_uint_ptr.decl_id, name="my_uint_ptr", canonical=_ptr(i32))
     holder = Struct(
         decl_id="struct:holder",
         name="holder",
         c_name="holder",
-        fields=[
+        fields=(
             _field(
                 name="value", source_name="value", type=my_uint_ref, byte_offset=0, size_bytes=4
             ),
             _field(
                 name="ptr", source_name="ptr", type=my_uint_ptr_ref, byte_offset=8, size_bytes=8
             ),
-        ],
+        ),
         size_bytes=16,
         align_bytes=8,
         is_union=False,
@@ -833,7 +746,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
         library="t",
         link_name="t",
         target_abi=_abi(),
-        decls=[
+        decls=(
             my_uint,
             my_uint_ptr,
             holder,
@@ -843,7 +756,7 @@ def test_generator_preserves_typedef_names_in_fields_globals_and_aliases() -> No
                 link_name="global_ptr",
                 type=my_uint_ptr_ref,
             ),
-        ],
+        ),
     )
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "comptime my_uint = c_int" in out
@@ -857,22 +770,15 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
     i32 = _i32()
     fp = _fnptr(ret=i32, params=[i32, i32], param_names=["a", "b"], is_variadic=False)
     fp_typedef = Typedef(
-        decl_id="typedef:pfr_binary_op_t",
-        name="pfr_binary_op_t",
-        aliased=fp,
-        canonical=fp,
+        decl_id="typedef:pfr_binary_op_t", name="pfr_binary_op_t", aliased=fp, canonical=fp
     )
-    fp_typedef_ref = TypeRef(
-        decl_id=fp_typedef.decl_id,
-        name="pfr_binary_op_t",
-        canonical=fp,
-    )
+    fp_typedef_ref = TypeRef(decl_id=fp_typedef.decl_id, name="pfr_binary_op_t", canonical=fp)
     choose = Function(
         decl_id="fn:pfr_select_add",
         name="pfr_select_add",
         link_name="pfr_select_add",
         ret=fp_typedef_ref,
-        params=[],
+        params=(),
         is_variadic=False,
     )
     choose_direct = Function(
@@ -880,7 +786,7 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         name="pfr_select_add_direct",
         link_name="pfr_select_add_direct",
         ret=fp,
-        params=[],
+        params=(),
         is_variadic=False,
     )
     call = Function(
@@ -888,11 +794,11 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         name="pfr_call",
         link_name="pfr_call",
         ret=i32,
-        params=[
-            Param(name="op", type=fp_typedef_ref),
-            Param(name="lhs", type=i32),
-            Param(name="rhs", type=i32),
-        ],
+        params=(
+            CParam(name="op", type=fp_typedef_ref),
+            CParam(name="lhs", type=i32),
+            CParam(name="rhs", type=i32),
+        ),
         is_variadic=False,
     )
     unit = Unit(
@@ -900,17 +806,16 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         library="pfr",
         link_name="pfr",
         target_abi=_abi(),
-        decls=[fp_typedef, choose, choose_direct, call],
+        decls=(fp_typedef, choose, choose_direct, call),
     )
-
     external_out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert (
         'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in external_out
     )
     assert 'def pfr_select_add() abi("C") -> pfr_binary_op_t:' in external_out
     assert (
-        'def pfr_select_add_direct() abi("C") -> pfr_select_add_direct_return_cb:'
-    ) in external_out
+        'def pfr_select_add_direct() abi("C") -> pfr_select_add_direct_return_cb:' in external_out
+    )
     assert 'return external_call["pfr_select_add", pfr_binary_op_t]()' in external_out
     assert (
         'return external_call["pfr_select_add_direct", pfr_select_add_direct_return_cb]()'
@@ -924,22 +829,19 @@ def test_generator_emits_function_pointer_return_wrappers_for_both_link_modes() 
         'return external_call["pfr_call", c_int, pfr_binary_op_t, c_int, c_int](op, lhs, rhs)'
         in external_out
     )
-
     dl_out = MojoGenerator(
-        MojoEmitOptions(
-            linking="owned_dl_handle",
-            library_path_hint="/tmp/libpfr.so",
-        )
+        MojoEmitOptions(linking="owned_dl_handle", library_path_hint="/tmp/libpfr.so")
     ).generate(unit)
     assert 'comptime pfr_binary_op_t = def (a: c_int, b: c_int) thin abi("C") -> c_int' in dl_out
     assert "def pfr_select_add() -> pfr_binary_op_t:" in dl_out
-    assert ("def pfr_select_add_direct() -> pfr_select_add_direct_return_cb:") in dl_out
+    assert "def pfr_select_add_direct() -> pfr_select_add_direct_return_cb:" in dl_out
     assert (
         'var _bindgen_c_fn = _bindgen_owner[].get_function[pfr_binary_op_t]("pfr_select_add")'
-    ) in dl_out
+        in dl_out
+    )
     assert (
-        "var _bindgen_c_fn = _bindgen_owner[].get_function["
-        'pfr_select_add_direct_return_cb]("pfr_select_add_direct")' in dl_out
+        'var _bindgen_c_fn = _bindgen_owner[].get_function[pfr_select_add_direct_return_cb]("pfr_select_add_direct")'
+        in dl_out
     )
     assert 'var _bindgen_c_fn = _bindgen_owner[].get_function[c_int]("pfr_call")' in dl_out
     assert "return _bindgen_c_fn(op, lhs, rhs)" in dl_out
@@ -951,7 +853,7 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
         decl_id="struct:sqlite3",
         name="sqlite3",
         c_name="sqlite3",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=8,
         is_complete=False,
@@ -960,18 +862,14 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
         decl_id="struct:sqlite3_vtab",
         name="sqlite3_vtab",
         c_name="sqlite3_vtab",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=8,
         is_complete=False,
     )
     sqlite3_ref = _ptr(
         _struct_ref(
-            decl_id="struct:sqlite3",
-            name="sqlite3",
-            c_name="sqlite3",
-            size_bytes=0,
-            align_bytes=8,
+            decl_id="struct:sqlite3", name="sqlite3", c_name="sqlite3", size_bytes=0, align_bytes=8
         )
     )
     vtab_out = _ptr(
@@ -997,11 +895,11 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
         decl_id="struct:sqlite3_module",
         name="sqlite3_module",
         c_name="sqlite3_module",
-        fields=[
+        fields=(
             _field(name="iVersion", source_name="iVersion", type=i32, byte_offset=0),
             _field(name="xCreate", source_name="xCreate", type=cb, byte_offset=8),
             _field(name="xConnect", source_name="xConnect", type=cb, byte_offset=16),
-        ],
+        ),
         size_bytes=24,
         align_bytes=8,
         is_union=False,
@@ -1012,7 +910,7 @@ def test_generator_emits_struct_field_callback_aliases() -> None:
             library="sqlite",
             link_name="sqlite",
             target_abi=_abi(),
-            decls=[sqlite3, vtab, module],
+            decls=(sqlite3, vtab, module),
         )
     )
     assert "comptime sqlite3_module_xCreate_cb = def (" in out
@@ -1028,10 +926,10 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         decl_id="struct:Parts",
         name="Parts",
         c_name="Parts",
-        fields=[
+        fields=(
             _field(name="lo", source_name="lo", type=i32, byte_offset=0),
             _field(name="hi", source_name="hi", type=i32, byte_offset=4),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_union=False,
@@ -1040,7 +938,7 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         decl_id="union:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[
+        fields=(
             _field(name="raw", source_name="raw", type=i32, byte_offset=0),
             _field(
                 name="parts",
@@ -1055,7 +953,7 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
                 ),
                 byte_offset=0,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_union=True,
@@ -1064,7 +962,7 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
         decl_id="struct:Holder",
         name="Holder",
         c_name="Holder",
-        fields=[
+        fields=(
             _field(
                 name="payload",
                 source_name="payload",
@@ -1077,8 +975,8 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
                     is_union=True,
                 ),
                 byte_offset=0,
-            )
-        ],
+            ),
+        ),
         size_bytes=8,
         align_bytes=4,
         is_union=False,
@@ -1089,7 +987,7 @@ def test_generator_emits_nominal_union_alias_for_struct_arm_union() -> None:
             library="t",
             link_name="t",
             target_abi=_abi(),
-            decls=[parts, payload, holder],
+            decls=(parts, payload, holder),
         )
     )
     assert "comptime Payload = UnsafeUnion[c_int, Parts]" in out
@@ -1102,10 +1000,10 @@ def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_un
         decl_id="union:Dup",
         name="Dup",
         c_name="Dup",
-        fields=[
+        fields=(
             _field(name="a", source_name="a", type=i32, byte_offset=0),
             _field(name="b", source_name="b", type=i32, byte_offset=0),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_union=True,
@@ -1114,7 +1012,7 @@ def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_un
         decl_id="struct:HolderDup",
         name="HolderDup",
         c_name="HolderDup",
-        fields=[
+        fields=(
             _field(
                 name="payload",
                 source_name="payload",
@@ -1127,8 +1025,8 @@ def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_un
                     is_union=True,
                 ),
                 byte_offset=0,
-            )
-        ],
+            ),
+        ),
         size_bytes=4,
         align_bytes=4,
         is_union=False,
@@ -1139,7 +1037,7 @@ def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_un
             library="t",
             link_name="t",
             target_abi=_abi(),
-            decls=[union_decl, holder],
+            decls=(union_decl, holder),
         )
     )
     assert "duplicates mapped type of earlier member `a`" in out
@@ -1149,46 +1047,41 @@ def test_generator_emits_documented_inline_array_fallback_for_duplicated_type_un
 
 def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
     i32 = _i32()
-    opaque = Pointer(pointee=None)
-    cmp_cb = FunctionPtr(
+    opaque = CPointer(pointee=None)
+    cmp_cb = CFunctionPtr(
         ret=i32,
-        params=[
-            Param(name="", type=opaque),
-            Param(name="", type=i32),
-            Param(name="", type=Pointer(pointee=None)),
-            Param(name="", type=i32),
-            Param(name="", type=Pointer(pointee=None)),
-        ],
+        params=(
+            CParam(name="", type=opaque),
+            CParam(name="", type=i32),
+            CParam(name="", type=CPointer(pointee=None)),
+            CParam(name="", type=i32),
+            CParam(name="", type=CPointer(pointee=None)),
+        ),
         param_names=["ctx", "lhs_len", "lhs", "rhs_len", "rhs"],
         is_variadic=False,
     )
-    destroy_cb = FunctionPtr(
+    destroy_cb = CFunctionPtr(
         ret=VoidType(),
-        params=[Param(name="", type=opaque)],
+        params=(CParam(name="", type=opaque),),
         param_names=["ctx"],
         is_variadic=False,
     )
-    db = Pointer(
-        pointee=StructRef(
-            decl_id="struct:sqlite3",
-            name="sqlite3",
-            c_name="sqlite3",
-            size_bytes=0,
-        )
+    db = CPointer(
+        pointee=StructRef(decl_id="struct:sqlite3", name="sqlite3", c_name="sqlite3", size_bytes=0)
     )
     create = Function(
         decl_id="fn:sqlite3_create_collation_v2",
         name="sqlite3_create_collation_v2",
         link_name="sqlite3_create_collation_v2",
         ret=i32,
-        params=[
-            Param(name="db", type=db),
-            Param(name="zName", type=Pointer(pointee=_char())),
-            Param(name="eTextRep", type=i32),
-            Param(name="ctx", type=opaque),
-            Param(name="xCompare", type=cmp_cb),
-            Param(name="xDestroy", type=destroy_cb),
-        ],
+        params=(
+            CParam(name="db", type=db),
+            CParam(name="zName", type=CPointer(pointee=_char())),
+            CParam(name="eTextRep", type=i32),
+            CParam(name="ctx", type=opaque),
+            CParam(name="xCompare", type=cmp_cb),
+            CParam(name="xDestroy", type=destroy_cb),
+        ),
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
@@ -1197,65 +1090,52 @@ def test_generator_uses_callback_alias_types_in_wrapper_abi_lists() -> None:
             library="sqlite",
             link_name="sqlite",
             target_abi=_abi(),
-            decls=[
+            decls=(
                 Struct(
                     decl_id="struct:sqlite3",
                     name="sqlite3",
                     c_name="sqlite3",
-                    fields=[],
+                    fields=(),
                     size_bytes=0,
                     align_bytes=8,
                     is_complete=False,
                 ),
                 create,
-            ],
+            ),
         )
     )
     assert "comptime sqlite3_create_collation_v2_xCompare_cb = def (" in out
     assert "comptime sqlite3_create_collation_v2_xDestroy_cb = def (" in out
     assert (
-        "def sqlite3_create_collation_v2("
-        "db: Optional[Pointer[sqlite3, MutUntrackedOrigin]], "
-        "zName: Optional[Pointer[c_char, MutUntrackedOrigin]], "
-        "eTextRep: c_int, "
-        "ctx: Optional[OpaquePointer[mut=True, MutUntrackedOrigin]], "
-        "xCompare: sqlite3_create_collation_v2_xCompare_cb, "
-        "xDestroy: sqlite3_create_collation_v2_xDestroy_cb"
-        ') abi("C") -> c_int:'
-    ) in out
+        'def sqlite3_create_collation_v2(db: Optional[Pointer[sqlite3, MutUntrackedOrigin]], zName: Optional[Pointer[c_char, MutUntrackedOrigin]], eTextRep: c_int, ctx: Optional[OpaquePointer[mut=True, MutUntrackedOrigin]], xCompare: sqlite3_create_collation_v2_xCompare_cb, xDestroy: sqlite3_create_collation_v2_xDestroy_cb) abi("C") -> c_int:'
+        in out
+    )
     assert (
-        'return external_call["sqlite3_create_collation_v2", c_int, '
-        "Optional[Pointer[sqlite3, MutUntrackedOrigin]], "
-        "Optional[Pointer[c_char, MutUntrackedOrigin]], c_int, "
-        "Optional[OpaquePointer[mut=True, MutUntrackedOrigin]], "
-        "sqlite3_create_collation_v2_xCompare_cb, sqlite3_create_collation_v2_xDestroy_cb]"
-        "(db, zName, eTextRep, ctx, xCompare, xDestroy)"
-    ) in out
+        'return external_call["sqlite3_create_collation_v2", c_int, Optional[Pointer[sqlite3, MutUntrackedOrigin]], Optional[Pointer[c_char, MutUntrackedOrigin]], c_int, Optional[OpaquePointer[mut=True, MutUntrackedOrigin]], sqlite3_create_collation_v2_xCompare_cb, sqlite3_create_collation_v2_xDestroy_cb](db, zName, eTextRep, ctx, xCompare, xDestroy)'
+        in out
+    )
 
 
 def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
-    cb_sig = FunctionPtr(
-        ret=Pointer(pointee=None),
-        params=[Param(name="", type=Pointer(pointee=None)), Param(name="", type=_i32())],
+    cb_sig = CFunctionPtr(
+        ret=CPointer(pointee=None),
+        params=(CParam(name="", type=CPointer(pointee=None)), CParam(name="", type=_i32())),
         param_names=["ctx", "value"],
         is_variadic=False,
     )
     cb_typedef = Typedef(
-        decl_id="typedef:nested_cb_t",
-        name="nested_cb_t",
-        aliased=cb_sig,
-        canonical=cb_sig,
+        decl_id="typedef:nested_cb_t", name="nested_cb_t", aliased=cb_sig, canonical=cb_sig
     )
     fn = Function(
         decl_id="fn:install_nested_cb",
         name="install_nested_cb",
         link_name="install_nested_cb",
         ret=VoidType(),
-        params=[
-            Param(
+        params=(
+            CParam(
                 name="slot",
-                type=Pointer(
-                    pointee=Pointer(
+                type=CPointer(
+                    pointee=CPointer(
                         pointee=TypeRef(
                             decl_id=cb_typedef.decl_id,
                             name=cb_typedef.name,
@@ -1263,8 +1143,8 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
                         )
                     )
                 ),
-            )
-        ],
+            ),
+        ),
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
@@ -1273,19 +1153,18 @@ def test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists() -> None:
             library="t",
             link_name="t",
             target_abi=_abi(),
-            decls=[cb_typedef, fn],
+            decls=(cb_typedef, fn),
         )
     )
     assert "comptime nested_cb_t = def (" in out
     assert (
-        "def install_nested_cb(slot: Optional[Pointer[Optional[Pointer[nested_cb_t, "
-        'MutUntrackedOrigin]], MutUntrackedOrigin]]) abi("C") -> None:'
-    ) in out
+        'def install_nested_cb(slot: Optional[Pointer[Optional[Pointer[nested_cb_t, MutUntrackedOrigin]], MutUntrackedOrigin]]) abi("C") -> None:'
+        in out
+    )
     assert (
-        'external_call["install_nested_cb", NoneType, '
-        "Optional[Pointer[Optional[Pointer[nested_cb_t, MutUntrackedOrigin]], "
-        "MutUntrackedOrigin]]](slot)"
-    ) in out
+        'external_call["install_nested_cb", NoneType, Optional[Pointer[Optional[Pointer[nested_cb_t, MutUntrackedOrigin]], MutUntrackedOrigin]]](slot)'
+        in out
+    )
 
 
 def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
@@ -1295,20 +1174,11 @@ def test_generator_emits_std_ffi_c_aliases_and_imports_by_default() -> None:
         name="sf_add",
         link_name="sf_add",
         ret=i32,
-        params=[
-            Param(name="a", type=i32),
-            Param(name="b", type=i32),
-        ],
+        params=(CParam(name="a", type=i32), CParam(name="b", type=i32)),
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
-        Unit(
-            source_header="t.h",
-            library="t",
-            link_name="t",
-            target_abi=_abi(),
-            decls=[fn],
-        )
+        Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(fn,))
     )
     assert "from std.ffi import external_call, c_int" in out
     assert 'def sf_add(a: c_int, b: c_int) abi("C") -> c_int:' in out
@@ -1320,29 +1190,20 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
     ``canonical`` on decl types never visits those scalars (e.g. ret-only function + typedef FP).
     """
     i32 = _i32()
-    fp = FunctionPtr(
+    fp = CFunctionPtr(
         ret=i32,
-        params=[Param(name="", type=i32), Param(name="", type=i32)],
+        params=(CParam(name="", type=i32), CParam(name="", type=i32)),
         param_names=["a", "b"],
         is_variadic=False,
     )
-    fp_typedef = Typedef(
-        decl_id="typedef:only_cb_t",
-        name="only_cb_t",
-        aliased=fp,
-        canonical=fp,
-    )
-    fp_typedef_ref = TypeRef(
-        decl_id=fp_typedef.decl_id,
-        name="only_cb_t",
-        canonical=fp,
-    )
+    fp_typedef = Typedef(decl_id="typedef:only_cb_t", name="only_cb_t", aliased=fp, canonical=fp)
+    fp_typedef_ref = TypeRef(decl_id=fp_typedef.decl_id, name="only_cb_t", canonical=fp)
     getter = Function(
         decl_id="fn:get_only_cb",
         name="get_only_cb",
         link_name="get_only_cb",
         ret=fp_typedef_ref,
-        params=[],
+        params=(),
         is_variadic=False,
     )
     out = MojoGenerator(MojoEmitOptions()).generate(
@@ -1351,7 +1212,7 @@ def test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures() ->
             library="t",
             link_name="t",
             target_abi=_abi(),
-            decls=[fp_typedef, getter],
+            decls=(fp_typedef, getter),
         )
     )
     assert "from std.ffi import external_call, c_int" in out

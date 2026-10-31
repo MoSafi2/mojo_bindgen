@@ -6,22 +6,34 @@
   "decls": [
     {
       "kind": "GlobalVar",
-      "name": "asf_counter",
+      "fields": {
+        "name": "asf_counter"
+      },
       "attrs": {
-        "type": {
-          "kind": "AtomicType",
-          "value_type": {
-            "kind": "IntType",
-            "int_kind": "INT"
+        "fields": {
+          "type": {
+            "kind": "AtomicType",
+            "fields": {
+              "value_type": {
+                "kind": "IntType",
+                "fields": {
+                  "int_kind": "INT"
+                }
+              }
+            }
           }
         }
       }
     },
     {
       "kind": "Struct",
-      "name": "asf_state",
+      "fields": {
+        "name": "asf_state"
+      },
       "attrs": {
-        "size_bytes": 8
+        "fields": {
+          "size_bytes": 8
+        }
       }
     }
   ],
@@ -29,17 +41,25 @@
     {
       "selector": {
         "kind": "Struct",
-        "name": "asf_state"
+        "fields": {
+          "name": "asf_state"
+        }
       },
-      "path": "fields.0.type",
+      "path": "fields.fields.0.fields.type",
       "attrs": {
         "kind": "AtomicType",
-        "value_type": {
-          "kind": "TypeRef",
-          "name": "uint64_t",
-          "canonical": {
-            "kind": "IntType",
-            "int_kind": "ULONG"
+        "fields": {
+          "value_type": {
+            "kind": "TypeRef",
+            "fields": {
+              "name": "uint64_t",
+              "canonical": {
+                "kind": "IntType",
+                "fields": {
+                  "int_kind": "ULONG"
+                }
+              }
+            }
           }
         }
       }

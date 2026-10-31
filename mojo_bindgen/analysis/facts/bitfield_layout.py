@@ -6,14 +6,14 @@ from dataclasses import dataclass, field
 
 from mojo_bindgen.analysis.facts.type_layout import peel_layout_wrappers
 from mojo_bindgen.analysis.mojo.mapping_support import field_display_name
-from mojo_bindgen.ir import Field, IntKind, IntType, Struct, Type
+from mojo_bindgen.ir import CType, Field, IntKind, IntType, Struct
 
 
 @dataclass(frozen=True)
 class BitfieldFieldLayout:
     index: int
     field: Field
-    logical_type: Type
+    logical_type: CType
     bit_offset: int
     bit_width: int
     signed: bool

@@ -13,11 +13,7 @@ from mojo_bindgen.parsing.frontend import ClangOptions
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _demo_unit() -> Unit:
@@ -26,15 +22,11 @@ def _demo_unit() -> Unit:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Function(
-                decl_id="fn:install",
-                name="install",
-                link_name="install",
-                ret=VoidType(),
-                params=[],
-            )
-        ],
+                decl_id="fn:install", name="install", link_name="install", ret=VoidType(), params=()
+            ),
+        ),
     )
 
 
@@ -81,13 +73,8 @@ def test_parse_builds_clang_parser(monkeypatch) -> None:
             return _demo_unit()
 
     monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
-
-    options = BindgenOptions(
-        header=Path("demo.h"),
-        compile_args=["-I./include"],
-    )
+    options = BindgenOptions(header=Path("demo.h"), compile_args=["-I./include"])
     result = BindgenOrchestrator(options).parse()
-
     assert result == _demo_unit()
     assert calls == {
         "header": Path("demo.h"),
@@ -122,9 +109,7 @@ def test_parse_adds_system_comment_retention_to_default_compile_args(monkeypatch
             return _demo_unit()
 
     monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
-
     BindgenOrchestrator(BindgenOptions(header=Path("demo.h"))).parse()
-
     assert calls["compile_args"] is not None
     assert "-I/usr/include" in calls["compile_args"]
     assert "-fretain-comments-from-system-headers" in calls["compile_args"]
@@ -151,13 +136,11 @@ def test_parse_adds_system_includes_to_structured_clang_options(monkeypatch) -> 
             return _demo_unit()
 
     monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
-
     options = BindgenOptions(
         header=Path("demo.h"),
         clang_options=ClangOptions(std="c11", include_dirs=(Path("./include"),)),
     )
     BindgenOrchestrator(options).parse()
-
     assert calls["compile_args"] is not None
     assert calls["compile_args"][:4] == ["-x", "c", "-std=c11", "-Iinclude"]
     assert "-I/usr/include" in calls["compile_args"]
@@ -185,14 +168,10 @@ def test_parse_omits_system_comment_retention_when_doc_comments_disabled(monkeyp
             return _demo_unit()
 
     monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
-
     options = BindgenOptions(
-        header=Path("demo.h"),
-        compile_args=["-I./include"],
-        emit_doc_comments=False,
+        header=Path("demo.h"), compile_args=["-I./include"], emit_doc_comments=False
     )
     BindgenOrchestrator(options).parse()
-
     assert calls["compile_args"] == ["-I./include"]
 
 
@@ -217,23 +196,17 @@ def test_parse_does_not_duplicate_system_comment_retention_arg(monkeypatch) -> N
             return _demo_unit()
 
     monkeypatch.setattr(orchestrator_mod, "ClangParser", DummyParser)
-
     options = BindgenOptions(
-        header=Path("demo.h"),
-        compile_args=["-I./include", "-fretain-comments-from-system-headers"],
+        header=Path("demo.h"), compile_args=["-I./include", "-fretain-comments-from-system-headers"]
     )
     BindgenOrchestrator(options).parse()
-
     assert calls["compile_args"] == ["-I./include", "-fretain-comments-from-system-headers"]
 
 
 def test_analyze_uses_analysis_orchestrator(monkeypatch) -> None:
     unit = _demo_unit()
     lowered = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
+        source_header="demo.h", library="demo", link_name="demo", link_mode=LinkMode.EXTERNAL_CALL
     )
     captured: dict[str, object] = {}
 
@@ -246,9 +219,7 @@ def test_analyze_uses_analysis_orchestrator(monkeypatch) -> None:
             return lowered
 
     monkeypatch.setattr(orchestrator_mod, "AnalysisOrchestrator", DummyAnalysisOrchestrator)
-
     result = BindgenOrchestrator(_options_for_unit(unit)).analyze(unit)
-
     assert result is lowered
     assert captured["unit"] is unit
     assert captured["options"] == MojoEmitOptions()
@@ -257,10 +228,7 @@ def test_analyze_uses_analysis_orchestrator(monkeypatch) -> None:
 def test_codegen_renders_bindings_and_layout_tests(monkeypatch) -> None:
     unit = _demo_unit()
     module = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
+        source_header="demo.h", library="demo", link_name="demo", link_mode=LinkMode.EXTERNAL_CALL
     )
     calls: dict[str, object] = {}
 
@@ -279,7 +247,6 @@ def test_codegen_renders_bindings_and_layout_tests(monkeypatch) -> None:
     monkeypatch.setattr(
         orchestrator_mod, "render_layout_test_module", fake_render_layout_test_module
     )
-
     options = BindgenOptions(
         header=Path("demo.h"),
         output=Path("/tmp/demo_bindings.mojo"),
@@ -287,7 +254,6 @@ def test_codegen_renders_bindings_and_layout_tests(monkeypatch) -> None:
         module_comment=False,
     )
     artifacts = BindgenOrchestrator(options).codegen(module, normalized_unit=unit)
-
     assert artifacts.bindings_source == "generated"
     assert artifacts.layout_test_source == "layout"
     assert calls == {
@@ -302,10 +268,7 @@ def test_codegen_renders_bindings_and_layout_tests(monkeypatch) -> None:
 def test_run_returns_full_result(monkeypatch) -> None:
     unit = _demo_unit()
     module = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode=LinkMode.EXTERNAL_CALL,
+        source_header="demo.h", library="demo", link_name="demo", link_mode=LinkMode.EXTERNAL_CALL
     )
 
     @dataclass(frozen=True)
@@ -326,19 +289,13 @@ def test_run_returns_full_result(monkeypatch) -> None:
         layout_test_source = None
 
     monkeypatch.setattr(orchestrator_mod, "AnalysisOrchestrator", DummyAnalysisOrchestrator)
-    monkeypatch.setattr(
-        BindgenOrchestrator,
-        "parse",
-        lambda self: unit,
-    )
+    monkeypatch.setattr(BindgenOrchestrator, "parse", lambda self: unit)
     monkeypatch.setattr(
         BindgenOrchestrator,
         "codegen",
         lambda self, _module, *, normalized_unit=None: DummyRendered(),
     )
-
     result = BindgenOrchestrator(_options_for_unit(unit)).run()
-
     assert result.unit is unit
     assert result.mojo_module is module
     assert result.bindings_source == "generated"
@@ -367,8 +324,6 @@ def test_bindgen_wrapper_uses_orchestrator(monkeypatch) -> None:
             return DummyResult()
 
     monkeypatch.setattr(orchestrator_mod, "BindgenOrchestrator", DummyOrchestrator)
-
     result = bindgen(_options_for_unit(_demo_unit()))
-
     assert result.bindings_source == "generated"
     assert captured["options"].header == Path("demo.h")

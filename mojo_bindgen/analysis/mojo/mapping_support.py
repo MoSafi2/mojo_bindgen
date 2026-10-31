@@ -7,12 +7,13 @@ from mojo_bindgen.analysis.facts.indexes import record_by_decl_id
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass, TypeMappingError
 from mojo_bindgen.ir import (
     BuiltinType,
+    CType,
     Field,
     MappingNote,
     MappingSeverity,
     MojoBuiltin,
+    MojoType,
     Struct,
-    Type,
 )
 
 
@@ -66,11 +67,11 @@ def union_note(message: str) -> MappingNote:
 
 def try_map_type(
     type_mapper: MapTypePass,
-    t: Type,
+    t: CType,
     *,
     subject: str,
     failure_suffix: str,
-) -> tuple[Type | None, str | None]:
+) -> tuple[MojoType | None, str | None]:
     """Map one CIR type and turn mapping failure into a diagnostic reason."""
 
     try:

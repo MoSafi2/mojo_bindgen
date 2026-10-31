@@ -8,16 +8,16 @@ import pytest
 
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
+    CArray,
+    CFunctionPtr,
+    CPointer,
     EnumRef,
     Function,
     FunctionAttrs,
-    FunctionPtr,
     InlineDisposition,
     IntKind,
     IntType,
-    Pointer,
     QualifiedType,
     Struct,
     StructRef,
@@ -38,10 +38,7 @@ def _has_libclang() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
-    not _has_libclang(),
-    reason="libclang not available (use pixi run)",
-)
+pytestmark = pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
 
 
 def test_type_context_enum_is_stable() -> None:
@@ -54,27 +51,12 @@ def test_type_context_enum_is_stable() -> None:
 def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     header = tmp_path / "type_lowering_ctx.h"
     header.write_text(
-        (
-            "typedef unsigned int my_uint;\n"
-            "typedef enum mode_t { MODE_A = 1 } mode_t;\n"
-            "typedef struct payload_t {\n"
-            "  my_uint value;\n"
-            "  mode_t mode;\n"
-            "} payload_t;\n"
-            "mode_t take_mode(my_uint input);\n"
-        ),
+        "typedef unsigned int my_uint;\ntypedef enum mode_t { MODE_A = 1 } mode_t;\ntypedef struct payload_t {\n  my_uint value;\n  mode_t mode;\n} payload_t;\nmode_t take_mode(my_uint input);\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "take_mode")
-
     assert isinstance(payload.fields[0].type, TypeRef)
     assert payload.fields[0].type.name == "my_uint"
     assert isinstance(payload.fields[0].type.canonical, IntType)
@@ -83,7 +65,6 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     assert payload.fields[1].type.name == "mode_t"
     assert isinstance(payload.fields[1].type.canonical, EnumRef)
     assert payload.fields[1].type.canonical.name == "mode_t"
-
     assert isinstance(fn.ret, TypeRef)
     assert fn.ret.name == "mode_t"
     assert isinstance(fn.ret.canonical, EnumRef)
@@ -95,59 +76,32 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
 def test_type_lowering_preserves_callback_parameter_names_across_positions(tmp_path: Path) -> None:
     header = tmp_path / "callback_param_names.h"
     header.write_text(
-        (
-            "typedef int (*typedef_cb_t)(int value, void *userdata);\n"
-            "struct callbacks_t {\n"
-            "  int (*poll)(int timeout_ms, void *);\n"
-            "};\n"
-            "int install(int (*fn)(int count, void *ctx));\n"
-            "int (*chooser(void))(int timeout_ms, void *userdata);\n"
-        ),
+        "typedef int (*typedef_cb_t)(int value, void *userdata);\nstruct callbacks_t {\n  int (*poll)(int timeout_ms, void *);\n};\nint install(int (*fn)(int count, void *ctx));\nint (*chooser(void))(int timeout_ms, void *userdata);\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     typedef_cb = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "typedef_cb_t")
     callbacks = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "callbacks_t")
     install = next(d for d in unit.decls if isinstance(d, Function) and d.name == "install")
     chooser = next(d for d in unit.decls if isinstance(d, Function) and d.name == "chooser")
-
-    assert isinstance(typedef_cb.aliased, FunctionPtr)
-    assert typedef_cb.aliased.param_names == ["value", "userdata"]
-
+    assert isinstance(typedef_cb.aliased, CFunctionPtr)
+    assert typedef_cb.aliased.param_names == ("value", "userdata")
     poll = next(f for f in callbacks.fields if f.name == "poll")
-    assert isinstance(poll.type, FunctionPtr)
-    assert poll.type.param_names == ["timeout_ms", ""]
-
-    assert isinstance(install.params[0].type, FunctionPtr)
-    assert install.params[0].type.param_names == ["count", "ctx"]
-
-    assert isinstance(chooser.ret, FunctionPtr)
-    assert chooser.ret.param_names == ["timeout_ms", "userdata"]
+    assert isinstance(poll.type, CFunctionPtr)
+    assert poll.type.param_names == ("timeout_ms", "")
+    assert isinstance(install.params[0].type, CFunctionPtr)
+    assert install.params[0].type.param_names == ("count", "ctx")
+    assert isinstance(chooser.ret, CFunctionPtr)
+    assert chooser.ret.param_names == ("timeout_ms", "userdata")
 
 
 def test_decl_lowering_preserves_inline_and_noreturn_function_attrs(tmp_path: Path) -> None:
     header = tmp_path / "function_attrs.h"
     header.write_text(
-        (
-            "inline int local_inline(int x);\n"
-            "extern inline int exported_inline(int x);\n"
-            "_Noreturn void fail_now(void);\n"
-        ),
+        "inline int local_inline(int x);\nextern inline int exported_inline(int x);\n_Noreturn void fail_now(void);\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     local_inline = next(
         d for d in unit.decls if isinstance(d, Function) and d.name == "local_inline"
     )
@@ -155,7 +109,6 @@ def test_decl_lowering_preserves_inline_and_noreturn_function_attrs(tmp_path: Pa
         d for d in unit.decls if isinstance(d, Function) and d.name == "exported_inline"
     )
     fail_now = next(d for d in unit.decls if isinstance(d, Function) and d.name == "fail_now")
-
     assert local_inline.attrs == FunctionAttrs(inline_disposition=InlineDisposition.INLINE)
     assert exported_inline.attrs == FunctionAttrs(
         inline_disposition=InlineDisposition.EXTERN_INLINE
@@ -168,23 +121,11 @@ def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(
 ) -> None:
     header = tmp_path / "callback_codegen_names.h"
     header.write_text(
-        (
-            "typedef int (*named_cb_t)(int value, void *userdata);\n"
-            "struct callbacks_t {\n"
-            "  int (*poll)(int timeout_ms, void *);\n"
-            "};\n"
-        ),
+        "typedef int (*named_cb_t)(int value, void *userdata);\nstruct callbacks_t {\n  int (*poll)(int timeout_ms, void *);\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-
     assert (
         'comptime named_cb_t = def (value: c_int, userdata: Optional[OpaquePointer[mut=True, MutUntrackedOrigin]]) thin abi("C") -> c_int'
         in out
@@ -198,25 +139,12 @@ def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(
 def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) -> None:
     header = tmp_path / "nested_typedef_chain.h"
     header.write_text(
-        (
-            "typedef unsigned int inner_t;\n"
-            "typedef inner_t outer_t;\n"
-            "typedef struct payload_t {\n"
-            "  outer_t value;\n"
-            "} payload_t;\n"
-        ),
+        "typedef unsigned int inner_t;\ntypedef inner_t outer_t;\ntypedef struct payload_t {\n  outer_t value;\n} payload_t;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     outer = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "outer_t")
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
-
     assert isinstance(outer.aliased, TypeRef)
     assert outer.aliased.name == "inner_t"
     assert isinstance(outer.canonical, IntType)
@@ -228,43 +156,25 @@ def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) 
 def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_nested.h"
     header.write_text(
-        (
-            "struct outer_t {\n"
-            "  struct { int x; } nested_struct;\n"
-            "  union { int y; float z; } nested_union;\n"
-            "  unsigned int flags:3;\n"
-            "  unsigned int :0;\n"
-            "};\n"
-            "typedef struct outer_t outer_t;\n"
-        ),
+        "struct outer_t {\n  struct { int x; } nested_struct;\n  union { int y; float z; } nested_union;\n  unsigned int flags:3;\n  unsigned int :0;\n};\ntypedef struct outer_t outer_t;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
-
     nested_struct_field = next(f for f in outer.fields if f.name == "nested_struct")
     assert isinstance(nested_struct_field.type, StructRef)
     assert nested_struct_field.type.is_union is False
     assert nested_struct_field.size_bytes == nested_struct_field.type.size_bytes
-
     nested_union_field = next(f for f in outer.fields if f.name == "nested_union")
     assert isinstance(nested_union_field.type, StructRef)
     assert nested_union_field.type.is_union is True
     assert nested_union_field.type.size_bytes > 0
     assert nested_union_field.size_bytes == nested_union_field.type.size_bytes
-
     flags = next(f for f in outer.fields if f.name == "flags")
     assert flags.is_bitfield
     assert flags.bit_width == 3
     assert isinstance(flags.type, IntType)
     assert flags.size_bytes == flags.type.size_bytes
-
     zero_width = next(f for f in outer.fields if f.name == "")
     assert zero_width.is_bitfield
     assert zero_width.bit_width == 0
@@ -274,28 +184,14 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
 def test_record_lowering_preserves_typedef_backed_bitfields(tmp_path: Path) -> None:
     header = tmp_path / "typedef_bitfields.h"
     header.write_text(
-        (
-            "#include <stdint.h>\n"
-            "struct typedef_bits_t {\n"
-            "  uint32_t ready:1;\n"
-            "  uint32_t state:3;\n"
-            "};\n"
-        ),
+        "#include <stdint.h>\nstruct typedef_bits_t {\n  uint32_t ready:1;\n  uint32_t state:3;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     bits = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "typedef_bits_t")
-
     assert [field.name for field in bits.fields] == ["ready", "state"]
     ready = bits.fields[0]
     state = bits.fields[1]
-
     assert ready.is_bitfield is True
     assert ready.bit_offset == 0
     assert ready.bit_width == 1
@@ -303,7 +199,6 @@ def test_record_lowering_preserves_typedef_backed_bitfields(tmp_path: Path) -> N
     assert ready.type.name == "uint32_t"
     assert isinstance(ready.type.canonical, IntType)
     assert ready.type.canonical.int_kind == IntKind.UINT
-
     assert state.is_bitfield is True
     assert state.bit_offset == 1
     assert state.bit_width == 3
@@ -316,25 +211,16 @@ def test_record_lowering_preserves_typedef_backed_bitfields(tmp_path: Path) -> N
 def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_path: Path) -> None:
     inner = tmp_path / "inner.h"
     outer = tmp_path / "outer.h"
-    inner.write_text(
-        "struct inner_t { int x; int y; };\n",
-        encoding="utf-8",
-    )
+    inner.write_text("struct inner_t { int x; int y; };\n", encoding="utf-8")
     outer.write_text(
         '#include "inner.h"\nstruct outer_t {\n  struct inner_t inner;\n  int tag;\n};\n',
         encoding="utf-8",
     )
-
     unit = ClangParser(
-        header=outer,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[f"-I{tmp_path}"],
+        header=outer, library="ctx", link_name="ctx", compile_args=[f"-I{tmp_path}"]
     ).run()
-
     inner_decl = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_t")
     outer_decl = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
-
     assert inner_decl.is_complete is True
     assert len(inner_decl.fields) == 2
     inner_field = next(f for f in outer_decl.fields if f.name == "inner")
@@ -345,31 +231,16 @@ def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_pa
 def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_direct_anon.h"
     header.write_text(
-        (
-            "struct outer_t {\n"
-            "  int tag;\n"
-            "  union {\n"
-            "    struct { int x; int y; };\n"
-            "    int flat;\n"
-            "  };\n"
-            "};\n"
-        ),
+        "struct outer_t {\n  int tag;\n  union {\n    struct { int x; int y; };\n    int flat;\n  };\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
     anon_union = next(f for f in outer.fields if f.is_anonymous and isinstance(f.type, StructRef))
     assert anon_union.byte_offset == 4
     assert anon_union.size_bytes == anon_union.type.size_bytes
     assert anon_union.type.is_union is True
     assert anon_union.type.is_anonymous is True
-
     inner_union = next(
         d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_union.type.decl_id
     )
@@ -380,7 +251,6 @@ def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Pat
     assert anon_struct.size_bytes == anon_struct.type.size_bytes
     assert anon_struct.type.is_union is False
     assert anon_struct.type.is_anonymous is True
-
     leaf_struct = next(
         d for d in unit.decls if isinstance(d, Struct) and d.decl_id == anon_struct.type.decl_id
     )
@@ -390,18 +260,11 @@ def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Pat
 def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path: Path) -> None:
     header = tmp_path / "record_codegen_direct_anon.h"
     header.write_text(
-        ("typedef struct outer_t {\n  int tag;\n  union {\n    int value;\n  };\n} outer_t;\n"),
+        "typedef struct outer_t {\n  int tag;\n  union {\n    int value;\n  };\n} outer_t;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-
     assert "struct outer_t" in out
     assert "var tag: c_int" in out
     assert "var _anon_1: " in out
@@ -411,19 +274,13 @@ def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path:
 def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_recursive.h"
     header.write_text(
-        ("struct node {\n  int value;\n  struct node* next;\n};\ntypedef struct node node;\n"),
+        "struct node {\n  int value;\n  struct node* next;\n};\ntypedef struct node node;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     node = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "node")
     next_field = next(f for f in node.fields if f.name == "next")
-    assert isinstance(next_field.type, Pointer)
+    assert isinstance(next_field.type, CPointer)
     assert next_field.size_bytes == 8
     assert next_field.type.size_bytes == 8
     assert next_field.type.align_bytes == 8
@@ -434,47 +291,24 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
 def test_record_lowering_marks_trailing_empty_and_zero_length_fams(tmp_path: Path) -> None:
     header = tmp_path / "fam_patterns.h"
     header.write_text(
-        (
-            "struct c99_packet {\n"
-            "  unsigned tag;\n"
-            "  unsigned char payload[];\n"
-            "};\n"
-            "struct gnu_packet {\n"
-            "  unsigned tag;\n"
-            "  unsigned char payload[0];\n"
-            "};\n"
-            "struct one_packet {\n"
-            "  unsigned tag;\n"
-            "  unsigned char payload[1];\n"
-            "};\n"
-        ),
+        "struct c99_packet {\n  unsigned tag;\n  unsigned char payload[];\n};\nstruct gnu_packet {\n  unsigned tag;\n  unsigned char payload[0];\n};\nstruct one_packet {\n  unsigned tag;\n  unsigned char payload[1];\n};\n",
         encoding="utf-8",
     )
-
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     c99_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "c99_packet")
     gnu_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "gnu_packet")
     one_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "one_packet")
-
     c99_payload = next(f for f in c99_packet.fields if f.name == "payload")
-    assert isinstance(c99_payload.type, Array)
+    assert isinstance(c99_payload.type, CArray)
     assert c99_payload.type.array_kind == "flexible"
     assert c99_payload.fam_pattern == "c99_empty"
-
     gnu_payload = next(f for f in gnu_packet.fields if f.name == "payload")
-    assert isinstance(gnu_payload.type, Array)
+    assert isinstance(gnu_payload.type, CArray)
     assert gnu_payload.type.array_kind == "fixed"
     assert gnu_payload.type.size == 0
     assert gnu_payload.fam_pattern == "gnu_zero"
-
     one_payload = next(f for f in one_packet.fields if f.name == "payload")
-    assert isinstance(one_payload.type, Array)
+    assert isinstance(one_payload.type, CArray)
     assert one_payload.type.array_kind == "fixed"
     assert one_payload.type.size == 1
     assert one_payload.fam_pattern is None
@@ -483,17 +317,10 @@ def test_record_lowering_marks_trailing_empty_and_zero_length_fams(tmp_path: Pat
 def test_record_lowering_warns_for_non_trailing_fam_like_field(tmp_path: Path) -> None:
     header = tmp_path / "fam_invalid.h"
     header.write_text(
-        ("struct invalid_packet {\n  unsigned char payload[0];\n  unsigned tag;\n};\n"),
+        "struct invalid_packet {\n  unsigned char payload[0];\n  unsigned tag;\n};\n",
         encoding="utf-8",
     )
-
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "invalid_packet")
     payload = next(f for f in packet.fields if f.name == "payload")
     assert payload.fam_pattern is None
@@ -505,19 +332,10 @@ def test_record_lowering_warns_for_non_trailing_fam_like_field(tmp_path: Path) -
 
 def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> None:
     header = tmp_path / "qualified_atomic_ptr.h"
-    header.write_text(
-        "int ev_load_atomic(const _Atomic int *src);\n",
-        encoding="utf-8",
-    )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    header.write_text("int ev_load_atomic(const _Atomic int *src);\n", encoding="utf-8")
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "ev_load_atomic")
-    assert isinstance(fn.params[0].type, Pointer)
+    assert isinstance(fn.params[0].type, CPointer)
     assert isinstance(fn.params[0].type.pointee, QualifiedType)
     assert fn.params[0].type.pointee.qualifiers.is_const is True
     assert isinstance(fn.params[0].type.pointee.unqualified, AtomicType)
@@ -528,29 +346,18 @@ def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> Non
 def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_path: Path) -> None:
     header = tmp_path / "vector_size_typedef.h"
     header.write_text(
-        (
-            "typedef float vet_float4 __attribute__((vector_size(16)));\n"
-            "typedef struct vet_payload { vet_float4 lanes; } vet_payload;\n"
-        ),
+        "typedef float vet_float4 __attribute__((vector_size(16)));\ntypedef struct vet_payload { vet_float4 lanes; } vet_payload;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     td = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "vet_float4")
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "vet_payload")
-
     assert isinstance(td.canonical, VectorType)
     assert td.canonical.count == 4
     assert isinstance(payload.fields[0].type, TypeRef)
     assert payload.fields[0].type.name == "vet_float4"
     assert isinstance(payload.fields[0].type.canonical, VectorType)
     assert payload.fields[0].type.canonical.count == 4
-
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
     assert "from std.simd import SIMD" in out
     assert "comptime vet_float4 = SIMD[DType.float32, 4]" in out
@@ -559,25 +366,18 @@ def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_pa
 def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_named_nested_ptr.h"
     header.write_text(
-        ("struct outer {\n  struct inner {\n    int x;\n  } *p;\n  struct inner *q;\n};\n"),
+        "struct outer {\n  struct inner {\n    int x;\n  } *p;\n  struct inner *q;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
     inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner")
-
     p_field = next(f for f in outer.fields if f.name == "p")
     q_field = next(f for f in outer.fields if f.name == "q")
-    assert isinstance(p_field.type, Pointer)
+    assert isinstance(p_field.type, CPointer)
     assert isinstance(p_field.type.pointee, StructRef)
     assert p_field.type.pointee.decl_id == inner.decl_id
-    assert isinstance(q_field.type, Pointer)
+    assert isinstance(q_field.type, CPointer)
     assert isinstance(q_field.type.pointee, StructRef)
     assert q_field.type.pointee.decl_id == inner.decl_id
 
@@ -585,19 +385,11 @@ def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_p
 def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_path: Path) -> None:
     header = tmp_path / "record_lowering_named_nested_value.h"
     header.write_text(
-        ("struct outer {\n  struct inner_value {\n    int y;\n  } value;\n};\n"),
-        encoding="utf-8",
+        "struct outer {\n  struct inner_value {\n    int y;\n  } value;\n};\n", encoding="utf-8"
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
     inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_value")
-
     value_field = next(f for f in outer.fields if f.name == "value")
     assert isinstance(value_field.type, StructRef)
     assert value_field.type.decl_id == inner.decl_id
@@ -610,26 +402,12 @@ def test_record_lowering_reuses_named_nested_record_nominally_after_definition(
 ) -> None:
     header = tmp_path / "record_lowering_named_nested_nominal.h"
     header.write_text(
-        (
-            "struct outer {\n"
-            "  struct inner_value {\n"
-            "    int y;\n"
-            "  } value;\n"
-            "  struct inner_value copy;\n"
-            "};\n"
-        ),
+        "struct outer {\n  struct inner_value {\n    int y;\n  } value;\n  struct inner_value copy;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
     inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_value")
-
     copy_field = next(f for f in outer.fields if f.name == "copy")
     assert isinstance(copy_field.type, StructRef)
     assert copy_field.type.decl_id == inner.decl_id
@@ -640,24 +418,11 @@ def test_record_lowering_reuses_named_nested_record_nominally_after_definition(
 def test_codegen_emits_named_nested_record_defs_before_parent(tmp_path: Path) -> None:
     header = tmp_path / "record_codegen_named_nested.h"
     header.write_text(
-        (
-            "struct sqlite3_index_info {\n"
-            "  struct sqlite3_index_constraint { int iColumn; } *aConstraint;\n"
-            "  struct sqlite3_index_orderby { int desc; } *aOrderBy;\n"
-            "  struct sqlite3_index_constraint_usage { int argvIndex; } *aConstraintUsage;\n"
-            "};\n"
-        ),
+        "struct sqlite3_index_info {\n  struct sqlite3_index_constraint { int iColumn; } *aConstraint;\n  struct sqlite3_index_orderby { int desc; } *aOrderBy;\n  struct sqlite3_index_constraint_usage { int argvIndex; } *aConstraintUsage;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(
-        header=header,
-        library="ctx",
-        link_name="ctx",
-        compile_args=[],
-    ).run()
-
+    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
     out = MojoGenerator(MojoEmitOptions()).generate(unit)
-
     assert "struct sqlite3_index_constraint" in out
     assert "struct sqlite3_index_orderby" in out
     assert "struct sqlite3_index_constraint_usage" in out

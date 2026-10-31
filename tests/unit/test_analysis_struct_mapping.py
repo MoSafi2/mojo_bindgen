@@ -2,28 +2,31 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from mojo_bindgen.analysis.facts.record_layout import PlainFieldFact, RecordLayoutFacts
 from mojo_bindgen.analysis.mojo.struct_mapping import StructMappingContext, map_struct
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
     ByteOrder,
+    CArray,
+    CPointer,
     Field,
     Initializer,
     InitializerParam,
     IntKind,
     IntType,
+    MojoArray,
     MojoBuiltin,
     NamedType,
     OpaqueStorageMember,
     PaddingMember,
     ParametricBase,
     ParametricType,
-    Pointer,
     QualifiedType,
     Qualifiers,
     StoredMember,
@@ -34,6 +37,7 @@ from mojo_bindgen.ir import (
     TypeArg,
     UnsupportedType,
 )
+from tests.bindgen_helpers import DEFAULT_TARGET_QUERIES
 
 
 def _i32() -> IntType:
@@ -49,21 +53,11 @@ def _bool() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _field(
-    *,
-    name: str,
-    source_name: str,
-    type,
-    byte_offset: int,
-    size_bytes: int | None = None,
-    **kwargs,
+    *, name: str, source_name: str, type, byte_offset: int, size_bytes: int | None = None, **kwargs
 ) -> Field:
     if size_bytes is None:
         size_bytes = getattr(type, "size_bytes", 0) or 0
@@ -80,8 +74,7 @@ def _field(
 def _context_for(*decls: Struct) -> StructMappingContext:
     record_map = {decl.decl_id: decl for decl in decls}
     return StructMappingContext(
-        record_map=record_map,
-        type_mapper=MapTypePass(),
+        record_map=record_map, type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES)
     )
 
 
@@ -90,7 +83,7 @@ def test_map_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
         decl_id="struct:Widget",
         name="Widget",
         c_name="Widget",
-        fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        fields=(_field(name="value", source_name="value", type=_i32(), byte_offset=0),),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
@@ -100,8 +93,7 @@ def test_map_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
         raise AssertionError("record layout should come from StructMappingContext")
 
     monkeypatch.setattr(
-        "mojo_bindgen.analysis.mojo.struct_mapping.analyze_record_layout",
-        fail_if_recomputed,
+        "mojo_bindgen.analysis.mojo.struct_mapping.analyze_record_layout", fail_if_recomputed
     )
     context = StructMappingContext(
         record_map={decl.decl_id: decl},
@@ -114,14 +106,12 @@ def test_map_struct_consumes_cached_record_layout_facts(monkeypatch) -> None:
                 plain_fields=(PlainFieldFact(index=0, byte_offset=0, size_bytes=4, align_bytes=4),),
             )
         },
-        type_mapper=MapTypePass(),
+        type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES),
     )
-
     mapped = map_struct(decl, context=context)
-
-    assert mapped.members == [
-        StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0)
-    ]
+    assert mapped.members == (
+        StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
+    )
 
 
 def test_map_struct_keeps_incomplete_records_opaque_with_explicit_align_none() -> None:
@@ -129,23 +119,21 @@ def test_map_struct_keeps_incomplete_records_opaque_with_explicit_align_none() -
         decl_id="struct:Opaque",
         name="Opaque",
         c_name="Opaque",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_complete=False,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.name == "Opaque"
     assert mapped.kind == StructKind.OPAQUE
     assert mapped.align is None
     assert mapped.align_decorator is None
     assert mapped.fieldwise_init is False
-    assert mapped.traits == []
-    assert mapped.members == []
-    assert mapped.initializers == []
-    assert mapped.diagnostics == []
+    assert mapped.traits == ()
+    assert mapped.members == ()
+    assert mapped.initializers == ()
+    assert mapped.diagnostics == ()
 
 
 def test_map_struct_maps_fieldwise_exact_structs_without_policies() -> None:
@@ -153,26 +141,24 @@ def test_map_struct_maps_fieldwise_exact_structs_without_policies() -> None:
         decl_id="struct:Widget",
         name="Widget",
         c_name="Widget",
-        fields=[
+        fields=(
             _field(name="size", source_name="size", type=_i32(), byte_offset=0),
             _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.kind == StructKind.PLAIN
     assert mapped.align == 4
     assert mapped.align_decorator is None
     assert mapped.fieldwise_init is False
-    assert mapped.traits == []
-    assert mapped.members == [
+    assert mapped.traits == ()
+    assert mapped.members == (
         StoredMember(index=0, name="size", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
         StoredMember(index=1, name="flags", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=4),
-    ]
+    )
 
 
 def test_map_struct_synthesizes_padding_members_for_exact_layout_gaps() -> None:
@@ -180,7 +166,7 @@ def test_map_struct_synthesizes_padding_members_for_exact_layout_gaps() -> None:
         decl_id="struct:Padded",
         name="Padded",
         c_name="Padded",
-        fields=[
+        fields=(
             _field(
                 name="tag",
                 source_name="tag",
@@ -188,20 +174,18 @@ def test_map_struct_synthesizes_padding_members_for_exact_layout_gaps() -> None:
                 byte_offset=0,
             ),
             _field(name="value", source_name="value", type=_i32(), byte_offset=8),
-        ],
+        ),
         size_bytes=12,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
-    assert mapped.members == [
+    assert mapped.members == (
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         PaddingMember(name="__pad0", size_bytes=4, byte_offset=4),
         StoredMember(index=1, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=8),
-    ]
+    )
 
 
 def test_map_struct_keeps_union_members_typed_and_preserves_padding() -> None:
@@ -209,7 +193,7 @@ def test_map_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         decl_id="union:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        fields=(_field(name="value", source_name="value", type=_i32(), byte_offset=0),),
         size_bytes=8,
         align_bytes=8,
         is_union=True,
@@ -219,7 +203,7 @@ def test_map_struct_keeps_union_members_typed_and_preserves_padding() -> None:
         decl_id="struct:Holder",
         name="Holder",
         c_name="Holder",
-        fields=[
+        fields=(
             _field(
                 name="tag",
                 source_name="tag",
@@ -240,20 +224,18 @@ def test_map_struct_keeps_union_members_typed_and_preserves_padding() -> None:
                 byte_offset=8,
             ),
             _field(name="tail", source_name="tail", type=_u32(), byte_offset=16),
-        ],
+        ),
         size_bytes=24,
         align_bytes=8,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl, union_decl))
-
     assert mapped.fieldwise_init is False
-    assert mapped.members == [
+    assert mapped.members == (
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UCHAR), byte_offset=0),
         StoredMember(index=1, name="payload", type=NamedType("Payload"), byte_offset=8),
         StoredMember(index=2, name="tail", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=16),
-    ]
+    )
 
 
 def test_map_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None:
@@ -261,7 +243,7 @@ def test_map_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None
         decl_id="struct:Inner",
         name="Inner",
         c_name="Inner",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_complete=False,
@@ -270,7 +252,7 @@ def test_map_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None
         decl_id="struct:Outer",
         name="Outer",
         c_name="Outer",
-        fields=[
+        fields=(
             _field(
                 name="inner",
                 source_name="inner",
@@ -285,15 +267,13 @@ def test_map_struct_uses_opaque_storage_for_embedded_incomplete_struct() -> None
                 size_bytes=16,
             ),
             _field(name="tail", source_name="tail", type=_i32(), byte_offset=16),
-        ],
+        ),
         size_bytes=24,
         align_bytes=8,
         is_complete=True,
     )
-
     mapped = map_struct(outer, context=_context_for(outer, inner))
-
-    assert mapped.members == [OpaqueStorageMember(name="storage", size_bytes=24)]
+    assert mapped.members == (OpaqueStorageMember(name="storage", size_bytes=24),)
 
 
 def test_map_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
@@ -301,7 +281,7 @@ def test_map_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
         decl_id="struct:Inner",
         name="Inner",
         c_name="Inner",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_complete=True,
@@ -310,11 +290,11 @@ def test_map_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
         decl_id="struct:Outer",
         name="Outer",
         c_name="Outer",
-        fields=[
+        fields=(
             _field(
                 name="items",
                 source_name="items",
-                type=Array(
+                type=CArray(
                     element=StructRef(
                         decl_id=inner.decl_id,
                         name=inner.name,
@@ -330,14 +310,12 @@ def test_map_struct_keeps_array_of_embedded_empty_struct_typed() -> None:
                 size_bytes=0,
             ),
             _field(name="tail", source_name="tail", type=_i32(), byte_offset=0),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(outer, context=_context_for(outer, inner))
-
     assert mapped.kind == StructKind.PLAIN
     assert [member.name for member in mapped.members if isinstance(member, StoredMember)] == [
         "items",
@@ -350,7 +328,7 @@ def test_map_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
         decl_id="struct:Inner",
         name="Inner",
         c_name="Inner",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_complete=False,
@@ -359,16 +337,14 @@ def test_map_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
         decl_id="struct:Outer",
         name="Outer",
         c_name="Outer",
-        fields=[
+        fields=(
             _field(
                 name="ptr",
                 source_name="ptr",
-                type=Pointer(
+                type=CPointer(
                     pointee=QualifiedType(
                         unqualified=StructRef(
-                            decl_id=inner.decl_id,
-                            name=inner.name,
-                            c_name=inner.c_name,
+                            decl_id=inner.decl_id, name=inner.name, c_name=inner.c_name
                         ),
                         qualifiers=Qualifiers(is_const=True),
                     ),
@@ -379,14 +355,12 @@ def test_map_struct_keeps_pointer_to_incomplete_struct_typed() -> None:
                 size_bytes=8,
             ),
             _field(name="tail", source_name="tail", type=_i32(), byte_offset=8),
-        ],
+        ),
         size_bytes=16,
         align_bytes=8,
         is_complete=True,
     )
-
     mapped = map_struct(outer, context=_context_for(outer, inner))
-
     assert mapped.kind == StructKind.PLAIN
     assert [member.name for member in mapped.members if isinstance(member, StoredMember)] == [
         "ptr",
@@ -399,17 +373,15 @@ def test_map_struct_omits_trailing_padding_explained_by_struct_alignment() -> No
         decl_id="struct:Aligned",
         name="Aligned",
         c_name="Aligned",
-        fields=[_field(name="value", source_name="value", type=_i32(), byte_offset=0)],
+        fields=(_field(name="value", source_name="value", type=_i32(), byte_offset=0),),
         size_bytes=16,
         align_bytes=16,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
-    assert mapped.members == [
+    assert mapped.members == (
         StoredMember(index=0, name="value", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0),
-    ]
+    )
 
 
 def test_map_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() -> None:
@@ -417,7 +389,7 @@ def test_map_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() ->
         decl_id="struct:Packed",
         name="Packed",
         c_name="Packed",
-        fields=[
+        fields=(
             _field(
                 name="tag",
                 source_name="tag",
@@ -425,15 +397,13 @@ def test_map_struct_falls_back_to_opaque_storage_for_unrepresentable_layout() ->
                 byte_offset=0,
             ),
             _field(name="value", source_name="value", type=_i32(), byte_offset=1),
-        ],
+        ),
         size_bytes=5,
         align_bytes=1,
         is_complete=True,
         is_packed=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
     assert len(mapped.members) == 1
     assert mapped.members[0].name == "storage"
@@ -448,7 +418,7 @@ def test_map_struct_keeps_atomic_field_types_and_drops_traits() -> None:
         decl_id="struct:AtomicHolder",
         name="AtomicHolder",
         c_name="AtomicHolder",
-        fields=[
+        fields=(
             _field(
                 name="counter",
                 source_name="counter",
@@ -457,21 +427,19 @@ def test_map_struct_keeps_atomic_field_types_and_drops_traits() -> None:
                 size_bytes=4,
             ),
             _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
-    assert mapped.traits == []
+    assert mapped.traits == ()
     assert mapped.fieldwise_init is False
     assert mapped.members[0] == StoredMember(
         index=0,
         name="counter",
         type=ParametricType(
-            base=ParametricBase.ATOMIC, args=[TypeArg(BuiltinType(MojoBuiltin.C_INT))]
+            base=ParametricBase.ATOMIC, args=(TypeArg(BuiltinType(MojoBuiltin.C_INT)),)
         ),
         byte_offset=0,
     )
@@ -482,7 +450,7 @@ def test_map_struct_maps_pure_bitfield_structs_with_synthesized_initializers() -
         decl_id="struct:Bits",
         name="Bits",
         c_name="Bits",
-        fields=[
+        fields=(
             _field(
                 name="ready",
                 source_name="ready",
@@ -520,23 +488,21 @@ def test_map_struct_maps_pure_bitfield_structs_with_synthesized_initializers() -
                 bit_offset=32,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
-    assert mapped.members == [
+    assert mapped.members == (
         BitfieldGroupMember(
             storage_name="__bf0",
             storage_type=BuiltinType(MojoBuiltin.C_UINT),
             byte_offset=0,
             first_index=0,
             storage_width_bits=32,
-            fields=[
+            fields=(
                 BitfieldField(
                     index=0,
                     name="ready",
@@ -553,7 +519,7 @@ def test_map_struct_maps_pure_bitfield_structs_with_synthesized_initializers() -
                     bit_width=3,
                     signed=False,
                 ),
-            ],
+            ),
         ),
         BitfieldGroupMember(
             storage_name="__bf1",
@@ -561,7 +527,7 @@ def test_map_struct_maps_pure_bitfield_structs_with_synthesized_initializers() -
             byte_offset=4,
             first_index=3,
             storage_width_bits=8,
-            fields=[
+            fields=(
                 BitfieldField(
                     index=3,
                     name="enabled",
@@ -570,20 +536,20 @@ def test_map_struct_maps_pure_bitfield_structs_with_synthesized_initializers() -
                     bit_width=1,
                     signed=False,
                     bool_semantics=True,
-                )
-            ],
+                ),
+            ),
         ),
-    ]
-    assert mapped.initializers == [
-        Initializer(params=[]),
+    )
+    assert mapped.initializers == (
+        Initializer(params=()),
         Initializer(
-            params=[
+            params=(
                 InitializerParam(name="ready", type=BuiltinType(MojoBuiltin.C_UINT)),
                 InitializerParam(name="state", type=BuiltinType(MojoBuiltin.C_UINT)),
                 InitializerParam(name="enabled", type=BuiltinType(MojoBuiltin.BOOL)),
-            ]
+            )
         ),
-    ]
+    )
 
 
 def test_map_struct_maps_mixed_bitfield_structs_in_byte_offset_order() -> None:
@@ -591,7 +557,7 @@ def test_map_struct_maps_mixed_bitfield_structs_in_byte_offset_order() -> None:
         decl_id="struct:MixedBits",
         name="MixedBits",
         c_name="MixedBits",
-        fields=[
+        fields=(
             _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
             _field(
                 name="signed_bits",
@@ -611,21 +577,16 @@ def test_map_struct_maps_mixed_bitfield_structs_in_byte_offset_order() -> None:
                 bit_offset=37,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
-    assert mapped.initializers == []
+    assert mapped.initializers == ()
     assert mapped.members[0] == StoredMember(
-        index=0,
-        name="tag",
-        type=BuiltinType(MojoBuiltin.C_UINT),
-        byte_offset=0,
+        index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=0
     )
     assert isinstance(mapped.members[1], BitfieldGroupMember)
     group = mapped.members[1]
@@ -641,7 +602,7 @@ def test_map_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
         decl_id="struct:SplitBits",
         name="SplitBits",
         c_name="SplitBits",
-        fields=[
+        fields=(
             _field(
                 name="left",
                 source_name="left",
@@ -670,14 +631,12 @@ def test_map_struct_splits_bitfield_groups_on_zero_width_barriers() -> None:
                 bit_offset=32,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert [member.storage_name for member in mapped.members] == ["__bf0", "__bf1"]
     assert [member.byte_offset for member in mapped.members] == [0, 4]
 
@@ -687,7 +646,7 @@ def test_map_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() ->
         decl_id="struct:AnonBits",
         name="AnonBits",
         c_name="AnonBits",
-        fields=[
+        fields=(
             _field(
                 name="",
                 source_name="",
@@ -698,17 +657,15 @@ def test_map_struct_emits_zero_init_only_for_anonymous_only_bitfield_struct() ->
                 bit_offset=0,
                 bit_width=8,
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
     assert len(mapped.initializers) == 1
-    assert mapped.initializers[0] == Initializer(params=[])
+    assert mapped.initializers[0] == Initializer(params=())
 
 
 def test_map_struct_omits_register_passable_when_field_references_incomplete_struct() -> None:
@@ -716,7 +673,7 @@ def test_map_struct_omits_register_passable_when_field_references_incomplete_str
         decl_id="struct:Child",
         name="Child",
         c_name="Child",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_complete=False,
@@ -725,7 +682,7 @@ def test_map_struct_omits_register_passable_when_field_references_incomplete_str
         decl_id="struct:Holder",
         name="Holder",
         c_name="Holder",
-        fields=[
+        fields=(
             _field(
                 name="child",
                 source_name="child",
@@ -738,17 +695,15 @@ def test_map_struct_omits_register_passable_when_field_references_incomplete_str
                     align_bytes=child.align_bytes,
                 ),
                 byte_offset=0,
-            )
-        ],
+            ),
+        ),
         size_bytes=8,
         align_bytes=8,
         is_complete=True,
     )
-
     mapped = map_struct(holder, context=_context_for(holder, child))
-
     assert mapped.fieldwise_init is False
-    assert mapped.traits == []
+    assert mapped.traits == ()
 
 
 def test_map_struct_omits_register_passable_for_recursive_struct_cycle() -> None:
@@ -756,7 +711,7 @@ def test_map_struct_omits_register_passable_for_recursive_struct_cycle() -> None
         decl_id="struct:Left",
         name="Left",
         c_name="Left",
-        fields=[],
+        fields=(),
         size_bytes=8,
         align_bytes=8,
         is_complete=True,
@@ -765,46 +720,50 @@ def test_map_struct_omits_register_passable_for_recursive_struct_cycle() -> None
         decl_id="struct:Right",
         name="Right",
         c_name="Right",
-        fields=[],
+        fields=(),
         size_bytes=8,
         align_bytes=8,
         is_complete=True,
     )
-    left.fields = [
-        _field(
-            name="right",
-            source_name="right",
-            type=StructRef(
-                decl_id=right.decl_id,
-                name=right.name,
-                c_name=right.c_name,
-                is_union=False,
-                size_bytes=right.size_bytes,
-                align_bytes=right.align_bytes,
+    left = replace(
+        left,
+        fields=(
+            _field(
+                name="right",
+                source_name="right",
+                type=StructRef(
+                    decl_id=right.decl_id,
+                    name=right.name,
+                    c_name=right.c_name,
+                    is_union=False,
+                    size_bytes=right.size_bytes,
+                    align_bytes=right.align_bytes,
+                ),
+                byte_offset=0,
             ),
-            byte_offset=0,
-        )
-    ]
-    right.fields = [
-        _field(
-            name="left",
-            source_name="left",
-            type=StructRef(
-                decl_id=left.decl_id,
-                name=left.name,
-                c_name=left.c_name,
-                is_union=False,
-                size_bytes=left.size_bytes,
-                align_bytes=left.align_bytes,
+        ),
+    )
+    right = replace(
+        right,
+        fields=(
+            _field(
+                name="left",
+                source_name="left",
+                type=StructRef(
+                    decl_id=left.decl_id,
+                    name=left.name,
+                    c_name=left.c_name,
+                    is_union=False,
+                    size_bytes=left.size_bytes,
+                    align_bytes=left.align_bytes,
+                ),
+                byte_offset=0,
             ),
-            byte_offset=0,
-        )
-    ]
-
+        ),
+    )
     mapped = map_struct(left, context=_context_for(left, right))
-
     assert mapped.fieldwise_init is False
-    assert mapped.traits == []
+    assert mapped.traits == ()
 
 
 def test_map_struct_falls_back_only_after_mojo_type_mapping_failure() -> None:
@@ -812,7 +771,7 @@ def test_map_struct_falls_back_only_after_mojo_type_mapping_failure() -> None:
         decl_id="struct:MappingFallback",
         name="MappingFallback",
         c_name="MappingFallback",
-        fields=[
+        fields=(
             _field(
                 name="mystery",
                 source_name="mystery",
@@ -824,25 +783,23 @@ def test_map_struct_falls_back_only_after_mojo_type_mapping_failure() -> None:
                     align_bytes=4,
                 ),
                 byte_offset=0,
-            )
-        ],
+            ),
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
-    assert mapped.diagnostics == []
-    assert mapped.members == [
+    assert mapped.diagnostics == ()
+    assert mapped.members == (
         StoredMember(
             index=0,
             name="mystery",
-            type=Array(element=BuiltinType(MojoBuiltin.UINT8), size=4),
+            type=MojoArray(element=BuiltinType(MojoBuiltin.UINT8), size=4),
             byte_offset=0,
-        )
-    ]
+        ),
+    )
 
 
 def test_map_struct_tracks_flexible_tail_metadata() -> None:
@@ -850,12 +807,12 @@ def test_map_struct_tracks_flexible_tail_metadata() -> None:
         decl_id="struct:Packet",
         name="Packet",
         c_name="Packet",
-        fields=[
+        fields=(
             _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
             _field(
                 name="payload",
                 source_name="payload",
-                type=Array(
+                type=CArray(
                     element=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
                     size=None,
                     array_kind="flexible",
@@ -865,28 +822,26 @@ def test_map_struct_tracks_flexible_tail_metadata() -> None:
                 byte_offset=4,
                 fam_pattern="c99_empty",
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(decl, context=_context_for(decl))
-
     assert mapped.fieldwise_init is False
     assert mapped.flexible_tail is not None
     assert mapped.flexible_tail.field_name == "payload"
     assert mapped.flexible_tail.pattern == "c99_empty"
     assert mapped.flexible_tail.byte_offset == 4
-    assert mapped.members == [
+    assert mapped.members == (
         StoredMember(index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=0),
         StoredMember(
             index=1,
             name="payload",
-            type=Array(element=BuiltinType(MojoBuiltin.C_UCHAR), size=0),
+            type=MojoArray(element=BuiltinType(MojoBuiltin.C_UCHAR), size=0),
             byte_offset=4,
         ),
-    ]
+    )
 
 
 def test_map_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
@@ -894,12 +849,12 @@ def test_map_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
         decl_id="struct:Packet",
         name="Packet",
         c_name="Packet",
-        fields=[
+        fields=(
             _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
             _field(
                 name="payload",
                 source_name="payload",
-                type=Array(
+                type=CArray(
                     element=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
                     size=None,
                     array_kind="flexible",
@@ -909,7 +864,7 @@ def test_map_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
                 byte_offset=4,
                 fam_pattern="c99_empty",
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
@@ -918,7 +873,7 @@ def test_map_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
         decl_id="struct:Wrapper",
         name="Wrapper",
         c_name="Wrapper",
-        fields=[
+        fields=(
             _field(
                 name="packet",
                 source_name="packet",
@@ -931,29 +886,22 @@ def test_map_struct_propagates_terminal_by_value_embedded_fam_struct() -> None:
                 ),
                 byte_offset=0,
                 size_bytes=packet.size_bytes,
-            )
-        ],
+            ),
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(wrapper, context=_context_for(packet, wrapper))
-
     assert mapped.fieldwise_init is False
-    assert mapped.diagnostics == []
+    assert mapped.diagnostics == ()
     assert mapped.flexible_tail is not None
     assert mapped.flexible_tail.field_name == "payload"
     assert mapped.flexible_tail.pattern == "c99_empty"
     assert mapped.flexible_tail.byte_offset == 4
-    assert mapped.members == [
-        StoredMember(
-            index=0,
-            name="packet",
-            type=NamedType("Packet"),
-            byte_offset=0,
-        )
-    ]
+    assert mapped.members == (
+        StoredMember(index=0, name="packet", type=NamedType("Packet"), byte_offset=0),
+    )
 
 
 def test_map_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() -> None:
@@ -961,12 +909,12 @@ def test_map_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() ->
         decl_id="struct:Packet",
         name="Packet",
         c_name="Packet",
-        fields=[
+        fields=(
             _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
             _field(
                 name="payload",
                 source_name="payload",
-                type=Array(
+                type=CArray(
                     element=IntType(int_kind=IntKind.UCHAR, size_bytes=1, align_bytes=1),
                     size=None,
                     array_kind="flexible",
@@ -976,7 +924,7 @@ def test_map_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() ->
                 byte_offset=4,
                 fam_pattern="c99_empty",
             ),
-        ],
+        ),
         size_bytes=4,
         align_bytes=4,
         is_complete=True,
@@ -985,7 +933,7 @@ def test_map_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() ->
         decl_id="struct:Wrapper",
         name="Wrapper",
         c_name="Wrapper",
-        fields=[
+        fields=(
             _field(
                 name="packet",
                 source_name="packet",
@@ -1000,17 +948,15 @@ def test_map_struct_falls_back_for_nonterminal_by_value_embedded_fam_struct() ->
                 size_bytes=packet.size_bytes,
             ),
             _field(name="trailer", source_name="trailer", type=_u32(), byte_offset=4),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
         is_complete=True,
     )
-
     mapped = map_struct(wrapper, context=_context_for(packet, wrapper))
-
     assert mapped.fieldwise_init is False
     assert mapped.flexible_tail is None
-    assert mapped.members == [OpaqueStorageMember(name="storage", size_bytes=8)]
+    assert mapped.members == (OpaqueStorageMember(name="storage", size_bytes=8),)
     assert mapped.diagnostics
     assert (
         "embedded flexible tail is not terminal in the enclosing record"

@@ -1,87 +1,80 @@
-"""Map CIR constant expressions into Mojo-facing constant-expression IR."""
+"""Map source constant expressions into the distinct Mojo expression family."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
-    BinaryExpr,
-    CallExpr,
-    CastExpr,
+    CBinaryExpr,
+    CCallExpr,
+    CCastExpr,
+    CConstExpr,
+    CFloatLiteral,
     CharLiteral,
-    ConstExpr,
-    FloatLiteral,
+    CNullPtrLiteral,
+    CRefExpr,
+    CSizeOfExpr,
+    CUnaryExpr,
     IntLiteral,
-    NullPtrLiteral,
-    RefExpr,
-    SizeOfExpr,
+    MojoBinaryExpr,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoConstExpr,
+    MojoFloatLiteral,
+    MojoRefExpr,
+    MojoSizeOfExpr,
+    MojoUnaryExpr,
     StringLiteral,
-    UnaryExpr,
 )
 
 
 class ConstExprMappingError(ValueError):
-    """Raised when a CIR constant expression cannot be mapped to MojoIR."""
+    """The source expression has no supported target form."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class MapConstExprPass:
-    """Map CIR constant expressions into Mojo-facing constant expressions."""
-
     type_mapping: MapTypePass
 
     @staticmethod
-    def _parse_float_literal(value: str | float) -> float:
-        text = mojo_float_literal_text(str(value))
-        mapped = text.lower()
-        if mapped.startswith(("0x", "+0x", "-0x")):
+    def _parse_float_literal(value: str) -> float:
+        text = mojo_float_literal_text(value)
+        if text.lower().startswith(("0x", "+0x", "-0x")):
             return float.fromhex(text)
         return float(text)
 
-    def run(self, expr: ConstExpr) -> ConstExpr:
-        if isinstance(expr, IntLiteral):
-            return expr
-        if isinstance(expr, FloatLiteral):
-            return FloatLiteral(self._parse_float_literal(expr.value))
-        if isinstance(expr, StringLiteral):
-            return expr
-        if isinstance(expr, CharLiteral):
-            return expr
-        if isinstance(expr, RefExpr):
-            return RefExpr(mojo_ident(expr.name))
-        if isinstance(expr, UnaryExpr):
-            return UnaryExpr(op=expr.op, operand=self.run(expr.operand))
-        if isinstance(expr, BinaryExpr):
-            return BinaryExpr(op=expr.op, lhs=self.run(expr.lhs), rhs=self.run(expr.rhs))
-        if isinstance(expr, CastExpr):
-            return CastExpr(
-                target=self.type_mapping.run(expr.target),
-                expr=self.run(expr.expr),
-            )
-        if isinstance(expr, SizeOfExpr):
-            return SizeOfExpr(target=self.type_mapping.run(expr.target))
-        if isinstance(expr, CallExpr):
-            return CallExpr(
-                callee=self.run(expr.callee),
-                args=[self.run(arg) for arg in expr.args],
-            )
-        if isinstance(expr, NullPtrLiteral):
-            raise ConstExprMappingError("nullptr constants do not have a valid MojoIR literal form")
-        raise ConstExprMappingError(
-            f"unsupported CIR constant-expression node: {type(expr).__name__!r}"
-        )
+    def run(self, expr: CConstExpr) -> MojoConstExpr:
+        match expr:
+            case IntLiteral() | StringLiteral() | CharLiteral():
+                return expr
+            case CFloatLiteral():
+                return MojoFloatLiteral(self._parse_float_literal(expr.spelling))
+            case CRefExpr():
+                return MojoRefExpr(mojo_ident(expr.name))
+            case CUnaryExpr():
+                return MojoUnaryExpr(expr.op, self.run(expr.operand))
+            case CBinaryExpr():
+                return MojoBinaryExpr(expr.op, self.run(expr.lhs), self.run(expr.rhs))
+            case CCastExpr():
+                return MojoCastExpr(self.type_mapping.run(expr.target), self.run(expr.expr))
+            case CSizeOfExpr():
+                return MojoSizeOfExpr(self.type_mapping.run(expr.target))
+            case CCallExpr():
+                return MojoCallExpr(
+                    self.run(expr.callee), tuple(self.run(arg) for arg in expr.args)
+                )
+            case CNullPtrLiteral():
+                raise ConstExprMappingError(
+                    "nullptr constants do not have a valid MojoIR literal form"
+                )
+        assert_never(expr)
 
 
-def map_const_expr(expr: ConstExpr) -> ConstExpr:
-    """Map one CIR constant expression to MojoIR."""
-
-    return MapConstExprPass(type_mapping=MapTypePass()).run(expr)
+def map_const_expr(expr: CConstExpr, *, type_mapper: MapTypePass) -> MojoConstExpr:
+    return MapConstExprPass(type_mapper).run(expr)
 
 
-__all__ = [
-    "ConstExprMappingError",
-    "MapConstExprPass",
-    "map_const_expr",
-]
+__all__ = ["MapConstExprPass", "ConstExprMappingError", "map_const_expr"]

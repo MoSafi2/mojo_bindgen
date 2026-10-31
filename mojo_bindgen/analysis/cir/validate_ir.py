@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from mojo_bindgen.analysis.traversal import iter_decl_referenced_types
-from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
+from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes, validate_type_tree
 from mojo_bindgen.ir import (
     Const,
+    CType,
+    Decl,
     MacroDecl,
     OpaqueRecordRef,
     Struct,
     StructRef,
-    Type,
     Typedef,
     TypeRef,
     Unit,
@@ -33,7 +34,7 @@ class ValidateIRPass:
     """
 
     def run(self, unit: Unit) -> Unit:
-        decl_ids: dict[str, object] = {}
+        decl_ids: dict[str, Decl] = {}
         struct_ids: set[str] = set()
 
         for decl in unit.decls:
@@ -52,10 +53,10 @@ class ValidateIRPass:
 
         return unit
 
-    def _validate_decl_identity(self, decl, decl_ids: dict[str, object]) -> None:
+    def _validate_decl_identity(self, decl: Decl, decl_ids: dict[str, Decl]) -> None:
         if isinstance(decl, (Const, MacroDecl)):
             return
-        decl_id = getattr(decl, "decl_id", None)
+        decl_id = decl.decl_id
         if not decl_id:
             return
         prior = decl_ids.get(decl_id)
@@ -63,7 +64,11 @@ class ValidateIRPass:
             raise IRValidationError(f"duplicate decl_id {decl_id!r} in Unit")
         decl_ids[decl_id] = decl
 
-    def _validate_type(self, t: Type, struct_ids: set[str]) -> None:
+    def _validate_type(self, t: CType, struct_ids: set[str]) -> None:
+        try:
+            validate_type_tree(t)
+        except ValueError as error:
+            raise IRValidationError(str(error)) from error
         for node in iter_type_nodes(t, options=TypeWalkOptions(descend_vector_element=True)):
             if isinstance(node, TypeRef) and not node.decl_id:
                 raise IRValidationError(f"TypeRef {node.name!r} is missing decl_id")

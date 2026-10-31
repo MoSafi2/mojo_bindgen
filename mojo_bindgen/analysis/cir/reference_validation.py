@@ -5,12 +5,12 @@ from __future__ import annotations
 from mojo_bindgen.analysis.traversal import iter_decl_referenced_types
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 from mojo_bindgen.ir import (
+    CType,
     Enum,
     EnumRef,
     OpaqueRecordRef,
     Struct,
     StructRef,
-    Type,
     TypeRef,
     Unit,
 )
@@ -41,7 +41,7 @@ class ValidateReferencesPass:
 
     def _validate_type(
         self,
-        t: Type,
+        t: CType,
         *,
         struct_ids: set[str],
         enum_ids: set[str],

@@ -16,24 +16,25 @@ from pathlib import Path
 import clang.cindex as cx
 
 from mojo_bindgen.ir import (
-    BinaryExpr,
-    CastExpr,
+    CBinaryExpr,
+    CCastExpr,
+    CConstExpr,
+    CFloatLiteral,
     CharLiteral,
-    ConstExpr,
+    CNullPtrLiteral,
+    CRefExpr,
+    CSizeOfExpr,
+    CUnaryExpr,
     FloatKind,
-    FloatLiteral,
     FloatType,
     IntKind,
     IntLiteral,
     IntType,
     MacroDeclKind,
-    NullPtrLiteral,
-    RefExpr,
-    SizeOfExpr,
     StringLiteral,
-    UnaryExpr,
     VoidType,
 )
+from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.literal_resolver import LiteralResolver
 
 _INT_LITERAL_RE = re.compile(
@@ -210,9 +211,9 @@ def _string_token_value(raw: str) -> str | None:
     return None
 
 
-def fold_const_expr(expr: ConstExpr) -> ConstExpr:
+def fold_const_expr(expr: CConstExpr) -> CConstExpr:
     """Constant-fold integer unary/binary expressions where operands are literals."""
-    if isinstance(expr, UnaryExpr):
+    if isinstance(expr, CUnaryExpr):
         inner = fold_const_expr(expr.operand)
         if isinstance(inner, IntLiteral):
             v = inner.value
@@ -224,8 +225,8 @@ def fold_const_expr(expr: ConstExpr) -> ConstExpr:
                 return IntLiteral(~v)
             if expr.op == "!":
                 return IntLiteral(0 if v else 1)
-        return UnaryExpr(op=expr.op, operand=inner)
-    if isinstance(expr, BinaryExpr):
+        return CUnaryExpr(op=expr.op, operand=inner)
+    if isinstance(expr, CBinaryExpr):
         lhs = fold_const_expr(expr.lhs)
         rhs = fold_const_expr(expr.rhs)
         if isinstance(lhs, IntLiteral) and isinstance(rhs, IntLiteral):
@@ -233,10 +234,10 @@ def fold_const_expr(expr: ConstExpr) -> ConstExpr:
             out = _eval_int_binary(expr.op, a, b)
             if out is not None:
                 return IntLiteral(out)
-        return BinaryExpr(op=expr.op, lhs=lhs, rhs=rhs)
-    if isinstance(expr, CastExpr):
+        return CBinaryExpr(op=expr.op, lhs=lhs, rhs=rhs)
+    if isinstance(expr, CCastExpr):
         inner = fold_const_expr(expr.expr)
-        return CastExpr(target=expr.target, expr=inner)
+        return CCastExpr(target=expr.target, expr=inner)
     return expr
 
 
@@ -300,19 +301,19 @@ def fold_parsed_const_expr(parsed: ParsedConstExpr) -> ParsedConstExpr:
     )
 
 
-def const_expr_needs_clang_macro_fallback(expr: ConstExpr) -> bool:
+def const_expr_needs_clang_macro_fallback(expr: CConstExpr) -> bool:
     """Return whether a parsed macro expression is structurally risky to emit."""
-    if isinstance(expr, RefExpr):
+    if isinstance(expr, CRefExpr):
         return True
-    if isinstance(expr, UnaryExpr):
+    if isinstance(expr, CUnaryExpr):
         return expr.op == "!" or const_expr_needs_clang_macro_fallback(expr.operand)
-    if isinstance(expr, BinaryExpr):
+    if isinstance(expr, CBinaryExpr):
         return (
             expr.op in {"&&", "||"}
             or const_expr_needs_clang_macro_fallback(expr.lhs)
             or const_expr_needs_clang_macro_fallback(expr.rhs)
         )
-    if isinstance(expr, CastExpr):
+    if isinstance(expr, CCastExpr):
         return const_expr_needs_clang_macro_fallback(expr.expr)
     return False
 
@@ -321,7 +322,7 @@ def const_expr_needs_clang_macro_fallback(expr: ConstExpr) -> bool:
 class ParsedConstExpr:
     """A parsed constant expression plus best-effort primitive typing."""
 
-    expr: ConstExpr
+    expr: CConstExpr
     primitive: IntType | FloatType | VoidType | None
     diagnostic: str | None = None
 
@@ -332,7 +333,7 @@ class ParsedMacro:
 
     tokens: list[str]
     kind: MacroDeclKind
-    expr: ConstExpr | None = None
+    expr: CConstExpr | None = None
     primitive: IntType | FloatType | VoidType | None = None
     diagnostic: str | None = None
 
@@ -374,16 +375,7 @@ class ConstExprParser:
                 diagnostic="predefined macro preserved without evaluation",
             )
 
-        is_function_like = getattr(cursor, "is_macro_function_like", None)
-        if (
-            (callable(is_function_like) and is_function_like())
-            or (
-                is_function_like is not None
-                and not callable(is_function_like)
-                and bool(is_function_like)
-            )
-            or looks_function_like_macro_body(body)
-        ):
+        if ClangCompat.is_function_like_macro(cursor) or looks_function_like_macro_body(body):
             return ParsedMacro(
                 tokens=body,
                 kind="function_like_unsupported",
@@ -438,7 +430,7 @@ class ConstExprParser:
         tokens = _merge_adjacent_string_literals(tokens)
         if self._is_null_pointer_tokens(tokens):
             return ParsedConstExpr(
-                expr=NullPtrLiteral(),
+                expr=CNullPtrLiteral(),
                 primitive=VoidType(),
             )
         stream = _TokenStream(tokens)
@@ -476,7 +468,7 @@ class ConstExprParser:
             if rhs is None:
                 return None
             lhs = ParsedConstExpr(
-                expr=BinaryExpr(op=op, lhs=lhs.expr, rhs=rhs.expr),
+                expr=CBinaryExpr(op=op, lhs=lhs.expr, rhs=rhs.expr),
                 primitive=self._combine_binary_primitive(lhs.primitive, rhs.primitive),
             )
         return lhs
@@ -506,7 +498,7 @@ class ConstExprParser:
                     operand = self._parse_prefix(stream)
                     if operand is not None:
                         return ParsedConstExpr(
-                            expr=CastExpr(target=it, expr=operand.expr), primitive=it
+                            expr=CCastExpr(target=it, expr=operand.expr), primitive=it
                         )
                     stream._index = i
             inner = self._parse_expr(stream, min_prec=0)
@@ -532,12 +524,12 @@ class ConstExprParser:
             ):
                 primitive = self.literal_resolver.int_type_for_integer_literal_suffix("")
             return ParsedConstExpr(
-                expr=UnaryExpr(op=tok, operand=operand.expr), primitive=primitive
+                expr=CUnaryExpr(op=tok, operand=operand.expr), primitive=primitive
             )
         return self._parse_leaf(tok)
 
     def _parse_sizeof_expr(self, stream: _TokenStream) -> ParsedConstExpr | None:
-        """Parse a ``sizeof(type)`` token sequence into a :class:`SizeOfExpr`."""
+        """Parse a ``sizeof(type)`` token sequence into a :class:`CSizeOfExpr`."""
         start = stream._index
         if stream.pop() != "(":
             return None
@@ -565,7 +557,7 @@ class ConstExprParser:
             stream._index = start
             return None
         return ParsedConstExpr(
-            expr=SizeOfExpr(target=size_type),
+            expr=CSizeOfExpr(target=size_type),
             primitive=size_type,
         )
 
@@ -582,7 +574,7 @@ class ConstExprParser:
         float_value, float_suffix = _match_float_literal(raw)
         if float_value is not None:
             return ParsedConstExpr(
-                expr=FloatLiteral(float_value),
+                expr=CFloatLiteral(float_value),
                 primitive=self._primitive_for_float_literal_suffix(float_suffix),
             )
         string_value = _string_token_value(raw)
@@ -598,14 +590,14 @@ class ConstExprParser:
             )
         if raw == "NULL":
             return ParsedConstExpr(
-                expr=NullPtrLiteral(),
+                expr=CNullPtrLiteral(),
                 primitive=VoidType(),
             )
         if _IDENT_RE.match(raw):
             if self.macro_values is not None and raw in self.macro_values:
                 return _clone_parsed_const_expr(self.macro_values[raw])
             return ParsedConstExpr(
-                expr=RefExpr(raw),
+                expr=CRefExpr(raw),
                 primitive=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
             )
         return None

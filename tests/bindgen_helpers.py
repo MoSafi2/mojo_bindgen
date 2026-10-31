@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from mojo_bindgen import BindgenOptions, BindgenOrchestrator
+from mojo_bindgen.analysis.facts.target import TargetQueries
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
-from mojo_bindgen.ir import MojoModule, Unit
+from mojo_bindgen.ir import ByteOrder, MojoModule, TargetABI, Unit
+
+DEFAULT_TARGET_QUERIES = TargetQueries(TargetABI(8, 8, ByteOrder.LITTLE))
 
 
 def _bindgen_options_from_emit_options(unit: Unit, options: MojoEmitOptions) -> BindgenOptions:

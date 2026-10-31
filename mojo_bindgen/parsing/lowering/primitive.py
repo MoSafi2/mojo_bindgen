@@ -6,7 +6,7 @@ import re
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import FloatKind, FloatType, IntKind, IntType, Type, VoidType
+from mojo_bindgen.ir import CType, FloatKind, FloatType, IntKind, IntType, VoidType
 
 _QUALIFIER_RE = re.compile(r"\b(?:const|volatile|restrict)\b")
 _EXT_INT_RE = re.compile(r"(?:_BitInt|_ExtInt)\s*\(\s*(\d+)\s*\)")
@@ -71,7 +71,7 @@ def _ext_int_bits(norm: str) -> int | None:
 class PrimitiveResolver:
     """Stateless lowering of clang scalar types to IR primitives."""
 
-    def resolve_primitive(self, clang_type: cx.Type) -> Type | None:
+    def resolve_primitive(self, clang_type: cx.Type) -> CType | None:
         """Return a scalar IR node for scalar clang types, else ``None``."""
         canonical = clang_type.get_canonical()
         norm = _normalize_spelling(canonical.spelling)

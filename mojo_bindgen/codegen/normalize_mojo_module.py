@@ -3,25 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import _mojo_align_decorator_ok, mojo_ident
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    Array,
-    BinaryExpr,
     BitfieldGroupMember,
     BuiltinType,
-    CallExpr,
     CallTarget,
-    CastExpr,
     CharLiteral,
     ComptimeMember,
-    ConstExpr,
-    FloatLiteral,
     FunctionDecl,
     FunctionKind,
-    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     Initializer,
@@ -30,23 +24,32 @@ from mojo_bindgen.ir import (
     LinkMode,
     ModuleDependencies,
     ModuleImport,
+    MojoArray,
+    MojoBinaryExpr,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoConstExpr,
     MojoDecl,
+    MojoFloatLiteral,
+    MojoFunctionPtr,
     MojoModule,
+    MojoParam,
+    MojoPointer,
+    MojoRefExpr,
+    MojoSizeOfExpr,
+    MojoType,
+    MojoUnaryExpr,
     NamedType,
-    Param,
+    OpaqueStorageMember,
+    PaddingMember,
     ParametricType,
-    Pointer,
-    RefExpr,
-    SizeOfExpr,
     StoredMember,
     StringLiteral,
     StructDecl,
     StructMember,
     SupportDecl,
     SupportDeclKind,
-    Type,
     TypeArg,
-    UnaryExpr,
 )
 
 
@@ -78,7 +81,7 @@ class NormalizeMojoModulePass:
         return replace(
             module,
             dependencies=dependencies,
-            decls=all_decls,
+            decls=tuple(all_decls),
         )
 
     def _normalize_decl(self, decl: MojoDecl) -> MojoDecl:
@@ -86,15 +89,15 @@ class NormalizeMojoModulePass:
             return replace(
                 decl,
                 align_decorator=self._resolve_align_decorator(decl),
-                members=[self._normalize_member(decl.name, member) for member in decl.members],
-                comptime_members=[
+                members=tuple(self._normalize_member(decl.name, member) for member in decl.members),
+                comptime_members=tuple(
                     self._normalize_comptime_member(decl.name, member)
                     for member in decl.comptime_members
-                ],
-                initializers=[
+                ),
+                initializers=tuple(
                     self._normalize_initializer(decl.name, initializer)
                     for initializer in decl.initializers
-                ],
+                ),
             )
         if isinstance(decl, AliasDecl):
             if decl.kind == AliasKind.CALLBACK_SIGNATURE:
@@ -126,16 +129,18 @@ class NormalizeMojoModulePass:
         if isinstance(decl, FunctionDecl):
             return replace(
                 decl,
-                params=[
-                    Param(
-                        name=param.name,
-                        type=self._normalize_type(
-                            param.type, (decl.name, param.name or f"param{i}")
-                        ),
-                        doc=param.doc,
+                params=tuple(
+                    (
+                        MojoParam(
+                            name=param.name,
+                            type=self._normalize_type(
+                                param.type, (decl.name, param.name or f"param{i}")
+                            ),
+                            doc=param.doc,
+                        )
+                        for i, param in enumerate(decl.params)
                     )
-                    for i, param in enumerate(decl.params)
-                ],
+                ),
                 return_type=self._normalize_type(decl.return_type, (decl.name, "return")),
                 call_target=CallTarget(
                     link_mode=self._effective_link_mode(decl),
@@ -147,7 +152,7 @@ class NormalizeMojoModulePass:
                 decl,
                 value_type=self._normalize_type(decl.value_type, (decl.name, "value")),
             )
-        raise NormalizeMojoModuleError(f"unsupported MojoDecl node: {type(decl).__name__!r}")
+        assert_never(decl)
 
     @staticmethod
     def _resolve_align_decorator(decl: StructDecl) -> int | None:
@@ -170,7 +175,7 @@ class NormalizeMojoModulePass:
                     member.storage_type,
                     (struct_name, member.storage_name or "bitfield_storage"),
                 ),
-                fields=[
+                fields=tuple(
                     replace(
                         field,
                         logical_type=self._normalize_type(
@@ -178,23 +183,26 @@ class NormalizeMojoModulePass:
                         ),
                     )
                     for field in member.fields
-                ],
+                ),
             )
-        return member
+        if isinstance(member, (PaddingMember, OpaqueStorageMember)):
+            return member
+        assert_never(member)
 
     def _normalize_initializer(self, struct_name: str, initializer: Initializer) -> Initializer:
         return replace(
             initializer,
-            params=[
-                InitializerParam(
-                    name=param.name,
-                    type=self._normalize_type(
-                        param.type,
-                        (struct_name, param.name or f"init_{i}"),
-                    ),
+            params=tuple(
+                (
+                    InitializerParam(
+                        name=param.name,
+                        type=self._normalize_type(
+                            param.type, (struct_name, param.name or f"init_{i}")
+                        ),
+                    )
+                    for i, param in enumerate(initializer.params)
                 )
-                for i, param in enumerate(initializer.params)
-            ],
+            ),
         )
 
     def _normalize_comptime_member(
@@ -220,16 +228,16 @@ class NormalizeMojoModulePass:
 
     def _normalize_type(
         self,
-        t: Type,
+        t: MojoType,
         context: tuple[str, ...],
         *,
         allow_inline_function: bool = False,
-    ) -> Type:
+    ) -> MojoType:
         if isinstance(t, BuiltinType):
             return t
         if isinstance(t, NamedType):
             return t
-        if isinstance(t, Pointer):
+        if isinstance(t, MojoPointer):
             return replace(
                 t,
                 pointee=(
@@ -238,99 +246,96 @@ class NormalizeMojoModulePass:
                     else self._normalize_type(t.pointee, (*context, "pointee"))
                 ),
             )
-        if isinstance(t, Array):
+        if isinstance(t, MojoArray):
             return replace(t, element=self._normalize_type(t.element, (*context, "element")))
         if isinstance(t, ParametricType):
             return replace(
                 t,
-                args=[
+                args=tuple(
                     (
-                        replace(
-                            arg,
-                            type=self._normalize_type(arg.type, (*context, f"arg{i}")),
-                        )
+                        replace(arg, type=self._normalize_type(arg.type, (*context, f"arg{i}")))
                         if isinstance(arg, TypeArg)
                         else arg
+                        for i, arg in enumerate(t.args)
                     )
-                    for i, arg in enumerate(t.args)
-                ],
+                ),
             )
-        function_type = self._function_type_from_type(t)
-        if function_type is not None:
-            normalized = self._normalize_function_type(function_type, context)
+        if isinstance(t, MojoFunctionPtr):
+            normalized = self._normalize_function_type(t, context)
             if allow_inline_function:
                 return normalized
             alias_name = self._ensure_function_alias(context, normalized)
             return NamedType(alias_name)
-        raise NormalizeMojoModuleError(f"unsupported Type node: {type(t).__name__!r}")
+        assert_never(t)
 
     def _normalize_function_type(
-        self, function_type: FunctionPtr, context: tuple[str, ...]
-    ) -> FunctionPtr:
+        self, function_type: MojoFunctionPtr, context: tuple[str, ...]
+    ) -> MojoFunctionPtr:
         return replace(
             function_type,
-            params=[
-                Param(
-                    name=param.name,
-                    type=self._normalize_type(
-                        param.type,
-                        (*context, param.name or f"arg{i}"),
-                    ),
+            params=tuple(
+                (
+                    MojoParam(
+                        name=param.name,
+                        type=self._normalize_type(param.type, (*context, param.name or f"arg{i}")),
+                    )
+                    for i, param in enumerate(function_type.params)
                 )
-                for i, param in enumerate(function_type.params)
-            ],
+            ),
             ret=self._normalize_type(function_type.ret, (*context, "return")),
         )
 
-    def _normalize_const_expr(self, expr: ConstExpr, context: tuple[str, ...]) -> ConstExpr:
+    def _normalize_const_expr(self, expr: MojoConstExpr, context: tuple[str, ...]) -> MojoConstExpr:
         if isinstance(
             expr,
             (
                 IntLiteral,
-                FloatLiteral,
+                MojoFloatLiteral,
                 StringLiteral,
                 CharLiteral,
-                RefExpr,
+                MojoRefExpr,
             ),
         ):
             return expr
-        if isinstance(expr, UnaryExpr):
+        if isinstance(expr, MojoUnaryExpr):
             return replace(
                 expr,
                 operand=self._normalize_const_expr(expr.operand, (*context, "operand")),
             )
-        if isinstance(expr, BinaryExpr):
+        if isinstance(expr, MojoBinaryExpr):
             return replace(
                 expr,
                 lhs=self._normalize_const_expr(expr.lhs, (*context, "lhs")),
                 rhs=self._normalize_const_expr(expr.rhs, (*context, "rhs")),
             )
-        if isinstance(expr, CastExpr):
+        if isinstance(expr, MojoCastExpr):
             return replace(
                 expr,
                 target=self._normalize_type(expr.target, (*context, "cast_target")),
                 expr=self._normalize_const_expr(expr.expr, (*context, "cast_expr")),
             )
-        if isinstance(expr, CallExpr):
+        if isinstance(expr, MojoCallExpr):
             return replace(
                 expr,
                 callee=self._normalize_const_expr(expr.callee, (*context, "callee")),
-                args=[
-                    self._normalize_const_expr(arg, (*context, f"arg{i}"))
-                    for i, arg in enumerate(expr.args)
-                ],
+                args=tuple(
+                    (
+                        self._normalize_const_expr(arg, (*context, f"arg{i}"))
+                        for i, arg in enumerate(expr.args)
+                    )
+                ),
             )
-        if isinstance(expr, SizeOfExpr):
+        if isinstance(expr, MojoSizeOfExpr):
             return replace(
                 expr,
                 target=self._normalize_type(expr.target, (*context, "sizeof_target")),
             )
-        raise NormalizeMojoModuleError(f"unsupported ConstExpr node: {type(expr).__name__!r}")
+        assert_never(expr)
 
     def _ensure_function_alias(
         self,
         path: tuple[str, ...],
-        function_type: FunctionPtr,
+        function_type: MojoFunctionPtr,
     ) -> str:
         existing = self._synth_aliases_by_path.get(path)
         if existing is not None:
@@ -415,8 +420,8 @@ class NormalizeMojoModulePass:
             self._record_import("std.ffi", "external_call")
 
         return ModuleDependencies(
-            imports=self._ordered_imports(),
-            support_decls=self._ordered_support_decls(),
+            imports=tuple(self._ordered_imports()),
+            support_decls=tuple(self._ordered_support_decls()),
         )
 
     def _ordered_imports(self) -> list[ModuleImport]:
@@ -443,7 +448,7 @@ class NormalizeMojoModulePass:
             )
         )
         if ordered_ffi:
-            imports.append(ModuleImport(module="std.ffi", names=ordered_ffi))
+            imports.append(ModuleImport(module="std.ffi", names=tuple(ordered_ffi)))
         preferred_modules = (
             "std.sys.info",
             "std.memory",
@@ -454,12 +459,14 @@ class NormalizeMojoModulePass:
         for module_name in preferred_modules:
             names = self._imports_by_module.get(module_name)
             if names:
-                imports.append(ModuleImport(module=module_name, names=sorted(names)))
+                imports.append(ModuleImport(module=module_name, names=tuple(sorted(names))))
         for module_name in sorted(
             name for name in self._imports_by_module if name not in {"std.ffi", *preferred_modules}
         ):
             imports.append(
-                ModuleImport(module=module_name, names=sorted(self._imports_by_module[module_name]))
+                ModuleImport(
+                    module=module_name, names=tuple(sorted(self._imports_by_module[module_name]))
+                )
             )
         return imports
 
@@ -508,55 +515,58 @@ class NormalizeMojoModulePass:
                 self._collect_type_imports(param.type)
         elif isinstance(decl, GlobalDecl):
             self._collect_type_imports(decl.value_type)
+        else:
+            assert_never(decl)
 
     def _collect_const_expr_imports(
         self,
-        expr: ConstExpr,
+        expr: MojoConstExpr,
     ) -> None:
         if isinstance(
             expr,
             (
                 IntLiteral,
-                FloatLiteral,
+                MojoFloatLiteral,
                 StringLiteral,
                 CharLiteral,
-                RefExpr,
+                MojoRefExpr,
             ),
         ):
             return
-        if isinstance(expr, UnaryExpr):
+        if isinstance(expr, MojoUnaryExpr):
             self._collect_const_expr_imports(expr.operand)
             return
-        if isinstance(expr, BinaryExpr):
+        if isinstance(expr, MojoBinaryExpr):
             self._collect_const_expr_imports(expr.lhs)
             self._collect_const_expr_imports(expr.rhs)
             return
-        if isinstance(expr, CastExpr):
+        if isinstance(expr, MojoCastExpr):
             self._collect_type_imports(expr.target)
             self._collect_const_expr_imports(expr.expr)
             return
-        if isinstance(expr, CallExpr):
+        if isinstance(expr, MojoCallExpr):
             self._collect_const_expr_imports(expr.callee)
             for arg in expr.args:
                 self._collect_const_expr_imports(arg)
             return
-        if isinstance(expr, SizeOfExpr):
+        if isinstance(expr, MojoSizeOfExpr):
             self._record_import("std.sys.info", "size_of")
             self._collect_type_imports(expr.target)
             return
+        assert_never(expr)
 
-    def _collect_type_imports(self, t: Type) -> None:
+    def _collect_type_imports(self, t: MojoType) -> None:
         if isinstance(t, BuiltinType):
             if t.name.value.startswith("c_"):
                 self._record_import("std.ffi", t.name.value)
             return
         if isinstance(t, NamedType):
             return
-        if isinstance(t, Pointer):
+        if isinstance(t, MojoPointer):
             if t.pointee is not None:
                 self._collect_type_imports(t.pointee)
             return
-        if isinstance(t, Array):
+        if isinstance(t, MojoArray):
             self._collect_type_imports(t.element)
             return
         if isinstance(t, ParametricType):
@@ -572,12 +582,12 @@ class NormalizeMojoModulePass:
                 if isinstance(arg, TypeArg):
                     self._collect_type_imports(arg.type)
             return
-        if isinstance(t, FunctionPtr):
+        if isinstance(t, MojoFunctionPtr):
             for param in t.params:
                 self._collect_type_imports(param.type)
             self._collect_type_imports(t.ret)
             return
-        raise NormalizeMojoModuleError(f"unsupported Type node: {type(t).__name__!r}")
+        assert_never(t)
 
     def _seed_dependencies(self, dependencies: ModuleDependencies) -> None:
         for imp in dependencies.imports:
@@ -603,10 +613,10 @@ class NormalizeMojoModulePass:
         return decl.call_target.link_mode
 
     @staticmethod
-    def _function_type_from_type(t: Type | None) -> FunctionPtr | None:
+    def _function_type_from_type(t: MojoType | None) -> MojoFunctionPtr | None:
         if t is None:
             return None
-        if isinstance(t, FunctionPtr):
+        if isinstance(t, MojoFunctionPtr):
             return t
         return None
 
@@ -619,8 +629,10 @@ class NormalizeMojoModulePass:
                 rank = 1
             elif isinstance(decl, GlobalDecl):
                 rank = 2
-            else:
+            elif isinstance(decl, FunctionDecl):
                 rank = 3
+            else:
+                assert_never(decl)
             return rank, 0
 
         return sorted(decls, key=sort_key)

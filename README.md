@@ -162,7 +162,9 @@ Current support includes:
   chains, supported casts, and `sizeof(type)` expressions are emitted as Mojo
   code.
 - **Debug IR output:** the CLI has hidden maintainer flags for serialized parser
-  and Mojo IR sidecars.
+  and Mojo IR sidecars. IR JSON follows the current implementation and is
+  unversioned; snapshots must change with the schemas. See the
+  [IR contracts](docs/ir_contracts.md) for stage boundaries and debug codecs.
 
 ## Current limitations
 

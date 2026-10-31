@@ -5,45 +5,61 @@
   "decls": [
     {
       "kind": "Function",
-      "name": "il_inline"
+      "fields": {
+        "name": "il_inline"
+      }
     },
     {
       "kind": "Function",
-      "name": "il_extern_inline"
+      "fields": {
+        "name": "il_extern_inline"
+      }
     }
   ],
   "paths": [
     {
       "selector": {
         "kind": "Function",
-        "name": "il_inline"
+        "fields": {
+          "name": "il_inline"
+        }
       },
-      "path": "attrs",
+      "path": "fields.attrs",
       "attrs": {
         "kind": "FunctionAttrs",
-        "inline_disposition": "inline"
+        "fields": {
+          "inline_disposition": "inline"
+        }
       }
     },
     {
       "selector": {
         "kind": "Function",
-        "name": "il_extern_inline"
+        "fields": {
+          "name": "il_extern_inline"
+        }
       },
-      "path": "attrs",
+      "path": "fields.attrs",
       "attrs": {
         "kind": "FunctionAttrs",
-        "inline_disposition": "extern_inline"
+        "fields": {
+          "inline_disposition": "extern_inline"
+        }
       }
     },
     {
       "selector": {
         "kind": "Function",
-        "name": "il_inline"
+        "fields": {
+          "name": "il_inline"
+        }
       },
-      "path": "params.0.type",
+      "path": "fields.params.0.fields.type",
       "attrs": {
         "kind": "IntType",
-        "int_kind": "INT"
+        "fields": {
+          "int_kind": "INT"
+        }
       }
     }
   ]

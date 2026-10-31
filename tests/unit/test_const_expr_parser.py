@@ -5,16 +5,16 @@ from __future__ import annotations
 import pytest
 
 from mojo_bindgen.ir import (
-    BinaryExpr,
-    CastExpr,
+    CBinaryExpr,
+    CCastExpr,
+    CFloatLiteral,
     CharLiteral,
-    FloatLiteral,
+    CNullPtrLiteral,
+    CRefExpr,
+    CSizeOfExpr,
     FloatType,
     IntLiteral,
     IntType,
-    NullPtrLiteral,
-    RefExpr,
-    SizeOfExpr,
     StringLiteral,
 )
 from mojo_bindgen.parsing.lowering import ConstExprParser, LiteralResolver
@@ -29,15 +29,11 @@ def _has_libclang() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
-    not _has_libclang(),
-    reason="libclang not available (use pixi run)",
-)
+pytestmark = pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
 
 
 def test_const_expr_parser_parses_supported_leaf_forms() -> None:
     parser = ConstExprParser(LiteralResolver([]))
-
     int_expr = parser.parse_tokens(["42u"])
     float_expr = parser.parse_tokens(["3.14159265"])
     null_expr = parser.parse_tokens(["(", "void", "*", ")", "0"])
@@ -45,20 +41,19 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
     string_expr = parser.parse_tokens(['"name"'])
     ref_expr = parser.parse_tokens(["DEFAULT_VALUE"])
     combined_expr = parser.parse_tokens(["(", "0x1u", "|", "0x2u", ")"])
-
     assert isinstance(int_expr.expr, IntLiteral)
     assert int_expr.expr.value == 42
-    assert isinstance(float_expr.expr, FloatLiteral)
-    assert float_expr.expr.value == "3.14159265"
+    assert isinstance(float_expr.expr, CFloatLiteral)
+    assert float_expr.expr.spelling == "3.14159265"
     assert isinstance(float_expr.primitive, FloatType)
     assert float_expr.primitive.float_kind.value == "DOUBLE"
-    assert isinstance(null_expr.expr, NullPtrLiteral)
-    assert isinstance(nested_null_expr.expr, NullPtrLiteral)
+    assert isinstance(null_expr.expr, CNullPtrLiteral)
+    assert isinstance(nested_null_expr.expr, CNullPtrLiteral)
     assert isinstance(string_expr.expr, StringLiteral)
     assert string_expr.expr.value == "name"
-    assert isinstance(ref_expr.expr, RefExpr)
+    assert isinstance(ref_expr.expr, CRefExpr)
     assert ref_expr.expr.name == "DEFAULT_VALUE"
-    assert isinstance(combined_expr.expr, BinaryExpr)
+    assert isinstance(combined_expr.expr, CBinaryExpr)
     assert combined_expr.expr.op == "|"
     assert isinstance(combined_expr.primitive, IntType)
     assert combined_expr.primitive.int_kind.value == "UINT"
@@ -66,17 +61,14 @@ def test_const_expr_parser_parses_supported_leaf_forms() -> None:
 
 def test_const_expr_parser_types_unsuffixed_negative_macro_literals_as_signed() -> None:
     parser = ConstExprParser(LiteralResolver([]), macro_defaults=True)
-
     positive = parser.parse_tokens(["1"])
     assert positive is not None
     assert isinstance(positive.primitive, IntType)
     assert positive.primitive.int_kind.value == "INT"
-
     out = parser.parse_tokens(["-", "1"])
     assert out is not None
     assert isinstance(out.primitive, IntType)
     assert out.primitive.int_kind.value == "INT"
-
     folded = fold_parsed_const_expr(out)
     assert isinstance(folded.expr, IntLiteral)
     assert folded.expr.value == -1
@@ -86,12 +78,10 @@ def test_const_expr_parser_types_unsuffixed_negative_macro_literals_as_signed() 
 
 def test_const_expr_parser_preserves_explicit_unsigned_macro_literal_type() -> None:
     parser = ConstExprParser(LiteralResolver([]), macro_defaults=True)
-
     out = parser.parse_tokens(["-", "1u"])
     assert out is not None
     assert isinstance(out.primitive, IntType)
     assert out.primitive.int_kind.value == "UINT"
-
     folded = fold_parsed_const_expr(out)
     assert isinstance(folded.expr, IntLiteral)
     assert folded.expr.value == -1
@@ -101,10 +91,9 @@ def test_const_expr_parser_preserves_explicit_unsigned_macro_literal_type() -> N
 
 def test_const_expr_parser_preserves_clang_resolved_cast_integer_type() -> None:
     parser = ConstExprParser(LiteralResolver([]), macro_defaults=True)
-
     out = parser.parse_tokens(["(", "__SIZE_TYPE__", ")", "-", "1"])
     assert out is not None
-    assert isinstance(out.expr, CastExpr)
+    assert isinstance(out.expr, CCastExpr)
     assert isinstance(out.primitive, IntType)
     assert out.primitive.int_kind.name.startswith("U")
 
@@ -114,10 +103,10 @@ def test_const_expr_parser_cast_size_t_minus_one() -> None:
     parser = ConstExprParser(LiteralResolver([]))
     out = parser.parse_tokens(["(", "(", "size_t", ")", "-", "1", ")"])
     assert out is not None
-    assert isinstance(out.expr, CastExpr)
+    assert isinstance(out.expr, CCastExpr)
     assert isinstance(out.expr.target, IntType)
     folded = fold_const_expr(out.expr)
-    assert isinstance(folded, CastExpr)
+    assert isinstance(folded, CCastExpr)
     assert isinstance(folded.expr, IntLiteral)
     assert folded.expr.value == -1
 
@@ -126,21 +115,18 @@ def test_const_expr_parser_parses_sizeof_type_expressions() -> None:
     parser = ConstExprParser(LiteralResolver([]))
     out = parser.parse_tokens(["sizeof", "(", "int", ")"])
     assert out is not None
-    assert isinstance(out.expr, SizeOfExpr)
+    assert isinstance(out.expr, CSizeOfExpr)
     assert isinstance(out.expr.target, IntType)
 
 
 def test_const_expr_parser_folds_logical_comparison_and_ternary_ops() -> None:
     parser = ConstExprParser(LiteralResolver([]))
-
     logical = parser.parse_tokens(["!", "0", "&&", "(", "4", ">=", "3", ")"])
     ternary = parser.parse_tokens(["(", "1", "<", "2", ")", "?", "40", "+", "2", ":", "0"])
-
     assert logical is not None
     logical_folded = fold_const_expr(logical.expr)
     assert isinstance(logical_folded, IntLiteral)
     assert logical_folded.value == 1
-
     assert ternary is not None
     ternary_folded = fold_const_expr(ternary.expr)
     assert isinstance(ternary_folded, IntLiteral)
@@ -149,10 +135,8 @@ def test_const_expr_parser_folds_logical_comparison_and_ternary_ops() -> None:
 
 def test_const_expr_parser_decodes_string_concat_and_char_escapes() -> None:
     parser = ConstExprParser(LiteralResolver([]))
-
     string_expr = parser.parse_tokens(['"a\\n"', '"b"'])
     char_expr = parser.parse_tokens(["'\\x41'"])
-
     assert string_expr is not None
     assert isinstance(string_expr.expr, StringLiteral)
     assert string_expr.expr.value == "a\nb"
@@ -166,7 +150,6 @@ def test_const_expr_parser_resolves_nested_macro_values() -> None:
     assert parser_value is not None
     values = {"A": parser_value}
     parser = ConstExprParser(LiteralResolver([]), macro_values=values)
-
     out = parser.parse_tokens(["A", "+", "2"])
     assert out is not None
     folded = fold_const_expr(out.expr)
@@ -202,7 +185,6 @@ def test_const_expr_parser_classifies_broader_predefined_and_function_like_macro
     function_like = parser.parse_macro(
         _Cursor("MACRO_FUNC", ["x", "(", "x", ")", "+", "1"], function_like=True)
     )
-
     assert predefined.kind == "predefined"
     assert predefined.tokens == ["__FILE__"]
     assert predefined.expr is None

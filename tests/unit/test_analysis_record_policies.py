@@ -1,25 +1,28 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from mojo_bindgen.analysis import assign_record_policies, map_unit
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    Array,
     AtomicType,
     BuiltinType,
     ByteOrder,
+    CArray,
     Field,
     IntKind,
     IntType,
     LinkMode,
+    MojoArray,
     MojoBuiltin,
     MojoModule,
     MojoPassability,
+    MojoPointer,
     NamedType,
     OpaqueStorageMember,
     ParametricBase,
     ParametricType,
-    Pointer,
     PointerMutability,
     StoredMember,
     Struct,
@@ -49,21 +52,11 @@ def _bool() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _field(
-    *,
-    name: str,
-    source_name: str,
-    type,
-    byte_offset: int,
-    size_bytes: int | None = None,
-    **kwargs,
+    *, name: str, source_name: str, type, byte_offset: int, size_bytes: int | None = None, **kwargs
 ) -> Field:
     if size_bytes is None:
         size_bytes = getattr(type, "size_bytes", 0) or 0
@@ -84,7 +77,7 @@ def _lowered_structs(*decls: Struct) -> list[StructDecl]:
             library="demo",
             link_name="demo",
             target_abi=_abi(),
-            decls=list(decls),
+            decls=tuple(list(decls)),
         )
     )
     module = assign_record_policies(lowered)
@@ -97,23 +90,22 @@ def test_assign_record_policies_marks_fieldwise_exact_struct_register_passable()
             decl_id="struct:Widget",
             name="Widget",
             c_name="Widget",
-            fields=[
+            fields=(
                 _field(name="size", source_name="size", type=_i32(), byte_offset=0),
                 _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
-            ],
+            ),
             size_bytes=8,
             align_bytes=4,
             is_complete=True,
         )
     )
-
     assert widget.fieldwise_init is True
     assert widget.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert widget.traits == [
+    assert widget.traits == (
         StructTraits.TRIVIAL_REGISTER_PASSABLE,
         StructTraits.COPYABLE,
         StructTraits.MOVABLE,
-    ]
+    )
 
 
 def test_assign_record_policies_keeps_padding_struct_register_passable() -> None:
@@ -122,23 +114,22 @@ def test_assign_record_policies_keeps_padding_struct_register_passable() -> None
             decl_id="struct:Padded",
             name="Padded",
             c_name="Padded",
-            fields=[
+            fields=(
                 _field(name="tag", source_name="tag", type=_u8(), byte_offset=0),
                 _field(name="value", source_name="value", type=_i32(), byte_offset=8),
-            ],
+            ),
             size_bytes=12,
             align_bytes=4,
             is_complete=True,
         )
     )
-
     assert padded.fieldwise_init is True
     assert padded.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert padded.traits == [
+    assert padded.traits == (
         StructTraits.TRIVIAL_REGISTER_PASSABLE,
         StructTraits.COPYABLE,
         StructTraits.MOVABLE,
-    ]
+    )
 
 
 def test_assign_record_policies_marks_fam_struct_memory_only() -> None:
@@ -147,32 +138,27 @@ def test_assign_record_policies_marks_fam_struct_memory_only() -> None:
             decl_id="struct:Packet",
             name="Packet",
             c_name="Packet",
-            fields=[
+            fields=(
                 _field(name="tag", source_name="tag", type=_u32(), byte_offset=0),
                 _field(
                     name="payload",
                     source_name="payload",
-                    type=Array(
-                        element=_u8(),
-                        size=None,
-                        array_kind="flexible",
-                        size_bytes=0,
-                        align_bytes=1,
+                    type=CArray(
+                        element=_u8(), size=None, array_kind="flexible", size_bytes=0, align_bytes=1
                     ),
                     byte_offset=4,
                     fam_pattern="c99_empty",
                 ),
-            ],
+            ),
             size_bytes=4,
             align_bytes=4,
             is_complete=True,
         )
     )
-
     assert packet.flexible_tail is not None
     assert packet.fieldwise_init is False
     assert packet.passability == MojoPassability.MEMORY_ONLY
-    assert packet.traits == [StructTraits.NOT_MOVABLE]
+    assert packet.traits == (StructTraits.NOT_MOVABLE,)
 
 
 def test_assign_record_policies_keeps_incomplete_struct_copyable_only() -> None:
@@ -181,16 +167,15 @@ def test_assign_record_policies_keeps_incomplete_struct_copyable_only() -> None:
             decl_id="struct:Opaque",
             name="Opaque",
             c_name="Opaque",
-            fields=[],
+            fields=(),
             size_bytes=0,
             align_bytes=1,
             is_complete=False,
         )
     )
-
     assert opaque.fieldwise_init is False
     assert opaque.passability == MojoPassability.MEMORY_ONLY
-    assert opaque.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert opaque.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)
 
 
 def test_assign_record_policies_drops_traits_for_representable_atomic_storage() -> None:
@@ -199,7 +184,7 @@ def test_assign_record_policies_drops_traits_for_representable_atomic_storage() 
             decl_id="struct:AtomicHolder",
             name="AtomicHolder",
             c_name="AtomicHolder",
-            fields=[
+            fields=(
                 _field(
                     name="counter",
                     source_name="counter",
@@ -208,16 +193,15 @@ def test_assign_record_policies_drops_traits_for_representable_atomic_storage() 
                     size_bytes=4,
                 ),
                 _field(name="flags", source_name="flags", type=_u32(), byte_offset=4),
-            ],
+            ),
             size_bytes=8,
             align_bytes=4,
             is_complete=True,
         )
     )
-
     assert atomic_holder.fieldwise_init is False
     assert atomic_holder.passability == MojoPassability.MEMORY_ONLY
-    assert atomic_holder.traits == [StructTraits.NOT_MOVABLE]
+    assert atomic_holder.traits == (StructTraits.NOT_MOVABLE,)
 
 
 def test_assign_record_policies_keeps_pure_bitfield_struct_non_fieldwise_init() -> None:
@@ -226,7 +210,7 @@ def test_assign_record_policies_keeps_pure_bitfield_struct_non_fieldwise_init() 
             decl_id="struct:Bits",
             name="Bits",
             c_name="Bits",
-            fields=[
+            fields=(
                 _field(
                     name="ready",
                     source_name="ready",
@@ -245,20 +229,19 @@ def test_assign_record_policies_keeps_pure_bitfield_struct_non_fieldwise_init() 
                     bit_offset=1,
                     bit_width=1,
                 ),
-            ],
+            ),
             size_bytes=4,
             align_bytes=4,
             is_complete=True,
         )
     )
-
     assert bits.fieldwise_init is False
     assert bits.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert bits.traits == [
+    assert bits.traits == (
         StructTraits.TRIVIAL_REGISTER_PASSABLE,
         StructTraits.COPYABLE,
         StructTraits.MOVABLE,
-    ]
+    )
 
 
 def test_assign_record_policies_treats_pointer_value_as_trivial() -> None:
@@ -268,38 +251,35 @@ def test_assign_record_policies_treats_pointer_value_as_trivial() -> None:
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[
+            decls=(
                 StructDecl(
-                    name="Blob",
-                    members=[OpaqueStorageMember(name="storage", size_bytes=8)],
+                    name="Blob", members=(OpaqueStorageMember(name="storage", size_bytes=8),)
                 ),
                 StructDecl(
                     name="BlobRef",
-                    members=[
+                    members=(
                         StoredMember(
                             index=0,
                             name="ptr",
-                            type=Pointer(
-                                pointee=NamedType("Blob"),
-                                mutability=PointerMutability.MUT,
+                            type=MojoPointer(
+                                pointee=NamedType("Blob"), mutability=PointerMutability.MUT
                             ),
                             byte_offset=0,
-                        )
-                    ],
+                        ),
+                    ),
                 ),
-            ],
+            ),
         )
     )
-
     blob, blob_ref = [decl for decl in module.decls if isinstance(decl, StructDecl)]
     assert blob.passability == MojoPassability.MEMORY_ONLY
-    assert blob.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert blob.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)
     assert blob_ref.passability == MojoPassability.TRIVIAL_REGISTER_PASSABLE
-    assert blob_ref.traits == [
+    assert blob_ref.traits == (
         StructTraits.TRIVIAL_REGISTER_PASSABLE,
         StructTraits.COPYABLE,
         StructTraits.MOVABLE,
-    ]
+    )
 
 
 def test_assign_record_policies_keeps_inline_array_backed_types_memory_only() -> None:
@@ -311,29 +291,25 @@ def test_assign_record_policies_keeps_inline_array_backed_types_memory_only() ->
                 library="demo",
                 link_name="demo",
                 link_mode=LinkMode.EXTERNAL_CALL,
-                decls=[
+                decls=(
                     StructDecl(
                         name="ArrayHolder",
-                        members=[
+                        members=(
                             StoredMember(
                                 index=0,
                                 name="bytes",
-                                type=Array(
-                                    element=BuiltinType(MojoBuiltin.UINT8),
-                                    size=4,
-                                ),
+                                type=MojoArray(element=BuiltinType(MojoBuiltin.UINT8), size=4),
                                 byte_offset=0,
-                            )
-                        ],
-                    )
-                ],
+                            ),
+                        ),
+                    ),
+                ),
             )
         ).decls
         if isinstance(decl, StructDecl)
     ]
-
     assert array_holder.passability == MojoPassability.MEMORY_ONLY
-    assert array_holder.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert array_holder.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)
 
 
 def test_assign_record_policies_recurses_through_union_layout_types() -> None:
@@ -343,52 +319,46 @@ def test_assign_record_policies_recurses_through_union_layout_types() -> None:
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[
+            decls=(
                 AliasDecl(
                     name="MaybePtr",
                     kind=AliasKind.UNION_LAYOUT,
                     type_value=ParametricType(
                         base=ParametricBase.UNSAFE_UNION,
-                        args=[
+                        args=(
                             TypeArg(
-                                type=Pointer(
-                                    pointee=BuiltinType(MojoBuiltin.C_CHAR),
-                                    nullable=True,
+                                type=MojoPointer(
+                                    pointee=BuiltinType(MojoBuiltin.C_CHAR), nullable=True
                                 )
                             ),
                             TypeArg(
-                                type=Pointer(
+                                type=MojoPointer(
                                     pointee=NamedType("Blob"),
                                     mutability=PointerMutability.MUT,
                                     nullable=True,
                                 )
                             ),
-                        ],
+                        ),
                     ),
                 ),
                 StructDecl(
-                    name="Blob",
-                    members=[OpaqueStorageMember(name="storage", size_bytes=8)],
+                    name="Blob", members=(OpaqueStorageMember(name="storage", size_bytes=8),)
                 ),
                 StructDecl(
                     name="Holder",
-                    members=[
+                    members=(
                         StoredMember(
-                            index=0,
-                            name="value",
-                            type=NamedType("MaybePtr"),
-                            byte_offset=0,
-                        )
-                    ],
+                            index=0, name="value", type=NamedType("MaybePtr"), byte_offset=0
+                        ),
+                    ),
                 ),
-            ],
+            ),
         )
     )
-
     blob, holder = [decl for decl in module.decls if isinstance(decl, StructDecl)]
-    assert blob.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert blob.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)
     assert holder.passability == MojoPassability.MEMORY_ONLY
-    assert holder.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert holder.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)
 
 
 def test_assign_record_policies_breaks_recursive_register_passable_cycles() -> None:
@@ -396,7 +366,7 @@ def test_assign_record_policies_breaks_recursive_register_passable_cycles() -> N
         decl_id="struct:Left",
         name="Left",
         c_name="Left",
-        fields=[],
+        fields=(),
         size_bytes=8,
         align_bytes=8,
         is_complete=True,
@@ -405,47 +375,51 @@ def test_assign_record_policies_breaks_recursive_register_passable_cycles() -> N
         decl_id="struct:Right",
         name="Right",
         c_name="Right",
-        fields=[],
+        fields=(),
         size_bytes=8,
         align_bytes=8,
         is_complete=True,
     )
-    left.fields = [
-        _field(
-            name="right",
-            source_name="right",
-            type=StructRef(
-                decl_id=right.decl_id,
-                name=right.name,
-                c_name=right.c_name,
-                is_union=False,
-                size_bytes=right.size_bytes,
-                align_bytes=right.align_bytes,
+    left = replace(
+        left,
+        fields=(
+            _field(
+                name="right",
+                source_name="right",
+                type=StructRef(
+                    decl_id=right.decl_id,
+                    name=right.name,
+                    c_name=right.c_name,
+                    is_union=False,
+                    size_bytes=right.size_bytes,
+                    align_bytes=right.align_bytes,
+                ),
+                byte_offset=0,
             ),
-            byte_offset=0,
-        )
-    ]
-    right.fields = [
-        _field(
-            name="left",
-            source_name="left",
-            type=StructRef(
-                decl_id=left.decl_id,
-                name=left.name,
-                c_name=left.c_name,
-                is_union=False,
-                size_bytes=left.size_bytes,
-                align_bytes=left.align_bytes,
+        ),
+    )
+    right = replace(
+        right,
+        fields=(
+            _field(
+                name="left",
+                source_name="left",
+                type=StructRef(
+                    decl_id=left.decl_id,
+                    name=left.name,
+                    c_name=left.c_name,
+                    is_union=False,
+                    size_bytes=left.size_bytes,
+                    align_bytes=left.align_bytes,
+                ),
+                byte_offset=0,
             ),
-            byte_offset=0,
-        )
-    ]
-
+        ),
+    )
     left_decl, right_decl = _lowered_structs(left, right)
-
     assert left_decl.fieldwise_init is True
     assert right_decl.fieldwise_init is True
     assert left_decl.passability == MojoPassability.MEMORY_ONLY
     assert right_decl.passability == MojoPassability.MEMORY_ONLY
-    assert left_decl.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
-    assert right_decl.traits == [StructTraits.COPYABLE, StructTraits.MOVABLE]
+    assert left_decl.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)
+    assert right_decl.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)

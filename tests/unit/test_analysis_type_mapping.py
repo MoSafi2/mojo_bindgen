@@ -4,23 +4,28 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass, map_type
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
     BuiltinType,
+    CArray,
+    CFunctionPtr,
     ComplexType,
     ConstArg,
+    CParam,
+    CPointer,
     DTypeArg,
     EnumRef,
     FloatKind,
     FloatType,
-    FunctionPtr,
     IntKind,
     IntType,
+    MojoArray,
     MojoBuiltin,
+    MojoFunctionPtr,
+    MojoParam,
+    MojoPointer,
     NamedType,
     ParametricBase,
     ParametricType,
-    Pointer,
     PointerMutability,
     QualifiedType,
     Qualifiers,
@@ -31,18 +36,15 @@ from mojo_bindgen.ir import (
     VectorType,
     VoidType,
 )
-from mojo_bindgen.ir import (
-    Param as Param,
-)
+from tests.bindgen_helpers import DEFAULT_TARGET_QUERIES
 
 
 def test_map_type_maps_primitives_to_builtins() -> None:
-    mapped = map_type(VoidType())
-
+    mapped = map_type(VoidType(), queries=DEFAULT_TARGET_QUERIES)
     assert mapped == BuiltinType(name=MojoBuiltin.NONE)
-    assert map_type(IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4)) == BuiltinType(
-        name=MojoBuiltin.C_INT
-    )
+    assert map_type(
+        IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4), queries=DEFAULT_TARGET_QUERIES
+    ) == BuiltinType(name=MojoBuiltin.C_INT)
 
 
 def test_map_type_preserves_typeref_name_as_named_type() -> None:
@@ -51,8 +53,7 @@ def test_map_type_preserves_typeref_name_as_named_type() -> None:
         name="my_uint",
         canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
     )
-
-    assert map_type(t) == NamedType(name="my_uint")
+    assert map_type(t, queries=DEFAULT_TARGET_QUERIES) == NamedType(name="my_uint")
 
 
 def test_map_type_maps_named_record_and_enum_refs() -> None:
@@ -62,60 +63,50 @@ def test_map_type_maps_named_record_and_enum_refs() -> None:
         c_name="mode_t",
         underlying=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
     )
-    struct_ref = StructRef(
-        decl_id="struct:payload_t",
-        name=" payload_t ",
-        c_name="payload_t",
-    )
-
-    assert map_type(enum_ref) == NamedType(name="mode_t")
-    assert map_type(struct_ref) == NamedType(name="payload_t")
+    struct_ref = StructRef(decl_id="struct:payload_t", name=" payload_t ", c_name="payload_t")
+    assert map_type(enum_ref, queries=DEFAULT_TARGET_QUERIES) == NamedType(name="mode_t")
+    assert map_type(struct_ref, queries=DEFAULT_TARGET_QUERIES) == NamedType(name="payload_t")
 
 
 def test_map_type_uses_pointer_pointee_constness_for_mutability() -> None:
-    const_int_ptr = Pointer(
+    const_int_ptr = CPointer(
         pointee=QualifiedType(
             unqualified=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
             qualifiers=Qualifiers(is_const=True),
         )
     )
-    void_ptr = Pointer(pointee=None)
-
-    assert map_type(const_int_ptr) == Pointer(
+    void_ptr = CPointer(pointee=None)
+    assert map_type(const_int_ptr, queries=DEFAULT_TARGET_QUERIES) == MojoPointer(
         pointee=BuiltinType(name=MojoBuiltin.C_INT),
         mutability=PointerMutability.IMMUT,
         nullable=True,
     )
-    assert map_type(void_ptr) == Pointer(
-        pointee=None,
-        mutability=PointerMutability.MUT,
-        nullable=True,
+    assert map_type(void_ptr, queries=DEFAULT_TARGET_QUERIES) == MojoPointer(
+        pointee=None, mutability=PointerMutability.MUT, nullable=True
     )
 
 
 def test_map_type_maps_fixed_arrays_and_pointer_falls_back_for_flexible_arrays() -> None:
     element = IntType(int_kind=IntKind.SHORT, size_bytes=2, align_bytes=2)
-
-    assert map_type(Array(element=element, size=4, array_kind="fixed")) == Array(
-        element=BuiltinType(name=MojoBuiltin.C_SHORT),
-        size=4,
+    assert map_type(
+        CArray(element=element, size=4, array_kind="fixed"), queries=DEFAULT_TARGET_QUERIES
+    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.C_SHORT), size=4)
+    assert map_type(
+        CArray(element=element, size=4, array_kind="flexible"), queries=DEFAULT_TARGET_QUERIES
+    ) == MojoPointer(
+        pointee=BuiltinType(name=MojoBuiltin.C_SHORT), mutability=PointerMutability.MUT
     )
-    assert map_type(Array(element=element, size=4, array_kind="flexible")) == Pointer(
-        pointee=BuiltinType(name=MojoBuiltin.C_SHORT),
-        mutability=PointerMutability.MUT,
-    )
-    assert map_type(Array(element=element, size=None, array_kind="flexible")) == Array(
-        element=BuiltinType(name=MojoBuiltin.C_SHORT),
-        size=0,
-    )
+    assert map_type(
+        CArray(element=element, size=None, array_kind="flexible"), queries=DEFAULT_TARGET_QUERIES
+    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.C_SHORT), size=0)
 
 
 def test_map_type_keeps_raw_function_pointer_signature_shape() -> None:
-    fn_ptr = FunctionPtr(
+    fn_ptr = CFunctionPtr(
         ret=IntType(int_kind=IntKind.INT, size_bytes=4, align_bytes=4),
-        params=[
-            Param(name="", type=Pointer(pointee=None)),
-            Param(
+        params=(
+            CParam(name="", type=CPointer(pointee=None)),
+            CParam(
                 name="",
                 type=TypeRef(
                     decl_id="typedef:my_uint",
@@ -123,19 +114,18 @@ def test_map_type_keeps_raw_function_pointer_signature_shape() -> None:
                     canonical=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4),
                 ),
             ),
-        ],
+        ),
         is_variadic=False,
         calling_convention="c",
     )
-
-    assert map_type(fn_ptr) == FunctionPtr(
-        params=[
-            Param(
+    assert map_type(fn_ptr, queries=DEFAULT_TARGET_QUERIES) == MojoFunctionPtr(
+        params=(
+            MojoParam(
                 name="",
-                type=Pointer(pointee=None, mutability=PointerMutability.MUT, nullable=True),
+                type=MojoPointer(pointee=None, mutability=PointerMutability.MUT, nullable=True),
             ),
-            Param(name="", type=NamedType(name="my_uint")),
-        ],
+            MojoParam(name="", type=NamedType(name="my_uint")),
+        ),
         ret=BuiltinType(name=MojoBuiltin.C_INT),
         abi="C",
         thin=True,
@@ -145,113 +135,94 @@ def test_map_type_keeps_raw_function_pointer_signature_shape() -> None:
 
 def test_map_type_maps_representable_atomic_to_atomic_surface_type() -> None:
     atomic = AtomicType(value_type=IntType(int_kind=IntKind.UINT, size_bytes=4, align_bytes=4))
-
-    assert map_type(atomic) == ParametricType(
-        base=ParametricBase.ATOMIC,
-        args=[TypeArg(BuiltinType(MojoBuiltin.C_UINT))],
+    assert map_type(atomic, queries=DEFAULT_TARGET_QUERIES) == ParametricType(
+        base=ParametricBase.ATOMIC, args=(TypeArg(BuiltinType(MojoBuiltin.C_UINT)),)
     )
 
 
 def test_map_type_maps_complex_and_vector_surface_forms_and_fallbacks() -> None:
     f32 = FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
     long_double = FloatType(float_kind=FloatKind.LONG_DOUBLE, size_bytes=16, align_bytes=16)
-
-    assert map_type(ComplexType(element=f32, size_bytes=8)) == ParametricType(
-        base=ParametricBase.COMPLEX_SIMD,
-        args=[DTypeArg("DType.float32"), ConstArg(1)],
+    assert map_type(
+        ComplexType(element=f32, size_bytes=8), queries=DEFAULT_TARGET_QUERIES
+    ) == ParametricType(
+        base=ParametricBase.COMPLEX_SIMD, args=(DTypeArg("DType.float32"), ConstArg(1))
     )
-    assert map_type(ComplexType(element=long_double, size_bytes=32)) == Array(
-        element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
-        size=2,
-    )
-    assert map_type(VectorType(element=f32, count=4, size_bytes=16)) == ParametricType(
-        base=ParametricBase.SIMD,
-        args=[DTypeArg("DType.float32"), ConstArg(4)],
-    )
-    assert map_type(VectorType(element=long_double, count=2, size_bytes=32)) == Array(
-        element=BuiltinType(name=MojoBuiltin.C_DOUBLE),
-        size=2,
-    )
-    assert map_type(VectorType(element=f32, count=None, size_bytes=16)) == Array(
-        element=BuiltinType(name=MojoBuiltin.UINT8),
-        size=16,
-    )
+    assert map_type(
+        ComplexType(element=long_double, size_bytes=32), queries=DEFAULT_TARGET_QUERIES
+    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.C_DOUBLE), size=2)
+    assert map_type(
+        VectorType(element=f32, count=4, size_bytes=16), queries=DEFAULT_TARGET_QUERIES
+    ) == ParametricType(base=ParametricBase.SIMD, args=(DTypeArg("DType.float32"), ConstArg(4)))
+    assert map_type(
+        VectorType(element=long_double, count=2, size_bytes=32), queries=DEFAULT_TARGET_QUERIES
+    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.C_DOUBLE), size=2)
+    assert map_type(
+        VectorType(element=f32, count=None, size_bytes=16), queries=DEFAULT_TARGET_QUERIES
+    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.UINT8), size=16)
 
 
 def test_map_type_maps_unsupported_type_to_inline_bytes_when_sized() -> None:
     unsupported = UnsupportedType(
-        category="unknown",
-        spelling="mystery_t",
-        reason="not modeled",
-        size_bytes=16,
-        align_bytes=8,
+        category="unknown", spelling="mystery_t", reason="not modeled", size_bytes=16, align_bytes=8
     )
-
-    assert map_type(unsupported) == Array(
-        element=BuiltinType(name=MojoBuiltin.UINT8),
-        size=16,
+    assert map_type(unsupported, queries=DEFAULT_TARGET_QUERIES) == MojoArray(
+        element=BuiltinType(name=MojoBuiltin.UINT8), size=16
     )
 
 
 def test_map_type_maps_unsized_unsupported_type_to_opaque_pointer() -> None:
-    unsupported = UnsupportedType(
-        category="unknown",
-        spelling="mystery_t",
-        reason="not modeled",
-    )
-
-    assert map_type(unsupported) == Pointer(
-        pointee=None,
-        mutability=PointerMutability.MUT,
+    unsupported = UnsupportedType(category="unknown", spelling="mystery_t", reason="not modeled")
+    assert map_type(unsupported, queries=DEFAULT_TARGET_QUERIES) == MojoPointer(
+        pointee=None, mutability=PointerMutability.MUT
     )
 
 
 def test_map_type_maps_missing_primitive_kinds_to_valid_surface_types() -> None:
-    assert map_type(IntType(int_kind=IntKind.WCHAR, size_bytes=4, align_bytes=4)) == NamedType(
-        name="Int32"
-    )
-    assert map_type(IntType(int_kind=IntKind.CHAR16, size_bytes=2, align_bytes=2)) == NamedType(
-        name="UInt16"
-    )
-    assert map_type(IntType(int_kind=IntKind.CHAR32, size_bytes=4, align_bytes=4)) == NamedType(
-        name="UInt32"
-    )
     assert map_type(
-        IntType(int_kind=IntKind.EXT_INT, size_bytes=8, align_bytes=8, ext_bits=33)
+        IntType(int_kind=IntKind.WCHAR, size_bytes=4, align_bytes=4), queries=DEFAULT_TARGET_QUERIES
+    ) == NamedType(name="Int32")
+    assert map_type(
+        IntType(int_kind=IntKind.CHAR16, size_bytes=2, align_bytes=2),
+        queries=DEFAULT_TARGET_QUERIES,
+    ) == NamedType(name="UInt16")
+    assert map_type(
+        IntType(int_kind=IntKind.CHAR32, size_bytes=4, align_bytes=4),
+        queries=DEFAULT_TARGET_QUERIES,
+    ) == NamedType(name="UInt32")
+    assert map_type(
+        IntType(int_kind=IntKind.EXT_INT, size_bytes=8, align_bytes=8, ext_bits=33),
+        queries=DEFAULT_TARGET_QUERIES,
     ) == NamedType(name="Int64")
-    assert map_type(IntType(int_kind=IntKind.INT128, size_bytes=16, align_bytes=16)) == BuiltinType(
-        name=MojoBuiltin.INT128
-    )
     assert map_type(
-        IntType(int_kind=IntKind.UINT128, size_bytes=16, align_bytes=16)
+        IntType(int_kind=IntKind.INT128, size_bytes=16, align_bytes=16),
+        queries=DEFAULT_TARGET_QUERIES,
+    ) == BuiltinType(name=MojoBuiltin.INT128)
+    assert map_type(
+        IntType(int_kind=IntKind.UINT128, size_bytes=16, align_bytes=16),
+        queries=DEFAULT_TARGET_QUERIES,
     ) == BuiltinType(name=MojoBuiltin.UINT128)
 
 
 def test_map_type_maps_float128_to_inline_bytes() -> None:
     assert map_type(
-        FloatType(float_kind=FloatKind.FLOAT128, size_bytes=16, align_bytes=16)
-    ) == Array(
-        element=BuiltinType(name=MojoBuiltin.UINT8),
-        size=16,
-    )
+        FloatType(float_kind=FloatKind.FLOAT128, size_bytes=16, align_bytes=16),
+        queries=DEFAULT_TARGET_QUERIES,
+    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.UINT8), size=16)
 
 
-def test_map_type_caches_recursively_without_looping_for_nested_typeref_shapes() -> None:
-    mapper = MapTypePass()
+def test_map_type_repeats_without_retaining_results_for_nested_typeref_shapes() -> None:
+    mapper = MapTypePass(queries=DEFAULT_TARGET_QUERIES)
     alias = TypeRef(
         decl_id="typedef:node_handle_t",
         name="node_handle_t",
-        canonical=Pointer(
+        canonical=CPointer(
             pointee=TypeRef(
-                decl_id="typedef:node_handle_t",
-                name="node_handle_t",
-                canonical=VoidType(),
+                decl_id="typedef:node_handle_t", name="node_handle_t", canonical=VoidType()
             )
         ),
     )
-
     first = mapper.run(alias)
     second = mapper.run(alias)
-
     assert first == NamedType(name="node_handle_t")
     assert second == first

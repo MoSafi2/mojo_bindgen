@@ -18,15 +18,11 @@ from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    Array,
-    BinaryExpr,
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
     ByteOrder,
-    CallExpr,
     CallTarget,
-    CastExpr,
     ConstArg,
     DocComment,
     DTypeArg,
@@ -35,7 +31,6 @@ from mojo_bindgen.ir import (
     FunctionAttrs,
     FunctionDecl,
     FunctionKind,
-    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     Initializer,
@@ -47,15 +42,20 @@ from mojo_bindgen.ir import (
     LinkMode,
     ModuleDependencies,
     ModuleImport,
+    MojoArray,
+    MojoBinaryExpr,
     MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoFunctionPtr,
     MojoModule,
+    MojoPointer,
+    MojoRefExpr,
+    MojoSizeOfExpr,
     NamedType,
     ParametricBase,
     ParametricType,
-    Pointer,
     PointerMutability,
-    RefExpr,
-    SizeOfExpr,
     StoredMember,
     Struct,
     StructDecl,
@@ -66,9 +66,8 @@ from mojo_bindgen.ir import (
     TypeArg,
     Unit,
 )
-from mojo_bindgen.ir import (
-    Param as Param,
-)
+from mojo_bindgen.ir import MojoParam as MojoParam
+from mojo_bindgen.serde import decode_node, to_debug_dict
 from tests.bindgen_helpers import analyze_to_mojo_module
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -79,11 +78,7 @@ def _i32_type() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def test_alias_decl_roundtrip_keeps_typed_const_metadata() -> None:
@@ -91,46 +86,27 @@ def test_alias_decl_roundtrip_keeps_typed_const_metadata() -> None:
         name="Flags",
         kind=AliasKind.CONST_VALUE,
         const_type=NamedType("flag_t"),
-        const_value=CallExpr(
-            callee=RefExpr("flag_t"),
-            args=[
-                CastExpr(
-                    target=BuiltinType(MojoBuiltin.C_INT),
-                    expr=IntLiteral(1),
-                )
-            ],
+        const_value=MojoCallExpr(
+            callee=MojoRefExpr("flag_t"),
+            args=(MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(1)),),
         ),
     )
-
-    raw = decl.to_json_dict()
-    restored = AliasDecl.from_json_dict(raw)
-
-    assert raw["alias_kind"] == "const_value"
+    raw = to_debug_dict(decl)
+    restored = decode_node(raw, AliasDecl)
+    assert raw["fields"]["kind"] == "const_value"
     assert restored.const_type == NamedType("flag_t")
-    assert restored.const_value == CallExpr(
-        callee=RefExpr("flag_t"),
-        args=[
-            CastExpr(
-                target=BuiltinType(MojoBuiltin.C_INT),
-                expr=IntLiteral(1),
-            )
-        ],
+    assert restored.const_value == MojoCallExpr(
+        callee=MojoRefExpr("flag_t"),
+        args=(MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(1)),),
     )
 
 
 def test_struct_decl_roundtrip_keeps_explicit_align_decorator() -> None:
-    decl = StructDecl(
-        name="Widget",
-        align=64,
-        align_decorator=16,
-        members=[],
-    )
-
-    raw = decl.to_json_dict()
-    restored = StructDecl.from_json_dict(raw)
-
-    assert raw["align"] == 64
-    assert raw["align_decorator"] == 16
+    decl = StructDecl(name="Widget", align=64, align_decorator=16, members=())
+    raw = to_debug_dict(decl)
+    restored = decode_node(raw, StructDecl)
+    assert raw["fields"]["align"] == 64
+    assert raw["fields"]["align_decorator"] == 16
     assert restored.align == 64
     assert restored.align_decorator == 16
 
@@ -142,21 +118,20 @@ def test_render_struct_decl_preserves_trait_order() -> None:
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[
+            decls=(
                 StructDecl(
                     name="Widget",
-                    traits=[
+                    traits=(
                         StructTraits.REGISTER_PASSABLE,
                         StructTraits.COPYABLE,
                         StructTraits.MOVABLE,
-                    ],
-                    members=[],
-                )
-            ],
+                    ),
+                    members=(),
+                ),
+            ),
         ),
         MojoIRPrintOptions(module_comment=False),
     )
-
     assert "struct Widget(RegisterPassable, Copyable, Movable):" in rendered
 
 
@@ -166,56 +141,41 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             AliasDecl(
-                name="Flags",
-                kind=AliasKind.TYPE_ALIAS,
-                type_value=BuiltinType(MojoBuiltin.C_INT),
+                name="Flags", kind=AliasKind.TYPE_ALIAS, type_value=BuiltinType(MojoBuiltin.C_INT)
             ),
             AliasDecl(
                 name="READY",
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType("Flags"),
-                const_value=CallExpr(
-                    callee=RefExpr("Flags"),
-                    args=[
-                        CastExpr(
-                            target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=IntLiteral(1),
-                        )
-                    ],
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Flags"),
+                    args=(MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(1)),),
                 ),
             ),
             AliasDecl(
                 name="ERROR",
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType("Flags"),
-                const_value=CallExpr(
-                    callee=RefExpr("Flags"),
-                    args=[
-                        CastExpr(
-                            target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=IntLiteral(2),
-                        )
-                    ],
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Flags"),
+                    args=(MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(2)),),
                 ),
             ),
             StructDecl(
                 name="Widget",
                 align=4,
-                traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
-                members=[
+                traits=(StructTraits.COPYABLE, StructTraits.MOVABLE),
+                members=(
                     StoredMember(
-                        index=0,
-                        name="size",
-                        type=BuiltinType(MojoBuiltin.C_INT),
-                        byte_offset=0,
+                        index=0, name="size", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0
                     ),
                     StoredMember(
                         index=1,
                         name="handler",
-                        type=FunctionPtr(
-                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=MojoFunctionPtr(
+                            params=(MojoParam(name="", type=BuiltinType(MojoBuiltin.C_INT)),),
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=8,
@@ -226,7 +186,7 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                         byte_offset=16,
                         first_index=2,
                         storage_width_bits=32,
-                        fields=[
+                        fields=(
                             BitfieldField(
                                 index=2,
                                 name="enabled",
@@ -244,75 +204,58 @@ def test_render_mojo_module_external_surface_with_synthesized_callback_aliases()
                                 bit_width=3,
                                 signed=False,
                             ),
-                        ],
+                        ),
                     ),
-                ],
-                initializers=[
+                ),
+                initializers=(
                     Initializer(
-                        params=[
-                            InitializerParam(
-                                name="size",
-                                type=BuiltinType(MojoBuiltin.C_INT),
-                            ),
-                            InitializerParam(
-                                name="enabled",
-                                type=BuiltinType(MojoBuiltin.BOOL),
-                            ),
-                        ]
-                    )
-                ],
+                        params=(
+                            InitializerParam(name="size", type=BuiltinType(MojoBuiltin.C_INT)),
+                            InitializerParam(name="enabled", type=BuiltinType(MojoBuiltin.BOOL)),
+                        )
+                    ),
+                ),
             ),
             AliasDecl(
                 name="Packet",
                 kind=AliasKind.UNION_LAYOUT,
                 type_value=ParametricType(
                     base=ParametricBase.UNSAFE_UNION,
-                    args=[
-                        TypeArg(BuiltinType(MojoBuiltin.C_INT)),
-                        TypeArg(NamedType("Widget")),
-                    ],
+                    args=(TypeArg(BuiltinType(MojoBuiltin.C_INT)), TypeArg(NamedType("Widget"))),
                 ),
             ),
             AliasDecl(
                 name="LIMIT",
                 kind=AliasKind.CONST_VALUE,
-                const_value=BinaryExpr(
-                    op="+",
-                    lhs=IntLiteral(1),
-                    rhs=IntLiteral(2),
-                ),
+                const_value=MojoBinaryExpr(op="+", lhs=IntLiteral(1), rhs=IntLiteral(2)),
             ),
             FunctionDecl(
                 name="install",
                 link_name="install",
-                params=[
-                    Param(
+                params=(
+                    MojoParam(
                         name="cb",
-                        type=FunctionPtr(
-                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=MojoFunctionPtr(
+                            params=(MojoParam(name="", type=BuiltinType(MojoBuiltin.C_INT)),),
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                     ),
-                    Param(
+                    MojoParam(
                         name="widget",
-                        type=Pointer(
-                            pointee=NamedType("Widget"),
-                            mutability=PointerMutability.IMMUT,
+                        type=MojoPointer(
+                            pointee=NamedType("Widget"), mutability=PointerMutability.IMMUT
                         ),
                     ),
-                ],
+                ),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="install"),
             ),
-        ],
+        ),
     )
-
     out = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert "from std.ffi import external_call, UnsafeUnion, c_int, c_uint" in out
     assert "@align(4)" in out
     assert "comptime Flags = c_int" in out
@@ -336,17 +279,17 @@ def test_render_bitfield_accessors_branch_on_target_endianness_comptime() -> Non
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             StructDecl(
                 name="Flags",
-                members=[
+                members=(
                     BitfieldGroupMember(
                         storage_name="__bf0",
                         storage_type=BuiltinType(MojoBuiltin.C_UINT),
                         byte_offset=0,
                         first_index=0,
                         storage_width_bits=32,
-                        fields=[
+                        fields=(
                             BitfieldField(
                                 index=0,
                                 name="ready",
@@ -364,21 +307,18 @@ def test_render_bitfield_accessors_branch_on_target_endianness_comptime() -> Non
                                 bit_width=3,
                                 signed=False,
                             ),
-                        ],
-                    )
-                ],
-            )
-        ],
+                        ),
+                    ),
+                ),
+            ),
+        ),
     )
-
     normalized = normalize_mojo_module(module)
-    assert normalized.dependencies.imports == [
-        ModuleImport(module="std.ffi", names=["external_call", "c_uint"]),
-        ModuleImport(module="std.sys.info", names=["Endian"]),
-    ]
-
+    assert normalized.dependencies.imports == (
+        ModuleImport(module="std.ffi", names=("external_call", "c_uint")),
+        ModuleImport(module="std.sys.info", names=("Endian",)),
+    )
     rendered = render_mojo_module(normalized, MojoIRPrintOptions(module_comment=False))
-
     assert "from std.sys.info import Endian" in rendered
     assert "is_little_endian" not in rendered
     assert "comptime if Endian.native() == Endian.big:" in rendered
@@ -395,30 +335,28 @@ def test_render_callback_alias_uses_none_in_signature_position() -> None:
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             AliasDecl(
                 name="log_callback_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=FunctionPtr(
-                    params=[
-                        Param(
+                type_value=MojoFunctionPtr(
+                    params=(
+                        MojoParam(
                             name="msg",
-                            type=Pointer(
+                            type=MojoPointer(
                                 pointee=BuiltinType(MojoBuiltin.C_CHAR),
                                 mutability=PointerMutability.IMMUT,
                             ),
-                        )
-                    ],
+                        ),
+                    ),
                     ret=BuiltinType(MojoBuiltin.NONE),
                 ),
-            )
-        ],
+            ),
+        ),
     )
-
     out = render_mojo_module(
         normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert (
         'comptime log_callback_t = def (msg: Pointer[c_char, ImmUntrackedOrigin]) thin abi("C") -> None'
         in out
@@ -431,48 +369,42 @@ def test_render_struct_emits_flexible_tail_helpers() -> None:
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             StructDecl(
                 name="Packet",
-                members=[
+                members=(
                     StoredMember(
-                        index=0,
-                        name="tag",
-                        type=BuiltinType(MojoBuiltin.C_UINT),
-                        byte_offset=0,
+                        index=0, name="tag", type=BuiltinType(MojoBuiltin.C_UINT), byte_offset=0
                     ),
                     StoredMember(
                         index=1,
                         name="payload",
-                        type=Array(BuiltinType(MojoBuiltin.C_UCHAR), 0),
+                        type=MojoArray(BuiltinType(MojoBuiltin.C_UCHAR), 0),
                         byte_offset=4,
                     ),
-                ],
+                ),
                 flexible_tail=FlexibleTail(
                     field_name="payload",
                     element_type=BuiltinType(MojoBuiltin.C_UCHAR),
                     pattern="c99_empty",
                     byte_offset=4,
                 ),
-            )
-        ],
+            ),
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert "var payload: Array[c_uchar, 0]" in rendered
     assert "@staticmethod" in rendered
     assert "def payload_offset() -> UInt:" in rendered
     assert (
-        "def payload_ptr(base: Pointer[Packet, ImmUntrackedOrigin]) -> "
-        "Pointer[c_uchar, ImmUntrackedOrigin]:" in rendered
+        "def payload_ptr(base: Pointer[Packet, ImmUntrackedOrigin]) -> Pointer[c_uchar, ImmUntrackedOrigin]:"
+        in rendered
     )
     assert (
-        "def payload_mut_ptr(base: Pointer[Packet, MutUntrackedOrigin]) -> "
-        "Pointer[c_uchar, MutUntrackedOrigin]:" in rendered
+        "def payload_mut_ptr(base: Pointer[Packet, MutUntrackedOrigin]) -> Pointer[c_uchar, MutUntrackedOrigin]:"
+        in rendered
     )
     assert "return raw.unsafe_offset(4)" in rendered
 
@@ -483,18 +415,18 @@ def test_normalize_and_render_sizeof_imports_std_sys_info() -> None:
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             AliasDecl(
                 name="SIZE",
                 kind=AliasKind.CONST_VALUE,
-                const_value=SizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
+                const_value=MojoSizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
             ),
-        ],
+        ),
     )
-
     normalized = normalize_mojo_module(module)
-    assert ModuleImport(module="std.sys.info", names=["size_of"]) in normalized.dependencies.imports
-
+    assert (
+        ModuleImport(module="std.sys.info", names=("size_of",)) in normalized.dependencies.imports
+    )
     out = render_mojo_module(normalized)
     assert "from std.sys.info import size_of" in out
     assert "comptime SIZE = size_of[c_int]()" in out
@@ -506,21 +438,21 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
         library="demo",
         link_name="demo",
         link_mode=LinkMode.OWNED_DL_HANDLE,
-        decls=[
+        decls=(
             StructDecl(
                 name="Widget",
-                traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
-                members=[
+                traits=(StructTraits.COPYABLE, StructTraits.MOVABLE),
+                members=(
                     StoredMember(
                         index=0,
                         name="handler",
-                        type=FunctionPtr(
-                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=MojoFunctionPtr(
+                            params=(MojoParam(name="", type=BuiltinType(MojoBuiltin.C_INT)),),
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=0,
-                    )
-                ],
+                    ),
+                ),
             ),
             GlobalDecl(
                 name="global_counter",
@@ -529,24 +461,19 @@ def test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit() ->
                 is_const=False,
                 kind=GlobalKind.WRAPPER,
             ),
-        ],
-    )
-
-    normalized = normalize_mojo_module(module)
-
-    assert normalized.dependencies.imports == [
-        ModuleImport(
-            module="std.ffi",
-            names=["OwnedDLHandle", "_Global", "c_int"],
         ),
-        ModuleImport(module="std.sys.info", names=["CompilationTarget", "platform_map"]),
-        ModuleImport(module="std.os", names=["abort", "getenv"]),
-        ModuleImport(module="std.pathlib", names=["Path"]),
-    ]
-    assert normalized.dependencies.support_decls == [
+    )
+    normalized = normalize_mojo_module(module)
+    assert normalized.dependencies.imports == (
+        ModuleImport(module="std.ffi", names=("OwnedDLHandle", "_Global", "c_int")),
+        ModuleImport(module="std.sys.info", names=("CompilationTarget", "platform_map")),
+        ModuleImport(module="std.os", names=("abort", "getenv")),
+        ModuleImport(module="std.pathlib", names=("Path",)),
+    )
+    assert normalized.dependencies.support_decls == (
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
         SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS),
-    ]
+    )
     assert isinstance(normalized.decls[0], AliasDecl)
     assert normalized.decls[0].name == "Widget_handler_cb"
     widget = next(decl for decl in normalized.decls if isinstance(decl, StructDecl))
@@ -561,44 +488,36 @@ def test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies() ->
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
         dependencies=ModuleDependencies(
-            imports=[ModuleImport(module="std.ffi", names=["c_int", "external_call"])],
-            support_decls=[SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS)],
+            imports=(ModuleImport(module="std.ffi", names=("c_int", "external_call")),),
+            support_decls=(SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),),
         ),
-        decls=[
+        decls=(
             AliasDecl(
                 name="SIZE",
                 kind=AliasKind.CONST_VALUE,
-                const_value=SizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
+                const_value=MojoSizeOfExpr(target=BuiltinType(MojoBuiltin.C_INT)),
             ),
             FunctionDecl(
                 name="install",
                 link_name="install",
-                params=[],
+                params=(),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="install"),
             ),
-        ],
-    )
-
-    normalized = normalize_mojo_module(module)
-
-    assert normalized.dependencies.imports == [
-        ModuleImport(
-            module="std.ffi",
-            names=[
-                "external_call",
-                "OwnedDLHandle",
-                "_Global",
-                "c_int",
-            ],
         ),
-        ModuleImport(module="std.sys.info", names=["size_of"]),
-        ModuleImport(module="std.os", names=["abort"]),
-    ]
-    assert normalized.dependencies.support_decls == [
+    )
+    normalized = normalize_mojo_module(module)
+    assert normalized.dependencies.imports == (
+        ModuleImport(
+            module="std.ffi", names=("external_call", "OwnedDLHandle", "_Global", "c_int")
+        ),
+        ModuleImport(module="std.sys.info", names=("size_of",)),
+        ModuleImport(module="std.os", names=("abort",)),
+    )
+    assert normalized.dependencies.support_decls == (
         SupportDecl(SupportDeclKind.DL_HANDLE_HELPERS),
-    ]
+    )
 
 
 def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
@@ -608,23 +527,20 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
         link_name="demo",
         link_mode=LinkMode.OWNED_DL_HANDLE,
         library_path_hint="/tmp/libdemo.so",
-        decls=[
+        decls=(
             FunctionDecl(
                 name="install",
                 link_name="install",
-                params=[],
+                params=(),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(link_mode=LinkMode.OWNED_DL_HANDLE, symbol="install"),
-            )
-        ],
+            ),
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert 'comptime _BINDGEN_LIB_PATH_CANDIDATE: String = "/tmp/libdemo.so"' in rendered
     assert 'comptime _BINDGEN_LIB_PATH_ENV = "MOJO_BINDGEN_DEMO_LIBRARY_PATH"' in rendered
     assert 'comptime _BINDGEN_GENERIC_LIB_PATH_ENV = "MOJO_BINDGEN_LIBRARY_PATH"' in rendered
@@ -639,8 +555,8 @@ def test_render_mojo_module_uses_owned_dl_handle_library_path_hint() -> None:
         in rendered
     )
     assert (
-        "_bindgen_append_dylib_candidate(paths, "
-        "_bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))" in rendered
+        "_bindgen_append_dylib_candidate(paths, _bindgen_env_path(_BINDGEN_GENERIC_LIB_PATH_ENV))"
+        in rendered
     )
     assert "_BINDGEN_LIB_PATH_CANDIDATE" in rendered
     assert 'var prefix = _bindgen_env_path("CONDA_PREFIX")' in rendered
@@ -657,23 +573,20 @@ def test_render_owned_dl_handle_sanitizes_library_path_env_var() -> None:
         library="demo",
         link_name="foo-bar.2",
         link_mode=LinkMode.OWNED_DL_HANDLE,
-        decls=[
+        decls=(
             FunctionDecl(
                 name="install",
                 link_name="install",
-                params=[],
+                params=(),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(link_mode=LinkMode.OWNED_DL_HANDLE, symbol="install"),
-            )
-        ],
+            ),
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert 'comptime _BINDGEN_LIB_PATH_ENV = "MOJO_BINDGEN_FOO_BAR_2_LIBRARY_PATH"' in rendered
 
 
@@ -683,36 +596,33 @@ def test_render_owned_dl_handle_function_local_does_not_collide_with_parameters(
         library="demo",
         link_name="demo",
         link_mode=LinkMode.OWNED_DL_HANDLE,
-        decls=[
+        decls=(
             FunctionDecl(
                 name="execute_on_thread",
                 link_name="execute_on_thread",
-                params=[
-                    Param(name="fn", type=NamedType("execute_on_thread_cb")),
-                    Param(name="_bindgen_c_fn", type=BuiltinType(MojoBuiltin.C_INT)),
-                ],
+                params=(
+                    MojoParam(name="fn", type=NamedType("execute_on_thread_cb")),
+                    MojoParam(name="_bindgen_c_fn", type=BuiltinType(MojoBuiltin.C_INT)),
+                ),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(
-                    link_mode=LinkMode.OWNED_DL_HANDLE,
-                    symbol="execute_on_thread",
+                    link_mode=LinkMode.OWNED_DL_HANDLE, symbol="execute_on_thread"
                 ),
-            )
-        ],
+            ),
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert (
         "def execute_on_thread(fn_: execute_on_thread_cb, _bindgen_c_fn: c_int) -> None:"
         in rendered
     )
     assert (
         'var _bindgen_c_fn_1 = _bindgen_owner[].get_function[NoneType]("execute_on_thread")'
-    ) in rendered
+        in rendered
+    )
     assert "_bindgen_c_fn_1(fn_, _bindgen_c_fn)" in rendered
     assert "var fn_ =" not in rendered
 
@@ -723,23 +633,20 @@ def test_render_mojo_module_emits_inline_directive_stub_comments() -> None:
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             FunctionDecl(
                 name="inline_add",
                 link_name="inline_add",
-                params=[Param(name="value", type=BuiltinType(MojoBuiltin.C_INT))],
+                params=(MojoParam(name="value", type=BuiltinType(MojoBuiltin.C_INT)),),
                 return_type=BuiltinType(MojoBuiltin.C_INT),
                 kind=FunctionKind.DIRECTIVE_STUB,
                 attrs=FunctionAttrs(inline_disposition=InlineDisposition.EXTERN_INLINE),
-            )
-        ],
+            ),
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
-
     assert "source directives: extern inline" in rendered
     assert "# c_int inline_add(value: c_int)" in rendered
     assert "def inline_add(" not in rendered
@@ -752,18 +659,16 @@ def test_render_mojo_module_does_not_normalize_implicitly(monkeypatch) -> None:
         raise AssertionError("render_mojo_module should not normalize")
 
     monkeypatch.setattr(normalize_mod, "normalize_mojo_module", fail)
-
     rendered = render_mojo_module(
         MojoModule(
             source_header="demo.h",
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[],
+            decls=(),
         ),
         MojoIRPrintOptions(module_comment=False),
     )
-
     assert rendered == ""
 
 
@@ -774,18 +679,10 @@ def test_normalize_mojo_module_sets_align_decorator_before_printing() -> None:
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[
-                StructDecl(
-                    name="Widget",
-                    align=8,
-                    members=[],
-                )
-            ],
+            decls=(StructDecl(name="Widget", align=8, members=()),),
         )
     )
-
     widget = next(decl for decl in normalized.decls if isinstance(decl, StructDecl))
-
     assert widget.align == 8
     assert widget.align_decorator == 8
 
@@ -797,23 +694,17 @@ def test_normalize_and_printer_keep_union_byte_fallback_without_unsafe_union_imp
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[
+            decls=(
                 AliasDecl(
                     name="Dup",
                     kind=AliasKind.UNION_LAYOUT,
-                    type_value=Array(
-                        element=BuiltinType(MojoBuiltin.UINT8),
-                        size=4,
-                    ),
-                )
-            ],
+                    type_value=MojoArray(element=BuiltinType(MojoBuiltin.UINT8), size=4),
+                ),
+            ),
         )
     )
-
-    assert normalized.dependencies.imports == []
-
+    assert normalized.dependencies.imports == ()
     rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(normalized)
-
     assert "UnsafeUnion" not in rendered
     assert "comptime Dup = Array[UInt8, 4]" in rendered
 
@@ -825,22 +716,12 @@ def test_printer_uses_explicit_align_decorator_only() -> None:
             library="demo",
             link_name="demo",
             link_mode=LinkMode.EXTERNAL_CALL,
-            decls=[
-                StructDecl(
-                    name="RawAlignOnly",
-                    align=8,
-                    members=[],
-                ),
-                StructDecl(
-                    name="ExplicitAlign",
-                    align=64,
-                    align_decorator=16,
-                    members=[],
-                ),
-            ],
+            decls=(
+                StructDecl(name="RawAlignOnly", align=8, members=()),
+                StructDecl(name="ExplicitAlign", align=64, align_decorator=16, members=()),
+            ),
         )
     )
-
     assert "@align(16)" in rendered
     assert "@align(8)" not in rendered
     assert "@align(64)" not in rendered
@@ -852,20 +733,20 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=[
+        decls=(
             Struct(
                 decl_id="struct:Aligned",
                 name="Aligned",
                 c_name="Aligned",
-                fields=[
+                fields=(
                     Field(
                         name="value",
                         source_name="value",
                         type=_i32_type(),
                         byte_offset=0,
                         size_bytes=4,
-                    )
-                ],
+                    ),
+                ),
                 size_bytes=16,
                 align_bytes=16,
                 requested_align_bytes=16,
@@ -874,7 +755,7 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
                 decl_id="struct:Padded",
                 name="Padded",
                 c_name="Padded",
-                fields=[
+                fields=(
                     Field(
                         name="tag",
                         source_name="tag",
@@ -889,7 +770,7 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
                         byte_offset=8,
                         size_bytes=4,
                     ),
-                ],
+                ),
                 size_bytes=12,
                 align_bytes=4,
             ),
@@ -897,7 +778,7 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
                 decl_id="struct:Packed",
                 name="Packed",
                 c_name="Packed",
-                fields=[
+                fields=(
                     Field(
                         name="tag",
                         source_name="tag",
@@ -912,7 +793,7 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
                         byte_offset=1,
                         size_bytes=4,
                     ),
-                ],
+                ),
                 size_bytes=5,
                 align_bytes=1,
                 is_packed=True,
@@ -921,7 +802,7 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
                 decl_id="struct:Flags",
                 name="Flags",
                 c_name="Flags",
-                fields=[
+                fields=(
                     Field(
                         name="enabled",
                         source_name="enabled",
@@ -931,23 +812,19 @@ def test_printer_renders_lowered_struct_layout_members_without_normalize_inferen
                         is_bitfield=True,
                         bit_offset=0,
                         bit_width=1,
-                    )
-                ],
+                    ),
+                ),
                 size_bytes=1,
                 align_bytes=1,
             ),
-        ],
+        ),
     )
-
     lowered = analyze_to_mojo_module(unit)
     aligned = next(
         decl for decl in lowered.decls if isinstance(decl, StructDecl) and decl.name == "Aligned"
     )
-
     assert aligned.align_decorator == 16
-
     rendered = MojoIRPrinter(MojoIRPrintOptions(module_comment=False)).render(lowered)
-
     assert "@align(16)\n@fieldwise_init\nstruct Aligned" in rendered
     assert "var __pad0: UInt32" in rendered
     assert "var storage: Array[UInt8, 5]" in rendered
@@ -963,55 +840,45 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
         library="demo",
         link_name="demo",
         link_mode=LinkMode.OWNED_DL_HANDLE,
-        decls=[
+        decls=(
             AliasDecl(
                 name="binary_cb_t",
                 kind=AliasKind.CALLBACK_SIGNATURE,
-                type_value=FunctionPtr(
-                    params=[
-                        Param(name="arg0", type=BuiltinType(MojoBuiltin.C_INT)),
-                        Param(
+                type_value=MojoFunctionPtr(
+                    params=(
+                        MojoParam(name="arg0", type=BuiltinType(MojoBuiltin.C_INT)),
+                        MojoParam(
                             name="arg1",
-                            type=Pointer(pointee=None, mutability=PointerMutability.MUT),
+                            type=MojoPointer(pointee=None, mutability=PointerMutability.MUT),
                         ),
-                    ],
+                    ),
                     ret=BuiltinType(MojoBuiltin.C_INT),
                 ),
             ),
             AliasDecl(
-                name="Flags",
-                kind=AliasKind.TYPE_ALIAS,
-                type_value=BuiltinType(MojoBuiltin.C_INT),
+                name="Flags", kind=AliasKind.TYPE_ALIAS, type_value=BuiltinType(MojoBuiltin.C_INT)
             ),
             AliasDecl(
                 name="READY",
                 kind=AliasKind.CONST_VALUE,
                 const_type=NamedType("Flags"),
-                const_value=CallExpr(
-                    callee=RefExpr("Flags"),
-                    args=[
-                        CastExpr(
-                            target=BuiltinType(MojoBuiltin.C_INT),
-                            expr=IntLiteral(1),
-                        )
-                    ],
+                const_value=MojoCallExpr(
+                    callee=MojoRefExpr("Flags"),
+                    args=(MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(1)),),
                 ),
             ),
             StructDecl(
                 name="Widget",
-                traits=[StructTraits.COPYABLE, StructTraits.MOVABLE],
-                members=[
+                traits=(StructTraits.COPYABLE, StructTraits.MOVABLE),
+                members=(
                     StoredMember(
-                        index=0,
-                        name="size",
-                        type=BuiltinType(MojoBuiltin.C_INT),
-                        byte_offset=0,
+                        index=0, name="size", type=BuiltinType(MojoBuiltin.C_INT), byte_offset=0
                     ),
                     StoredMember(
                         index=1,
                         name="callback",
-                        type=FunctionPtr(
-                            params=[Param(name="", type=BuiltinType(MojoBuiltin.C_INT))],
+                        type=MojoFunctionPtr(
+                            params=(MojoParam(name="", type=BuiltinType(MojoBuiltin.C_INT)),),
                             ret=BuiltinType(MojoBuiltin.C_INT),
                         ),
                         byte_offset=8,
@@ -1019,17 +886,16 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
                     StoredMember(
                         index=2,
                         name="buffer",
-                        type=Array(element=BuiltinType(MojoBuiltin.C_UCHAR), size=16),
+                        type=MojoArray(element=BuiltinType(MojoBuiltin.C_UCHAR), size=16),
                         byte_offset=16,
                     ),
-                ],
+                ),
             ),
             AliasDecl(
                 name="Value",
                 kind=AliasKind.TYPE_ALIAS,
                 type_value=ParametricType(
-                    base=ParametricBase.SIMD,
-                    args=[DTypeArg("DType.float32"), ConstArg(4)],
+                    base=ParametricBase.SIMD, args=(DTypeArg("DType.float32"), ConstArg(4))
                 ),
             ),
             GlobalDecl(
@@ -1042,12 +908,7 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
             FunctionDecl(
                 name="install",
                 link_name="install",
-                params=[
-                    Param(
-                        name="cb",
-                        type=NamedType("binary_cb_t"),
-                    ),
-                ],
+                params=(MojoParam(name="cb", type=NamedType("binary_cb_t")),),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="install"),
@@ -1055,30 +916,25 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
             FunctionDecl(
                 name="load_widget",
                 link_name="load_widget",
-                params=[],
-                return_type=Pointer(
-                    pointee=NamedType("Widget"),
-                    mutability=PointerMutability.MUT,
+                params=(),
+                return_type=MojoPointer(
+                    pointee=NamedType("Widget"), mutability=PointerMutability.MUT
                 ),
                 kind=FunctionKind.WRAPPER,
                 call_target=CallTarget(link_mode=LinkMode.OWNED_DL_HANDLE, symbol="load_widget"),
             ),
-        ],
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
     module_path = tmp_path / "demo_bindings.mojo"
     runner_path = tmp_path / "runner.mojo"
     output_path = tmp_path / "runner_bin"
     module_path.write_text(rendered, encoding="utf-8")
     runner_path.write_text(
-        "from demo_bindings import *\n\ndef main():\n    pass\n",
-        encoding="utf-8",
+        "from demo_bindings import *\n\ndef main():\n    pass\n", encoding="utf-8"
     )
-
     proc = subprocess.run(
         [
             "pixi",
@@ -1096,7 +952,6 @@ def test_rendered_mojo_module_compiles_with_mixed_decl_kinds(tmp_path: Path) -> 
         capture_output=True,
         text=True,
     )
-
     assert proc.returncode == 0, proc.stderr
     assert "def _bindgen_dylib() -> Pointer[OwnedDLHandle, MutUntrackedOrigin]:" in rendered
     assert "struct GlobalVar[T: Copyable & Deinitable, //, link: StaticString]:" in rendered
@@ -1111,38 +966,26 @@ def test_rendered_docstring_comments_escape_backslashes_for_mojo(tmp_path: Path)
         library="docs",
         link_name="docs",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=[
+        decls=(
             FunctionDecl(
                 name="sam_hdr_pg_id",
                 link_name="sam_hdr_pg_id",
-                params=[],
+                params=(),
                 return_type=BuiltinType(MojoBuiltin.NONE),
                 kind=FunctionKind.WRAPPER,
-                call_target=CallTarget(
-                    link_mode=LinkMode.EXTERNAL_CALL,
-                    symbol="sam_hdr_pg_id",
-                ),
+                call_target=CallTarget(link_mode=LinkMode.EXTERNAL_CALL, symbol="sam_hdr_pg_id"),
                 doc=DocComment(
-                    text=r'''/*!
-                     * Generate a unique \@PG ID: value
-                     * \param name  Name of the program. Eg. samtools
-                     * Path example: C:\tmp\samtools
-                     * Literal newline escape: \n
-                     * Embedded delimiter: """
-                     */'''
+                    text='/*!\n                     * Generate a unique \\@PG ID: value\n                     * \\param name  Name of the program. Eg. samtools\n                     * Path example: C:\\tmp\\samtools\n                     * Literal newline escape: \\n\n                     * Embedded delimiter: """\n                     */'
                 ),
             ),
-        ],
+        ),
     )
-
     rendered = render_mojo_module(
-        normalize_mojo_module(module),
-        MojoIRPrintOptions(module_comment=False),
+        normalize_mojo_module(module), MojoIRPrintOptions(module_comment=False)
     )
     module_path = tmp_path / "docs_bindings.mojo"
     output_path = tmp_path / "docs_bindings.so"
     module_path.write_text(rendered, encoding="utf-8")
-
     proc = subprocess.run(
         [
             "pixi",
@@ -1160,7 +1003,6 @@ def test_rendered_docstring_comments_escape_backslashes_for_mojo(tmp_path: Path)
         capture_output=True,
         text=True,
     )
-
     assert proc.returncode == 0, proc.stderr
     assert "Generate a unique \\\\@PG ID: value" in rendered
     assert "\\\\param name  Name of the program. Eg. samtools" in rendered

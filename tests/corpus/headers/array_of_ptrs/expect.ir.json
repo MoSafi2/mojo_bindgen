@@ -5,30 +5,38 @@
   "decls": [
     {
       "kind": "GlobalVar",
-      "name": "aop_slots"
+      "fields": {
+        "name": "aop_slots"
+      }
     }
   ],
   "paths": [
     {
       "selector": {
         "kind": "GlobalVar",
-        "name": "aop_slots"
+        "fields": {
+          "name": "aop_slots"
+        }
       },
-      "path": "type",
+      "path": "fields.type",
       "attrs": {
-        "kind": "Array",
-        "array_kind": "fixed",
-        "size": 4
+        "kind": "CArray",
+        "fields": {
+          "array_kind": "fixed",
+          "size": 4
+        }
       }
     },
     {
       "selector": {
         "kind": "GlobalVar",
-        "name": "aop_slots"
+        "fields": {
+          "name": "aop_slots"
+        }
       },
-      "path": "type.element",
+      "path": "fields.type.fields.element",
       "attrs": {
-        "kind": "Pointer"
+        "kind": "CPointer"
       }
     }
   ]

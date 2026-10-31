@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
 from mojo_bindgen.codegen.mojo_support_templates import (
@@ -15,23 +16,16 @@ from mojo_bindgen.codegen.mojo_support_templates import (
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    Array,
-    BinaryExpr,
     BitfieldField,
     BitfieldGroupMember,
     BuiltinType,
-    CallExpr,
     CallTarget,
-    CastExpr,
     CharLiteral,
     ComptimeMember,
-    ConstExpr,
     DocComment,
     FlexibleTail,
-    FloatLiteral,
     FunctionDecl,
     FunctionKind,
-    FunctionPtr,
     GlobalDecl,
     GlobalKind,
     Initializer,
@@ -40,27 +34,35 @@ from mojo_bindgen.ir import (
     LinkMode,
     MappingNote,
     ModuleImport,
+    MojoArray,
+    MojoBinaryExpr,
     MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoConstExpr,
     MojoDecl,
+    MojoFloatLiteral,
+    MojoFunctionPtr,
     MojoModule,
+    MojoParam,
+    MojoPointer,
+    MojoRefExpr,
+    MojoSizeOfExpr,
+    MojoType,
+    MojoUnaryExpr,
     NamedType,
     OpaqueStorageMember,
     PaddingMember,
-    Param,
+    ParametricArg,
     ParametricBase,
     ParametricType,
-    Pointer,
     PointerMutability,
     PointerOrigin,
-    RefExpr,
-    SizeOfExpr,
     StoredMember,
     StringLiteral,
     StructDecl,
     StructKind,
     SupportDeclKind,
-    Type,
-    UnaryExpr,
 )
 
 
@@ -233,7 +235,7 @@ class MojoIRPrinter:
         )
 
     @staticmethod
-    def _render_import_block(imports: list[ModuleImport]) -> str:
+    def _render_import_block(imports: tuple[ModuleImport, ...]) -> str:
         lines = [f"from {imp.module} import {', '.join(imp.names)}" for imp in imports]
         return "\n".join(lines)
 
@@ -259,7 +261,7 @@ class MojoIRPrinter:
             return self._render_function_decl(decl)
         if isinstance(decl, GlobalDecl):
             return self._render_global_decl(decl)
-        raise MojoIRPrintError(f"unsupported MojoDecl node: {type(decl).__name__!r}")
+        assert_never(decl)
 
     def _render_struct_decl(self, decl: StructDecl) -> str:
         b = CodeBuilder()
@@ -540,7 +542,7 @@ class MojoIRPrinter:
         non_macro_notes = [note for note in decl.diagnostics if note.category != "macro_comment"]
         b.extend(self._diagnostic_lines(non_macro_notes))
         if decl.kind == AliasKind.CALLBACK_SIGNATURE:
-            if not isinstance(decl.type_value, FunctionPtr):
+            if not isinstance(decl.type_value, MojoFunctionPtr):
                 raise MojoIRPrintError(
                     f"callback alias {decl.name!r} is missing normalized FunctionPtr payload"
                 )
@@ -723,27 +725,25 @@ class MojoIRPrinter:
             return
         b.add(f"# comptime {member.name}: missing payload")
 
-    def _render_type(self, t: Type) -> str:
+    def _render_type(self, t: MojoType) -> str:
         if isinstance(t, BuiltinType):
             if t.name == MojoBuiltin.UNSUPPORTED:
                 raise MojoIRPrintError("cannot render MojoBuiltin.UNSUPPORTED as valid Mojo")
             return t.name.value
         if isinstance(t, NamedType):
             return t.name
-        if isinstance(t, Pointer):
+        if isinstance(t, MojoPointer):
             return self._render_pointer_type(t)
-        if isinstance(t, Array):
-            if t.size is None:
-                raise MojoIRPrintError("cannot render array type without a fixed size")
+        if isinstance(t, MojoArray):
             return f"Array[{self._render_type(t.element)}, {t.size}]"
         if isinstance(t, ParametricType):
             args = ", ".join(self._render_parametric_arg(arg) for arg in t.args)
             return f"{t.base.value}[{args}]"
-        if isinstance(t, FunctionPtr):
+        if isinstance(t, MojoFunctionPtr):
             return self._render_function_signature(t)
-        raise MojoIRPrintError(f"unsupported Type node: {type(t).__name__!r}")
+        assert_never(t)
 
-    def _render_pointer_type(self, t: Pointer) -> str:
+    def _render_pointer_type(self, t: MojoPointer) -> str:
         if t.pointee is None:
             mut_text = "False" if t.mutability == PointerMutability.IMMUT else "True"
             rendered = f"OpaquePointer[mut={mut_text}, {self._origin_name(t.origin, t.mutability)}]"
@@ -754,7 +754,7 @@ class MojoIRPrinter:
             )
         return f"Optional[{rendered}]" if t.nullable else rendered
 
-    def _render_parametric_arg(self, arg: object) -> str:
+    def _render_parametric_arg(self, arg: ParametricArg) -> str:
         from mojo_bindgen.ir import ConstArg, DTypeArg, NameArg, TypeArg
 
         if isinstance(arg, DTypeArg):
@@ -765,9 +765,9 @@ class MojoIRPrinter:
             return arg.value
         if isinstance(arg, TypeArg):
             return self._render_type(arg.type)
-        raise MojoIRPrintError(f"unsupported parametric argument node: {type(arg).__name__!r}")
+        assert_never(arg)
 
-    def _render_function_signature(self, function_type: FunctionPtr) -> str:
+    def _render_function_signature(self, function_type: MojoFunctionPtr) -> str:
         params = ", ".join(
             f"{self._render_function_param_name(param, i)}: {self._render_type(param.type)}"
             for i, param in enumerate(function_type.params)
@@ -783,35 +783,35 @@ class MojoIRPrinter:
         parts.extend(["->", ret])
         return " ".join(parts)
 
-    def _render_signature_return_type(self, t: Type) -> str:
+    def _render_signature_return_type(self, t: MojoType) -> str:
         rendered = self._render_type(t)
         return "None" if rendered == "NoneType" else rendered
 
-    def _render_const_expr(self, expr: ConstExpr) -> str:
+    def _render_const_expr(self, expr: MojoConstExpr) -> str:
         if isinstance(expr, IntLiteral):
             return str(expr.value)
-        if isinstance(expr, FloatLiteral):
+        if isinstance(expr, MojoFloatLiteral):
             return mojo_float_literal_text(str(expr.value))
         if isinstance(expr, StringLiteral):
             return '"' + _escape_mojo_string(expr.value) + '"'
         if isinstance(expr, CharLiteral):
             return "'" + _escape_mojo_char(expr.value) + "'"
-        if isinstance(expr, RefExpr):
+        if isinstance(expr, MojoRefExpr):
             return expr.name
-        if isinstance(expr, UnaryExpr):
+        if isinstance(expr, MojoUnaryExpr):
             return f"{expr.op}({self._render_const_expr(expr.operand)})"
-        if isinstance(expr, BinaryExpr):
+        if isinstance(expr, MojoBinaryExpr):
             lhs = self._render_const_expr(expr.lhs)
             rhs = self._render_const_expr(expr.rhs)
             return f"({lhs} {expr.op} {rhs})"
-        if isinstance(expr, CastExpr):
+        if isinstance(expr, MojoCastExpr):
             return f"{self._render_type(expr.target)}({self._render_const_expr(expr.expr)})"
-        if isinstance(expr, CallExpr):
+        if isinstance(expr, MojoCallExpr):
             args = ", ".join(self._render_const_expr(arg) for arg in expr.args)
             return f"{self._render_const_expr(expr.callee)}({args})"
-        if isinstance(expr, SizeOfExpr):
+        if isinstance(expr, MojoSizeOfExpr):
             return f"size_of[{self._render_type(expr.target)}]()"
-        raise MojoIRPrintError(f"unsupported ConstExpr node: {type(expr).__name__!r}")
+        assert_never(expr)
 
     @staticmethod
     def _diagnostic_lines(notes: Iterable[MappingNote]) -> list[str]:
@@ -845,7 +845,7 @@ class MojoIRPrinter:
         return f"a{index}"
 
     @staticmethod
-    def _render_function_param_name(param: Param, index: int) -> str:
+    def _render_function_param_name(param: MojoParam, index: int) -> str:
         if param.name.strip():
             return mojo_ident(param.name, fallback=f"arg{index}")
         return f"arg{index}"

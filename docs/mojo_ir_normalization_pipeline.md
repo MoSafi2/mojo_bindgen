@@ -55,7 +55,7 @@ Primary implementation:
 
 ### 2. Lift function-signature types into named aliases when needed
 
-`FunctionPtr` may appear nested inside pointers, aliases, or other type
+`MojoFunctionPtr` may appear nested inside pointers, aliases, or other type
 positions. Normalization gives those signatures stable names when they should
 not remain inline.
 
@@ -92,10 +92,10 @@ The printer consumes these imports as already-decided facts.
 `_normalize_type()` recursively handles:
 - `BuiltinType`
 - `NamedType`
-- `Pointer`
-- `Array`
+- `MojoPointer`
+- `MojoArray`
 - `ParametricType`
-- `FunctionPtr`
+- `MojoFunctionPtr`
 
 If a function-signature shape appears in a non-inline position, normalization
 can rewrite it to a synthesized named alias instead of leaving it inline. That

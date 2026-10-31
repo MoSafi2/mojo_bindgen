@@ -7,7 +7,7 @@ from pathlib import Path
 import clang.cindex as cx
 import pytest
 
-from mojo_bindgen.ir import FunctionPtr, Struct, TypeRef
+from mojo_bindgen.ir import CFunctionPtr, Struct, TypeRef
 from mojo_bindgen.parsing.diagnostics import ParserDiagnosticSink
 from mojo_bindgen.parsing.frontend import ClangFrontend, ClangFrontendConfig
 from mojo_bindgen.parsing.lowering.primitive import PrimitiveResolver
@@ -23,23 +23,15 @@ def _has_libclang() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
-    not _has_libclang(),
-    reason="libclang not available (use pixi run)",
-)
+pytestmark = pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
 
 
 def test_registry_unifies_forward_decl_and_definition(tmp_path: Path) -> None:
     header = tmp_path / "registry_forward.h"
-    header.write_text(
-        ("struct node;\nstruct node { int value; };\n"),
-        encoding="utf-8",
-    )
-
+    header.write_text("struct node;\nstruct node { int value; };\n", encoding="utf-8")
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
     registry = RecordRegistry.build_from_translation_unit(tu, frontend)
-
     records = [
         cursor for cursor in frontend.iter_translation_unit_cursors(tu) if cursor.spelling == "node"
     ]
@@ -50,15 +42,10 @@ def test_registry_unifies_forward_decl_and_definition(tmp_path: Path) -> None:
 
 def test_registry_synthesizes_anonymous_record_identity(tmp_path: Path) -> None:
     header = tmp_path / "registry_anon.h"
-    header.write_text(
-        "struct outer { struct { int x; } inner; };\n",
-        encoding="utf-8",
-    )
-
+    header.write_text("struct outer { struct { int x; } inner; };\n", encoding="utf-8")
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
     registry = RecordRegistry.build_from_translation_unit(tu, frontend)
-
     outer = next(
         cursor
         for cursor in frontend.iter_translation_unit_cursors(tu)
@@ -83,21 +70,12 @@ def test_registry_synthesizes_anonymous_record_identity(tmp_path: Path) -> None:
 def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: Path) -> None:
     header = tmp_path / "registry_nested_anon.h"
     header.write_text(
-        (
-            "struct outer {\n"
-            "  union {\n"
-            "    struct { int x; int y; };\n"
-            "    struct { float u; float v; };\n"
-            "  };\n"
-            "};\n"
-        ),
+        "struct outer {\n  union {\n    struct { int x; int y; };\n    struct { float u; float v; };\n  };\n};\n",
         encoding="utf-8",
     )
-
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
     registry = RecordRegistry.build_from_translation_unit(tu, frontend)
-
     outer = next(
         cursor
         for cursor in frontend.iter_translation_unit_cursors(tu)
@@ -113,7 +91,6 @@ def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: P
         for child in anon_union.get_children()
         if child.kind == cx.CursorKind.STRUCT_DECL and child.is_definition()
     ]
-
     assert len(anon_structs) == 2
     assert anon_structs[0].get_usr() == anon_structs[1].get_usr()
     assert registry.decl_id_for_cursor(anon_structs[0]) != registry.decl_id_for_cursor(
@@ -123,15 +100,10 @@ def test_registry_distinguishes_sibling_anonymous_record_definitions(tmp_path: P
 
 def test_type_lowerer_prefers_cached_lowered_record_over_nominal_resolution(tmp_path: Path) -> None:
     header = tmp_path / "registry_cache.h"
-    header.write_text(
-        "struct node { int value; };\n",
-        encoding="utf-8",
-    )
-
+    header.write_text("struct node { int value; };\n", encoding="utf-8")
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
     registry = RecordRegistry.build_from_translation_unit(tu, frontend)
-
     node = next(
         cursor
         for cursor in frontend.iter_translation_unit_cursors(tu)
@@ -141,13 +113,12 @@ def test_type_lowerer_prefers_cached_lowered_record_over_nominal_resolution(tmp_
         decl_id=registry.decl_id_for_cursor(node),
         name="node_cached",
         c_name="node_cached",
-        fields=[],
+        fields=(),
         size_bytes=max(0, node.type.get_size()),
         align_bytes=max(1, node.type.get_align()),
         is_union=False,
     )
-    registry.store(cached)
-
+    registry.publish(cached)
     type_lowerer = TypeLowerer(
         registry=registry,
         diagnostics=ParserDiagnosticSink(),
@@ -165,11 +136,9 @@ def test_fnptr_typedef_params_keep_typedef_names(tmp_path: Path) -> None:
         "typedef long my_off_t;\ntypedef int (*xfer_cb)(void *p, my_off_t a, my_off_t b);\n",
         encoding="utf-8",
     )
-
     frontend = ClangFrontend(ClangFrontendConfig(header=header, compile_args=()))
     tu = frontend.parse_translation_unit()
     registry = RecordRegistry.build_from_translation_unit(tu, frontend)
-
     xfer = next(
         c
         for c in frontend.iter_translation_unit_cursors(tu)
@@ -181,7 +150,7 @@ def test_fnptr_typedef_params_keep_typedef_names(tmp_path: Path) -> None:
         primitive_resolver=PrimitiveResolver(),
     )
     lowered = type_lowerer.lower(xfer.underlying_typedef_type, TypeContext.TYPEDEF)
-    assert isinstance(lowered, FunctionPtr)
+    assert isinstance(lowered, CFunctionPtr)
     assert isinstance(lowered.params[1].type, TypeRef)
     assert lowered.params[1].type.name == "my_off_t"
     assert isinstance(lowered.params[2].type, TypeRef)

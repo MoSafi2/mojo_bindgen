@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.mojo.const_expr_mapping import ConstExprMappingError, MapConstExprPass
@@ -12,15 +13,20 @@ from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    BinaryExpr,
-    CallExpr,
-    CastExpr,
-    ConstExpr,
+    CBinaryExpr,
+    CCallExpr,
+    CCastExpr,
+    CConstExpr,
+    CFloatLiteral,
+    CharLiteral,
+    CNullPtrLiteral,
+    CRefExpr,
+    CSizeOfExpr,
+    CUnaryExpr,
+    IntLiteral,
     MacroDecl,
-    NullPtrLiteral,
-    RefExpr,
-    SizeOfExpr,
-    UnaryExpr,
+    MappingNote,
+    StringLiteral,
 )
 
 
@@ -38,7 +44,7 @@ class MacroMapper:
 
         name = mojo_ident(decl.name)
         if name in self.emitted_const_names:
-            if isinstance(decl.expr, RefExpr) and mojo_ident(decl.expr.name) == name:
+            if isinstance(decl.expr, CRefExpr) and mojo_ident(decl.expr.name) == name:
                 return None
             return self._comment_alias(
                 decl,
@@ -63,29 +69,26 @@ class MacroMapper:
         try:
             value = self.const_expr_mapper.run(decl.expr)
         except ConstExprMappingError:
-            if isinstance(decl.expr, NullPtrLiteral):
+            if isinstance(decl.expr, CNullPtrLiteral):
                 return self._comment_alias(
                     decl,
                     f"macro {decl.name}: null pointer macro is not emitted directly",
                 )
             return None
 
+        typed_value = typed_const_value(value, decl.type, type_mapper=self.type_mapper)
         self.emitted_const_names.add(name)
         return AliasDecl(
             name=name,
             kind=AliasKind.MACRO_VALUE,
-            const_value=typed_const_value(
-                value,
-                decl.type,
-                type_mapper=self.type_mapper,
-            ),
+            const_value=typed_value,
             doc=decl.doc,
         )
 
-    def _emit_blocker(self, expr: ConstExpr) -> str | None:
-        if isinstance(expr, NullPtrLiteral):
+    def _emit_blocker(self, expr: CConstExpr) -> str | None:
+        if isinstance(expr, CNullPtrLiteral):
             return "null pointer macro is not emitted directly"
-        if isinstance(expr, RefExpr):
+        if isinstance(expr, CRefExpr):
             name = mojo_ident(expr.name)
             if name not in self.emitted_const_names:
                 return (
@@ -93,19 +96,21 @@ class MacroMapper:
                     f"{expr.name!r}"
                 )
             return None
-        if isinstance(expr, UnaryExpr):
+        if isinstance(expr, CUnaryExpr):
             if expr.op == "!":
                 return "C logical operator '!' is not emitted directly"
             return self._emit_blocker(expr.operand)
-        if isinstance(expr, BinaryExpr):
+        if isinstance(expr, CBinaryExpr):
             if expr.op in {"&&", "||"}:
                 return f"C logical operator {expr.op!r} is not emitted directly"
             return self._emit_blocker(expr.lhs) or self._emit_blocker(expr.rhs)
-        if isinstance(expr, CastExpr):
+        if isinstance(expr, CCastExpr):
             return self._emit_blocker(expr.expr)
-        if isinstance(expr, (SizeOfExpr, CallExpr)):
+        if isinstance(
+            expr, (CSizeOfExpr, CCallExpr, IntLiteral, CFloatLiteral, StringLiteral, CharLiteral)
+        ):
             return None
-        return None
+        assert_never(expr)
 
     def _placeholder_alias(self, decl: MacroDecl) -> AliasDecl:
         return AliasDecl(
@@ -114,7 +119,7 @@ class MacroMapper:
             diagnostics=(
                 self._comment_notes(decl, f"macro {decl.name}: {decl.diagnostic}")
                 if decl.diagnostic
-                else [stub_note("macro mapping is incomplete; placeholder alias emitted")]
+                else (stub_note("macro mapping is incomplete; placeholder alias emitted"),)
             ),
             doc=decl.doc,
         )
@@ -127,14 +132,14 @@ class MacroMapper:
             doc=decl.doc,
         )
 
-    def _comment_notes(self, decl: MacroDecl, message: str):
-        return [
+    def _comment_notes(self, decl: MacroDecl, message: str) -> tuple[MappingNote, ...]:
+        return (
             mapping_note(message, category="macro_comment"),
             mapping_note(
                 f"define {decl.name} {' '.join(decl.tokens)}",
                 category="macro_comment",
             ),
-        ]
+        )
 
 
 __all__ = [

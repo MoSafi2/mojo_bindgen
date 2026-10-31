@@ -252,6 +252,35 @@ class ClangCompat:
 
     _value_type_api_ready: ClassVar[bool | None] = None
 
+    @staticmethod
+    def optional_type_kind(name: str) -> cx.TypeKind | None:
+        """Return a type kind only when supported by the installed bindings."""
+        kind = getattr(cx.TypeKind, name, None)
+        return kind if isinstance(kind, cx.TypeKind) else None
+
+    @staticmethod
+    def is_function_like_macro(cursor: cx.Cursor) -> bool:
+        """Query bindings exposing the macro flag as either a method or property."""
+        flag = getattr(cursor, "is_macro_function_like", None)
+        return bool(flag() if callable(flag) else flag)
+
+    @staticmethod
+    def field_bit_offset(parent_type: cx.Type, cursor: cx.Cursor | None) -> int:
+        """Bit offset within a record, or -1 when no available API can resolve it."""
+        if cursor is None:
+            return -1
+        if cursor.spelling:
+            bit_offset = parent_type.get_offset(cursor.spelling)
+            if bit_offset >= 0:
+                return bit_offset
+        getter = getattr(cursor, "get_field_offsetof", None)
+        if callable(getter):
+            try:
+                return cast(int, getter())
+            except Exception:
+                return -1
+        return -1
+
     def get_calling_convention(self, t: cx.Type) -> str | None:
         """Return a readable calling-convention string if available."""
         if hasattr(t, "get_canonical"):

@@ -1,218 +1,312 @@
-"""Shared JSON serialization/deserialization helpers for dataclass IR nodes."""
+"""Unversioned IR debug codecs; reflection is confined to this boundary."""
 
 from __future__ import annotations
 
-import sys
-import types
-from collections.abc import Callable
-from dataclasses import MISSING, dataclass, field, fields
-from enum import StrEnum
+import json
+from dataclasses import MISSING, fields, is_dataclass
+from enum import Enum
 from functools import cache
-from typing import Any, ClassVar, Self, Union, cast, get_args, get_origin, get_type_hints
+from types import UnionType
+from typing import Any, Literal, TypeAliasType, Union, cast, get_args, get_origin, get_type_hints
 
-_SERDE_DEFAULT_KIND = object()
+from mojo_bindgen import ir
+
+type JSONValue = None | bool | int | float | str | list[JSONValue] | dict[str, JSONValue]
+
+_NODES: dict[str, type] = {
+    node.__name__: node
+    for node in (
+        ir.DocComment,
+        ir.Qualifiers,
+        ir.VoidType,
+        ir.IntType,
+        ir.FloatType,
+        ir.QualifiedType,
+        ir.AtomicType,
+        ir.CPointer,
+        ir.MojoPointer,
+        ir.CArray,
+        ir.MojoArray,
+        ir.CFunctionPtr,
+        ir.MojoFunctionPtr,
+        ir.FunctionAttrs,
+        ir.OpaqueRecordRef,
+        ir.UnsupportedType,
+        ir.ComplexType,
+        ir.VectorType,
+        ir.StructRef,
+        ir.EnumRef,
+        ir.TypeRef,
+        ir.Field,
+        ir.Struct,
+        ir.IntLiteral,
+        ir.CFloatLiteral,
+        ir.MojoFloatLiteral,
+        ir.StringLiteral,
+        ir.CharLiteral,
+        ir.CNullPtrLiteral,
+        ir.CRefExpr,
+        ir.MojoRefExpr,
+        ir.CUnaryExpr,
+        ir.MojoUnaryExpr,
+        ir.CBinaryExpr,
+        ir.MojoBinaryExpr,
+        ir.CCastExpr,
+        ir.MojoCastExpr,
+        ir.CSizeOfExpr,
+        ir.MojoSizeOfExpr,
+        ir.CCallExpr,
+        ir.MojoCallExpr,
+        ir.Enumerant,
+        ir.Enum,
+        ir.Typedef,
+        ir.CParam,
+        ir.MojoParam,
+        ir.Function,
+        ir.Const,
+        ir.MacroDecl,
+        ir.GlobalVar,
+        ir.IRDiagnostic,
+        ir.TargetABI,
+        ir.Unit,
+        ir.PrimitiveDType,
+        ir.MappingNote,
+        ir.ModuleImport,
+        ir.SupportDecl,
+        ir.ModuleDependencies,
+        ir.BuiltinType,
+        ir.NamedType,
+        ir.DTypeArg,
+        ir.ConstArg,
+        ir.NameArg,
+        ir.TypeArg,
+        ir.ParametricType,
+        ir.StoredMember,
+        ir.PaddingMember,
+        ir.OpaqueStorageMember,
+        ir.BitfieldField,
+        ir.BitfieldGroupMember,
+        ir.ComptimeMember,
+        ir.InitializerParam,
+        ir.Initializer,
+        ir.FlexibleTail,
+        ir.StructDecl,
+        ir.AliasDecl,
+        ir.CallTarget,
+        ir.FunctionDecl,
+        ir.GlobalDecl,
+        ir.MojoModule,
+    )
+}
+
+_FAMILIES: dict[TypeAliasType, dict[str, type]] = {
+    family: {node.__name__: node for node in nodes}
+    for family, nodes in (
+        (
+            ir.CType,
+            (
+                ir.VoidType,
+                ir.IntType,
+                ir.FloatType,
+                ir.QualifiedType,
+                ir.AtomicType,
+                ir.CPointer,
+                ir.CArray,
+                ir.CFunctionPtr,
+                ir.OpaqueRecordRef,
+                ir.UnsupportedType,
+                ir.ComplexType,
+                ir.VectorType,
+                ir.StructRef,
+                ir.EnumRef,
+                ir.TypeRef,
+            ),
+        ),
+        (
+            ir.MojoType,
+            (
+                ir.BuiltinType,
+                ir.NamedType,
+                ir.MojoPointer,
+                ir.MojoArray,
+                ir.MojoFunctionPtr,
+                ir.ParametricType,
+            ),
+        ),
+        (
+            ir.CConstExpr,
+            (
+                ir.IntLiteral,
+                ir.CFloatLiteral,
+                ir.StringLiteral,
+                ir.CharLiteral,
+                ir.CNullPtrLiteral,
+                ir.CRefExpr,
+                ir.CUnaryExpr,
+                ir.CBinaryExpr,
+                ir.CCastExpr,
+                ir.CSizeOfExpr,
+                ir.CCallExpr,
+            ),
+        ),
+        (
+            ir.MojoConstExpr,
+            (
+                ir.IntLiteral,
+                ir.MojoFloatLiteral,
+                ir.StringLiteral,
+                ir.CharLiteral,
+                ir.MojoRefExpr,
+                ir.MojoUnaryExpr,
+                ir.MojoBinaryExpr,
+                ir.MojoCastExpr,
+                ir.MojoSizeOfExpr,
+                ir.MojoCallExpr,
+            ),
+        ),
+    )
+}
 
 
-def _encode_json_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, StrEnum):
-        return v.value
-    to_json_dict = getattr(v, "to_json_dict", None)
-    if callable(to_json_dict):
-        return to_json_dict()
-    if isinstance(v, list):
-        return [_encode_json_value(x) for x in v]
-    return v
+def _encode(value: object) -> JSONValue:
+    if isinstance(value, Enum):
+        return _encode(value.value)
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (tuple, list)):
+        return [_encode(item) for item in value]
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            "kind": type(value).__name__,
+            "fields": {f.name: _encode(getattr(value, f.name)) for f in fields(value)},
+        }
+    raise ValueError(f"cannot encode IR value {type(value).__name__}")
 
 
-def _decode_list(raw: Any, elem_type: Any, owner_cls: type) -> Any:
-    if raw is None:
-        return None
-    if not isinstance(raw, list):
-        raise TypeError(f"expected list, got {type(raw).__name__}")
-    out: list[Any] = []
-    for x in raw:
-        out.append(_decode_json_value(x, elem_type, owner_cls))
-    return out
-
-
-def _is_union_type(annotated_type: Any) -> bool:
-    origin = get_origin(annotated_type)
-    return origin in (Union, types.UnionType)
-
-
-def _decode_json_value(raw: Any, annotated_type: Any, owner_cls: type) -> Any:
-    if raw is None:
-        return None
-
-    if (
-        dispatch := SerDeMixin._serde_union_dispatch_for(owner_cls, annotated_type)
-    ) is not None and isinstance(raw, dict):
-        return dispatch(raw)
-
-    origin = get_origin(annotated_type)
-    if origin is list:
-        (elem_type,) = get_args(annotated_type) or (Any,)
-        return _decode_list(raw, elem_type, owner_cls)
-
-    if _is_union_type(annotated_type):
-        args = tuple(arg for arg in get_args(annotated_type) if arg is not type(None))
-        if len(args) == 1:
-            return _decode_json_value(raw, args[0], owner_cls)
-        if isinstance(raw, dict) and "kind" in raw:
-            for arg in args:
-                if (dispatch := SerDeMixin._serde_union_dispatch_for(owner_cls, arg)) is not None:
-                    try:
-                        return dispatch(raw)
-                    except (TypeError, ValueError, KeyError):
-                        continue
-                from_json_dict = getattr(arg, "from_json_dict", None)
-                if callable(from_json_dict):
-                    try:
-                        return from_json_dict(raw)
-                    except (TypeError, ValueError, KeyError):
-                        continue
-        return raw
-
-    if isinstance(annotated_type, type) and issubclass(annotated_type, StrEnum):
-        return annotated_type(raw)
-
-    from_json_dict = getattr(annotated_type, "from_json_dict", None)
-    if callable(from_json_dict) and isinstance(raw, dict):
-        return from_json_dict(raw)
-
-    if isinstance(raw, dict) and "kind" in raw:
-        raise TypeError(f"missing decoder for discriminated object kind={raw.get('kind')!r}")
-
-    return raw
-
-
-@dataclass(frozen=True)
-class SerdeFieldSpec:
-    """Small schema override for one dataclass field."""
-
-    json_key: str | None = None
-    missing_from: Callable[[dict[str, Any]], Any] | None = None
-    encoder: Callable[[Any], Any] | None = None
-    decoder: Callable[[Any], Any] | None = None
-    omit_if_default: bool = False
-    omit_when: Callable[[Any, Any], bool] | None = None
-
-
-@dataclass(frozen=True)
-class SerdeSpec:
-    """Compact per-class SerDe overrides used by :class:`SerDeMixin`."""
-
-    kind: str | None | object = _SERDE_DEFAULT_KIND
-    field_order: tuple[str, ...] | None = None
-    fields: dict[str, SerdeFieldSpec] = field(default_factory=dict)
+def to_debug_dict(value: object) -> dict[str, JSONValue]:
+    encoded = _encode(value)
+    if not isinstance(encoded, dict):
+        raise ValueError("expected an IR record")
+    return encoded
 
 
 @cache
-def _type_hints_for_cls(cls: type) -> dict[str, Any]:
-    module = sys.modules[cls.__module__]
-    return get_type_hints(cls, vars(module), vars(module))
+def _annotations(cls: type) -> dict[str, Any]:
+    return get_type_hints(cls)
 
 
-def _field_default_value(f: Any) -> Any:
-    if f.default is not MISSING:
-        return f.default
-    if f.default_factory is not MISSING:  # type: ignore[comparison-overlap]
-        return f.default_factory()
-    return MISSING
-
-
-class SerDeMixin:
-    """Shared JSON serialization/deserialization mixin for IR dataclasses."""
-
-    KIND: ClassVar[str | None] = None
-    SERDE: ClassVar[SerdeSpec] = SerdeSpec()
-
-    @classmethod
-    def _serde_kind(cls) -> str | None:
-        if cls.SERDE.kind is not _SERDE_DEFAULT_KIND:
-            return cast(str | None, cls.SERDE.kind)
-        if "KIND" in cls.__dict__:
-            return cast(str | None, cls.__dict__["KIND"])
-        return cls.__name__
-
-    @classmethod
-    def _serde_field_spec(cls, field_name: str) -> SerdeFieldSpec:
-        return cls.SERDE.fields.get(field_name, SerdeFieldSpec())
-
-    @classmethod
-    def _serde_union_dispatch_for(
-        cls, owner_cls: type, annotated_type: Any
-    ) -> Callable[[dict[str, Any]], Any] | None:
-        module = sys.modules[owner_cls.__module__]
-        module_vars = vars(module)
-        dispatch_pairs = (
-            ("Type", "type_from_json"),
-            ("ConstExpr", "const_expr_from_json"),
-            ("Decl", "decl_from_json"),
-            ("ParametricArg", "parametric_arg_from_json"),
-            ("StructMember", "struct_member_from_json"),
-            ("MojoDecl", "mojo_decl_from_json"),
-        )
-        for alias_name, helper_name in dispatch_pairs:
-            if annotated_type == module_vars.get(alias_name):
-                return cast(Callable[[dict[str, Any]], Any], module_vars.get(helper_name))
+def _decode(raw: object, expected: Any) -> Any:
+    if isinstance(expected, TypeAliasType):
+        family = _FAMILIES.get(expected)
+        if family is not None:
+            tag = raw.get("kind") if isinstance(raw, dict) else None
+            if not isinstance(tag, str) or tag not in family:
+                raise ValueError(f"kind {tag!r} does not belong to {expected.__name__}")
+            return _decode(raw, family[tag])
+        return _decode(raw, expected.__value__)
+    origin = get_origin(expected)
+    args = get_args(expected)
+    if origin in (Union, UnionType):
+        for candidate in args:
+            try:
+                return _decode(raw, candidate)
+            except (ValueError, TypeError):
+                pass
+        raise ValueError(f"value does not belong to {expected}")
+    if origin is Literal:
+        if raw not in args:
+            raise ValueError(f"expected one of {args}")
+        return raw
+    if origin is tuple:
+        if not isinstance(raw, list):
+            raise ValueError("expected a JSON array")
+        if len(args) == 2 and args[1] is Ellipsis:
+            return tuple(_decode(item, args[0]) for item in raw)
+        if len(raw) != len(args):
+            raise ValueError("incorrect tuple length")
+        return tuple(_decode(item, element) for item, element in zip(raw, args, strict=True))
+    if expected is type(None):
+        if raw is not None:
+            raise ValueError("expected null")
         return None
+    if isinstance(expected, type) and issubclass(expected, Enum):
+        return expected(raw)
+    if expected in (str, bool, int, float):
+        if expected is float and isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return float(raw)
+        if type(raw) is not expected:
+            raise ValueError(f"expected {expected.__name__}")
+        return raw
+    if isinstance(expected, type) and is_dataclass(expected):
+        if not isinstance(raw, dict):
+            raise ValueError("expected an IR record")
+        tag = raw.get("kind")
+        if not isinstance(tag, str) or _NODES.get(tag) is not expected:
+            raise ValueError(f"expected {expected.__name__}, got {tag!r}")
+        payload = raw.get("fields")
+        if set(raw) != {"kind", "fields"} or not isinstance(payload, dict):
+            raise ValueError("expected kind and fields")
+        declared = {f.name: f for f in fields(expected)}
+        if payload.keys() - declared.keys():
+            raise ValueError(f"unknown {tag} fields: {sorted(payload.keys() - declared.keys())}")
+        annotations = _annotations(expected)
+        kwargs = {}
+        for name, field in declared.items():
+            if name in payload:
+                kwargs[name] = _decode(payload[name], annotations[name])
+            elif field.default is MISSING and field.default_factory is MISSING:
+                raise ValueError(f"missing {tag}.{name}")
+        return expected(**kwargs)
+    raise ValueError(f"unsupported IR field type {expected}")
 
-    def to_json_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {}
-        kind = self.__class__._serde_kind()
-        if kind is not None:
-            out["kind"] = kind
 
-        ordered_names = self.SERDE.field_order or tuple(f.name for f in fields(cast(Any, self)))
-        field_by_name = {f.name: f for f in fields(cast(Any, self))}
-        for field_name in ordered_names:
-            f = field_by_name[field_name]
-            spec = self._serde_field_spec(field_name)
-            v = getattr(self, f.name)
-            if callable(spec.omit_when) and spec.omit_when(v, self):
-                continue
-            if spec.omit_if_default:
-                default = _field_default_value(f)
-                if default is not MISSING and v == default:
-                    continue
-            json_key = spec.json_key or f.name
-            if callable(spec.encoder):
-                out[json_key] = spec.encoder(v)
-            else:
-                out[json_key] = _encode_json_value(v)
-        return out
+def decode_node[T](raw: object, expected: type[T]) -> T:
+    return cast(T, _decode(raw, expected))
 
-    @classmethod
-    def from_json_dict(cls, d: dict[str, Any]) -> Self:
-        kind = cls._serde_kind()
-        if kind is not None:
-            cls._serde_expect_kind(d, kind)
 
-        type_hints = _type_hints_for_cls(cls)
-        kwargs: dict[str, Any] = {}
-        for f in fields(cast(Any, cls)):
-            spec = cls._serde_field_spec(f.name)
-            json_key = spec.json_key or f.name
-            if json_key in d:
-                raw = d[json_key]
-            else:
-                if callable(spec.missing_from):
-                    raw = spec.missing_from(d)
-                elif f.default is not MISSING or f.default_factory is not MISSING:  # type: ignore[comparison-overlap]
-                    continue
-                else:
-                    raise KeyError(json_key)
+def decode_c_type(raw: object) -> ir.CType:
+    return cast(ir.CType, _decode(raw, ir.CType))
 
-            if callable(spec.decoder):
-                kwargs[f.name] = spec.decoder(raw)
-            else:
-                kwargs[f.name] = _decode_json_value(raw, type_hints.get(f.name, f.type), cls)
-        return cls(**kwargs)  # type: ignore[call-arg]
 
-    @staticmethod
-    def _serde_expect_kind(d: dict[str, Any], kind: str) -> None:
-        if d.get("kind") != kind:
-            raise ValueError(f"expected kind {kind!r}, got {d.get('kind')!r}")
+def decode_mojo_type(raw: object) -> ir.MojoType:
+    return cast(ir.MojoType, _decode(raw, ir.MojoType))
+
+
+def decode_c_expr(raw: object) -> ir.CConstExpr:
+    return cast(ir.CConstExpr, _decode(raw, ir.CConstExpr))
+
+
+def decode_mojo_expr(raw: object) -> ir.MojoConstExpr:
+    return cast(ir.MojoConstExpr, _decode(raw, ir.MojoConstExpr))
+
+
+def encode_cir(unit: ir.Unit) -> dict[str, JSONValue]:
+    return to_debug_dict(unit)
+
+
+def decode_cir(raw: object) -> ir.Unit:
+    return decode_node(raw, ir.Unit)
+
+
+def encode_mojo_ir(module: ir.MojoModule) -> dict[str, JSONValue]:
+    return to_debug_dict(module)
+
+
+def decode_mojo_ir(raw: object) -> ir.MojoModule:
+    return decode_node(raw, ir.MojoModule)
+
+
+def dumps_cir(unit: ir.Unit, *, indent: int | None = 2) -> str:
+    return json.dumps(encode_cir(unit), indent=indent)
+
+
+def loads_cir(text: str) -> ir.Unit:
+    return decode_cir(json.loads(text))
+
+
+def dumps_mojo_ir(module: ir.MojoModule, *, indent: int | None = 2) -> str:
+    return json.dumps(encode_mojo_ir(module), indent=indent)
+
+
+def loads_mojo_ir(text: str) -> ir.MojoModule:
+    return decode_mojo_ir(json.loads(text))

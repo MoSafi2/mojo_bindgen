@@ -3,28 +3,34 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import assert_never
 
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes
 from mojo_bindgen.ir import (
-    BinaryExpr,
-    CallExpr,
-    CastExpr,
+    CBinaryExpr,
+    CCallExpr,
+    CCastExpr,
+    CConstExpr,
+    CFloatLiteral,
+    CharLiteral,
+    CNullPtrLiteral,
     Const,
-    ConstExpr,
+    CRefExpr,
+    CSizeOfExpr,
+    CType,
+    CUnaryExpr,
     Decl,
     Enum,
     EnumRef,
     Function,
     GlobalVar,
+    IntLiteral,
     MacroDecl,
-    RefExpr,
-    SizeOfExpr,
+    StringLiteral,
     Struct,
     StructRef,
-    Type,
     Typedef,
     TypeRef,
-    UnaryExpr,
     Unit,
 )
 
@@ -36,10 +42,10 @@ def decl_id(decl: Decl) -> str | None:
         return decl.decl_id
     if isinstance(decl, (Const, MacroDecl)):
         return decl.name
-    return None
+    assert_never(decl)
 
 
-def iter_decl_types(decl: Decl) -> Iterator[Type]:
+def iter_decl_types(decl: Decl) -> Iterator[CType]:
     """Yield direct type slots owned by one top-level declaration."""
 
     if isinstance(decl, Function):
@@ -61,62 +67,89 @@ def iter_decl_types(decl: Decl) -> Iterator[Type]:
     if isinstance(decl, Const):
         yield decl.type
         return
-    if isinstance(decl, MacroDecl) and decl.type is not None:
-        yield decl.type
+    if isinstance(decl, MacroDecl):
+        if decl.type is not None:
+            yield decl.type
+        return
+    if isinstance(decl, Enum):
+        yield decl.underlying
+        return
+    assert_never(decl)
 
 
-def iter_decl_const_exprs(decl: Decl) -> Iterator[ConstExpr]:
+def iter_decl_const_exprs(decl: Decl) -> Iterator[CConstExpr]:
     """Yield direct constant-expression slots owned by one declaration."""
 
     if isinstance(decl, Const):
         yield decl.expr
         return
-    if isinstance(decl, GlobalVar) and decl.initializer is not None:
-        yield decl.initializer
+    if isinstance(decl, GlobalVar):
+        if decl.initializer is not None:
+            yield decl.initializer
         return
-    if isinstance(decl, MacroDecl) and decl.expr is not None:
-        yield decl.expr
+    if isinstance(decl, MacroDecl):
+        if decl.expr is not None:
+            yield decl.expr
+        return
+    if isinstance(decl, (Function, Struct, Enum, Typedef)):
+        return
+    assert_never(decl)
 
 
-def iter_const_expr_nodes(expr: ConstExpr) -> Iterator[ConstExpr]:
+def iter_const_expr_nodes(expr: CConstExpr) -> Iterator[CConstExpr]:
     """Yield a constant expression and descendants in preorder."""
 
     yield expr
-    if isinstance(expr, CastExpr):
+    if isinstance(expr, CCastExpr):
         yield from iter_const_expr_nodes(expr.expr)
         return
-    if isinstance(expr, UnaryExpr):
+    if isinstance(expr, CUnaryExpr):
         yield from iter_const_expr_nodes(expr.operand)
         return
-    if isinstance(expr, BinaryExpr):
+    if isinstance(expr, CBinaryExpr):
         yield from iter_const_expr_nodes(expr.lhs)
         yield from iter_const_expr_nodes(expr.rhs)
         return
-    if isinstance(expr, CallExpr):
+    if isinstance(expr, CCallExpr):
         yield from iter_const_expr_nodes(expr.callee)
         for arg in expr.args:
             yield from iter_const_expr_nodes(arg)
+        return
+    if isinstance(
+        expr,
+        (
+            IntLiteral,
+            CFloatLiteral,
+            StringLiteral,
+            CharLiteral,
+            CNullPtrLiteral,
+            CRefExpr,
+            CSizeOfExpr,
+        ),
+    ):
+        return
+    assert_never(expr)
 
 
-def iter_const_expr_types(expr: ConstExpr) -> Iterator[Type]:
+def iter_const_expr_types(expr: CConstExpr) -> Iterator[CType]:
     """Yield type slots referenced by a constant-expression tree."""
 
     for node in iter_const_expr_nodes(expr):
-        if isinstance(node, CastExpr):
+        if isinstance(node, CCastExpr):
             yield node.target
-        elif isinstance(node, SizeOfExpr):
+        elif isinstance(node, CSizeOfExpr):
             yield node.target
 
 
-def iter_const_expr_refs(expr: ConstExpr) -> Iterator[RefExpr]:
+def iter_const_expr_refs(expr: CConstExpr) -> Iterator[CRefExpr]:
     """Yield symbol references from a constant-expression tree."""
 
     for node in iter_const_expr_nodes(expr):
-        if isinstance(node, RefExpr):
+        if isinstance(node, CRefExpr):
             yield node
 
 
-def iter_decl_referenced_types(decl: Decl) -> Iterator[Type]:
+def iter_decl_referenced_types(decl: Decl) -> Iterator[CType]:
     """Yield declaration type slots plus type slots nested in const expressions."""
 
     yield from iter_decl_types(decl)
@@ -138,7 +171,7 @@ def iter_unit_typerefs(unit: Unit) -> Iterator[TypeRef]:
 
 
 def iter_type_decl_refs(
-    t: Type,
+    t: CType,
     *,
     options: TypeWalkOptions | None = None,
 ) -> Iterator[TypeRef | StructRef | EnumRef]:

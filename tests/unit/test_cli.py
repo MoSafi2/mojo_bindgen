@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import mojo_bindgen.cli as cli
+from mojo_bindgen.ir import ByteOrder, LinkMode, MojoModule, TargetABI, Unit
+from mojo_bindgen.serde import encode_cir, encode_mojo_ir, loads_cir, loads_mojo_ir
 
 # Rich-styled Typer help embeds ANSI sequences; strip for stable substring checks.
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;:]*m")
@@ -19,13 +22,9 @@ def _strip_ansi(s: str) -> str:
 class _DummyUnit:
     diagnostics = []
 
-    def to_json(self) -> str:
-        return '{"ok": true}'
-
 
 class _DummyMojoModule:
-    def to_json(self) -> str:
-        return '{"mojo": true}'
+    pass
 
 
 @dataclass(frozen=True)
@@ -267,8 +266,8 @@ def test_dump_sidecars(monkeypatch, tmp_path: Path) -> None:
     class DummyResult:
         bindings_source = "bindings"
         layout_test_source = None
-        unit = _DummyUnit()
-        mojo_module = _DummyMojoModule()
+        unit = Unit("demo.h", "demo", "demo", TargetABI(8, 8, ByteOrder.LITTLE))
+        mojo_module = MojoModule("demo.h", "demo", "demo", LinkMode.EXTERNAL_CALL)
 
     class DummyOrchestrator:
         def __init__(self, _options) -> None:
@@ -302,8 +301,8 @@ def test_dump_sidecars(monkeypatch, tmp_path: Path) -> None:
 
     assert rc == 0
     assert output.read_text(encoding="utf-8") == "bindings"
-    assert cir.read_text(encoding="utf-8") == '{"ok": true}'
-    assert mojo_ir.read_text(encoding="utf-8") == '{"mojo": true}'
+    assert json.loads(cir.read_text()) == encode_cir(DummyResult.unit)
+    assert json.loads(mojo_ir.read_text()) == encode_mojo_ir(DummyResult.mojo_module)
     assert preprocessed.read_text(encoding="utf-8") == "preprocessed"
 
 
@@ -389,3 +388,31 @@ def test_orchestrator_failures_return_exit_code_1(monkeypatch, capsys, tmp_path:
     assert "mojo-bindgen error:" in captured.err
     assert "header not found" in captured.err
     assert "clang args:" in captured.err
+
+
+def test_real_cli_debug_sidecars_load_with_current_stage_codecs(tmp_path: Path) -> None:
+    header = tmp_path / "demo.h"
+    header.write_text("struct node { int x; struct node *next; };\nint take(struct node *p);\n")
+    cir_path, mojo_path, output = (
+        tmp_path / name for name in ("cir.json", "mojo.json", "demo.mojo")
+    )
+    assert (
+        cli.main(
+            [
+                str(header),
+                "--output",
+                str(output),
+                "--dump-cir",
+                str(cir_path),
+                "--dump-mojo-ir",
+                str(mojo_path),
+            ]
+        )
+        == 0
+    )
+    cir = loads_cir(cir_path.read_text())
+    mojo = loads_mojo_ir(mojo_path.read_text())
+    assert cir.source_header == mojo.source_header == str(header)
+    assert {decl.name for decl in cir.decls} >= {"node", "take"}
+    assert {decl.name for decl in mojo.decls} >= {"node", "take"}
+    assert "struct node" in output.read_text()

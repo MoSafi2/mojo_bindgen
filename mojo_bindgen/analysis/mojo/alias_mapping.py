@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass, exact_width_stdint_alias_type
-from mojo_bindgen.ir import AliasDecl, AliasKind, DocComment, FunctionPtr, NamedType, Type
+from mojo_bindgen.ir import (
+    AliasDecl,
+    AliasKind,
+    CType,
+    DocComment,
+    MojoFunctionPtr,
+    MojoType,
+    NamedType,
+)
 
 
-def is_named_type(t: Type, name: str) -> bool:
+def is_named_type(t: MojoType, name: str) -> bool:
     """Return whether ``t`` is exactly the Mojo named type ``name``."""
 
     return isinstance(t, NamedType) and t.name == name
@@ -16,7 +24,7 @@ def is_named_type(t: Type, name: str) -> bool:
 def map_typedef_alias(
     *,
     c_name: str,
-    aliased: Type,
+    aliased: CType,
     type_mapper: MapTypePass,
     doc: DocComment | None = None,
 ) -> AliasDecl | None:
@@ -26,7 +34,7 @@ def map_typedef_alias(
     mapped_type = exact_width_stdint_alias_type(c_name)
     if mapped_type is None:
         mapped_type = type_mapper.run(aliased)
-    if isinstance(mapped_type, FunctionPtr):
+    if isinstance(mapped_type, MojoFunctionPtr):
         return AliasDecl(
             name=alias_name,
             kind=AliasKind.CALLBACK_SIGNATURE,

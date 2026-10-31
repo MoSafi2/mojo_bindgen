@@ -5,30 +5,40 @@
   "decls": [
     {
       "kind": "Function",
-      "name": "cplx_add"
+      "fields": {
+        "name": "cplx_add"
+      }
     }
   ],
   "paths": [
     {
       "selector": {
         "kind": "Function",
-        "name": "cplx_add"
+        "fields": {
+          "name": "cplx_add"
+        }
       },
-      "path": "ret",
+      "path": "fields.ret",
       "attrs": {
         "kind": "ComplexType",
-        "size_bytes": 8
+        "fields": {
+          "size_bytes": 8
+        }
       }
     },
     {
       "selector": {
         "kind": "Function",
-        "name": "cplx_add"
+        "fields": {
+          "name": "cplx_add"
+        }
       },
-      "path": "params.0.type",
+      "path": "fields.params.0.fields.type",
       "attrs": {
         "kind": "ComplexType",
-        "size_bytes": 8
+        "fields": {
+          "size_bytes": 8
+        }
       }
     }
   ]

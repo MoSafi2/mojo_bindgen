@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from mojo_bindgen.analysis.mojo.mapping_support import (
@@ -16,14 +15,15 @@ from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
-    Array,
     BuiltinType,
+    MappingNote,
+    MojoArray,
     MojoBuiltin,
+    MojoType,
     NamedType,
     ParametricBase,
     ParametricType,
     Struct,
-    Type,
     TypeArg,
 )
 
@@ -34,8 +34,8 @@ class UnionMappingError(ValueError):
 
 @dataclass(frozen=True)
 class _UnionArmPlan:
-    arms: tuple[Type, ...]
-    diagnostics: tuple
+    arms: tuple[MojoType, ...]
+    diagnostics: tuple[MappingNote, ...]
     eligible: bool
 
 
@@ -62,8 +62,8 @@ class MapUnionPass:
 
     def _collect_union_arms(self, decl: Struct, *, alias_name: str) -> _UnionArmPlan:
         diagnostics = _size_diagnostics(decl)
-        arms: list[Type] = []
-        seen_keys: dict[str, str] = {}
+        arms: list[MojoType] = []
+        seen_types: list[tuple[MojoType, str]] = []
         eligible = not diagnostics
 
         for index, field in enumerate(decl.fields):
@@ -89,27 +89,22 @@ class MapUnionPass:
                 )
                 continue
 
-            key = self._type_key(mapped)
-            prior_name = seen_keys.get(key)
+            prior_name = next((name for prior, name in seen_types if prior == mapped), None)
             if prior_name is not None:
                 diagnostics.append(_duplicate_member_note(field_name, prior_name))
                 continue
 
-            seen_keys[key] = field_name
+            seen_types.append((mapped, field_name))
             arms.append(mapped)
 
         return _UnionArmPlan(arms=tuple(arms), diagnostics=tuple(diagnostics), eligible=eligible)
-
-    @staticmethod
-    def _type_key(t: Type) -> str:
-        return json.dumps(t.to_json_dict(), sort_keys=True)
 
 
 def _incomplete_union_alias(decl: Struct) -> AliasDecl:
     return AliasDecl(
         name=record_name(decl),
         kind=AliasKind.UNION_LAYOUT,
-        diagnostics=[stub_note("incomplete union placeholder emitted; layout not mapped")],
+        diagnostics=(stub_note("incomplete union placeholder emitted; layout not mapped"),),
         doc=decl.doc,
     )
 
@@ -120,9 +115,9 @@ def _unsafe_union_alias(decl: Struct, *, alias_name: str, plan: _UnionArmPlan) -
         kind=AliasKind.UNION_LAYOUT,
         type_value=ParametricType(
             base=ParametricBase.UNSAFE_UNION,
-            args=[TypeArg(type=arm) for arm in plan.arms],
+            args=tuple(TypeArg(type=arm) for arm in plan.arms),
         ),
-        diagnostics=list(plan.diagnostics),
+        diagnostics=plan.diagnostics,
         doc=decl.doc,
     )
 
@@ -131,22 +126,21 @@ def _byte_storage_union_alias(decl: Struct, *, alias_name: str, plan: _UnionArmP
     return AliasDecl(
         name=alias_name,
         kind=AliasKind.UNION_LAYOUT,
-        type_value=Array(
+        type_value=MojoArray(
             element=BuiltinType(MojoBuiltin.UINT8),
             size=decl.size_bytes,
-            array_kind="fixed",
         ),
-        diagnostics=[
+        diagnostics=(
             *plan.diagnostics,
             union_note(
                 f"union `{decl.c_name}` mapped as Array[UInt8, {decl.size_bytes}] to preserve layout"
             ),
-        ],
+        ),
         doc=decl.doc,
     )
 
 
-def _size_diagnostics(decl: Struct) -> list:
+def _size_diagnostics(decl: Struct) -> list[MappingNote]:
     if decl.size_bytes > 0:
         return []
     return [
@@ -156,16 +150,16 @@ def _size_diagnostics(decl: Struct) -> list:
     ]
 
 
-def _duplicate_member_note(field_name: str, prior_name: str):
+def _duplicate_member_note(field_name: str, prior_name: str) -> MappingNote:
     return union_note(
         f"union member `{field_name}` duplicates mapped type of earlier member `{prior_name}`;"
     )
 
 
-def map_union(decl: Struct, *, type_mapper: MapTypePass | None = None) -> AliasDecl:
+def map_union(decl: Struct, *, type_mapper: MapTypePass) -> AliasDecl:
     """Map one top-level union declaration to a MojoIR alias."""
 
-    return MapUnionPass(type_mapper=type_mapper or MapTypePass()).run(decl)
+    return MapUnionPass(type_mapper=type_mapper).run(decl)
 
 
 __all__ = [

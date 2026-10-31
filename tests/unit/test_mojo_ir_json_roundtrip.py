@@ -1,415 +1,180 @@
-"""Round-trip tests for the standalone MojoIR schema."""
+"""Active roundtrips for current MojoIR, without legacy wire shims."""
 
 from __future__ import annotations
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="MojoIR schema is under active iteration")
+from mojo_bindgen.ir import (
+    AliasDecl,
+    AliasKind,
+    BitfieldField,
+    BitfieldGroupMember,
+    BuiltinType,
+    CallTarget,
+    CharLiteral,
+    ComptimeMember,
+    ConstArg,
+    CPointer,
+    DTypeArg,
+    FlexibleTail,
+    FunctionDecl,
+    GlobalDecl,
+    Initializer,
+    InitializerParam,
+    IntLiteral,
+    LinkMode,
+    MappingNote,
+    MappingSeverity,
+    ModuleDependencies,
+    ModuleImport,
+    MojoArray,
+    MojoBinaryExpr,
+    MojoBuiltin,
+    MojoCallExpr,
+    MojoCastExpr,
+    MojoFloatLiteral,
+    MojoFunctionPtr,
+    MojoModule,
+    MojoParam,
+    MojoPointer,
+    MojoRefExpr,
+    MojoSizeOfExpr,
+    MojoUnaryExpr,
+    NameArg,
+    NamedType,
+    OpaqueStorageMember,
+    PaddingMember,
+    ParametricBase,
+    ParametricType,
+    PointerMutability,
+    PointerOrigin,
+    StoredMember,
+    StringLiteral,
+    StructDecl,
+    SupportDecl,
+    SupportDeclKind,
+    TypeArg,
+)
+from mojo_bindgen.serde import (
+    decode_c_type,
+    decode_mojo_expr,
+    decode_mojo_ir,
+    decode_mojo_type,
+    decode_node,
+    dumps_mojo_ir,
+    encode_mojo_ir,
+    loads_mojo_ir,
+    to_debug_dict,
+)
+
+I32 = BuiltinType(MojoBuiltin.C_INT)
 
 
-def test_mojo_type_json_roundtrip() -> None:
-    from mojo_bindgen.ir import (
-        Array,
-        BuiltinType,
-        FunctionPtr,
-        MojoBuiltin,
-        NamedType,
-        ParametricType,
-        Pointer,
-        type_from_json,
-    )
-    from mojo_bindgen.ir import (
-        Param as Param,
-    )
-
-    builtin = BuiltinType.from_json_dict({"kind": "BuiltinType", "name": "c_int"})
-    assert isinstance(builtin, BuiltinType)
-    assert builtin.name == MojoBuiltin.C_INT
-
-    named = NamedType.from_json_dict({"kind": "NamedType", "name": "point_t"})
-    assert isinstance(named, NamedType)
-
-    ptr = Pointer.from_json_dict(
-        {
-            "kind": "Pointer",
-            "pointee": {"kind": "BuiltinType", "name": "c_uchar"},
-            "mutability": "mut",
-            "origin": "external",
-        }
-    )
-    assert isinstance(ptr, Pointer)
-
-    array = Array.from_json_dict(
-        {
-            "kind": "Array",
-            "element": {"kind": "BuiltinType", "name": "c_uchar"},
-            "size": 16,
-        }
-    )
-    assert isinstance(array, Array)
-
-    generic = ParametricType.from_json_dict(
-        {
-            "kind": "ParametricType",
-            "base": "UnsafeUnion",
-            "args": ["c_int", "point_t"],
-        }
-    )
-    assert isinstance(generic, ParametricType)
-
-    fn = type_from_json(
-        {
-            "kind": "FunctionPtr",
-            "params": [
-                {
-                    "name": "lhs",
-                    "type": {"kind": "BuiltinType", "name": "c_int"},
-                },
-                {
-                    "name": "rhs",
-                    "type": {"kind": "NamedType", "name": "binary_op_t"},
-                },
-            ],
-            "ret": {"kind": "BuiltinType", "name": "c_int"},
-            "abi": "C",
-            "thin": True,
-        }
-    )
-    assert isinstance(fn, FunctionPtr)
-    assert fn.params[1] == Param(name="rhs", type=NamedType(name="binary_op_t"))
-    assert fn.ret == BuiltinType(MojoBuiltin.C_INT)
+@pytest.mark.parametrize(
+    "value",
+    [
+        I32,
+        NamedType("Record"),
+        MojoPointer(None),
+        MojoPointer(NamedType("Record"), PointerMutability.IMMUT, PointerOrigin.ANY, True),
+        MojoArray(I32, 0),
+        MojoArray(MojoPointer(I32), 4),
+        MojoFunctionPtr(I32, (MojoParam("x", I32),), "C", True, False),
+        ParametricType(ParametricBase.SIMD, (DTypeArg("DType.int32"), ConstArg(4))),
+        ParametricType(ParametricBase.UNSAFE_UNION, (TypeArg(I32), NameArg("Record"))),
+    ],
+)
+def test_mojo_type_roundtrip(value) -> None:
+    assert decode_mojo_type(to_debug_dict(value)) == value
 
 
-def test_struct_member_json_roundtrip() -> None:
-    from mojo_bindgen.ir import (
-        BitfieldGroupMember,
-        BuiltinType,
-        MojoBuiltin,
-        OpaqueStorageMember,
-        PaddingMember,
-        StoredMember,
-        struct_member_from_json,
-    )
-
-    stored = struct_member_from_json(
-        {
-            "kind": "StoredMember",
-            "index": 0,
-            "name": "x",
-            "type": {"kind": "BuiltinType", "name": "c_int"},
-            "byte_offset": 0,
-        }
-    )
-    assert isinstance(stored, StoredMember)
-
-    padding = struct_member_from_json(
-        {
-            "kind": "PaddingMember",
-            "name": "__pad0",
-            "size_bytes": 4,
-            "byte_offset": 8,
-        }
-    )
-    assert isinstance(padding, PaddingMember)
-
-    storage = struct_member_from_json(
-        {
-            "kind": "OpaqueStorageMember",
-            "name": "storage",
-            "size_bytes": 16,
-        }
-    )
-    assert isinstance(storage, OpaqueStorageMember)
-
-    bitfields = struct_member_from_json(
-        {
-            "kind": "BitfieldGroupMember",
-            "storage_name": "__bits0",
-            "storage_type": {"kind": "BuiltinType", "name": "c_uint"},
-            "byte_offset": 0,
-            "first_index": 0,
-            "storage_width_bits": 32,
-            "fields": [
-                {
-                    "kind": "BitfieldField",
-                    "index": 0,
-                    "name": "ready",
-                    "logical_type": {"kind": "BuiltinType", "name": "Bool"},
-                    "bit_offset": 0,
-                    "bit_width": 1,
-                    "signed": False,
-                    "bool_semantics": True,
-                },
-                {
-                    "kind": "BitfieldField",
-                    "index": 1,
-                    "name": "mode",
-                    "logical_type": {"kind": "BuiltinType", "name": "c_uint"},
-                    "bit_offset": 1,
-                    "bit_width": 3,
-                    "signed": False,
-                },
-            ],
-        }
-    )
-    assert isinstance(bitfields, BitfieldGroupMember)
-    assert bitfields.storage_type == BuiltinType(name=MojoBuiltin.C_UINT)
-    assert bitfields.storage_width_bits == 32
+@pytest.mark.parametrize(
+    "value",
+    [
+        IntLiteral(2),
+        MojoFloatLiteral(16.0),
+        StringLiteral("λ"),
+        CharLiteral("x"),
+        MojoRefExpr("name_"),
+        MojoUnaryExpr("-", IntLiteral(1)),
+        MojoBinaryExpr("+", IntLiteral(1), IntLiteral(2)),
+        MojoCastExpr(I32, IntLiteral(2)),
+        MojoSizeOfExpr(I32),
+        MojoCallExpr(MojoRefExpr("E"), (IntLiteral(2),)),
+    ],
+)
+def test_mojo_expression_roundtrip(value) -> None:
+    assert decode_mojo_expr(to_debug_dict(value)) == value
 
 
-def test_mojo_decl_json_roundtrip() -> None:
-    from mojo_bindgen.ir import (
-        AliasDecl,
-        BinaryExpr,
-        BuiltinType,
-        CallExpr,
-        CallTarget,
-        CastExpr,
-        ComptimeMember,
-        FunctionDecl,
-        GlobalDecl,
-        IntLiteral,
-        MojoBuiltin,
-        RefExpr,
-        StructDecl,
-        mojo_decl_from_json,
-    )
-
-    struct_decl = mojo_decl_from_json(
-        {
-            "kind": "StructDecl",
-            "name": "point",
-            "traits": ["Copyable", "Movable"],
-            "align": 4,
-            "fieldwise_init": True,
-            "struct_kind": "plain",
-            "members": [
-                {
-                    "kind": "StoredMember",
-                    "index": 0,
-                    "name": "x",
-                    "type": {"kind": "BuiltinType", "name": "c_int"},
-                    "byte_offset": 0,
-                },
-                {
-                    "kind": "StoredMember",
-                    "index": 1,
-                    "name": "y",
-                    "type": {"kind": "BuiltinType", "name": "c_int"},
-                    "byte_offset": 4,
-                },
-            ],
-            "comptime_members": [
-                {
-                    "kind": "ComptimeMember",
-                    "name": "ORIGIN",
-                    "const_value": {
-                        "kind": "CallExpr",
-                        "callee": {"kind": "RefExpr", "name": "Self"},
-                        "args": [
-                            {
-                                "kind": "CastExpr",
-                                "target": {"kind": "BuiltinType", "name": "c_int"},
-                                "expr": {"kind": "IntLiteral", "value": 0},
-                            }
-                        ],
-                    },
-                }
-            ],
-            "initializers": [],
-            "diagnostics": [],
-        }
-    )
-    assert isinstance(struct_decl, StructDecl)
-    assert struct_decl.comptime_members == [
-        ComptimeMember(
-            name="ORIGIN",
-            const_value=CallExpr(
-                callee=RefExpr("Self"),
-                args=[
-                    CastExpr(
-                        target=BuiltinType(MojoBuiltin.C_INT),
-                        expr=IntLiteral(0),
-                    )
-                ],
+def test_module_roundtrip_preserves_all_target_declarations_and_member_shapes() -> None:
+    note = MappingNote(MappingSeverity.WARNING, "note", "test")
+    record = StructDecl(
+        "Record",
+        members=(
+            StoredMember(0, "x", I32, 0),
+            PaddingMember("padding", 4, 4),
+            OpaqueStorageMember("storage", 8),
+            BitfieldGroupMember(
+                "bits", I32, 8, 1, 32, (BitfieldField(1, "flag", I32, 0, 1, False),)
             ),
-        )
-    ]
-
-    alias_decl = AliasDecl.from_json_dict(
-        {
-            "kind": "AliasDecl",
-            "name": "POINT_LIMIT",
-            "alias_kind": "const_value",
-            "const_value": {
-                "kind": "BinaryExpr",
-                "op": "+",
-                "lhs": {"kind": "IntLiteral", "value": 1},
-                "rhs": {"kind": "IntLiteral", "value": 2},
-            },
-            "diagnostics": [],
-        }
-    )
-    assert alias_decl.const_value == BinaryExpr(
-        op="+",
-        lhs=IntLiteral(1),
-        rhs=IntLiteral(2),
-    )
-    assert isinstance(alias_decl, AliasDecl)
-
-    fn_decl = mojo_decl_from_json(
-        {
-            "kind": "FunctionDecl",
-            "name": "point_add",
-            "link_name": "point_add",
-            "params": [
-                {
-                    "kind": "Param",
-                    "name": "lhs",
-                    "type": {"kind": "NamedType", "name": "point"},
-                },
-                {
-                    "kind": "Param",
-                    "name": "rhs",
-                    "type": {"kind": "NamedType", "name": "point"},
-                },
-            ],
-            "return_type": {"kind": "NamedType", "name": "point"},
-            "function_kind": "wrapper",
-            "call_target": {
-                "kind": "CallTarget",
-                "link_mode": "external_call",
-                "symbol": "point_add",
-            },
-            "diagnostics": [],
-        }
-    )
-    assert isinstance(fn_decl, FunctionDecl)
-    assert fn_decl.call_target == CallTarget(link_mode="external_call", symbol="point_add")
-
-    global_decl = GlobalDecl.from_json_dict(
-        {
-            "kind": "GlobalDecl",
-            "name": "global_counter",
-            "link_name": "global_counter",
-            "value_type": {"kind": "BuiltinType", "name": "c_int"},
-            "is_const": False,
-            "global_kind": "wrapper",
-            "diagnostics": [],
-        }
-    )
-    assert isinstance(global_decl, GlobalDecl)
-    assert global_decl.value_type == BuiltinType(name=MojoBuiltin.C_INT)
-
-
-def test_mojo_module_roundtrip() -> None:
-    from mojo_bindgen.ir import (
-        AliasDecl,
-        BinaryExpr,
-        BuiltinType,
-        FunctionAttrs,
-        FunctionDecl,
-        FunctionPtr,
-        GlobalDecl,
-        InlineDisposition,
-        IntLiteral,
-        ModuleDependencies,
-        ModuleImport,
-        MojoBuiltin,
-        MojoModule,
-        ParametricType,
-        SupportDecl,
-        SupportDeclKind,
-    )
-
-    module = MojoModule(
-        source_header="demo.h",
-        library="demo",
-        link_name="demo",
-        link_mode="external_call",
-        dependencies=ModuleDependencies(
-            imports=[
-                ModuleImport(module="std.ffi", names=["c_int"]),
-                ModuleImport(module="std.simd", names=["SIMD"]),
-            ],
-            support_decls=[SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS)],
         ),
-        decls=[
-            AliasDecl(
-                name="demo_mode",
-                kind="type_alias",
-                type_value=BuiltinType(MojoBuiltin.C_UINT),
-            ),
-            AliasDecl(
-                name="binary_op_t",
-                kind="callback_signature",
-                type_value=FunctionPtr(
-                    params=[
-                        BuiltinType(MojoBuiltin.C_INT),
-                        BuiltinType(MojoBuiltin.C_INT),
-                    ],
-                    ret=BuiltinType(MojoBuiltin.C_INT),
-                ),
-            ),
-            AliasDecl(
-                name="DEMO_LIMIT",
-                kind="const_value",
-                const_value=BinaryExpr("+", IntLiteral(4), IntLiteral(5)),
-            ),
-            AliasDecl(
-                name="demo_union",
-                kind="union_layout",
-                type_value=ParametricType(base="UnsafeUnion", args=["c_int", "point"]),
-            ),
-            FunctionDecl(
-                name="demo_add",
-                link_name="demo_add",
-                return_type=BuiltinType(MojoBuiltin.C_INT),
-                attrs=FunctionAttrs(inline_disposition=InlineDisposition.INLINE),
-            ),
-            GlobalDecl(
-                name="demo_counter",
-                link_name="demo_counter",
-                value_type=BuiltinType(MojoBuiltin.C_INT),
-            ),
-        ],
+        comptime_members=(ComptimeMember("N", const_value=IntLiteral(2)),),
+        initializers=(Initializer((InitializerParam("x", I32),)),),
+        flexible_tail=FlexibleTail("tail", I32, "c99_empty", 12),
+        diagnostics=(note,),
     )
-
-    raw = module.to_json_dict()
-    restored = MojoModule.from_json_dict(raw)
-    assert restored.to_json_dict() == raw
-
-
-def test_unknown_mojo_type_kind_raises() -> None:
-    from mojo_bindgen.ir import type_from_json
-
-    with pytest.raises(ValueError) as exc_info:
-        type_from_json({"kind": "NoSuchType"})
-    assert "NoSuchType" in str(exc_info.value)
-
-
-def test_builtin_lookup_tables_cover_expected_scalars() -> None:
-    from mojo_bindgen.ir import PRIMITIVE_BUILTINS, FloatKind, IntKind, MojoBuiltin
-
-    assert PRIMITIVE_BUILTINS["void"] == MojoBuiltin.NONE
-    assert PRIMITIVE_BUILTINS[IntKind.BOOL] == MojoBuiltin.BOOL
-    assert PRIMITIVE_BUILTINS[IntKind.INT] == MojoBuiltin.C_INT
-    assert PRIMITIVE_BUILTINS[IntKind.ULONG] == MojoBuiltin.C_ULONG
-    assert PRIMITIVE_BUILTINS[FloatKind.FLOAT] == MojoBuiltin.C_FLOAT
-    assert PRIMITIVE_BUILTINS[FloatKind.DOUBLE] == MojoBuiltin.C_DOUBLE
-
-
-def test_unknown_struct_member_kind_raises() -> None:
-    from mojo_bindgen.ir import struct_member_from_json
-
-    with pytest.raises(ValueError) as exc_info:
-        struct_member_from_json({"kind": "NoSuchStructMember"})
-    assert "NoSuchStructMember" in str(exc_info.value)
+    module = MojoModule(
+        "input.h",
+        "lib",
+        "lib",
+        LinkMode.EXTERNAL_CALL,
+        dependencies=ModuleDependencies(
+            (ModuleImport("std.ffi", ("c_int",)),),
+            (SupportDecl(SupportDeclKind.GLOBAL_SYMBOL_HELPERS),),
+        ),
+        decls=(
+            record,
+            AliasDecl("T", AliasKind.TYPE_ALIAS, type_value=I32),
+            FunctionDecl(
+                "f",
+                "f",
+                (MojoParam("x", I32),),
+                I32,
+                call_target=CallTarget(LinkMode.EXTERNAL_CALL, "f"),
+            ),
+            GlobalDecl("g", "g", I32),
+        ),
+    )
+    assert loads_mojo_ir(dumps_mojo_ir(module)) == module
+    assert decode_mojo_ir(encode_mojo_ir(module)) == module
+    assert isinstance(decode_mojo_ir(encode_mojo_ir(module)).decls, tuple)
 
 
-def test_unknown_mojo_decl_kind_raises() -> None:
-    from mojo_bindgen.ir import mojo_decl_from_json
+def test_kind_field_is_data_not_a_serialization_override() -> None:
+    alias = AliasDecl("T", AliasKind.TYPE_ALIAS, type_value=I32)
+    raw = to_debug_dict(alias)
+    assert raw["kind"] == "AliasDecl"
+    assert raw["fields"]["kind"] == "type_alias"
+    assert raw["fields"]["diagnostics"] == []
+    assert raw["fields"]["const_value"] is None
+    assert decode_node(raw, AliasDecl) == alias
 
-    with pytest.raises(ValueError) as exc_info:
-        mojo_decl_from_json({"kind": "NoSuchMojoDecl"})
-    assert "NoSuchMojoDecl" in str(exc_info.value)
+
+def test_wrong_stage_and_malformed_records_are_rejected() -> None:
+    with pytest.raises(ValueError):
+        decode_c_type(to_debug_dict(MojoPointer(None)))
+    with pytest.raises(ValueError):
+        decode_mojo_type(to_debug_dict(CPointer(None)))
+    with pytest.raises(ValueError):
+        decode_mojo_expr({"kind": "CFloatLiteral", "fields": {"spelling": "1.0"}})
+    raw = to_debug_dict(MojoArray(I32, 2))
+    raw["fields"]["element"] = to_debug_dict(CPointer(None))
+    with pytest.raises(ValueError):
+        decode_mojo_type(raw)
+    with pytest.raises(ValueError):
+        decode_mojo_type({"kind": "MojoArray", "fields": {"element": to_debug_dict(I32)}})
+    raw = to_debug_dict(I32)
+    raw["fields"]["unexpected"] = 1
+    with pytest.raises(ValueError):
+        decode_mojo_type(raw)

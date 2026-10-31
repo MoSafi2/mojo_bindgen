@@ -8,10 +8,10 @@ from enum import StrEnum
 from mojo_bindgen.analysis.mojo.type_mapping import exact_width_stdint_alias_type
 from mojo_bindgen.analysis.traversal import iter_unit_typerefs
 from mojo_bindgen.ir import (
+    CFunctionPtr,
+    CType,
     EnumRef,
-    FunctionPtr,
     StructRef,
-    Type,
     Typedef,
     TypeRef,
     Unit,
@@ -87,7 +87,7 @@ def classify_aliases(unit: Unit) -> AliasClassification:
 def _classify_typedef(decl: Typedef) -> AliasClass:
     if exact_width_stdint_alias_type(decl.name) is not None:
         return AliasClass.EXACT_WIDTH_STDINT
-    if isinstance(decl.aliased, FunctionPtr) or isinstance(decl.canonical, FunctionPtr):
+    if isinstance(decl.aliased, CFunctionPtr) or isinstance(decl.canonical, CFunctionPtr):
         return AliasClass.CALLBACK
     target = _target_type(decl.aliased) or _target_type(decl.canonical)
     if isinstance(target, EnumRef):
@@ -99,7 +99,7 @@ def _classify_typedef(decl: Typedef) -> AliasClass:
     return AliasClass.TYPEDEF
 
 
-def _target_type(t: Type) -> EnumRef | StructRef | None:
+def _target_type(t: CType) -> EnumRef | StructRef | None:
     if isinstance(t, TypeRef):
         return _target_type(t.canonical)
     if isinstance(t, (EnumRef, StructRef)):
@@ -107,7 +107,7 @@ def _target_type(t: Type) -> EnumRef | StructRef | None:
     return None
 
 
-def _target_decl_id(t: Type) -> str | None:
+def _target_decl_id(t: CType) -> str | None:
     target = _target_type(t)
     return None if target is None else target.decl_id
 

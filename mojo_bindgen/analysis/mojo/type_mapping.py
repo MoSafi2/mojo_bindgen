@@ -2,40 +2,46 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.facts.target import TargetQueries
+from mojo_bindgen.analysis.type_walk import validate_type_tree
 from mojo_bindgen.ir import (
     _FLOAT_DTYPE_TABLE,
     _INT_DTYPE_TABLE,
     _SIGNED_INT_KINDS,
     _UNSIGNED_INT_KINDS,
     PRIMITIVE_BUILTINS,
-    Array,
     AtomicType,
     BuiltinType,
+    CArray,
+    CFunctionPtr,
     ComplexType,
     ConstArg,
+    CPointer,
+    CType,
     DTypeArg,
     EnumRef,
     FloatKind,
     FloatType,
-    FunctionPtr,
     IntKind,
     IntType,
+    MojoArray,
     MojoBuiltin,
+    MojoFunctionPtr,
+    MojoParam,
+    MojoPointer,
+    MojoType,
     NamedType,
     OpaqueRecordRef,
-    Param,
     ParametricBase,
     ParametricType,
-    Pointer,
     PointerMutability,
     PointerOrigin,
     QualifiedType,
     StructRef,
-    Type,
     TypeArg,
     TypeRef,
     UnsupportedType,
@@ -56,7 +62,7 @@ PrimitiveCIRType = VoidType | IntType | FloatType
 # ------------------------
 
 
-def _strip_transparent_wrappers(t: Type) -> Type:
+def _strip_transparent_wrappers(t: CType) -> CType:
     """Remove wrappers that do not affect surface type structure."""
     while True:
         if isinstance(t, QualifiedType):
@@ -66,7 +72,7 @@ def _strip_transparent_wrappers(t: Type) -> Type:
     return t
 
 
-def _strip_for_dtype(t: Type) -> Type:
+def _strip_for_dtype(t: CType) -> CType:
     """More aggressive normalization for scalar dtype resolution."""
     while True:
         if isinstance(t, TypeRef):
@@ -82,7 +88,7 @@ def _strip_for_dtype(t: Type) -> Type:
     return t
 
 
-def _unwrap_pointer_pointee(t: Type | None) -> tuple[Type | None, PointerMutability]:
+def _unwrap_pointer_pointee(t: CType | None) -> tuple[CType | None, PointerMutability]:
     if t is None:
         return None, PointerMutability.MUT
 
@@ -144,38 +150,53 @@ def exact_width_stdint_alias_type(name: str) -> NamedType | None:
     return NamedType(name=mojo_name)
 
 
-@dataclass
+def _storage_size(t: CType) -> int | None:
+    match t:
+        case (
+            IntType()
+            | FloatType()
+            | AtomicType()
+            | CPointer()
+            | CArray()
+            | CFunctionPtr()
+            | OpaqueRecordRef()
+            | UnsupportedType()
+            | ComplexType()
+            | VectorType()
+            | StructRef()
+        ):
+            return t.size_bytes
+        case EnumRef():
+            return None
+        case TypeRef():
+            return _storage_size(t.canonical)
+        case QualifiedType():
+            return _storage_size(t.unqualified)
+        case VoidType():
+            return None
+    assert_never(t)
+
+
+@dataclass(frozen=True)
 class MapTypePass:
-    """Map CIR types into surface-oriented MojoIR type nodes."""
+    """Pure CIR mapping with target queries fixed for this mapping context."""
 
-    queries: TargetQueries | None = None
-    _cache: dict[int, Type] = field(default_factory=dict, init=False, repr=False)
-    _active: set[int] = field(default_factory=set, init=False, repr=False)
-    # ------------------------
-    # Entry point
-    # ------------------------
+    queries: TargetQueries
 
-    def run(self, t: Type) -> Type:
-        key = id(t)
-        if key in self._cache:
-            return self._cache[key]
-        if key in self._active:
-            raise TypeMappingError(f"recursive CIR type cycle while mapping {type(t).__name__}")
-        self._active.add(key)
-        try:
-            t_norm = _strip_transparent_wrappers(t)
-            result = self._map(t_norm)
-        finally:
-            self._active.remove(key)
+    def run(self, t: CType) -> MojoType:
+        validate_type_tree(t)
+        return self._map_validated(t)
 
-        self._cache[key] = result
-        return result
+    def _map_validated(self, t: CType) -> MojoType:
+        return self._map(_strip_transparent_wrappers(t))
 
     # ------------------------
     # Core mapping dispatcher
     # ------------------------
 
-    def _map(self, t: Type) -> Type:
+    def _map(self, t: CType) -> MojoType:
+        if isinstance(t, QualifiedType):
+            return self._map_validated(t.unqualified)
         if isinstance(t, (VoidType, IntType, FloatType)):
             return self._map_primitive(t)
         if isinstance(t, AtomicType):
@@ -183,16 +204,16 @@ class MapTypePass:
         if isinstance(t, (TypeRef, EnumRef, StructRef)):
             return self._named(t.name)
         if isinstance(t, OpaqueRecordRef):
-            return Pointer(
+            return MojoPointer(
                 pointee=None,
                 mutability=PointerMutability.MUT,
                 origin=PointerOrigin.EXTERNAL,
             )
-        if isinstance(t, Pointer):
+        if isinstance(t, CPointer):
             return self._map_pointer(t)
-        if isinstance(t, Array):
+        if isinstance(t, CArray):
             return self._map_array(t)
-        if isinstance(t, FunctionPtr):
+        if isinstance(t, CFunctionPtr):
             return self._map_function_ptr(t)
         if isinstance(t, ComplexType):
             return self._map_complex(t)
@@ -200,16 +221,16 @@ class MapTypePass:
             return self._map_vector(t)
         if isinstance(t, UnsupportedType):
             return self._unsupported_type(t)
-        raise TypeMappingError(f"unsupported CIR type node: {type(t).__name__!r}")
+        assert_never(t)
 
     # ------------------------
     # Named types
     # ------------------------
-    def _map_primitive(self, t: PrimitiveCIRType) -> Type:
+    def _map_primitive(self, t: PrimitiveCIRType) -> MojoType:
         if isinstance(t, VoidType):
             key = "void"
         elif isinstance(t, IntType):
-            if t.int_kind in (IntKind.CHAR_S, IntKind.CHAR_U) and self.queries:
+            if t.int_kind in (IntKind.CHAR_S, IntKind.CHAR_U):
                 unsigned = self.queries.default_char_is_unsigned()
                 if unsigned is not None:
                     if (t.int_kind == IntKind.CHAR_U) == unsigned:
@@ -238,19 +259,27 @@ class MapTypePass:
             ) from exc
         return BuiltinType(name=builtin)
 
-    def _map_atomic(self, t: AtomicType) -> Type:
+    def _map_atomic(self, t: AtomicType) -> MojoType:
         dtype = self._dtype_arg(t.value_type)
         scalar = self._scalar_for_dtype(t.value_type)
         compatible = scalar is not None and (
-            (t.size_bytes is None or t.size_bytes == getattr(scalar, "size_bytes", None))
-            and (t.align_bytes is None or t.align_bytes == getattr(scalar, "align_bytes", None))
+            (
+                t.size_bytes is None
+                or t.size_bytes
+                == (scalar.size_bytes if isinstance(scalar, (IntType, FloatType)) else None)
+            )
+            and (
+                t.align_bytes is None
+                or t.align_bytes
+                == (scalar.align_bytes if isinstance(scalar, (IntType, FloatType)) else None)
+            )
         )
         if dtype is not None and compatible:
             return ParametricType(
                 base=ParametricBase.ATOMIC,
-                args=[TypeArg(self.run(t.value_type))],
+                args=(TypeArg(self._map_validated(t.value_type)),),
             )
-        size = t.size_bytes or getattr(_strip_for_dtype(t.value_type), "size_bytes", None)
+        size = t.size_bytes or _storage_size(_strip_for_dtype(t.value_type))
         if size:
             return self._opaque_bytes(size)
         raise TypeMappingError("atomic storage has no representable scalar type or known size")
@@ -261,17 +290,17 @@ class MapTypePass:
     # ------------------------
     # Pointer mapping
     # ------------------------
-    def _map_pointer(self, t: Pointer) -> Pointer:
+    def _map_pointer(self, t: CPointer) -> MojoPointer:
         pointee, mutability = _unwrap_pointer_pointee(t.pointee)
         if pointee is None or isinstance(pointee, VoidType):
-            return Pointer(
+            return MojoPointer(
                 pointee=None,
                 mutability=mutability,
                 origin=PointerOrigin.EXTERNAL,
                 nullable=True,
             )
-        return Pointer(
-            pointee=self.run(pointee),
+        return MojoPointer(
+            pointee=self._map_validated(pointee),
             mutability=mutability,
             origin=PointerOrigin.EXTERNAL,
             nullable=True,
@@ -280,16 +309,16 @@ class MapTypePass:
     # ------------------------
     # Arrays
     # ------------------------
-    def _map_array(self, t: Array) -> Type:
+    def _map_array(self, t: CArray) -> MojoType:
         if t.array_kind == "fixed" and t.size is not None:
-            return Array(element=self.run(t.element), size=t.size, array_kind="fixed")
+            return MojoArray(element=self._map_validated(t.element), size=t.size)
 
         if t.array_kind == "flexible" and t.size is None:
             # Flexible array members mapped as Array[T, 0]
-            return Array(element=self.run(t.element), size=0, array_kind="fixed")
+            return MojoArray(element=self._map_validated(t.element), size=0)
         # fallback: pointer
-        return Pointer(
-            pointee=self.run(t.element),
+        return MojoPointer(
+            pointee=self._map_validated(t.element),
             mutability=PointerMutability.MUT,
             origin=PointerOrigin.EXTERNAL,
         )
@@ -297,18 +326,18 @@ class MapTypePass:
     # ------------------------
     # Function pointers
     # ------------------------
-    def _map_function_ptr(self, t: FunctionPtr) -> FunctionPtr:
-        param_names = t.param_names or []
+    def _map_function_ptr(self, t: CFunctionPtr) -> MojoFunctionPtr:
+        param_names = t.param_names or ()
         params = [
-            Param(
+            MojoParam(
                 name=param_names[i] if i < len(param_names) else "",
-                type=self.run(param.type),
+                type=self._map_validated(param.type),
             )
             for i, param in enumerate(t.params)
         ]
-        return FunctionPtr(
-            params=params,
-            ret=self.run(t.ret),
+        return MojoFunctionPtr(
+            params=tuple(params),
+            ret=self._map_validated(t.ret),
             abi="C" if t.calling_convention in (None, "", "c") else t.calling_convention,
             thin=True,
             raises=False,
@@ -318,46 +347,44 @@ class MapTypePass:
     # Vector & complex
     # ------------------------
 
-    def _map_vector(self, t: VectorType) -> Type:
+    def _map_vector(self, t: VectorType) -> MojoType:
         if t.count is None:
             return self._opaque_bytes(t.size_bytes)
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
             return ParametricType(
                 base=ParametricBase.SIMD,
-                args=[DTypeArg(dtype), ConstArg(t.count)],
+                args=(DTypeArg(dtype), ConstArg(t.count)),
             )
-        return Array(element=self.run(t.element), size=t.count, array_kind="fixed")
+        return MojoArray(element=self._map_validated(t.element), size=t.count)
 
-    def _map_complex(self, t: ComplexType) -> Type:
+    def _map_complex(self, t: ComplexType) -> MojoType:
         dtype = self._dtype_arg(t.element)
         if dtype is not None:
             return ParametricType(
                 base=ParametricBase.COMPLEX_SIMD,
-                args=[DTypeArg(dtype), ConstArg(1)],
+                args=(DTypeArg(dtype), ConstArg(1)),
             )
 
-        return Array(element=self.run(t.element), size=2, array_kind="fixed")
+        return MojoArray(element=self._map_validated(t.element), size=2)
 
-    def _unsupported_type(self, t: UnsupportedType) -> Type:
+    def _unsupported_type(self, t: UnsupportedType) -> MojoType:
         if t.size_bytes is not None and t.size_bytes > 0:
             return self._opaque_bytes(t.size_bytes)
-        return Pointer(
+        return MojoPointer(
             pointee=None,
             mutability=PointerMutability.MUT,
             origin=PointerOrigin.EXTERNAL,
         )
 
-    def _opaque_bytes(self, size_bytes: int) -> Array:
-        return Array(
-            element=BuiltinType(name=MojoBuiltin.UINT8), size=size_bytes, array_kind="fixed"
-        )
+    def _opaque_bytes(self, size_bytes: int) -> MojoArray:
+        return MojoArray(element=BuiltinType(name=MojoBuiltin.UINT8), size=size_bytes)
 
     # ------------------------
     # DType resolution
     # ------------------------
 
-    def _dtype_arg(self, t: Type) -> str | None:
+    def _dtype_arg(self, t: CType) -> str | None:
         scalar = self._scalar_for_dtype(t)
         if scalar is None:
             return None
@@ -367,7 +394,7 @@ class MapTypePass:
             return _FLOAT_DTYPE_TABLE.get(scalar.float_kind)
         return None
 
-    def _scalar_for_dtype(self, t: Type) -> PrimitiveCIRType | None:
+    def _scalar_for_dtype(self, t: CType) -> PrimitiveCIRType | None:
         t = _strip_for_dtype(t)
         if isinstance(t, (VoidType, IntType, FloatType)):
             return t
@@ -379,9 +406,9 @@ class MapTypePass:
 # ------------------------
 
 
-def map_type(t: Type) -> Type:
+def map_type(t: CType, *, queries: TargetQueries) -> MojoType:
     """Map a CIR type to MojoIR."""
-    return MapTypePass().run(t)
+    return MapTypePass(queries=queries).run(t)
 
 
 __all__ = [

@@ -19,10 +19,11 @@ from mojo_bindgen.analysis.traversal import (
 )
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
+    CConstExpr,
+    CType,
     Decl,
     Struct,
     StructRef,
-    Type,
     Unit,
 )
 
@@ -46,7 +47,7 @@ class SignatureRecordStubResult:
 
 
 def _walk_type(
-    t: Type,
+    t: CType,
     out: list[StructRef],
     *,
     traverse_function_ptrs: bool,
@@ -66,7 +67,7 @@ def _walk_type(
 
 
 def _walk_const_expr(
-    expr,
+    expr: CConstExpr,
     out: list[StructRef],
     *,
     traverse_function_ptrs: bool,
@@ -95,7 +96,7 @@ def _struct_from_ref(ref: StructRef) -> Struct:
         decl_id=ref.decl_id,
         name=ref.name,
         c_name=ref.c_name,
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=1,
         is_union=ref.is_union,
@@ -150,7 +151,7 @@ class SignatureRecordStubPass:
 
         new_decls: list[Decl] = list(synthesized)
         new_decls.extend(unit.decls)
-        new_unit = replace(unit, decls=new_decls)
+        new_unit = replace(unit, decls=tuple(new_decls))
         return SignatureRecordStubResult(
             unit=new_unit,
             synthesized_structs=synthesized,

@@ -6,14 +6,13 @@ from pathlib import Path
 
 from mojo_bindgen.ir import ByteOrder, Unit
 from mojo_bindgen.parsing.parser import ClangParser
+from mojo_bindgen.serde import decode_node, to_debug_dict
 
 
 def test_clang_parser_records_target_abi_on_unit(tmp_path: Path) -> None:
     header = tmp_path / "probe.h"
     header.write_text("void *take_ptr(void *p);\n", encoding="utf-8")
-
     unit = ClangParser(header, library="probe", link_name="probe").run()
-
     assert unit.target_abi.pointer_size_bytes > 0
     assert unit.target_abi.pointer_align_bytes > 0
     assert unit.target_abi.byte_order in (ByteOrder.LITTLE, ByteOrder.BIG)
@@ -22,9 +21,7 @@ def test_clang_parser_records_target_abi_on_unit(tmp_path: Path) -> None:
 def test_unit_json_roundtrip_preserves_target_abi(tmp_path: Path) -> None:
     header = tmp_path / "probe.h"
     header.write_text("int take_int(int value);\n", encoding="utf-8")
-
     unit = ClangParser(header, library="probe", link_name="probe").run()
-    restored = Unit.from_json_dict(unit.to_json_dict())
-
+    restored = decode_node(to_debug_dict(unit), Unit)
     assert restored.target_abi == unit.target_abi
     assert restored.target_abi.byte_order == unit.target_abi.byte_order

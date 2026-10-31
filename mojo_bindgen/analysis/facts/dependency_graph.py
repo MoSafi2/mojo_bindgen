@@ -13,7 +13,7 @@ from mojo_bindgen.analysis.traversal import (
     iter_type_decl_refs,
 )
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions
-from mojo_bindgen.ir import Type, Unit
+from mojo_bindgen.ir import CType, Unit
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ def build_decl_dependency_graph(unit: Unit) -> DeclDependencyGraph:
     )
 
 
-def _collect_type_edges(t: Type, out: set[str]) -> None:
+def _collect_type_edges(t: CType, out: set[str]) -> None:
     for node in iter_type_decl_refs(
         t,
         options=TypeWalkOptions(descend_vector_element=True),

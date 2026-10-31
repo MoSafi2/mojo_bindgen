@@ -5,22 +5,22 @@ from __future__ import annotations
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     _MOJO_INT_TYPES,
-    BinaryExpr,
     BuiltinType,
-    CastExpr,
-    ConstExpr,
+    CType,
     IntLiteral,
-    Type,
-    UnaryExpr,
+    MojoBinaryExpr,
+    MojoCastExpr,
+    MojoConstExpr,
+    MojoUnaryExpr,
 )
 
 
 def typed_const_value(
-    value: ConstExpr,
-    decl_type: Type,
+    value: MojoConstExpr,
+    decl_type: CType,
     *,
     type_mapper: MapTypePass,
-) -> ConstExpr:
+) -> MojoConstExpr:
     """Apply Mojo-facing type coercions needed for emitted constant aliases."""
 
     mapped_type = type_mapper.run(decl_type)
@@ -30,18 +30,18 @@ def typed_const_value(
 
 
 def _coerce_integral_const(
-    value: ConstExpr,
+    value: MojoConstExpr,
     mapped_type: BuiltinType,
-) -> ConstExpr:
+) -> MojoConstExpr:
     if isinstance(value, IntLiteral):
-        return CastExpr(target=mapped_type, expr=value)
-    if isinstance(value, UnaryExpr):
-        return UnaryExpr(
+        return MojoCastExpr(target=mapped_type, expr=value)
+    if isinstance(value, MojoUnaryExpr):
+        return MojoUnaryExpr(
             op=value.op,
             operand=_coerce_integral_const(value.operand, mapped_type),
         )
-    if isinstance(value, BinaryExpr):
-        return BinaryExpr(
+    if isinstance(value, MojoBinaryExpr):
+        return MojoBinaryExpr(
             op=value.op,
             lhs=_coerce_integral_const(value.lhs, mapped_type),
             rhs=_coerce_integral_const(value.rhs, mapped_type),

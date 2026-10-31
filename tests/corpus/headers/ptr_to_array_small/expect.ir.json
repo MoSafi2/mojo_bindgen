@@ -5,30 +5,38 @@
   "decls": [
     {
       "kind": "GlobalVar",
-      "name": "ptas_slot"
+      "fields": {
+        "name": "ptas_slot"
+      }
     }
   ],
   "paths": [
     {
       "selector": {
         "kind": "GlobalVar",
-        "name": "ptas_slot"
+        "fields": {
+          "name": "ptas_slot"
+        }
       },
-      "path": "type",
+      "path": "fields.type",
       "attrs": {
-        "kind": "Pointer"
+        "kind": "CPointer"
       }
     },
     {
       "selector": {
         "kind": "GlobalVar",
-        "name": "ptas_slot"
+        "fields": {
+          "name": "ptas_slot"
+        }
       },
-      "path": "type.pointee",
+      "path": "fields.type.fields.pointee",
       "attrs": {
-        "kind": "Array",
-        "array_kind": "fixed",
-        "size": 4
+        "kind": "CArray",
+        "fields": {
+          "array_kind": "fixed",
+          "size": 4
+        }
       }
     }
   ]

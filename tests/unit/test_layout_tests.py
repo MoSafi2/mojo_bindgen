@@ -25,11 +25,7 @@ from mojo_bindgen.layout_tests import collect_layout_record_checks, render_layou
 
 
 def _abi() -> TargetABI:
-    return TargetABI(
-        pointer_size_bytes=8,
-        pointer_align_bytes=8,
-        byte_order=ByteOrder.LITTLE,
-    )
+    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
 
 
 def _i32() -> IntType:
@@ -46,7 +42,7 @@ def _unit(*decls: Struct) -> Unit:
         library="demo",
         link_name="demo",
         target_abi=_abi(),
-        decls=list(decls),
+        decls=tuple(list(decls)),
     )
 
 
@@ -56,7 +52,7 @@ def _module(*decls: StructDecl) -> MojoModule:
         library="demo",
         link_name="demo",
         link_mode=LinkMode.EXTERNAL_CALL,
-        decls=list(decls),
+        decls=tuple(list(decls)),
     )
 
 
@@ -65,27 +61,24 @@ def test_collect_layout_record_checks_for_plain_struct_with_padding() -> None:
         decl_id="struct:Sample",
         name="Sample",
         c_name="Sample",
-        fields=[
+        fields=(
             Field(name="a", source_name="a", type=_u8(), byte_offset=0, size_bytes=1),
             Field(name="b", source_name="b", type=_i32(), byte_offset=4, size_bytes=4),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
     )
     mojo_decl = StructDecl(
         name="Sample",
-        members=[
+        members=(
             StoredMember(0, "a", BuiltinType(MojoBuiltin.C_UCHAR), 0),
             OpaqueStorageMember("__pad0", 3),
             StoredMember(1, "b", BuiltinType(MojoBuiltin.C_INT), 4),
-        ],
+        ),
     )
-
     checks = collect_layout_record_checks(
-        normalized_unit=_unit(decl),
-        mojo_module=_module(mojo_decl),
+        normalized_unit=_unit(decl), mojo_module=_module(mojo_decl)
     )
-
     assert checks[0].record_name == "Sample"
     assert [(check.label, check.expected) for check in checks[0].checks] == [
         ("Sample.size", 8),
@@ -106,7 +99,7 @@ def test_collect_layout_record_checks_uses_emitted_indices_after_bitfield_paddin
         decl_id="struct:Instance",
         name="Instance",
         c_name="Instance",
-        fields=[
+        fields=(
             Field(
                 name="transform", source_name="transform", type=_i32(), byte_offset=0, size_bytes=4
             ),
@@ -121,24 +114,21 @@ def test_collect_layout_record_checks_uses_emitted_indices_after_bitfield_paddin
                 bit_width=8,
             ),
             Field(name="address", source_name="address", type=_i32(), byte_offset=8, size_bytes=4),
-        ],
+        ),
         size_bytes=12,
         align_bytes=4,
     )
     mojo_decl = StructDecl(
         name="Instance",
-        members=[
+        members=(
             StoredMember(0, "transform", BuiltinType(MojoBuiltin.C_INT), 0),
             PaddingMember("__pad0", 4, 4),
             StoredMember(2, "address", BuiltinType(MojoBuiltin.C_INT), 8),
-        ],
+        ),
     )
-
     checks = collect_layout_record_checks(
-        normalized_unit=_unit(decl),
-        mojo_module=_module(mojo_decl),
+        normalized_unit=_unit(decl), mojo_module=_module(mojo_decl)
     )
-
     assert ("Instance.address.offset", "r.field_offset[index=2]()", 8) in [
         (check.label, check.expression, check.expected) for check in checks[0].checks
     ]
@@ -149,21 +139,15 @@ def test_collect_layout_record_checks_for_opaque_storage_skips_field_offsets() -
         decl_id="struct:Packed",
         name="Packed",
         c_name="Packed",
-        fields=[Field(name="x", source_name="x", type=_i32(), byte_offset=1, size_bytes=4)],
+        fields=(Field(name="x", source_name="x", type=_i32(), byte_offset=1, size_bytes=4),),
         size_bytes=5,
         align_bytes=1,
         is_packed=True,
     )
-    mojo_decl = StructDecl(
-        name="Packed",
-        members=[OpaqueStorageMember("storage", 5)],
-    )
-
+    mojo_decl = StructDecl(name="Packed", members=(OpaqueStorageMember("storage", 5),))
     checks = collect_layout_record_checks(
-        normalized_unit=_unit(decl),
-        mojo_module=_module(mojo_decl),
+        normalized_unit=_unit(decl), mojo_module=_module(mojo_decl)
     )
-
     assert [(check.label, check.expected) for check in checks[0].checks] == [
         ("Packed.size", 5),
         ("Packed.align", 1),
@@ -175,7 +159,7 @@ def test_collect_layout_record_checks_for_bitfield_storage_group_offset() -> Non
         decl_id="struct:Flags",
         name="Flags",
         c_name="Flags",
-        fields=[
+        fields=(
             Field(
                 name="enabled",
                 source_name="enabled",
@@ -185,21 +169,21 @@ def test_collect_layout_record_checks_for_bitfield_storage_group_offset() -> Non
                 is_bitfield=True,
                 bit_offset=0,
                 bit_width=1,
-            )
-        ],
+            ),
+        ),
         size_bytes=4,
         align_bytes=4,
     )
     mojo_decl = StructDecl(
         name="Flags",
-        members=[
+        members=(
             BitfieldGroupMember(
                 storage_name="__bf0",
                 storage_type=BuiltinType(MojoBuiltin.C_UINT),
                 byte_offset=0,
                 first_index=0,
                 storage_width_bits=32,
-                fields=[
+                fields=(
                     BitfieldField(
                         index=0,
                         name="enabled",
@@ -207,17 +191,14 @@ def test_collect_layout_record_checks_for_bitfield_storage_group_offset() -> Non
                         bit_offset=0,
                         bit_width=1,
                         signed=True,
-                    )
-                ],
-            )
-        ],
+                    ),
+                ),
+            ),
+        ),
     )
-
     checks = collect_layout_record_checks(
-        normalized_unit=_unit(decl),
-        mojo_module=_module(mojo_decl),
+        normalized_unit=_unit(decl), mojo_module=_module(mojo_decl)
     )
-
     assert ("Flags.__bf0.offset", 0) in [
         (check.label, check.expected) for check in checks[0].checks
     ]
@@ -229,7 +210,7 @@ def test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups()
         decl_id="struct:MixedFlags",
         name="MixedFlags",
         c_name="MixedFlags",
-        fields=[
+        fields=(
             Field(name="prefix", source_name="prefix", type=_i32(), byte_offset=0, size_bytes=4),
             Field(
                 name="enabled",
@@ -241,13 +222,13 @@ def test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups()
                 bit_offset=32,
                 bit_width=1,
             ),
-        ],
+        ),
         size_bytes=8,
         align_bytes=4,
     )
     mojo_decl = StructDecl(
         name="MixedFlags",
-        members=[
+        members=(
             StoredMember(0, "prefix", BuiltinType(MojoBuiltin.C_INT), 0),
             PaddingMember("__pad0", 0, 4),
             BitfieldGroupMember(
@@ -256,7 +237,7 @@ def test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups()
                 byte_offset=4,
                 first_index=1,
                 storage_width_bits=32,
-                fields=[
+                fields=(
                     BitfieldField(
                         index=1,
                         name="enabled",
@@ -264,17 +245,14 @@ def test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups()
                         bit_offset=32,
                         bit_width=1,
                         signed=True,
-                    )
-                ],
+                    ),
+                ),
             ),
-        ],
+        ),
     )
-
     checks = collect_layout_record_checks(
-        normalized_unit=_unit(decl),
-        mojo_module=_module(mojo_decl),
+        normalized_unit=_unit(decl), mojo_module=_module(mojo_decl)
     )
-
     assert ("MixedFlags.__bf0.offset", "r.field_offset[index=2]()", 4) in [
         (check.label, check.expression, check.expected) for check in checks[0].checks
     ]
@@ -285,7 +263,7 @@ def test_collect_layout_record_checks_skips_incomplete_union_and_missing_record_
         decl_id="struct:Forward",
         name="Forward",
         c_name="Forward",
-        fields=[],
+        fields=(),
         size_bytes=0,
         align_bytes=0,
         is_complete=False,
@@ -294,15 +272,14 @@ def test_collect_layout_record_checks_skips_incomplete_union_and_missing_record_
         decl_id="union:Payload",
         name="Payload",
         c_name="Payload",
-        fields=[Field(name="x", source_name="x", type=_i32(), byte_offset=0, size_bytes=4)],
+        fields=(Field(name="x", source_name="x", type=_i32(), byte_offset=0, size_bytes=4),),
         size_bytes=4,
         align_bytes=4,
         is_union=True,
     )
     assert (
         collect_layout_record_checks(
-            normalized_unit=_unit(incomplete, union),
-            mojo_module=_module(),
+            normalized_unit=_unit(incomplete, union), mojo_module=_module()
         )
         == ()
     )
@@ -313,21 +290,16 @@ def test_render_layout_test_module_imports_records_and_calls_tests() -> None:
         decl_id="struct:Sample",
         name="Sample",
         c_name="Sample",
-        fields=[Field(name="x", source_name="x", type=_i32(), byte_offset=0, size_bytes=4)],
+        fields=(Field(name="x", source_name="x", type=_i32(), byte_offset=0, size_bytes=4),),
         size_bytes=4,
         align_bytes=4,
     )
     mojo_decl = StructDecl(
-        name="Sample",
-        members=[StoredMember(0, "x", BuiltinType(MojoBuiltin.C_INT), 0)],
+        name="Sample", members=(StoredMember(0, "x", BuiltinType(MojoBuiltin.C_INT), 0),)
     )
-
     out = render_layout_test_module(
-        normalized_unit=_unit(decl),
-        mojo_module=_module(mojo_decl),
-        main_module_name="bindings",
+        normalized_unit=_unit(decl), mojo_module=_module(mojo_decl), main_module_name="bindings"
     )
-
     assert "from std.sys.info import align_of, size_of" in out
     assert "from std.testing import TestSuite" in out
     assert "from std.reflection import reflect" in out

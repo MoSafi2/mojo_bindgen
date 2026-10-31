@@ -8,33 +8,37 @@ from mojo_bindgen import BindgenOptions, bindgen
 from mojo_bindgen.analysis.facts.type_layout import type_layout
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
-    Array,
     AtomicType,
     BuiltinType,
     FunctionDecl,
     FunctionKind,
     IntKind,
     IntType,
+    MojoArray,
     MojoBuiltin,
     NamedType,
     ParametricBase,
     ParametricType,
     TypeArg,
 )
+from mojo_bindgen.serde import decode_node, to_debug_dict
+from tests.bindgen_helpers import DEFAULT_TARGET_QUERIES
 
 
 def test_atomic_layout_is_not_assumed_transparent() -> None:
     value = IntType(IntKind.INT, 4, 4)
     atomic = AtomicType(value, size_bytes=16, align_bytes=16)
     assert type_layout(atomic) == (16, 16)
-    assert MapTypePass().run(atomic) == Array(BuiltinType(MojoBuiltin.UINT8), 16)
-    compatible = AtomicType(value, size_bytes=4, align_bytes=4)
-    assert MapTypePass().run(compatible) == ParametricType(
-        ParametricBase.ATOMIC, [TypeArg(BuiltinType(MojoBuiltin.C_INT))]
+    assert MapTypePass(queries=DEFAULT_TARGET_QUERIES).run(atomic) == MojoArray(
+        BuiltinType(MojoBuiltin.UINT8), 16
     )
-    assert AtomicType.from_json_dict(atomic.to_json_dict()) == atomic
-    assert AtomicType.from_json_dict(
-        {"kind": "AtomicType", "value_type": value.to_json_dict()}
+    compatible = AtomicType(value, size_bytes=4, align_bytes=4)
+    assert MapTypePass(queries=DEFAULT_TARGET_QUERIES).run(compatible) == ParametricType(
+        ParametricBase.ATOMIC, (TypeArg(BuiltinType(MojoBuiltin.C_INT)),)
+    )
+    assert decode_node(to_debug_dict(atomic), AtomicType) == atomic
+    assert decode_node(
+        {"kind": "AtomicType", "fields": {"value_type": to_debug_dict(value)}}, AtomicType
     ) == AtomicType(value)
 
 
@@ -63,15 +67,11 @@ def test_plain_and_explicit_char_signedness(tmp_path: Path, target, flag, plain)
 
 
 @pytest.mark.parametrize("count", [None, 0, 2])
-def test_variadic_metadata_roundtrips_without_breaking_old_ir(count) -> None:
+def test_variadic_metadata_roundtrips_current_ir(count) -> None:
     function = FunctionDecl("example", "example", num_fixed_args=count)
-    payload = function.to_json_dict()
-    assert FunctionDecl.from_json_dict(payload) == function
-    if count is None:
-        assert "num_fixed_args" not in payload
-        assert FunctionDecl.from_json_dict(payload).num_fixed_args is None
-    else:
-        assert payload["num_fixed_args"] == count
+    payload = to_debug_dict(function)
+    assert decode_node(payload, FunctionDecl) == function
+    assert payload["fields"]["num_fixed_args"] == count
 
 
 def test_non_register_return_and_inline_variadic_are_stubs(tmp_path: Path) -> None:
