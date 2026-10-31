@@ -1,0 +1,45 @@
+# Development recipe. Published recipes must use an immutable source commit.
+context:
+  version: "0.3.5"
+  mojo_version: "1.3.0.dev2026103105"
+
+package:
+  name: mojo-bindgen-native
+  version: ${{ version }}
+
+source:
+  path: ../..
+
+build:
+  number: 0
+  script:
+    interpreter: bash
+    content:
+      - mkdir -p "${PREFIX}/bin" "${PREFIX}/lib/mojo"
+      - mojo precompile mojo/mojo_bindgen -o "${PREFIX}/lib/mojo/mojo_bindgen.mojoc"
+      - mojo build -I mojo mojo/main.mojo -o "${PREFIX}/bin/mojo-bindgen-mojo"
+
+requirements:
+  build:
+    - mojo-compiler ==${{ mojo_version }}
+  host:
+    - mojo-compiler ==${{ mojo_version }}
+  run:
+    - mojo-compiler ==${{ mojo_version }}
+    - __glibc >=2.34,<3
+
+# libclang_mojo and its libclang/shim dependencies are added with the frontend stage.
+tests:
+  - script:
+      - mojo-bindgen-mojo --version
+      - mojo run test_import.mojo
+    files:
+      recipe:
+        - test_import.mojo
+
+about:
+  homepage: https://github.com/MoSafi2/mojo_bindgen
+  repository: https://github.com/MoSafi2/mojo_bindgen
+  license: MIT
+  license_file: LICENSE
+  summary: Native Mojo bindgen recursive type-mapping library (first rewrite slice)

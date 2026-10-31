@@ -10,6 +10,13 @@ The goal is simple: make binding generation easy and faithful as possible to the
 actual C surface, and fail conservatively when a declaration cannot be modeled
 correctly.
 
+## Native rewrite
+
+A native Mojo implementation is being developed alongside Python. The first slice
+provides recursive type IR and type mapping; Python remains the supported binding
+generator. See [native development and packaging](mojo/README.md) and the
+[staged roadmap](agent_docs/native_mojo_roadmap.md).
+
 ## Requirements
 
 - Python 3.14+

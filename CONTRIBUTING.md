@@ -104,3 +104,12 @@ re-baselining blindly. In particular:
 - keep surface goldens honest about the exact emitted Mojo API
 - keep e2e expectations aligned with both `external_call` and `owned_dl_handle`
 - prefer conservative behavior over output that looks nicer but misrepresents C
+
+## Native Mojo development
+
+The native rewrite has its own pinned nightly manifest and lock under `mojo/`.
+Use `pixi run --locked check-native` for native format/build checks, O0/O3
+ownership tests, and Python/native parity. `pixi run --locked check-light` keeps
+its existing stable-toolchain Python scope; the full pytest suite includes the
+expensive native parity cases and therefore also requires Pixi and the native lock.
+See [the native README](mojo/README.md) for setup, packaging and compiler constraints.

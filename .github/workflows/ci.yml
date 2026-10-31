@@ -46,3 +46,17 @@ jobs:
         run: pixi run --locked pytest -q tests/e2e
         env:
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
+
+  native-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          cache: true
+      - name: Install C toolchain for the Python comparison frontend
+        run: sudo apt-get update && sudo apt-get install -y clang libclang1
+      - name: Install pinned native nightly
+        run: pixi install --manifest-path mojo/pixi.toml --locked
+      - name: Validate native library and Python parity
+        run: pixi run --locked check-native

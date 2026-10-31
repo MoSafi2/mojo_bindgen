@@ -22,6 +22,11 @@ install = { features = [], solve-group = "main" }
 PATH = "$PIXI_PROJECT_ROOT/bin:$PATH"
 
 [tasks]
+native-build = "pixi run --manifest-path mojo/pixi.toml --locked build"
+native-test = "pixi run --manifest-path mojo/pixi.toml --locked test"
+native-format-check = "pixi run --manifest-path mojo/pixi.toml --locked format-check"
+native-parity = "pytest -q tests/parity"
+check-native = { depends-on = ["native-format-check", "native-build", "native-test", "native-parity"] }
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"

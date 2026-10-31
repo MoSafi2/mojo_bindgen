@@ -15,5 +15,10 @@ examples/cairo/cairo_smoke_2
 todo.md
 *.h
 *.mojo
+!/mojo/**/*.mojo
+!/tests/mojo/*.mojo
+!/tests/mojo/**/*.mojo
+/mojo/.pixi/
+*.mojoc
 io_uring.json
 io_uring.rs
