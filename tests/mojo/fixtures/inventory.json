@@ -1806,5 +1806,13 @@
     "native_test": "test_unicode_target_unsigned_char",
     "native_source": "tests/mojo/suites/test_frontend.mojo",
     "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_c_abi_memory_returns",
+    "fixture": "test_c_abi_returns/memory_returns.json",
+    "group": "test_c_abi_returns",
+    "native_test": "test_c_abi_memory_returns",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_c_abi_returns.mojo"
   }
 ]

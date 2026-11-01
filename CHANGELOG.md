@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased — 0.4.0]
 
+- Emit Mojo 1.2-compatible direct C declarations for eligible fixed-array record
+  returns, retaining conservative layout checks and dynamic-loading restrictions.
+- Derive IR payload equality, share analysis facts and avoid retaining diagnostic
+  snapshots during production generation. Verify finalized MojoIR before emission.
+
 - Make Mojo the production generator for both PyPI and Conda distributions under
   the single `mojo-bindgen` package and command. Retain a Typer/Rich Python CLI
   facade with help, completion, colors and native diagnostic presentation.

@@ -22,6 +22,12 @@ struct AnalysisArtifacts(Copyable, Movable):
     var mojo_module: MojoModule
 
 
+@fieldwise_init
+struct NormalizedAnalysis(Copyable, Movable):
+    var normalized_unit: ArcPointer[Unit]
+    var mojo_module: MojoModule
+
+
 struct AnalysisOrchestrator(Copyable, Movable):
     var options: MojoEmitOptions
 
@@ -56,4 +62,11 @@ struct AnalysisOrchestrator(Copyable, Movable):
         return AnalysisArtifacts(raw^, validated^, normalized^, context^, mapped^, final^)
 
     def analyze(self, unit: Unit) raises -> MojoModule:
-        return self.analyze_pipeline(unit).mojo_module.copy()
+        var result = self.analyze_normalized(unit)
+        return result.mojo_module.copy()
+
+    def analyze_normalized(self, unit: Unit) raises -> NormalizedAnalysis:
+        var normalized = ArcPointer(self.normalize_cir(unit))
+        var mapped = self.map_normalized(normalized)
+        var final = self.finalize(mapped)
+        return NormalizedAnalysis(normalized^, final^)

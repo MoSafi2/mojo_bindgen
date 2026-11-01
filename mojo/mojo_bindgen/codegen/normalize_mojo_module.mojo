@@ -2,6 +2,7 @@
 from std.memory import ArcPointer
 from ..ir import *
 from ..analysis.traversal import validate_mojo_module
+from ..analysis.mojo.validate_finalized import validate_finalized_mojo_module
 from ..analysis.common import mojo_ident, mojo_align_decorator_ok, sort_strings
 
 
@@ -399,7 +400,9 @@ struct _NormalizeState(Movable):
             case .global_decl(v):
                 self.type_imports(v.value_type.ptr()[])
 
-    def dependencies(mut self, decls: List[MojoDecl]) raises -> ModuleDependencies:
+    def dependencies(
+        mut self, decls: List[MojoDecl], compatibility_imports: Bool = True
+    ) raises -> ModuleDependencies:
         var seeded = self.module.dependencies.copy()
         for imp in seeded.imports:
             for name in imp.names:
@@ -457,7 +460,7 @@ struct _NormalizeState(Movable):
                 case _:
                     external = True
             self.decl_imports(d)
-        if external and self.module.link_mode == LinkMode.EXTERNAL_CALL:
+        if compatibility_imports and external and self.module.link_mode == LinkMode.EXTERNAL_CALL:
             self.record_import("std.ffi", "external_call")
         var result = ModuleDependencies()
         var ffi = List[String]()
@@ -544,7 +547,16 @@ def normalize_mojo_module(module: MojoModule) raises -> MojoModule:
             if current == rank:
                 result.decls.append(d.copy())
     result.dependencies = state.dependencies(result.decls)
+    validate_finalized_mojo_module(result, result.dependencies)
     return result^
+
+
+def required_module_dependencies(module: MojoModule) raises -> ModuleDependencies:
+    validate_mojo_module(module)
+    var bare = module.copy()
+    bare.dependencies = ModuleDependencies()
+    var state = _NormalizeState(bare)
+    return state.dependencies(module.decls, compatibility_imports=False)
 
 
 struct NormalizeMojoModulePass:

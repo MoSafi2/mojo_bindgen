@@ -3,6 +3,7 @@ from std.memory import ArcPointer
 from ...ir import *
 from ..common import mojo_ident
 from ..facts.type_layout import peel_layout_wrappers
+from ..facts.c_abi import CABIQueries
 from .mojo_emit_options import MojoEmitOptions
 from .type_mapping import MapTypePass
 from .const_expr_mapping import MapConstExprPass
@@ -26,8 +27,10 @@ struct MappingSession(Copyable, Movable):
 struct UnitDeclMapper(Movable):
     var session: MappingSession
     var emitted_const_names: Dict[String, Bool]
+    var c_abi: CABIQueries
 
     def __init__(out self, var session: MappingSession):
+        self.c_abi = CABIQueries(session.struct_context.facts.copy())
         self.session = session^
         self.emitted_const_names = Dict[String, Bool]()
 
@@ -168,7 +171,7 @@ struct UnitDeclMapper(Movable):
                     out.append(MojoDecl.struct_decl(map_struct(v, self.session.struct_context)))
         return out^
 
-    def _function(self, v: Function) raises -> FunctionDecl:
+    def _function(mut self, v: Function) raises -> FunctionDecl:
         require_c_calling_convention(v.calling_convention)
         var kind = FunctionKind.WRAPPER
         var notes = List[MappingNote]()
@@ -182,6 +185,12 @@ struct UnitDeclMapper(Movable):
         elif v.is_variadic and self.session.options.linking == LinkMode.OWNED_DL_HANDLE:
             kind = FunctionKind.VARIADIC_STUB
             notes.append(stub_note("OwnedDLHandle does not expose variadic C ABI metadata"))
+        elif (
+            not v.is_variadic
+            and self.session.options.linking == LinkMode.EXTERNAL_CALL
+            and self.c_abi.memory_return_eligible(v)
+        ):
+            kind = FunctionKind.EXTERN_DECLARATION
         var params = List[MojoParam]()
         for i in range(len(v.params)):
             var p = v.params[i].copy()

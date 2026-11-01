@@ -219,6 +219,7 @@ __enum GlobalKind(Equatable, ImplicitlyCopyable, Movable):
 
 __enum FunctionKind(Equatable, ImplicitlyCopyable, Movable):
     case WRAPPER
+    case EXTERN_DECLARATION
     case VARIADIC_STUB
     case DIRECTIVE_STUB
     case NON_REGISTER_RETURN_STUB
@@ -227,6 +228,8 @@ __enum FunctionKind(Equatable, ImplicitlyCopyable, Movable):
         match self:
             case .WRAPPER:
                 return "wrapper"
+            case .EXTERN_DECLARATION:
+                return "extern_declaration"
             case .VARIADIC_STUB:
                 return "variadic_stub"
             case .DIRECTIVE_STUB:
@@ -463,7 +466,7 @@ __enum PrimitiveKind(Equatable, ImplicitlyCopyable, Movable):
                 return v.value()
 
 
-struct DocComment(Copyable, Movable):
+struct DocComment(Copyable, Equatable, Movable):
     var text: String
     var brief: Optional[String]
     var source: String
@@ -479,7 +482,7 @@ struct DocComment(Copyable, Movable):
         self.source = source^
 
 
-struct Qualifiers(Copyable, Movable):
+struct Qualifiers(Copyable, Equatable, Movable):
     var is_const: Bool
     var is_volatile: Bool
     var is_restrict: Bool
@@ -495,12 +498,12 @@ struct Qualifiers(Copyable, Movable):
         self.is_restrict = is_restrict
 
 
-struct VoidType(Copyable, Movable):
+struct VoidType(Copyable, Equatable, Movable):
     def __init__(out self):
         pass
 
 
-struct IntType(Copyable, Movable):
+struct IntType(Copyable, Equatable, Movable):
     var int_kind: IntKind
     var size_bytes: Int
     var align_bytes: Optional[Int]
@@ -519,7 +522,7 @@ struct IntType(Copyable, Movable):
         self.ext_bits = ext_bits^
 
 
-struct FloatType(Copyable, Movable):
+struct FloatType(Copyable, Equatable, Movable):
     var float_kind: FloatKind
     var size_bytes: Int
     var align_bytes: Optional[Int]
@@ -535,7 +538,7 @@ struct FloatType(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct QualifiedType(Copyable, Movable):
+struct QualifiedType(Copyable, Equatable, Movable):
     var unqualified: ArcPointer[CType]
     var qualifiers: Qualifiers
 
@@ -546,7 +549,7 @@ struct QualifiedType(Copyable, Movable):
         self.qualifiers = qualifiers^
 
 
-struct AtomicType(Copyable, Movable):
+struct AtomicType(Copyable, Equatable, Movable):
     var value_type: ArcPointer[CType]
     var size_bytes: Optional[Int]
     var align_bytes: Optional[Int]
@@ -562,7 +565,7 @@ struct AtomicType(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct CPointer(Copyable, Movable):
+struct CPointer(Copyable, Equatable, Movable):
     var pointee: Optional[ArcPointer[CType]]
     var size_bytes: Int
     var align_bytes: Optional[Int]
@@ -578,7 +581,7 @@ struct CPointer(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct MojoPointer(Copyable, Movable):
+struct MojoPointer(Copyable, Equatable, Movable):
     var pointee: Optional[ArcPointer[MojoType]]
     var mutability: PointerMutability
     var origin: PointerOrigin
@@ -597,7 +600,7 @@ struct MojoPointer(Copyable, Movable):
         self.nullable = nullable
 
 
-struct CArray(Copyable, Movable):
+struct CArray(Copyable, Equatable, Movable):
     var element: ArcPointer[CType]
     var size: Optional[Int]
     var array_kind: ArrayKind
@@ -619,7 +622,7 @@ struct CArray(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct MojoArray(Copyable, Movable):
+struct MojoArray(Copyable, Equatable, Movable):
     var element: ArcPointer[MojoType]
     var size: Int
 
@@ -628,7 +631,7 @@ struct MojoArray(Copyable, Movable):
         self.size = size
 
 
-struct CFunctionPtr(Copyable, Movable):
+struct CFunctionPtr(Copyable, Equatable, Movable):
     var ret: ArcPointer[CType]
     var params: List[CParam]
     var param_names: Optional[List[String]]
@@ -659,7 +662,7 @@ struct CFunctionPtr(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct MojoFunctionPtr(Copyable, Movable):
+struct MojoFunctionPtr(Copyable, Equatable, Movable):
     var ret: ArcPointer[MojoType]
     var params: List[MojoParam]
     var abi: String
@@ -681,7 +684,7 @@ struct MojoFunctionPtr(Copyable, Movable):
         self.raises_error = raises_error
 
 
-struct FunctionAttrs(Copyable, Movable):
+struct FunctionAttrs(Copyable, Equatable, Movable):
     var inline_disposition: InlineDisposition
     var is_noreturn: Bool
 
@@ -694,7 +697,7 @@ struct FunctionAttrs(Copyable, Movable):
         self.is_noreturn = is_noreturn
 
 
-struct OpaqueRecordRef(Copyable, Movable):
+struct OpaqueRecordRef(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var c_name: String
@@ -719,7 +722,7 @@ struct OpaqueRecordRef(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct UnsupportedType(Copyable, Movable):
+struct UnsupportedType(Copyable, Equatable, Movable):
     var category: UnsupportedTypeCategory
     var spelling: String
     var reason: String
@@ -741,7 +744,7 @@ struct UnsupportedType(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct ComplexType(Copyable, Movable):
+struct ComplexType(Copyable, Equatable, Movable):
     var element: FloatType
     var size_bytes: Int
     var align_bytes: Optional[Int]
@@ -754,7 +757,7 @@ struct ComplexType(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct VectorType(Copyable, Movable):
+struct VectorType(Copyable, Equatable, Movable):
     var element: ArcPointer[CType]
     var count: Optional[Int]
     var size_bytes: Int
@@ -776,7 +779,7 @@ struct VectorType(Copyable, Movable):
         self.align_bytes = align_bytes^
 
 
-struct StructRef(Copyable, Movable):
+struct StructRef(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var c_name: String
@@ -804,7 +807,7 @@ struct StructRef(Copyable, Movable):
         self.is_anonymous = is_anonymous
 
 
-struct EnumRef(Copyable, Movable):
+struct EnumRef(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var c_name: String
@@ -819,7 +822,7 @@ struct EnumRef(Copyable, Movable):
         self.underlying = underlying^
 
 
-struct TypeRef(Copyable, Movable):
+struct TypeRef(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var canonical: ArcPointer[CType]
@@ -830,7 +833,7 @@ struct TypeRef(Copyable, Movable):
         self.canonical = canonical^
 
 
-struct Field(Copyable, Movable):
+struct Field(Copyable, Equatable, Movable):
     var name: String
     var source_name: String
     var type: ArcPointer[CType]
@@ -870,7 +873,7 @@ struct Field(Copyable, Movable):
         self.doc = doc^
 
 
-struct Struct(Copyable, Movable):
+struct Struct(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var c_name: String
@@ -913,61 +916,61 @@ struct Struct(Copyable, Movable):
         self.doc = doc^
 
 
-struct IntLiteral(Copyable, Movable):
+struct IntLiteral(Copyable, Equatable, Movable):
     var value: IntegerValue
 
     def __init__(out self, var value: IntegerValue):
         self.value = value^
 
 
-struct CFloatLiteral(Copyable, Movable):
+struct CFloatLiteral(Copyable, Equatable, Movable):
     var spelling: String
 
     def __init__(out self, var spelling: String):
         self.spelling = spelling^
 
 
-struct MojoFloatLiteral(Copyable, Movable):
+struct MojoFloatLiteral(Copyable, Equatable, Movable):
     var value: Float64
 
     def __init__(out self, var value: Float64):
         self.value = value
 
 
-struct StringLiteral(Copyable, Movable):
+struct StringLiteral(Copyable, Equatable, Movable):
     var value: String
 
     def __init__(out self, var value: String):
         self.value = value^
 
 
-struct CharLiteral(Copyable, Movable):
+struct CharLiteral(Copyable, Equatable, Movable):
     var value: String
 
     def __init__(out self, var value: String):
         self.value = value^
 
 
-struct CNullPtrLiteral(Copyable, Movable):
+struct CNullPtrLiteral(Copyable, Equatable, Movable):
     def __init__(out self):
         pass
 
 
-struct CRefExpr(Copyable, Movable):
+struct CRefExpr(Copyable, Equatable, Movable):
     var name: String
 
     def __init__(out self, var name: String):
         self.name = name^
 
 
-struct MojoRefExpr(Copyable, Movable):
+struct MojoRefExpr(Copyable, Equatable, Movable):
     var name: String
 
     def __init__(out self, var name: String):
         self.name = name^
 
 
-struct CUnaryExpr(Copyable, Movable):
+struct CUnaryExpr(Copyable, Equatable, Movable):
     var op: String
     var operand: ArcPointer[CConstExpr]
 
@@ -976,7 +979,7 @@ struct CUnaryExpr(Copyable, Movable):
         self.operand = operand^
 
 
-struct MojoUnaryExpr(Copyable, Movable):
+struct MojoUnaryExpr(Copyable, Equatable, Movable):
     var op: String
     var operand: ArcPointer[MojoConstExpr]
 
@@ -985,7 +988,7 @@ struct MojoUnaryExpr(Copyable, Movable):
         self.operand = operand^
 
 
-struct CBinaryExpr(Copyable, Movable):
+struct CBinaryExpr(Copyable, Equatable, Movable):
     var op: String
     var lhs: ArcPointer[CConstExpr]
     var rhs: ArcPointer[CConstExpr]
@@ -998,7 +1001,7 @@ struct CBinaryExpr(Copyable, Movable):
         self.rhs = rhs^
 
 
-struct MojoBinaryExpr(Copyable, Movable):
+struct MojoBinaryExpr(Copyable, Equatable, Movable):
     var op: String
     var lhs: ArcPointer[MojoConstExpr]
     var rhs: ArcPointer[MojoConstExpr]
@@ -1014,7 +1017,7 @@ struct MojoBinaryExpr(Copyable, Movable):
         self.rhs = rhs^
 
 
-struct CCastExpr(Copyable, Movable):
+struct CCastExpr(Copyable, Equatable, Movable):
     var target: ArcPointer[CType]
     var expr: ArcPointer[CConstExpr]
 
@@ -1023,7 +1026,7 @@ struct CCastExpr(Copyable, Movable):
         self.expr = expr^
 
 
-struct MojoCastExpr(Copyable, Movable):
+struct MojoCastExpr(Copyable, Equatable, Movable):
     var target: ArcPointer[MojoType]
     var expr: ArcPointer[MojoConstExpr]
 
@@ -1032,21 +1035,21 @@ struct MojoCastExpr(Copyable, Movable):
         self.expr = expr^
 
 
-struct CSizeOfExpr(Copyable, Movable):
+struct CSizeOfExpr(Copyable, Equatable, Movable):
     var target: ArcPointer[CType]
 
     def __init__(out self, var target: ArcPointer[CType]):
         self.target = target^
 
 
-struct MojoSizeOfExpr(Copyable, Movable):
+struct MojoSizeOfExpr(Copyable, Equatable, Movable):
     var target: ArcPointer[MojoType]
 
     def __init__(out self, var target: ArcPointer[MojoType]):
         self.target = target^
 
 
-struct CCallExpr(Copyable, Movable):
+struct CCallExpr(Copyable, Equatable, Movable):
     var callee: ArcPointer[CConstExpr]
     var args: List[ArcPointer[CConstExpr]]
 
@@ -1059,7 +1062,7 @@ struct CCallExpr(Copyable, Movable):
         self.args = args^
 
 
-struct MojoCallExpr(Copyable, Movable):
+struct MojoCallExpr(Copyable, Equatable, Movable):
     var callee: ArcPointer[MojoConstExpr]
     var args: List[ArcPointer[MojoConstExpr]]
 
@@ -1072,7 +1075,7 @@ struct MojoCallExpr(Copyable, Movable):
         self.args = args^
 
 
-struct Enumerant(Copyable, Movable):
+struct Enumerant(Copyable, Equatable, Movable):
     var name: String
     var c_name: String
     var value: IntegerValue
@@ -1094,7 +1097,7 @@ struct Enumerant(Copyable, Movable):
         self.doc = doc^
 
 
-struct Enum(Copyable, Movable):
+struct Enum(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var c_name: String
@@ -1125,7 +1128,7 @@ struct Enum(Copyable, Movable):
         self.doc = doc^
 
 
-struct Typedef(Copyable, Movable):
+struct Typedef(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var aliased: ArcPointer[CType]
@@ -1147,7 +1150,7 @@ struct Typedef(Copyable, Movable):
         self.doc = doc^
 
 
-struct CParam(Copyable, Movable):
+struct CParam(Copyable, Equatable, Movable):
     var name: String
     var type: ArcPointer[CType]
     var doc: Optional[DocComment]
@@ -1160,7 +1163,7 @@ struct CParam(Copyable, Movable):
         self.doc = doc^
 
 
-struct MojoParam(Copyable, Movable):
+struct MojoParam(Copyable, Equatable, Movable):
     var name: String
     var type: ArcPointer[MojoType]
     var doc: Optional[DocComment]
@@ -1176,7 +1179,7 @@ struct MojoParam(Copyable, Movable):
         self.doc = doc^
 
 
-struct Function(Copyable, Movable):
+struct Function(Copyable, Equatable, Movable):
     var name: String
     var link_name: String
     var ret: ArcPointer[CType]
@@ -1210,7 +1213,7 @@ struct Function(Copyable, Movable):
         self.doc = doc^
 
 
-struct Const(Copyable, Movable):
+struct Const(Copyable, Equatable, Movable):
     var name: String
     var type: ArcPointer[CType]
     var expr: ArcPointer[CConstExpr]
@@ -1229,7 +1232,7 @@ struct Const(Copyable, Movable):
         self.doc = doc^
 
 
-struct MacroDecl(Copyable, Movable):
+struct MacroDecl(Copyable, Equatable, Movable):
     var name: String
     var tokens: List[String]
     var kind: MacroDeclKind
@@ -1257,7 +1260,7 @@ struct MacroDecl(Copyable, Movable):
         self.doc = doc^
 
 
-struct GlobalVar(Copyable, Movable):
+struct GlobalVar(Copyable, Equatable, Movable):
     var decl_id: String
     var name: String
     var link_name: String
@@ -1285,7 +1288,7 @@ struct GlobalVar(Copyable, Movable):
         self.doc = doc^
 
 
-struct IRDiagnostic(Copyable, Movable):
+struct IRDiagnostic(Copyable, Equatable, Movable):
     var severity: String
     var message: String
     var file: Optional[String]
@@ -1310,7 +1313,7 @@ struct IRDiagnostic(Copyable, Movable):
         self.decl_id = decl_id^
 
 
-struct TargetABI(Copyable, Movable):
+struct TargetABI(Copyable, Equatable, Movable):
     var pointer_size_bytes: Int
     var pointer_align_bytes: Int
     var byte_order: ByteOrder
@@ -1329,7 +1332,7 @@ struct TargetABI(Copyable, Movable):
         self.target_triple = target_triple^
 
 
-struct Unit(Copyable, Movable):
+struct Unit(Copyable, Equatable, Movable):
     var source_header: String
     var library: String
     var link_name: String
@@ -1354,7 +1357,7 @@ struct Unit(Copyable, Movable):
         self.diagnostics = diagnostics^
 
 
-struct PrimitiveDType(Copyable, Movable):
+struct PrimitiveDType(Copyable, Equatable, Movable):
     var kind: PrimitiveKind
     var signed: Bool
     var dtype: String
@@ -1369,7 +1372,7 @@ struct PrimitiveDType(Copyable, Movable):
         self.width_bytes = width_bytes
 
 
-struct MappingNote(Copyable, Movable):
+struct MappingNote(Copyable, Equatable, Movable):
     var severity: MappingSeverity
     var message: String
     var category: String
@@ -1382,7 +1385,7 @@ struct MappingNote(Copyable, Movable):
         self.category = category^
 
 
-struct ModuleImport(Copyable, Movable):
+struct ModuleImport(Copyable, Equatable, Movable):
     var module: String
     var names: List[String]
 
@@ -1391,14 +1394,14 @@ struct ModuleImport(Copyable, Movable):
         self.names = names^
 
 
-struct SupportDecl(Copyable, Movable):
+struct SupportDecl(Copyable, Equatable, Movable):
     var kind: SupportDeclKind
 
     def __init__(out self, var kind: SupportDeclKind):
         self.kind = kind^
 
 
-struct ModuleDependencies(Copyable, Movable):
+struct ModuleDependencies(Copyable, Equatable, Movable):
     var imports: List[ModuleImport]
     var support_decls: List[SupportDecl]
 
@@ -1411,49 +1414,49 @@ struct ModuleDependencies(Copyable, Movable):
         self.support_decls = support_decls^
 
 
-struct BuiltinType(Copyable, Movable):
+struct BuiltinType(Copyable, Equatable, Movable):
     var name: MojoBuiltin
 
     def __init__(out self, var name: MojoBuiltin):
         self.name = name^
 
 
-struct NamedType(Copyable, Movable):
+struct NamedType(Copyable, Equatable, Movable):
     var name: String
 
     def __init__(out self, var name: String):
         self.name = name^
 
 
-struct DTypeArg(Copyable, Movable):
+struct DTypeArg(Copyable, Equatable, Movable):
     var value: String
 
     def __init__(out self, var value: String):
         self.value = value^
 
 
-struct ConstArg(Copyable, Movable):
+struct ConstArg(Copyable, Equatable, Movable):
     var value: IntegerValue
 
     def __init__(out self, var value: IntegerValue):
         self.value = value^
 
 
-struct NameArg(Copyable, Movable):
+struct NameArg(Copyable, Equatable, Movable):
     var value: String
 
     def __init__(out self, var value: String):
         self.value = value^
 
 
-struct TypeArg(Copyable, Movable):
+struct TypeArg(Copyable, Equatable, Movable):
     var type: ArcPointer[MojoType]
 
     def __init__(out self, var type: ArcPointer[MojoType]):
         self.type = type^
 
 
-struct ParametricType(Copyable, Movable):
+struct ParametricType(Copyable, Equatable, Movable):
     var base: ParametricBase
     var args: List[ParametricArg]
 
@@ -1464,7 +1467,7 @@ struct ParametricType(Copyable, Movable):
         self.args = args^
 
 
-struct StoredMember(Copyable, Movable):
+struct StoredMember(Copyable, Equatable, Movable):
     var index: Int
     var name: String
     var type: ArcPointer[MojoType]
@@ -1486,7 +1489,7 @@ struct StoredMember(Copyable, Movable):
         self.doc = doc^
 
 
-struct PaddingMember(Copyable, Movable):
+struct PaddingMember(Copyable, Equatable, Movable):
     var name: String
     var size_bytes: Int
     var byte_offset: Int
@@ -1497,7 +1500,7 @@ struct PaddingMember(Copyable, Movable):
         self.byte_offset = byte_offset
 
 
-struct OpaqueStorageMember(Copyable, Movable):
+struct OpaqueStorageMember(Copyable, Equatable, Movable):
     var name: String
     var size_bytes: Int
 
@@ -1506,7 +1509,7 @@ struct OpaqueStorageMember(Copyable, Movable):
         self.size_bytes = size_bytes
 
 
-struct BitfieldField(Copyable, Movable):
+struct BitfieldField(Copyable, Equatable, Movable):
     var index: Int
     var name: String
     var logical_type: ArcPointer[MojoType]
@@ -1537,7 +1540,7 @@ struct BitfieldField(Copyable, Movable):
         self.doc = doc^
 
 
-struct BitfieldGroupMember(Copyable, Movable):
+struct BitfieldGroupMember(Copyable, Equatable, Movable):
     var storage_name: String
     var storage_type: ArcPointer[MojoType]
     var byte_offset: Int
@@ -1562,7 +1565,7 @@ struct BitfieldGroupMember(Copyable, Movable):
         self.fields = fields^
 
 
-struct ComptimeMember(Copyable, Movable):
+struct ComptimeMember(Copyable, Equatable, Movable):
     var name: String
     var type_value: Optional[ArcPointer[MojoType]]
     var const_value: Optional[ArcPointer[MojoConstExpr]]
@@ -1578,7 +1581,7 @@ struct ComptimeMember(Copyable, Movable):
         self.const_value = const_value^
 
 
-struct InitializerParam(Copyable, Movable):
+struct InitializerParam(Copyable, Equatable, Movable):
     var name: String
     var type: ArcPointer[MojoType]
 
@@ -1587,14 +1590,14 @@ struct InitializerParam(Copyable, Movable):
         self.type = type^
 
 
-struct Initializer(Copyable, Movable):
+struct Initializer(Copyable, Equatable, Movable):
     var params: List[InitializerParam]
 
     def __init__(out self, var params: List[InitializerParam] = List[InitializerParam]()):
         self.params = params^
 
 
-struct FlexibleTail(Copyable, Movable):
+struct FlexibleTail(Copyable, Equatable, Movable):
     var field_name: String
     var element_type: ArcPointer[MojoType]
     var pattern: String
@@ -1613,7 +1616,7 @@ struct FlexibleTail(Copyable, Movable):
         self.byte_offset = byte_offset
 
 
-struct StructDecl(Copyable, Movable):
+struct StructDecl(Copyable, Equatable, Movable):
     var name: String
     var traits: List[StructTraits]
     var passability: MojoPassability
@@ -1659,7 +1662,7 @@ struct StructDecl(Copyable, Movable):
         self.doc = doc^
 
 
-struct AliasDecl(Copyable, Movable):
+struct AliasDecl(Copyable, Equatable, Movable):
     var name: String
     var kind: AliasKind
     var type_value: Optional[ArcPointer[MojoType]]
@@ -1687,7 +1690,7 @@ struct AliasDecl(Copyable, Movable):
         self.doc = doc^
 
 
-struct CallTarget(Copyable, Movable):
+struct CallTarget(Copyable, Equatable, Movable):
     var link_mode: LinkMode
     var symbol: String
 
@@ -1696,7 +1699,7 @@ struct CallTarget(Copyable, Movable):
         self.symbol = symbol^
 
 
-struct FunctionDecl(Copyable, Movable):
+struct FunctionDecl(Copyable, Equatable, Movable):
     var name: String
     var link_name: String
     var params: List[MojoParam]
@@ -1735,7 +1738,7 @@ struct FunctionDecl(Copyable, Movable):
         self.doc = doc^
 
 
-struct GlobalDecl(Copyable, Movable):
+struct GlobalDecl(Copyable, Equatable, Movable):
     var name: String
     var link_name: String
     var value_type: ArcPointer[MojoType]
@@ -1763,7 +1766,7 @@ struct GlobalDecl(Copyable, Movable):
         self.doc = doc^
 
 
-struct MojoModule(Copyable, Movable):
+struct MojoModule(Copyable, Equatable, Movable):
     var source_header: String
     var library: String
     var link_name: String
@@ -1791,7 +1794,7 @@ struct MojoModule(Copyable, Movable):
         self.decls = decls^
 
 
-__enum CType(Copyable, Movable):
+__enum CType(Copyable, Equatable, Movable):
     case void_type(VoidType)
     case int_type(IntType)
     case float_type(FloatType)
@@ -1812,8 +1815,71 @@ __enum CType(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .void_type(a):
+                if case .void_type(b) = other:
+                    return a == b
+                return False
+            case .int_type(a):
+                if case .int_type(b) = other:
+                    return a == b
+                return False
+            case .float_type(a):
+                if case .float_type(b) = other:
+                    return a == b
+                return False
+            case .qualified_type(a):
+                if case .qualified_type(b) = other:
+                    return a == b
+                return False
+            case .atomic_type(a):
+                if case .atomic_type(b) = other:
+                    return a == b
+                return False
+            case .c_pointer(a):
+                if case .c_pointer(b) = other:
+                    return a == b
+                return False
+            case .c_array(a):
+                if case .c_array(b) = other:
+                    return a == b
+                return False
+            case .c_function_ptr(a):
+                if case .c_function_ptr(b) = other:
+                    return a == b
+                return False
+            case .opaque_record_ref(a):
+                if case .opaque_record_ref(b) = other:
+                    return a == b
+                return False
+            case .unsupported_type(a):
+                if case .unsupported_type(b) = other:
+                    return a == b
+                return False
+            case .complex_type(a):
+                if case .complex_type(b) = other:
+                    return a == b
+                return False
+            case .vector_type(a):
+                if case .vector_type(b) = other:
+                    return a == b
+                return False
+            case .struct_ref(a):
+                if case .struct_ref(b) = other:
+                    return a == b
+                return False
+            case .enum_ref(a):
+                if case .enum_ref(b) = other:
+                    return a == b
+                return False
+            case .type_ref(a):
+                if case .type_ref(b) = other:
+                    return a == b
+                return False
 
-__enum MojoType(Copyable, Movable):
+
+__enum MojoType(Copyable, Equatable, Movable):
     case builtin_type(BuiltinType)
     case named_type(NamedType)
     case mojo_pointer(MojoPointer)
@@ -1825,8 +1891,35 @@ __enum MojoType(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .builtin_type(a):
+                if case .builtin_type(b) = other:
+                    return a == b
+                return False
+            case .named_type(a):
+                if case .named_type(b) = other:
+                    return a == b
+                return False
+            case .mojo_pointer(a):
+                if case .mojo_pointer(b) = other:
+                    return a == b
+                return False
+            case .mojo_array(a):
+                if case .mojo_array(b) = other:
+                    return a == b
+                return False
+            case .mojo_function_ptr(a):
+                if case .mojo_function_ptr(b) = other:
+                    return a == b
+                return False
+            case .parametric_type(a):
+                if case .parametric_type(b) = other:
+                    return a == b
+                return False
 
-__enum ParametricArg(Copyable, Movable):
+
+__enum ParametricArg(Copyable, Equatable, Movable):
     case d_type_arg(DTypeArg)
     case const_arg(ConstArg)
     case name_arg(NameArg)
@@ -1836,8 +1929,27 @@ __enum ParametricArg(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .d_type_arg(a):
+                if case .d_type_arg(b) = other:
+                    return a == b
+                return False
+            case .const_arg(a):
+                if case .const_arg(b) = other:
+                    return a == b
+                return False
+            case .name_arg(a):
+                if case .name_arg(b) = other:
+                    return a == b
+                return False
+            case .type_arg(a):
+                if case .type_arg(b) = other:
+                    return a == b
+                return False
 
-__enum CConstExpr(Copyable, Movable):
+
+__enum CConstExpr(Copyable, Equatable, Movable):
     case int_literal(IntLiteral)
     case c_float_literal(CFloatLiteral)
     case string_literal(StringLiteral)
@@ -1854,8 +1966,55 @@ __enum CConstExpr(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .int_literal(a):
+                if case .int_literal(b) = other:
+                    return a == b
+                return False
+            case .c_float_literal(a):
+                if case .c_float_literal(b) = other:
+                    return a == b
+                return False
+            case .string_literal(a):
+                if case .string_literal(b) = other:
+                    return a == b
+                return False
+            case .char_literal(a):
+                if case .char_literal(b) = other:
+                    return a == b
+                return False
+            case .c_null_ptr_literal(a):
+                if case .c_null_ptr_literal(b) = other:
+                    return a == b
+                return False
+            case .c_ref_expr(a):
+                if case .c_ref_expr(b) = other:
+                    return a == b
+                return False
+            case .c_unary_expr(a):
+                if case .c_unary_expr(b) = other:
+                    return a == b
+                return False
+            case .c_binary_expr(a):
+                if case .c_binary_expr(b) = other:
+                    return a == b
+                return False
+            case .c_cast_expr(a):
+                if case .c_cast_expr(b) = other:
+                    return a == b
+                return False
+            case .c_size_of_expr(a):
+                if case .c_size_of_expr(b) = other:
+                    return a == b
+                return False
+            case .c_call_expr(a):
+                if case .c_call_expr(b) = other:
+                    return a == b
+                return False
 
-__enum MojoConstExpr(Copyable, Movable):
+
+__enum MojoConstExpr(Copyable, Equatable, Movable):
     case int_literal(IntLiteral)
     case mojo_float_literal(MojoFloatLiteral)
     case string_literal(StringLiteral)
@@ -1871,8 +2030,51 @@ __enum MojoConstExpr(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .int_literal(a):
+                if case .int_literal(b) = other:
+                    return a == b
+                return False
+            case .mojo_float_literal(a):
+                if case .mojo_float_literal(b) = other:
+                    return a == b
+                return False
+            case .string_literal(a):
+                if case .string_literal(b) = other:
+                    return a == b
+                return False
+            case .char_literal(a):
+                if case .char_literal(b) = other:
+                    return a == b
+                return False
+            case .mojo_ref_expr(a):
+                if case .mojo_ref_expr(b) = other:
+                    return a == b
+                return False
+            case .mojo_unary_expr(a):
+                if case .mojo_unary_expr(b) = other:
+                    return a == b
+                return False
+            case .mojo_binary_expr(a):
+                if case .mojo_binary_expr(b) = other:
+                    return a == b
+                return False
+            case .mojo_cast_expr(a):
+                if case .mojo_cast_expr(b) = other:
+                    return a == b
+                return False
+            case .mojo_size_of_expr(a):
+                if case .mojo_size_of_expr(b) = other:
+                    return a == b
+                return False
+            case .mojo_call_expr(a):
+                if case .mojo_call_expr(b) = other:
+                    return a == b
+                return False
 
-__enum Decl(Copyable, Movable):
+
+__enum Decl(Copyable, Equatable, Movable):
     case function(Function)
     case struct_decl(Struct)
     case enum_decl(Enum)
@@ -1885,8 +2087,39 @@ __enum Decl(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .function(a):
+                if case .function(b) = other:
+                    return a == b
+                return False
+            case .struct_decl(a):
+                if case .struct_decl(b) = other:
+                    return a == b
+                return False
+            case .enum_decl(a):
+                if case .enum_decl(b) = other:
+                    return a == b
+                return False
+            case .typedef(a):
+                if case .typedef(b) = other:
+                    return a == b
+                return False
+            case .const_decl(a):
+                if case .const_decl(b) = other:
+                    return a == b
+                return False
+            case .macro_decl(a):
+                if case .macro_decl(b) = other:
+                    return a == b
+                return False
+            case .global_var(a):
+                if case .global_var(b) = other:
+                    return a == b
+                return False
 
-__enum MojoDecl(Copyable, Movable):
+
+__enum MojoDecl(Copyable, Equatable, Movable):
     case struct_decl(StructDecl)
     case alias_decl(AliasDecl)
     case function_decl(FunctionDecl)
@@ -1896,8 +2129,27 @@ __enum MojoDecl(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .struct_decl(a):
+                if case .struct_decl(b) = other:
+                    return a == b
+                return False
+            case .alias_decl(a):
+                if case .alias_decl(b) = other:
+                    return a == b
+                return False
+            case .function_decl(a):
+                if case .function_decl(b) = other:
+                    return a == b
+                return False
+            case .global_decl(a):
+                if case .global_decl(b) = other:
+                    return a == b
+                return False
 
-__enum StructMember(Copyable, Movable):
+
+__enum StructMember(Copyable, Equatable, Movable):
     case stored_member(StoredMember)
     case padding_member(PaddingMember)
     case opaque_storage_member(OpaqueStorageMember)
@@ -1907,1262 +2159,25 @@ __enum StructMember(Copyable, Movable):
         # Resolve recursive lifecycle inference on the pinned compiler.
         pass
 
-
-def equal(a: ArcPointer[CConstExpr], b: ArcPointer[CConstExpr]) -> Bool:
-    return equal(a.ptr()[], b.ptr()[])
-
-
-def equal(a: ArcPointer[CType], b: ArcPointer[CType]) -> Bool:
-    return equal(a.ptr()[], b.ptr()[])
-
-
-def equal(a: ArcPointer[MojoConstExpr], b: ArcPointer[MojoConstExpr]) -> Bool:
-    return equal(a.ptr()[], b.ptr()[])
-
-
-def equal(a: ArcPointer[MojoType], b: ArcPointer[MojoType]) -> Bool:
-    return equal(a.ptr()[], b.ptr()[])
-
-
-def equal(a: List[ArcPointer[CConstExpr]], b: List[ArcPointer[CConstExpr]]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[ArcPointer[MojoConstExpr]], b: List[ArcPointer[MojoConstExpr]]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[BitfieldField], b: List[BitfieldField]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[CParam], b: List[CParam]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[ComptimeMember], b: List[ComptimeMember]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[Decl], b: List[Decl]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[Enumerant], b: List[Enumerant]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[Field], b: List[Field]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[IRDiagnostic], b: List[IRDiagnostic]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[InitializerParam], b: List[InitializerParam]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[Initializer], b: List[Initializer]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[MappingNote], b: List[MappingNote]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[ModuleImport], b: List[ModuleImport]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[MojoDecl], b: List[MojoDecl]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[MojoParam], b: List[MojoParam]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[ParametricArg], b: List[ParametricArg]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[String], b: List[String]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (a[i] == b[i]):
-            return False
-    return True
-
-
-def equal(a: List[StructMember], b: List[StructMember]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: List[StructTraits], b: List[StructTraits]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (a[i] == b[i]):
-            return False
-    return True
-
-
-def equal(a: List[SupportDecl], b: List[SupportDecl]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not (equal(a[i], b[i])):
-            return False
-    return True
-
-
-def equal(a: Optional[ArcPointer[CConstExpr]], b: Optional[ArcPointer[CConstExpr]]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[ArcPointer[CType]], b: Optional[ArcPointer[CType]]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[ArcPointer[MojoConstExpr]], b: Optional[ArcPointer[MojoConstExpr]]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[ArcPointer[MojoType]], b: Optional[ArcPointer[MojoType]]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[DocComment], b: Optional[DocComment]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[FamPattern], b: Optional[FamPattern]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return a.value() == b.value()
-
-
-def equal(a: Optional[FlexibleTail], b: Optional[FlexibleTail]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[Int], b: Optional[Int]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return a.value() == b.value()
-
-
-def equal(a: Optional[List[String]], b: Optional[List[String]]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return equal(a.value(), b.value())
-
-
-def equal(a: Optional[String], b: Optional[String]) -> Bool:
-    if Bool(a) != Bool(b):
-        return False
-    if not a:
-        return True
-    return a.value() == b.value()
-
-
-def equal(a: DocComment, b: DocComment) -> Bool:
-    return (a.text == b.text) and (equal(a.brief, b.brief)) and (a.source == b.source)
-
-
-def equal(a: Qualifiers, b: Qualifiers) -> Bool:
-    return (
-        (a.is_const == b.is_const)
-        and (a.is_volatile == b.is_volatile)
-        and (a.is_restrict == b.is_restrict)
-    )
-
-
-def equal(a: VoidType, b: VoidType) -> Bool:
-    return True
-
-
-def equal(a: IntType, b: IntType) -> Bool:
-    return (
-        (a.int_kind == b.int_kind)
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-        and (equal(a.ext_bits, b.ext_bits))
-    )
-
-
-def equal(a: FloatType, b: FloatType) -> Bool:
-    return (
-        (a.float_kind == b.float_kind)
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: QualifiedType, b: QualifiedType) -> Bool:
-    return (equal(a.unqualified, b.unqualified)) and (equal(a.qualifiers, b.qualifiers))
-
-
-def equal(a: AtomicType, b: AtomicType) -> Bool:
-    return (
-        (equal(a.value_type, b.value_type))
-        and (equal(a.size_bytes, b.size_bytes))
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: CPointer, b: CPointer) -> Bool:
-    return (
-        (equal(a.pointee, b.pointee))
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: MojoPointer, b: MojoPointer) -> Bool:
-    return (
-        (equal(a.pointee, b.pointee))
-        and (a.mutability == b.mutability)
-        and (a.origin == b.origin)
-        and (a.nullable == b.nullable)
-    )
-
-
-def equal(a: CArray, b: CArray) -> Bool:
-    return (
-        (equal(a.element, b.element))
-        and (equal(a.size, b.size))
-        and (a.array_kind == b.array_kind)
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: MojoArray, b: MojoArray) -> Bool:
-    return (equal(a.element, b.element)) and (a.size == b.size)
-
-
-def equal(a: CFunctionPtr, b: CFunctionPtr) -> Bool:
-    return (
-        (equal(a.ret, b.ret))
-        and (equal(a.params, b.params))
-        and (equal(a.param_names, b.param_names))
-        and (a.is_variadic == b.is_variadic)
-        and (equal(a.calling_convention, b.calling_convention))
-        and (a.is_noreturn == b.is_noreturn)
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: MojoFunctionPtr, b: MojoFunctionPtr) -> Bool:
-    return (
-        (equal(a.ret, b.ret))
-        and (equal(a.params, b.params))
-        and (a.abi == b.abi)
-        and (a.thin == b.thin)
-        and (a.raises_error == b.raises_error)
-    )
-
-
-def equal(a: FunctionAttrs, b: FunctionAttrs) -> Bool:
-    return (a.inline_disposition == b.inline_disposition) and (a.is_noreturn == b.is_noreturn)
-
-
-def equal(a: OpaqueRecordRef, b: OpaqueRecordRef) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (a.c_name == b.c_name)
-        and (a.is_union == b.is_union)
-        and (equal(a.size_bytes, b.size_bytes))
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: UnsupportedType, b: UnsupportedType) -> Bool:
-    return (
-        (a.category == b.category)
-        and (a.spelling == b.spelling)
-        and (a.reason == b.reason)
-        and (equal(a.size_bytes, b.size_bytes))
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: ComplexType, b: ComplexType) -> Bool:
-    return (
-        (equal(a.element, b.element))
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: VectorType, b: VectorType) -> Bool:
-    return (
-        (equal(a.element, b.element))
-        and (equal(a.count, b.count))
-        and (a.size_bytes == b.size_bytes)
-        and (a.is_ext_vector == b.is_ext_vector)
-        and (equal(a.align_bytes, b.align_bytes))
-    )
-
-
-def equal(a: StructRef, b: StructRef) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (a.c_name == b.c_name)
-        and (a.is_union == b.is_union)
-        and (a.size_bytes == b.size_bytes)
-        and (equal(a.align_bytes, b.align_bytes))
-        and (a.is_anonymous == b.is_anonymous)
-    )
-
-
-def equal(a: EnumRef, b: EnumRef) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (a.c_name == b.c_name)
-        and (equal(a.underlying, b.underlying))
-    )
-
-
-def equal(a: TypeRef, b: TypeRef) -> Bool:
-    return (a.decl_id == b.decl_id) and (a.name == b.name) and (equal(a.canonical, b.canonical))
-
-
-def equal(a: Field, b: Field) -> Bool:
-    return (
-        (a.name == b.name)
-        and (a.source_name == b.source_name)
-        and (equal(a.type, b.type))
-        and (a.byte_offset == b.byte_offset)
-        and (a.size_bytes == b.size_bytes)
-        and (a.is_anonymous == b.is_anonymous)
-        and (a.is_bitfield == b.is_bitfield)
-        and (a.bit_offset == b.bit_offset)
-        and (a.bit_width == b.bit_width)
-        and (equal(a.fam_pattern, b.fam_pattern))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: Struct, b: Struct) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (a.c_name == b.c_name)
-        and (equal(a.fields, b.fields))
-        and (a.size_bytes == b.size_bytes)
-        and (a.align_bytes == b.align_bytes)
-        and (a.is_union == b.is_union)
-        and (a.is_anonymous == b.is_anonymous)
-        and (a.is_complete == b.is_complete)
-        and (a.is_packed == b.is_packed)
-        and (equal(a.requested_align_bytes, b.requested_align_bytes))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: IntLiteral, b: IntLiteral) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: CFloatLiteral, b: CFloatLiteral) -> Bool:
-    return a.spelling == b.spelling
-
-
-def equal(a: MojoFloatLiteral, b: MojoFloatLiteral) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: StringLiteral, b: StringLiteral) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: CharLiteral, b: CharLiteral) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: CNullPtrLiteral, b: CNullPtrLiteral) -> Bool:
-    return True
-
-
-def equal(a: CRefExpr, b: CRefExpr) -> Bool:
-    return a.name == b.name
-
-
-def equal(a: MojoRefExpr, b: MojoRefExpr) -> Bool:
-    return a.name == b.name
-
-
-def equal(a: CUnaryExpr, b: CUnaryExpr) -> Bool:
-    return (a.op == b.op) and (equal(a.operand, b.operand))
-
-
-def equal(a: MojoUnaryExpr, b: MojoUnaryExpr) -> Bool:
-    return (a.op == b.op) and (equal(a.operand, b.operand))
-
-
-def equal(a: CBinaryExpr, b: CBinaryExpr) -> Bool:
-    return (a.op == b.op) and (equal(a.lhs, b.lhs)) and (equal(a.rhs, b.rhs))
-
-
-def equal(a: MojoBinaryExpr, b: MojoBinaryExpr) -> Bool:
-    return (a.op == b.op) and (equal(a.lhs, b.lhs)) and (equal(a.rhs, b.rhs))
-
-
-def equal(a: CCastExpr, b: CCastExpr) -> Bool:
-    return (equal(a.target, b.target)) and (equal(a.expr, b.expr))
-
-
-def equal(a: MojoCastExpr, b: MojoCastExpr) -> Bool:
-    return (equal(a.target, b.target)) and (equal(a.expr, b.expr))
-
-
-def equal(a: CSizeOfExpr, b: CSizeOfExpr) -> Bool:
-    return equal(a.target, b.target)
-
-
-def equal(a: MojoSizeOfExpr, b: MojoSizeOfExpr) -> Bool:
-    return equal(a.target, b.target)
-
-
-def equal(a: CCallExpr, b: CCallExpr) -> Bool:
-    return (equal(a.callee, b.callee)) and (equal(a.args, b.args))
-
-
-def equal(a: MojoCallExpr, b: MojoCallExpr) -> Bool:
-    return (equal(a.callee, b.callee)) and (equal(a.args, b.args))
-
-
-def equal(a: Enumerant, b: Enumerant) -> Bool:
-    return (
-        (a.name == b.name)
-        and (a.c_name == b.c_name)
-        and (a.value == b.value)
-        and (equal(a.enum_decl_id, b.enum_decl_id))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: Enum, b: Enum) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (a.c_name == b.c_name)
-        and (equal(a.underlying, b.underlying))
-        and (equal(a.enumerants, b.enumerants))
-        and (equal(a.alias_names, b.alias_names))
-        and (a.is_anonymous == b.is_anonymous)
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: Typedef, b: Typedef) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (equal(a.aliased, b.aliased))
-        and (equal(a.canonical, b.canonical))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: CParam, b: CParam) -> Bool:
-    return (a.name == b.name) and (equal(a.type, b.type)) and (equal(a.doc, b.doc))
-
-
-def equal(a: MojoParam, b: MojoParam) -> Bool:
-    return (a.name == b.name) and (equal(a.type, b.type)) and (equal(a.doc, b.doc))
-
-
-def equal(a: Function, b: Function) -> Bool:
-    return (
-        (a.name == b.name)
-        and (a.link_name == b.link_name)
-        and (equal(a.ret, b.ret))
-        and (equal(a.params, b.params))
-        and (a.is_variadic == b.is_variadic)
-        and (a.decl_id == b.decl_id)
-        and (equal(a.calling_convention, b.calling_convention))
-        and (equal(a.attrs, b.attrs))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: Const, b: Const) -> Bool:
-    return (
-        (a.name == b.name)
-        and (equal(a.type, b.type))
-        and (equal(a.expr, b.expr))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: MacroDecl, b: MacroDecl) -> Bool:
-    return (
-        (a.name == b.name)
-        and (equal(a.tokens, b.tokens))
-        and (a.kind == b.kind)
-        and (equal(a.expr, b.expr))
-        and (equal(a.type, b.type))
-        and (equal(a.diagnostic, b.diagnostic))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: GlobalVar, b: GlobalVar) -> Bool:
-    return (
-        (a.decl_id == b.decl_id)
-        and (a.name == b.name)
-        and (a.link_name == b.link_name)
-        and (equal(a.type, b.type))
-        and (a.is_const == b.is_const)
-        and (equal(a.initializer, b.initializer))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: IRDiagnostic, b: IRDiagnostic) -> Bool:
-    return (
-        (a.severity == b.severity)
-        and (a.message == b.message)
-        and (equal(a.file, b.file))
-        and (equal(a.line, b.line))
-        and (equal(a.col, b.col))
-        and (equal(a.decl_id, b.decl_id))
-    )
-
-
-def equal(a: TargetABI, b: TargetABI) -> Bool:
-    return (
-        (a.pointer_size_bytes == b.pointer_size_bytes)
-        and (a.pointer_align_bytes == b.pointer_align_bytes)
-        and (a.byte_order == b.byte_order)
-        and (equal(a.target_triple, b.target_triple))
-    )
-
-
-def equal(a: Unit, b: Unit) -> Bool:
-    return (
-        (a.source_header == b.source_header)
-        and (a.library == b.library)
-        and (a.link_name == b.link_name)
-        and (equal(a.target_abi, b.target_abi))
-        and (equal(a.decls, b.decls))
-        and (equal(a.diagnostics, b.diagnostics))
-    )
-
-
-def equal(a: PrimitiveDType, b: PrimitiveDType) -> Bool:
-    return (
-        (a.kind == b.kind)
-        and (a.signed == b.signed)
-        and (a.dtype == b.dtype)
-        and (a.width_bytes == b.width_bytes)
-    )
-
-
-def equal(a: MappingNote, b: MappingNote) -> Bool:
-    return (a.severity == b.severity) and (a.message == b.message) and (a.category == b.category)
-
-
-def equal(a: ModuleImport, b: ModuleImport) -> Bool:
-    return (a.module == b.module) and (equal(a.names, b.names))
-
-
-def equal(a: SupportDecl, b: SupportDecl) -> Bool:
-    return a.kind == b.kind
-
-
-def equal(a: ModuleDependencies, b: ModuleDependencies) -> Bool:
-    return (equal(a.imports, b.imports)) and (equal(a.support_decls, b.support_decls))
-
-
-def equal(a: BuiltinType, b: BuiltinType) -> Bool:
-    return a.name == b.name
-
-
-def equal(a: NamedType, b: NamedType) -> Bool:
-    return a.name == b.name
-
-
-def equal(a: DTypeArg, b: DTypeArg) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: ConstArg, b: ConstArg) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: NameArg, b: NameArg) -> Bool:
-    return a.value == b.value
-
-
-def equal(a: TypeArg, b: TypeArg) -> Bool:
-    return equal(a.type, b.type)
-
-
-def equal(a: ParametricType, b: ParametricType) -> Bool:
-    return (a.base == b.base) and (equal(a.args, b.args))
-
-
-def equal(a: StoredMember, b: StoredMember) -> Bool:
-    return (
-        (a.index == b.index)
-        and (a.name == b.name)
-        and (equal(a.type, b.type))
-        and (a.byte_offset == b.byte_offset)
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: PaddingMember, b: PaddingMember) -> Bool:
-    return (
-        (a.name == b.name) and (a.size_bytes == b.size_bytes) and (a.byte_offset == b.byte_offset)
-    )
-
-
-def equal(a: OpaqueStorageMember, b: OpaqueStorageMember) -> Bool:
-    return (a.name == b.name) and (a.size_bytes == b.size_bytes)
-
-
-def equal(a: BitfieldField, b: BitfieldField) -> Bool:
-    return (
-        (a.index == b.index)
-        and (a.name == b.name)
-        and (equal(a.logical_type, b.logical_type))
-        and (a.bit_offset == b.bit_offset)
-        and (a.bit_width == b.bit_width)
-        and (a.signed == b.signed)
-        and (a.bool_semantics == b.bool_semantics)
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: BitfieldGroupMember, b: BitfieldGroupMember) -> Bool:
-    return (
-        (a.storage_name == b.storage_name)
-        and (equal(a.storage_type, b.storage_type))
-        and (a.byte_offset == b.byte_offset)
-        and (a.first_index == b.first_index)
-        and (a.storage_width_bits == b.storage_width_bits)
-        and (equal(a.fields, b.fields))
-    )
-
-
-def equal(a: ComptimeMember, b: ComptimeMember) -> Bool:
-    return (
-        (a.name == b.name)
-        and (equal(a.type_value, b.type_value))
-        and (equal(a.const_value, b.const_value))
-    )
-
-
-def equal(a: InitializerParam, b: InitializerParam) -> Bool:
-    return (a.name == b.name) and (equal(a.type, b.type))
-
-
-def equal(a: Initializer, b: Initializer) -> Bool:
-    return equal(a.params, b.params)
-
-
-def equal(a: FlexibleTail, b: FlexibleTail) -> Bool:
-    return (
-        (a.field_name == b.field_name)
-        and (equal(a.element_type, b.element_type))
-        and (a.pattern == b.pattern)
-        and (a.byte_offset == b.byte_offset)
-    )
-
-
-def equal(a: StructDecl, b: StructDecl) -> Bool:
-    return (
-        (a.name == b.name)
-        and (equal(a.traits, b.traits))
-        and (a.passability == b.passability)
-        and (equal(a.align, b.align))
-        and (equal(a.align_decorator, b.align_decorator))
-        and (a.fieldwise_init == b.fieldwise_init)
-        and (a.kind == b.kind)
-        and (equal(a.members, b.members))
-        and (equal(a.comptime_members, b.comptime_members))
-        and (equal(a.initializers, b.initializers))
-        and (equal(a.flexible_tail, b.flexible_tail))
-        and (equal(a.diagnostics, b.diagnostics))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: AliasDecl, b: AliasDecl) -> Bool:
-    return (
-        (a.name == b.name)
-        and (a.kind == b.kind)
-        and (equal(a.type_value, b.type_value))
-        and (equal(a.const_type, b.const_type))
-        and (equal(a.const_value, b.const_value))
-        and (equal(a.diagnostics, b.diagnostics))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: CallTarget, b: CallTarget) -> Bool:
-    return (a.link_mode == b.link_mode) and (a.symbol == b.symbol)
-
-
-def equal(a: FunctionDecl, b: FunctionDecl) -> Bool:
-    return (
-        (a.name == b.name)
-        and (a.link_name == b.link_name)
-        and (equal(a.params, b.params))
-        and (equal(a.return_type, b.return_type))
-        and (a.kind == b.kind)
-        and (equal(a.call_target, b.call_target))
-        and (equal(a.attrs, b.attrs))
-        and (equal(a.num_fixed_args, b.num_fixed_args))
-        and (equal(a.diagnostics, b.diagnostics))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: GlobalDecl, b: GlobalDecl) -> Bool:
-    return (
-        (a.name == b.name)
-        and (a.link_name == b.link_name)
-        and (equal(a.value_type, b.value_type))
-        and (a.is_const == b.is_const)
-        and (a.kind == b.kind)
-        and (equal(a.diagnostics, b.diagnostics))
-        and (equal(a.doc, b.doc))
-    )
-
-
-def equal(a: MojoModule, b: MojoModule) -> Bool:
-    return (
-        (a.source_header == b.source_header)
-        and (a.library == b.library)
-        and (a.link_name == b.link_name)
-        and (a.link_mode == b.link_mode)
-        and (equal(a.library_path_hint, b.library_path_hint))
-        and (equal(a.dependencies, b.dependencies))
-        and (equal(a.decls, b.decls))
-    )
-
-
-def equal(a: CType, b: CType) -> Bool:
-    match a:
-        case .void_type(av):
-            match b:
-                case .void_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .int_type(av):
-            match b:
-                case .int_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .float_type(av):
-            match b:
-                case .float_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .qualified_type(av):
-            match b:
-                case .qualified_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .atomic_type(av):
-            match b:
-                case .atomic_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_pointer(av):
-            match b:
-                case .c_pointer(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_array(av):
-            match b:
-                case .c_array(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_function_ptr(av):
-            match b:
-                case .c_function_ptr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .opaque_record_ref(av):
-            match b:
-                case .opaque_record_ref(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .unsupported_type(av):
-            match b:
-                case .unsupported_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .complex_type(av):
-            match b:
-                case .complex_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .vector_type(av):
-            match b:
-                case .vector_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .struct_ref(av):
-            match b:
-                case .struct_ref(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .enum_ref(av):
-            match b:
-                case .enum_ref(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .type_ref(av):
-            match b:
-                case .type_ref(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: MojoType, b: MojoType) -> Bool:
-    match a:
-        case .builtin_type(av):
-            match b:
-                case .builtin_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .named_type(av):
-            match b:
-                case .named_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_pointer(av):
-            match b:
-                case .mojo_pointer(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_array(av):
-            match b:
-                case .mojo_array(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_function_ptr(av):
-            match b:
-                case .mojo_function_ptr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .parametric_type(av):
-            match b:
-                case .parametric_type(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: ParametricArg, b: ParametricArg) -> Bool:
-    match a:
-        case .d_type_arg(av):
-            match b:
-                case .d_type_arg(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .const_arg(av):
-            match b:
-                case .const_arg(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .name_arg(av):
-            match b:
-                case .name_arg(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .type_arg(av):
-            match b:
-                case .type_arg(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: CConstExpr, b: CConstExpr) -> Bool:
-    match a:
-        case .int_literal(av):
-            match b:
-                case .int_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_float_literal(av):
-            match b:
-                case .c_float_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .string_literal(av):
-            match b:
-                case .string_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .char_literal(av):
-            match b:
-                case .char_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_null_ptr_literal(av):
-            match b:
-                case .c_null_ptr_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_ref_expr(av):
-            match b:
-                case .c_ref_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_unary_expr(av):
-            match b:
-                case .c_unary_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_binary_expr(av):
-            match b:
-                case .c_binary_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_cast_expr(av):
-            match b:
-                case .c_cast_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_size_of_expr(av):
-            match b:
-                case .c_size_of_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .c_call_expr(av):
-            match b:
-                case .c_call_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: MojoConstExpr, b: MojoConstExpr) -> Bool:
-    match a:
-        case .int_literal(av):
-            match b:
-                case .int_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_float_literal(av):
-            match b:
-                case .mojo_float_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .string_literal(av):
-            match b:
-                case .string_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .char_literal(av):
-            match b:
-                case .char_literal(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_ref_expr(av):
-            match b:
-                case .mojo_ref_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_unary_expr(av):
-            match b:
-                case .mojo_unary_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_binary_expr(av):
-            match b:
-                case .mojo_binary_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_cast_expr(av):
-            match b:
-                case .mojo_cast_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_size_of_expr(av):
-            match b:
-                case .mojo_size_of_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .mojo_call_expr(av):
-            match b:
-                case .mojo_call_expr(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: Decl, b: Decl) -> Bool:
-    match a:
-        case .function(av):
-            match b:
-                case .function(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .struct_decl(av):
-            match b:
-                case .struct_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .enum_decl(av):
-            match b:
-                case .enum_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .typedef(av):
-            match b:
-                case .typedef(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .const_decl(av):
-            match b:
-                case .const_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .macro_decl(av):
-            match b:
-                case .macro_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .global_var(av):
-            match b:
-                case .global_var(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: MojoDecl, b: MojoDecl) -> Bool:
-    match a:
-        case .struct_decl(av):
-            match b:
-                case .struct_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .alias_decl(av):
-            match b:
-                case .alias_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .function_decl(av):
-            match b:
-                case .function_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .global_decl(av):
-            match b:
-                case .global_decl(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-
-
-def equal(a: StructMember, b: StructMember) -> Bool:
-    match a:
-        case .stored_member(av):
-            match b:
-                case .stored_member(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .padding_member(av):
-            match b:
-                case .padding_member(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .opaque_storage_member(av):
-            match b:
-                case .opaque_storage_member(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
-        case .bitfield_group_member(av):
-            match b:
-                case .bitfield_group_member(bv):
-                    return equal(av, bv)
-                case _:
-                    return False
+    def __eq__(self, other: Self) -> Bool:
+        match self:
+            case .stored_member(a):
+                if case .stored_member(b) = other:
+                    return a == b
+                return False
+            case .padding_member(a):
+                if case .padding_member(b) = other:
+                    return a == b
+                return False
+            case .opaque_storage_member(a):
+                if case .opaque_storage_member(b) = other:
+                    return a == b
+                return False
+            case .bitfield_group_member(a):
+                if case .bitfield_group_member(b) = other:
+                    return a == b
+                return False
+
+
+def equal[T: Equatable](a: T, b: T) -> Bool:
+    return a == b

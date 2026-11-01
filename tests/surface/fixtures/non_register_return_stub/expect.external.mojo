@@ -12,5 +12,6 @@ comptime int32_t = Int32
 struct nrr_payload(Copyable, Movable):
     var values: Array[int32_t, 2]
 
-# C return type is not RegisterPassable - Mojo FFI cannot model this return; bind manually.
-# nrr_payload nrr_build()
+@extern("nrr_build")
+def nrr_build() abi("C") -> nrr_payload:
+    ...

@@ -1,12 +1,9 @@
 from std.memory import ArcPointer
 from ...ir import *
 from ..common import quoted, mojo_align_decorator_ok
-from ..facts.record_layout import RecordLayoutFacts, analyze_record_layout
-from ..facts.record_storage import (
-    RecordStorageFacts,
-    RecordStorageKind,
-    analyze_record_storage_facts,
-)
+from ..facts.context import AnalysisContext
+from ..facts.record_layout import RecordLayoutFacts
+from ..facts.record_storage import RecordStorageKind
 from .mapping_support import (
     record_name,
     field_mojo_name,
@@ -19,10 +16,8 @@ from .type_mapping import MapTypePass
 
 @fieldwise_init
 struct StructMappingContext(Copyable, Movable):
-    var record_map: Dict[String, Struct]
+    var facts: ArcPointer[AnalysisContext]
     var type_mapper: MapTypePass
-    var record_layouts: Dict[String, RecordLayoutFacts]
-    var record_storage: Dict[String, RecordStorageFacts]
 
 
 @fieldwise_init
@@ -64,19 +59,11 @@ def _opaque(
     return result^
 
 
-def map_struct(decl: Struct, mut context: StructMappingContext) raises -> StructDecl:
+def map_struct(decl: Struct, context: StructMappingContext) raises -> StructDecl:
     if decl.is_union:
         raise Error("expected non-union Struct declaration, got union " + quoted(decl.decl_id))
-    if decl.decl_id not in context.record_storage:
-        var layouts = context.record_layouts.copy()
-        for record in context.record_map.values():
-            if record.decl_id not in layouts:
-                layouts[record.decl_id] = analyze_record_layout(record)
-        var storage = analyze_record_storage_facts(context.record_map, layouts, context.type_mapper)
-        context.record_layouts = layouts^
-        context.record_storage = storage^
-    var storage = context.record_storage[decl.decl_id].copy()
-    var facts = storage.layout.copy()
+    ref storage = context.facts[].record_storage[decl.decl_id]
+    ref facts = storage.layout
     if storage.storage_kind == RecordStorageKind.INCOMPLETE:
         return StructDecl(record_name(decl), kind=StructKind.OPAQUE, doc=decl.doc.copy())
     if storage.storage_kind == RecordStorageKind.OPAQUE_STORAGE:

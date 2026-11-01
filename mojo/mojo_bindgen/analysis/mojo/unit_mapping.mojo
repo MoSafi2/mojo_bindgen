@@ -27,19 +27,14 @@ struct MapUnitPass(Copyable, Movable):
             context = self.context.value().copy()
         else:
             context = ArcPointer(build_analysis_context(unit))
-        var facts = context.ptr()[].copy()
+        ref facts = context[]
         var mapper = MapTypePass(facts.target_queries.copy())
         var session = MappingSession(
             unit.copy(),
             self.options.copy(),
             mapper.copy(),
             MapConstExprPass(mapper.copy()),
-            StructMappingContext(
-                facts.indexes.records_by_decl_id.copy(),
-                mapper.copy(),
-                facts.record_layouts.copy(),
-                facts.record_storage.copy(),
-            ),
+            StructMappingContext(context.copy(), mapper.copy()),
         )
         var decl_mapper = UnitDeclMapper(session^)
         var result = MojoModule(

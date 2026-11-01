@@ -20,7 +20,7 @@ def generate_from_unit(
     emit_options: MojoEmitOptions = MojoEmitOptions(),
     layout_module_name: Optional[String] = {},
 ) raises -> BackendResult:
-    var analysis = AnalysisOrchestrator(emit_options.copy()).analyze_pipeline(unit)
+    var analysis = AnalysisOrchestrator(emit_options.copy()).analyze_normalized(unit)
     var source = render_mojo_module(
         analysis.mojo_module,
         MojoIRPrintOptions(emit_options.module_comment, emit_options.emit_doc_comments),

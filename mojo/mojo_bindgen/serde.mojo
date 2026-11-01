@@ -186,6 +186,8 @@ def _decode_functionkind(value: JSON) raises -> FunctionKind:
     match text:
         case "wrapper":
             return FunctionKind.WRAPPER
+        case "extern_declaration":
+            return FunctionKind.EXTERN_DECLARATION
         case "variadic_stub":
             return FunctionKind.VARIADIC_STUB
         case "directive_stub":

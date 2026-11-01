@@ -1,7 +1,8 @@
 """Print finalized target IR without consulting source declarations."""
 from std.memory import ArcPointer
 from ..ir import *
-from ..analysis.traversal import validate_mojo_module
+from ..analysis.mojo.validate_finalized import validate_finalized_mojo_module
+from .normalize_mojo_module import required_module_dependencies
 from ..analysis.common import mojo_ident, strip_whitespace, mojo_float_literal_text, quoted
 from .._numbers import float_text, mask_text, sign_bit_text
 from .mojo_support_templates import (
@@ -266,7 +267,7 @@ struct MojoIRPrinter(Copyable, Movable):
             b.add('"""')
 
     def render(self, module: MojoModule) raises -> String:
-        validate_mojo_module(module)
+        validate_finalized_mojo_module(module, required_module_dependencies(module))
         var parts = List[String]()
         if self.options.module_comment:
             parts.append(
@@ -409,6 +410,14 @@ struct MojoIRPrinter(Copyable, Movable):
         var ret = render_type(decl.return_type.ptr()[])
         var symbol = decl.call_target.symbol if decl.call_target.symbol else decl.link_name
         var escaped = escape_mojo_string(symbol)
+        if decl.kind == FunctionKind.EXTERN_DECLARATION:
+            _diagnostics(b, decl.diagnostics)
+            b.add('@extern("' + escaped + '")')
+            b.add("def " + decl.name + "(" + params_text + ') abi("C") -> ' + ret + ":")
+            b.indent()
+            self._doc(b, decl.doc, True)
+            b.add("...")
+            return b.render()
         if (
             decl.kind == FunctionKind.VARIADIC_STUB
             or decl.kind == FunctionKind.DIRECTIVE_STUB
@@ -424,7 +433,7 @@ struct MojoIRPrinter(Copyable, Movable):
             else:
                 if decl.kind == FunctionKind.NON_REGISTER_RETURN_STUB:
                     b.add(
-                        "# C return type is not RegisterPassable - Mojo FFI cannot model this return; bind manually."
+                        "# C return type is not RegisterPassable - this binding requires manual handling."
                     )
                 else:
                     var directives = List[String]()

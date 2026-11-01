@@ -1,9 +1,10 @@
 # Independent native reference cases
 
-`inventory.json` records the former Python test ID and the native TestSuite
-function that replaces its native pytest execution. Fixtures contain frozen
-Python-reference vectors plus external-process recipes; all semantic assertions
-execute in Mojo. Python only copies/decompresses inputs and supervises processes.
+`inventory.json` records each external-process case and its native TestSuite
+function. Fixtures contain frozen Python-reference vectors or independently
+authored native runtime cases, with provenance in each fixture. They also contain
+external-process recipes; all semantic assertions execute in Mojo. Python only
+copies/decompresses inputs and supervises processes.
 
 Read a case with `gzip -dc acceptance/GROUP/CASE.json.gz`. The native preparer
 expands `@ROOT@` and `@WORK@`, runs native production passes and writes results;

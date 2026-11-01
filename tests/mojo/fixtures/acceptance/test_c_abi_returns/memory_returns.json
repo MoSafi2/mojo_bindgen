@@ -1,0 +1,98 @@
+{
+  "id": "test_c_abi_memory_returns",
+  "reference": "Native generation and independent C runtime oracle, Mojo 1.2 O0/O3",
+  "files": {
+    "block.h": "typedef struct Block { double values[3]; } Block;\ntypedef struct Small { float values[2]; } Small;\ntypedef struct Nested { Block block; } Nested;\nBlock make_block(double seed);\nBlock increment_block(Block block);\nSmall make_small(float seed);\nNested make_nested(double seed);\ntypedef struct Ints { int values[2]; } Ints;\nInts make_ints(int seed);\n",
+    "block.c": "#include \"block.h\"\nBlock make_block(double seed) { return (Block){{seed,seed+1,seed+2}}; }\nBlock increment_block(Block block) { for(int i=0;i<3;i++) block.values[i] += 10; return block; }\nSmall make_small(float seed) { return (Small){{seed,seed+1}}; }\nNested make_nested(double seed) { return (Nested){make_block(seed)}; }\nInts make_ints(int seed) { return (Ints){{seed,seed+1}}; }\n",
+    "consumer.mojo": "from std.testing import assert_equal\nfrom bindings import make_block, increment_block, make_small, make_nested, make_ints\ndef main() raises:\n    var first = make_block(2.0)\n    assert_equal(first.values[0], 2.0)\n    assert_equal(first.values[2], 4.0)\n    var second = increment_block(first)\n    assert_equal(second.values[0], 12.0)\n    assert_equal(second.values[2], 14.0)\n    var small = make_small(5.0)\n    assert_equal(small.values[0], 5.0)\n    assert_equal(small.values[1], 6.0)\n    var nested = make_nested(7.0)\n    assert_equal(nested.block.values[2], 9.0)\n    var ints = make_ints(11)\n    assert_equal(ints.values[0], 11)\n    assert_equal(ints.values[1], 12)\n    print(\"Mojo 1.2 C aggregate returns passed\")\n"
+  },
+  "operations": [],
+  "writes": [],
+  "steps": [
+    {
+      "role": "cc",
+      "args": [
+        "-shared",
+        "-fPIC",
+        "@WORK@/block.c",
+        "-o",
+        "@WORK@/libblock.so"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "native-cli",
+      "args": [
+        "@WORK@/block.h",
+        "-o",
+        "@WORK@/bindings.mojo",
+        "--library",
+        "block",
+        "--link-name",
+        "block",
+        "--link-mode",
+        "external-call"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/consumer.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libblock.so",
+        "-O0",
+        "--Werror",
+        "-o",
+        "@WORK@/consumer-O0"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/consumer-O0"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "Mojo 1.2 C aggregate returns passed"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/consumer.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libblock.so",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/consumer-O3"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/consumer-O3"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "Mojo 1.2 C aggregate returns passed"
+      ]
+    }
+  ],
+  "diagnostics": []
+}

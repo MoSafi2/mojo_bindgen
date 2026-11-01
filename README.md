@@ -248,8 +248,10 @@ verify emitted layouts and symbols against your target toolchain.
   pointer-based usage work, but atomic globals are still emitted as stubs and
   some surfaces require manual handling. Bindings use `Atomic[T]`; incompatible
   atomic storage is opaque and is never silently treated as non-atomic storage.
-- **By-value returns:** a mapped return type must be `RegisterPassable`. Returns
-  containing fixed arrays or opaque storage are emitted as diagnostic stubs.
+- **By-value returns:** direct-link bindings use Mojo 1.2 C ABI declarations for
+  eligible typed records containing fixed arrays. Packed, padded, explicitly
+  aligned, bitfield, atomic, flexible-tail and opaque layouts remain conservative.
+  Dynamic loading still requires `RegisterPassable` return types.
 - **Linkage and compiler edge cases:** `inline`, compiler-specific linkage
   hints, and other extension-heavy cases can still require manual review and
   may lead to symbol mismatches at runtime.
