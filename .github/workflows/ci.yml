@@ -43,7 +43,7 @@ jobs:
       - name: Install C toolchain
         run: sudo apt-get update && sudo apt-get install -y clang libclang1
       - name: Verify generated FFI on locked Mojo
-        run: pixi run --locked pytest -q tests/e2e
+        run: pixi run --locked pytest -q tests/e2e --bindgen python
         env:
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
 

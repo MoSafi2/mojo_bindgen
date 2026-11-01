@@ -10,23 +10,11 @@ from typing import Any
 import pytest
 
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
-from mojo_bindgen.parsing.parser import ClangParser, ParseError
 from mojo_bindgen.serde import encode_cir
-from tests.bindgen_helpers import MojoGenerator
+from tests.header_harness import HeaderHarness, HeaderParseError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_ROOT = _REPO_ROOT / "tests" / "corpus" / "headers"
-
-
-def _has_libclang() -> bool:
-    try:
-        import clang.cindex  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-pytestmark = pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
 
 
 def _case_dirs() -> list[Path]:
@@ -72,14 +60,13 @@ def _expect_phase_pass(status: str) -> bool:
 
 
 @pytest.mark.parametrize("case_dir", _case_dirs(), ids=lambda p: p.name)
-def test_header_corpus_case(case_dir: Path) -> None:
+def test_header_corpus_case(case_dir: Path, bindgen: HeaderHarness) -> None:
     status = json.loads((case_dir / "status.json").read_text(encoding="utf-8"))
     expect = json.loads((case_dir / "expect.ir.json").read_text(encoding="utf-8"))
     header = case_dir / "input.h"
-    parser = ClangParser(header, library=case_dir.name, link_name=case_dir.name)
     try:
-        unit = parser.run()
-    except ParseError:
+        unit = bindgen.parse_header(header, library=case_dir.name, link_name=case_dir.name)
+    except HeaderParseError:
         if _expect_phase_pass(status["parse"]):
             raise
         pytest.xfail(f"parse is expected to stay {status['parse']}")
@@ -101,7 +88,7 @@ def test_header_corpus_case(case_dir: Path) -> None:
     if status["emit"] == "not_required":
         return
     try:
-        generated = MojoGenerator(MojoEmitOptions()).generate(unit)
+        generated = bindgen.generate(unit, MojoEmitOptions())
     except Exception:
         if _expect_phase_pass(status["emit"]):
             raise

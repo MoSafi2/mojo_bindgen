@@ -26,8 +26,9 @@ native-build = "pixi run --manifest-path mojo/pixi.toml --locked build"
 native-test = "pixi run --manifest-path mojo/pixi.toml --locked test"
 native-format-check = "pixi run --manifest-path mojo/pixi.toml --locked format-check"
 native-parity = "pytest -q tests/parity"
+native-shared = "pytest -q --bindgen native -m native tests/surface tests/corpus tests/stress tests/e2e tests/unit/test_type_lowering.py tests/unit/test_macro_closure.py tests/unit/test_doc_comments.py tests/unit/test_target_abi.py"
 native-example-parity = "pixi run --manifest-path examples/pixi.toml --locked test-native"
-check-native = { depends-on = ["native-format-check", "native-build", "native-test", "native-parity"] }
+check-native = { depends-on = ["native-format-check", "native-build", "native-test", "native-parity", "native-shared"] }
 example-zlib = "bash examples/zlib/generate.sh"
 example-cairo = "bash examples/cairo/generate.sh"
 example-libpng = "bash examples/libpng/generate.sh"

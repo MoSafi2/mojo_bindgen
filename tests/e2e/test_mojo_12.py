@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from mojo_bindgen import BindgenOptions, bindgen
+from tests.header_harness import HeaderHarness
 
 pytestmark = pytest.mark.skipif(
     not shutil.which("mojo") or not shutil.which("cc"), reason="requires Mojo and a C compiler"
@@ -73,7 +73,7 @@ def _run(command: list[str], *, env=None) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.fixture(scope="module")
-def ffi_root(tmp_path_factory) -> Path:
+def ffi_root(tmp_path_factory, bindgen: HeaderHarness) -> Path:
     root = tmp_path_factory.mktemp("mojo12")
     header = root / "modern.h"
     header.write_text(HEADER)
@@ -96,16 +96,14 @@ def ffi_root(tmp_path_factory) -> Path:
         ("external_call", "modern_external"),
         ("owned_dl_handle", "modern_dynamic"),
     ):
-        result = bindgen(
-            BindgenOptions(
-                header=header,
-                library="modernffi",
-                link_name="modernffi",
-                linking=mode,
-                library_path_hint=str(root / "libmodernffi.so"),
-            )
+        source = bindgen.generate_header(
+            header,
+            library="modernffi",
+            link_name="modernffi",
+            linking=mode,
+            library_path_hint=str(root / "libmodernffi.so"),
         )
-        (root / f"{module}.mojo").write_text(result.bindings_source)
+        (root / f"{module}.mojo").write_text(source)
     return root
 
 
@@ -225,17 +223,15 @@ def test_missing_dynamic_symbol_keeps_non_raising_diagnostic(ffi_root: Path) -> 
     assert "modernffi" in result.stdout + result.stderr
 
 
-def test_missing_library_has_candidate_diagnostic(ffi_root: Path) -> None:
-    result = bindgen(
-        BindgenOptions(
-            header=ffi_root / "modern.h",
-            library="missing_bindgen_test_library",
-            link_name="missing_bindgen_test_library",
-            linking="owned_dl_handle",
-            library_path_hint=str(ffi_root / "does-not-exist.so"),
-        )
+def test_missing_library_has_candidate_diagnostic(ffi_root: Path, bindgen: HeaderHarness) -> None:
+    source = bindgen.generate_header(
+        ffi_root / "modern.h",
+        library="missing_bindgen_test_library",
+        link_name="missing_bindgen_test_library",
+        linking="owned_dl_handle",
+        library_path_hint=str(ffi_root / "does-not-exist.so"),
     )
-    (ffi_root / "missing_library.mojo").write_text(result.bindings_source)
+    (ffi_root / "missing_library.mojo").write_text(source)
     result = _build(
         ffi_root,
         "missing_lib",

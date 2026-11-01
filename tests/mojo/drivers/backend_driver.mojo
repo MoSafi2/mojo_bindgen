@@ -18,7 +18,12 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
 )
 from mojo_bindgen.layout_tests.generator import render_layout_test_module
 from mojo_bindgen.orchestrator import generate_from_unit
+from mojo_bindgen.parsing.parser import ClangParser
 from mojo_bindgen.parsing.lowering.const_expr import fold
+from mojo_bindgen.parsing.lowering.macro_env import (
+    collect_object_like_macro_env,
+    expand_object_like_macro_tokens,
+)
 
 
 def _options(req: JSON) raises -> MojoEmitOptions:
@@ -31,13 +36,83 @@ def _options(req: JSON) raises -> MojoEmitOptions:
         options.module_comment = req.get("module_comment").ptr()[].bool_value()
     if req.has("emit_doc_comments"):
         options.emit_doc_comments = req.get("emit_doc_comments").ptr()[].bool_value()
+    if req.has("strict_abi"):
+        options.strict_abi = req.get("strict_abi").ptr()[].bool_value()
+    if req.has("warn_abi"):
+        options.warn_abi = req.get("warn_abi").ptr()[].bool_value()
+    if req.has("ffi_origin"):
+        var origin = req.get("ffi_origin").ptr()[].text()
+        if origin == "any":
+            options.ffi_origin = PointerOrigin.ANY
+        elif origin != "external":
+            raise Error("unknown ffi_origin: " + origin)
     return options^
+
+
+def _strings(value: JSON) raises -> List[String]:
+    var result = List[String]()
+    for item in value.items():
+        result.append(item.ptr()[].text())
+    return result^
+
+
+def _string_array(values: List[String]) -> JSON:
+    var result = List[ArcPointer[JSON]]()
+    for value in values:
+        result.append(ArcPointer(JSON.string(value.copy())))
+    return JSON.array(result^)
+
+
+def _parser(req: JSON) raises -> ClangParser:
+    var args = Optional[List[String]]()
+    if req.has("compile_args") and not req.get("compile_args").ptr()[].is_null():
+        args = _strings(req.get("compile_args").ptr()[])
+    var headers = List[String]()
+    if req.has("include_headers"):
+        headers = _strings(req.get("include_headers").ptr()[])
+    var fallback = False
+    if req.has("clang_macro_fallback"):
+        fallback = req.get("clang_macro_fallback").ptr()[].bool_value()
+    return ClangParser(
+        req.get("header").ptr()[].text(),
+        req.get("library").ptr()[].text(),
+        req.get("link_name").ptr()[].text(),
+        args.copy(),
+        include_headers=headers,
+        clang_macro_fallback=fallback,
+    )
 
 
 def _run(req: JSON) raises -> JSON:
     var response = Dict[String, ArcPointer[JSON]]()
     var action = req.get("action").ptr()[].text()
-    if action == "fold":
+    if action == "parse-header":
+        response["unit"] = ArcPointer(encode_cir(_parser(req).run()))
+    elif action == "macro-environment":
+        var parser = _parser(req)
+        var tu = parser.frontend.parse()
+        var environment = collect_object_like_macro_env(tu)
+        var fields = Dict[String, ArcPointer[JSON]]()
+        for entry in environment.items():
+            fields[entry.key] = ArcPointer(_string_array(entry.value))
+        response["environment"] = ArcPointer(JSON.object(fields^))
+    elif action == "expand-macros":
+        var environment = Dict[String, List[String]]()
+        match req.get("environment").ptr()[]:
+            case .object(fields):
+                for entry in fields.items():
+                    environment[entry.key] = _strings(entry.value.ptr()[])
+            case _:
+                raise Error("expected macro environment object")
+        var limit = req.get("max_expansion_steps").ptr()[].int_value()
+        response["tokens"] = ArcPointer(
+            _string_array(
+                expand_object_like_macro_tokens(
+                    _strings(req.get("tokens").ptr()[]), environment, limit
+                )
+            )
+        )
+    elif action == "fold":
         response["expr"] = ArcPointer(encode_c_expr(fold(decode_c_expr(req.get("expr").ptr()[]))))
     elif action == "roundtrip-cir":
         response["unit"] = ArcPointer(encode_cir(decode_cir(req.get("unit").ptr()[])))

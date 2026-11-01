@@ -13,6 +13,8 @@ from typing import Any
 
 import pytest
 
+from tests.header_harness import HeaderHarness
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GOLDEN_ROOT = _REPO_ROOT / "tests" / "e2e" / "fixtures"
 
@@ -131,11 +133,6 @@ def _check_phase(
     raise AssertionError(f"unknown expected status {expected_status}")
 
 
-def _persist_generated_bindings(src: Path, dst: Path) -> None:
-    if src.exists():
-        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-
-
 def _case_dirs() -> list[Path]:
     return sorted(
         [p for p in _GOLDEN_ROOT.iterdir() if p.is_dir() and (p / "status.json").exists()]
@@ -144,11 +141,8 @@ def _case_dirs() -> list[Path]:
 
 @pytest.mark.skipif(not shutil.which("cc"), reason="requires cc")
 @pytest.mark.parametrize("case_dir", _case_dirs(), ids=lambda p: p.name)
-def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
-    mojo_bindgen = _tool_cmd("mojo-bindgen")
+def test_golden_runtime_case(case_dir: Path, tmp_path: Path, bindgen: HeaderHarness) -> None:
     mojo = _tool_cmd("mojo")
-    if mojo_bindgen is None:
-        pytest.skip("requires mojo-bindgen (or pixi)")
     if mojo is None:
         pytest.skip("requires mojo (or pixi)")
 
@@ -159,8 +153,12 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
 
     header = case_dir / "input.h"
     source = case_dir / "impl.c"
-    runner_external = case_dir / "runner_external.mojo"
-    runner_dl = case_dir / "runner_dl.mojo"
+    runner_external = tmp_path / "runner_external.mojo"
+    runner_dl = tmp_path / "runner_dl.mojo"
+    # Put runners beside this harness's freshly generated bindings, so ignored
+    # output in the fixture directory cannot shadow the selected implementation.
+    shutil.copyfile(case_dir / runner_external.name, runner_external)
+    shutil.copyfile(case_dir / runner_dl.name, runner_dl)
     expected_rt_external = json.loads(
         (case_dir / "expect.runtime.external.json").read_text(encoding="utf-8")
     )
@@ -177,9 +175,8 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
 
     bindings_external = tmp_path / f"{case_name}_bindings_external.mojo"
     bindings_dl = tmp_path / f"{case_name}_bindings_dl.mojo"
-    bindgen_external = _run(
+    bindgen_external = bindgen.run_cli(
         [
-            *mojo_bindgen,
             str(header),
             "--library",
             case_name,
@@ -192,9 +189,8 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
     )
     _check_phase("bindgen_external", phases["bindgen_external"], bindgen_external, str(case_dir))
 
-    bindgen_dl = _run(
+    bindgen_dl = bindgen.run_cli(
         [
-            *mojo_bindgen,
             str(header),
             "--library",
             case_name,
@@ -210,10 +206,6 @@ def test_golden_runtime_case(case_dir: Path, tmp_path: Path) -> None:
         cwd=_REPO_ROOT,
     )
     _check_phase("bindgen_dl", phases["bindgen_dl"], bindgen_dl, str(case_dir))
-
-    # Keep generated bindings under each golden case for local inspection.
-    _persist_generated_bindings(bindings_external, case_dir / "generated.bindings.external.mojo")
-    _persist_generated_bindings(bindings_dl, case_dir / "generated.bindings.owned_dl_handle.mojo")
 
     if bindgen_external.returncode == 0:
         _assert_emit_has_snippets(

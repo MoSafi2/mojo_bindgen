@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.ir import (
     AtomicType,
@@ -26,19 +24,7 @@ from mojo_bindgen.ir import (
     VectorType,
 )
 from mojo_bindgen.parsing.lowering import TypeContext
-from mojo_bindgen.parsing.parser import ClangParser
-from tests.bindgen_helpers import MojoGenerator
-
-
-def _has_libclang() -> bool:
-    try:
-        import clang.cindex  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-pytestmark = pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
+from tests.header_harness import HeaderHarness
 
 
 def test_type_context_enum_is_stable() -> None:
@@ -48,13 +34,15 @@ def test_type_context_enum_is_stable() -> None:
     assert isinstance(TypeContext.TYPEDEF, TypeContext)
 
 
-def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
+def test_type_lowering_preserves_typedefs_by_context(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "type_lowering_ctx.h"
     header.write_text(
         "typedef unsigned int my_uint;\ntypedef enum mode_t { MODE_A = 1 } mode_t;\ntypedef struct payload_t {\n  my_uint value;\n  mode_t mode;\n} payload_t;\nmode_t take_mode(my_uint input);\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "take_mode")
     assert isinstance(payload.fields[0].type, TypeRef)
@@ -73,13 +61,15 @@ def test_type_lowering_preserves_typedefs_by_context(tmp_path: Path) -> None:
     assert isinstance(fn.params[0].type.canonical, IntType)
 
 
-def test_type_lowering_preserves_callback_parameter_names_across_positions(tmp_path: Path) -> None:
+def test_type_lowering_preserves_callback_parameter_names_across_positions(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "callback_param_names.h"
     header.write_text(
         "typedef int (*typedef_cb_t)(int value, void *userdata);\nstruct callbacks_t {\n  int (*poll)(int timeout_ms, void *);\n};\nint install(int (*fn)(int count, void *ctx));\nint (*chooser(void))(int timeout_ms, void *userdata);\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     typedef_cb = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "typedef_cb_t")
     callbacks = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "callbacks_t")
     install = next(d for d in unit.decls if isinstance(d, Function) and d.name == "install")
@@ -95,13 +85,15 @@ def test_type_lowering_preserves_callback_parameter_names_across_positions(tmp_p
     assert chooser.ret.param_names == ("timeout_ms", "userdata")
 
 
-def test_decl_lowering_preserves_inline_and_noreturn_function_attrs(tmp_path: Path) -> None:
+def test_decl_lowering_preserves_inline_and_noreturn_function_attrs(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "function_attrs.h"
     header.write_text(
         "inline int local_inline(int x);\nextern inline int exported_inline(int x);\n_Noreturn void fail_now(void);\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     local_inline = next(
         d for d in unit.decls if isinstance(d, Function) and d.name == "local_inline"
     )
@@ -118,14 +110,15 @@ def test_decl_lowering_preserves_inline_and_noreturn_function_attrs(tmp_path: Pa
 
 def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(
     tmp_path: Path,
+    bindgen: HeaderHarness,
 ) -> None:
     header = tmp_path / "callback_codegen_names.h"
     header.write_text(
         "typedef int (*named_cb_t)(int value, void *userdata);\nstruct callbacks_t {\n  int (*poll)(int timeout_ms, void *);\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
-    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
+    out = bindgen.generate(unit, MojoEmitOptions())
     assert (
         'comptime named_cb_t = def (value: c_int, userdata: Optional[OpaquePointer[mut=True, MutUntrackedOrigin]]) thin abi("C") -> c_int'
         in out
@@ -136,13 +129,15 @@ def test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed(
     )
 
 
-def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) -> None:
+def test_type_lowering_fully_canonicalizes_nested_typedef_chain(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "nested_typedef_chain.h"
     header.write_text(
         "typedef unsigned int inner_t;\ntypedef inner_t outer_t;\ntypedef struct payload_t {\n  outer_t value;\n} payload_t;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     outer = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "outer_t")
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "payload_t")
     assert isinstance(outer.aliased, TypeRef)
@@ -153,13 +148,15 @@ def test_type_lowering_fully_canonicalizes_nested_typedef_chain(tmp_path: Path) 
     assert isinstance(payload.fields[0].type.canonical, IntType)
 
 
-def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> None:
+def test_record_lowering_handles_nested_anon_and_bitfields(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_lowering_nested.h"
     header.write_text(
         "struct outer_t {\n  struct { int x; } nested_struct;\n  union { int y; float z; } nested_union;\n  unsigned int flags:3;\n  unsigned int :0;\n};\ntypedef struct outer_t outer_t;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
     nested_struct_field = next(f for f in outer.fields if f.name == "nested_struct")
     assert isinstance(nested_struct_field.type, StructRef)
@@ -181,13 +178,15 @@ def test_record_lowering_handles_nested_anon_and_bitfields(tmp_path: Path) -> No
     assert zero_width.size_bytes == zero_width.type.size_bytes
 
 
-def test_record_lowering_preserves_typedef_backed_bitfields(tmp_path: Path) -> None:
+def test_record_lowering_preserves_typedef_backed_bitfields(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "typedef_bitfields.h"
     header.write_text(
         "#include <stdint.h>\nstruct typedef_bits_t {\n  uint32_t ready:1;\n  uint32_t state:3;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     bits = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "typedef_bits_t")
     assert [field.name for field in bits.fields] == ["ready", "state"]
     ready = bits.fields[0]
@@ -208,7 +207,9 @@ def test_record_lowering_preserves_typedef_backed_bitfields(tmp_path: Path) -> N
     assert state.type.canonical.int_kind == IntKind.UINT
 
 
-def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_path: Path) -> None:
+def test_parser_materializes_named_embedded_structs_from_included_headers(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     inner = tmp_path / "inner.h"
     outer = tmp_path / "outer.h"
     inner.write_text("struct inner_t { int x; int y; };\n", encoding="utf-8")
@@ -216,9 +217,9 @@ def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_pa
         '#include "inner.h"\nstruct outer_t {\n  struct inner_t inner;\n  int tag;\n};\n',
         encoding="utf-8",
     )
-    unit = ClangParser(
+    unit = bindgen.parse_header(
         header=outer, library="ctx", link_name="ctx", compile_args=[f"-I{tmp_path}"]
-    ).run()
+    )
     inner_decl = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_t")
     outer_decl = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
     assert inner_decl.is_complete is True
@@ -228,13 +229,15 @@ def test_parser_materializes_named_embedded_structs_from_included_headers(tmp_pa
     assert inner_field.type.decl_id == inner_decl.decl_id
 
 
-def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Path) -> None:
+def test_record_lowering_preserves_direct_anonymous_record_members(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_lowering_direct_anon.h"
     header.write_text(
         "struct outer_t {\n  int tag;\n  union {\n    struct { int x; int y; };\n    int flat;\n  };\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer_t")
     anon_union = next(f for f in outer.fields if f.is_anonymous and isinstance(f.type, StructRef))
     assert anon_union.byte_offset == 4
@@ -257,27 +260,31 @@ def test_record_lowering_preserves_direct_anonymous_record_members(tmp_path: Pat
     assert [f.name for f in leaf_struct.fields] == ["x", "y"]
 
 
-def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(tmp_path: Path) -> None:
+def test_codegen_emits_synthesized_fields_for_direct_anonymous_members(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_codegen_direct_anon.h"
     header.write_text(
         "typedef struct outer_t {\n  int tag;\n  union {\n    int value;\n  };\n} outer_t;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
-    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
+    out = bindgen.generate(unit, MojoEmitOptions())
     assert "struct outer_t" in out
     assert "var tag: c_int" in out
     assert "var _anon_1: " in out
     assert "struct __bindgen_anon_" not in out
 
 
-def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> None:
+def test_record_lowering_handles_recursive_pointer_to_self(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_lowering_recursive.h"
     header.write_text(
         "struct node {\n  int value;\n  struct node* next;\n};\ntypedef struct node node;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     node = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "node")
     next_field = next(f for f in node.fields if f.name == "next")
     assert isinstance(next_field.type, CPointer)
@@ -288,13 +295,15 @@ def test_record_lowering_handles_recursive_pointer_to_self(tmp_path: Path) -> No
     assert next_field.type.pointee.name == "node"
 
 
-def test_record_lowering_marks_trailing_empty_and_zero_length_fams(tmp_path: Path) -> None:
+def test_record_lowering_marks_trailing_empty_and_zero_length_fams(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "fam_patterns.h"
     header.write_text(
         "struct c99_packet {\n  unsigned tag;\n  unsigned char payload[];\n};\nstruct gnu_packet {\n  unsigned tag;\n  unsigned char payload[0];\n};\nstruct one_packet {\n  unsigned tag;\n  unsigned char payload[1];\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     c99_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "c99_packet")
     gnu_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "gnu_packet")
     one_packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "one_packet")
@@ -314,13 +323,15 @@ def test_record_lowering_marks_trailing_empty_and_zero_length_fams(tmp_path: Pat
     assert one_payload.fam_pattern is None
 
 
-def test_record_lowering_warns_for_non_trailing_fam_like_field(tmp_path: Path) -> None:
+def test_record_lowering_warns_for_non_trailing_fam_like_field(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "fam_invalid.h"
     header.write_text(
         "struct invalid_packet {\n  unsigned char payload[0];\n  unsigned tag;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     packet = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "invalid_packet")
     payload = next(f for f in packet.fields if f.name == "payload")
     assert payload.fam_pattern is None
@@ -330,10 +341,12 @@ def test_record_lowering_warns_for_non_trailing_fam_like_field(tmp_path: Path) -
     )
 
 
-def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> None:
+def test_type_lowering_preserves_qualified_atomic_pointee(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "qualified_atomic_ptr.h"
     header.write_text("int ev_load_atomic(const _Atomic int *src);\n", encoding="utf-8")
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     fn = next(d for d in unit.decls if isinstance(d, Function) and d.name == "ev_load_atomic")
     assert isinstance(fn.params[0].type, CPointer)
     assert isinstance(fn.params[0].type.pointee, QualifiedType)
@@ -343,13 +356,15 @@ def test_type_lowering_preserves_qualified_atomic_pointee(tmp_path: Path) -> Non
     assert fn.params[0].type.pointee.unqualified.value_type.int_kind == IntKind.INT
 
 
-def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_path: Path) -> None:
+def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "vector_size_typedef.h"
     header.write_text(
         "typedef float vet_float4 __attribute__((vector_size(16)));\ntypedef struct vet_payload { vet_float4 lanes; } vet_payload;\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     td = next(d for d in unit.decls if isinstance(d, Typedef) and d.name == "vet_float4")
     payload = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "vet_payload")
     assert isinstance(td.canonical, VectorType)
@@ -358,18 +373,20 @@ def test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef(tmp_pa
     assert payload.fields[0].type.name == "vet_float4"
     assert isinstance(payload.fields[0].type.canonical, VectorType)
     assert payload.fields[0].type.canonical.count == 4
-    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    out = bindgen.generate(unit, MojoEmitOptions())
     assert "from std.simd import SIMD" in out
     assert "comptime vet_float4 = SIMD[DType.float32, 4]" in out
 
 
-def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_path: Path) -> None:
+def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_lowering_named_nested_ptr.h"
     header.write_text(
         "struct outer {\n  struct inner {\n    int x;\n  } *p;\n  struct inner *q;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
     inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner")
     p_field = next(f for f in outer.fields if f.name == "p")
@@ -382,12 +399,14 @@ def test_record_lowering_emits_named_nested_record_defs_for_pointer_fields(tmp_p
     assert q_field.type.pointee.decl_id == inner.decl_id
 
 
-def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_path: Path) -> None:
+def test_record_lowering_emits_named_nested_record_defs_for_value_fields(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_lowering_named_nested_value.h"
     header.write_text(
         "struct outer {\n  struct inner_value {\n    int y;\n  } value;\n};\n", encoding="utf-8"
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
     inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_value")
     value_field = next(f for f in outer.fields if f.name == "value")
@@ -399,13 +418,14 @@ def test_record_lowering_emits_named_nested_record_defs_for_value_fields(tmp_pat
 
 def test_record_lowering_reuses_named_nested_record_nominally_after_definition(
     tmp_path: Path,
+    bindgen: HeaderHarness,
 ) -> None:
     header = tmp_path / "record_lowering_named_nested_nominal.h"
     header.write_text(
         "struct outer {\n  struct inner_value {\n    int y;\n  } value;\n  struct inner_value copy;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
     outer = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "outer")
     inner = next(d for d in unit.decls if isinstance(d, Struct) and d.name == "inner_value")
     copy_field = next(f for f in outer.fields if f.name == "copy")
@@ -415,14 +435,16 @@ def test_record_lowering_reuses_named_nested_record_nominally_after_definition(
     assert copy_field.type.is_anonymous is False
 
 
-def test_codegen_emits_named_nested_record_defs_before_parent(tmp_path: Path) -> None:
+def test_codegen_emits_named_nested_record_defs_before_parent(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "record_codegen_named_nested.h"
     header.write_text(
         "struct sqlite3_index_info {\n  struct sqlite3_index_constraint { int iColumn; } *aConstraint;\n  struct sqlite3_index_orderby { int desc; } *aOrderBy;\n  struct sqlite3_index_constraint_usage { int argvIndex; } *aConstraintUsage;\n};\n",
         encoding="utf-8",
     )
-    unit = ClangParser(header=header, library="ctx", link_name="ctx", compile_args=[]).run()
-    out = MojoGenerator(MojoEmitOptions()).generate(unit)
+    unit = bindgen.parse_header(header=header, library="ctx", link_name="ctx", compile_args=[])
+    out = bindgen.generate(unit, MojoEmitOptions())
     assert "struct sqlite3_index_constraint" in out
     assert "struct sqlite3_index_orderby" in out
     assert "struct sqlite3_index_constraint_usage" in out

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from mojo_bindgen.ir import (
@@ -15,25 +13,24 @@ from mojo_bindgen.ir import (
     Struct,
     StructRef,
     Typedef,
-    Unit,
 )
-from mojo_bindgen.serde import decode_node, to_debug_dict
-from tests.stress._helpers import case_dirs, has_libclang, parse_case
-
-pytestmark = pytest.mark.skipif(not has_libclang(), reason="libclang not available (use pixi run)")
+from mojo_bindgen.serde import to_debug_dict
+from tests.header_harness import HeaderHarness
+from tests.stress._helpers import case_dirs, parse_case
 
 
 @pytest.mark.parametrize("case_dir", case_dirs(), ids=lambda path: path.name)
-def test_stress_fixture_json_round_trip(case_dir) -> None:
-    unit = parse_case(case_dir)
+def test_stress_fixture_json_round_trip(case_dir, bindgen: HeaderHarness) -> None:
+    unit = parse_case(case_dir, bindgen)
     d0 = to_debug_dict(unit)
-    d1 = json.loads(json.dumps(d0))
-    d2 = to_debug_dict(decode_node(d1, Unit))
+    d2 = to_debug_dict(bindgen.roundtrip_cir(unit))
     assert d0 == d2
 
 
-def test_pathological_core_preserves_selected_hard_declarations() -> None:
-    unit = parse_case(next(path for path in case_dirs() if path.name == "pathological_core"))
+def test_pathological_core_preserves_selected_hard_declarations(bindgen: HeaderHarness) -> None:
+    unit = parse_case(
+        next(path for path in case_dirs() if path.name == "pathological_core"), bindgen
+    )
     typedefs = {decl.name: decl for decl in unit.decls if isinstance(decl, Typedef)}
     globals_by_name = {decl.name: decl for decl in unit.decls if isinstance(decl, GlobalVar)}
     functions = {decl.name: decl for decl in unit.decls if isinstance(decl, Function)}
@@ -68,8 +65,12 @@ def test_pathological_core_preserves_selected_hard_declarations() -> None:
     assert all(field.is_anonymous for field in anon_union.fields)
 
 
-def test_pathological_macros_preserves_supported_and_unsupported_forms() -> None:
-    unit = parse_case(next(path for path in case_dirs() if path.name == "pathological_macros"))
+def test_pathological_macros_preserves_supported_and_unsupported_forms(
+    bindgen: HeaderHarness,
+) -> None:
+    unit = parse_case(
+        next(path for path in case_dirs() if path.name == "pathological_macros"), bindgen
+    )
     macros = {decl.name: decl for decl in unit.decls if isinstance(decl, MacroDecl)}
     assert {"PM_INT", "PM_FILE", "PM_SIZEOF", "PM_FUNC", "PM_GENERIC"} <= macros.keys()
     assert "PM_EMPTY" not in macros
@@ -85,8 +86,10 @@ def test_pathological_macros_preserves_supported_and_unsupported_forms() -> None
     assert macros["PM_GENERIC"].diagnostic is not None
 
 
-def test_pathological_layout_preserves_selected_layout_edges() -> None:
-    unit = parse_case(next(path for path in case_dirs() if path.name == "pathological_layout"))
+def test_pathological_layout_preserves_selected_layout_edges(bindgen: HeaderHarness) -> None:
+    unit = parse_case(
+        next(path for path in case_dirs() if path.name == "pathological_layout"), bindgen
+    )
     structs = {decl.name: decl for decl in unit.decls if isinstance(decl, Struct)}
     dense = structs["pl_dense_bits"]
     assert any(field.is_bitfield and field.bit_width == 0 for field in dense.fields)

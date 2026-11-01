@@ -4,21 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_ir_printer import _clean_doc_comment
 from mojo_bindgen.ir import DocComment, Enum, Function, GlobalVar, Struct
-from mojo_bindgen.parsing.parser import ClangParser
-from tests.bindgen_helpers import MojoGenerator
-
-
-def _has_libclang() -> bool:
-    try:
-        import clang.cindex  # noqa: F401
-    except ImportError:
-        return False
-    return True
+from tests.header_harness import HeaderHarness
 
 
 def test_clean_doc_comment_strips_common_c_doc_markers() -> None:
@@ -46,8 +35,9 @@ def test_clean_doc_comment_strips_line_doc_markers() -> None:
     assert _clean_doc_comment(doc) == ["First line.", "  Indented detail."]
 
 
-@pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
-def test_parser_captures_docs_on_public_declarations(tmp_path: Path) -> None:
+def test_parser_captures_docs_on_public_declarations(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "docs.h"
     header.write_text(
         """
@@ -72,7 +62,7 @@ extern const int VALUE;
         encoding="utf-8",
     )
 
-    unit = ClangParser(header, library="docs", link_name="docs", compile_args=[]).run()
+    unit = bindgen.parse_header(header, library="docs", link_name="docs", compile_args=[])
 
     struct = next(decl for decl in unit.decls if isinstance(decl, Struct))
     enum = next(decl for decl in unit.decls if isinstance(decl, Enum))
@@ -89,8 +79,9 @@ extern const int VALUE;
     assert global_var.doc is not None
 
 
-@pytest.mark.skipif(not _has_libclang(), reason="libclang not available (use pixi run)")
-def test_mojo_emits_docs_and_respects_disable_option(tmp_path: Path) -> None:
+def test_mojo_emits_docs_and_respects_disable_option(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
     header = tmp_path / "docs.h"
     header.write_text(
         """
@@ -105,15 +96,15 @@ int add(int lhs, int rhs);
 """,
         encoding="utf-8",
     )
-    unit = ClangParser(header, library="docs", link_name="docs", compile_args=[]).run()
+    unit = bindgen.parse_header(header, library="docs", link_name="docs", compile_args=[])
 
-    rendered = MojoGenerator().generate(unit)
+    rendered = bindgen.generate(unit)
     assert '"""' in rendered
     assert "A documented struct." in rendered
     assert "# Field count." in rendered
     assert "Adds two integers." in rendered
 
-    disabled = MojoGenerator(MojoEmitOptions(emit_doc_comments=False)).generate(unit)
+    disabled = bindgen.generate(unit, MojoEmitOptions(emit_doc_comments=False))
     assert "A documented struct." not in disabled
     assert "Field count." not in disabled
     assert "Adds two integers." not in disabled

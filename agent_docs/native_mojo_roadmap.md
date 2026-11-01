@@ -169,3 +169,18 @@ publication occurred.
 See [the frontend implementation and dependency provenance](native_frontend_plan.md)
 for the localized upstream unsaved-file lifetime adapter, checked traversal limit,
 exact folding comparisons and test scope. Stages 4–5 remain future work.
+
+
+## Shared acceptance follow-up (2026-11-01)
+
+Surface/alignment, corpus, stress and all existing runtime tests now share their
+test bodies across Python, native O0 and native O3. The 198-case shared matrix and
+full **638-test suite** pass; the light gate remains at **400 passed**. Native
+shared acceptance is required by `check-native`. See [the harness boundary,
+selection and measured results](shared_header_acceptance.md). Production generator
+algorithms and fixed expectations remain unchanged in this follow-up.
+
+The next shared slice adds type lowering, macro closure/expansion/folding, comment
+capture/emission and target ABI checks. All 102 shared behaviors now run across
+three harnesses (306 executions; 204 native). Full integration passes **710 tests**;
+the light gate remains **400 passed**, with no production or expectation changes.

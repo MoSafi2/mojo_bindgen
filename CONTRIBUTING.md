@@ -39,7 +39,7 @@ Useful Pixi tasks:
 - `pixi run test`: full pytest suite
 - `pixi run test-light`: pytest excluding `expensive` tests
 - `pixi run check-light`: CI-aligned validation (`format-check`, lint, pyright, `test-light`)
-- `pixi run --locked pytest -q tests/e2e`: the separate FFI runtime CI gate,
+- `pixi run --locked pytest -q tests/e2e --bindgen python`: the stable Python FFI runtime gate,
   including compiler warnings as errors and negative vararg compilation checks
 - `pixi run build`: build sdist and wheel
 - `pixi run example-sqlite` / `example-cairo` / `example-libpng` / `example-zlib`: generate and exercise example bindings
@@ -109,7 +109,46 @@ re-baselining blindly. In particular:
 
 The native rewrite has its own pinned nightly manifest and lock under `mojo/`.
 Use `pixi run --locked check-native` for native format/build checks, O0/O3
-ownership tests, and Python/native parity. `pixi run --locked check-light` keeps
+ownership tests, Python/native parity, and shared native acceptance suites. `pixi run --locked check-light` keeps
 its existing stable-toolchain Python scope; the full pytest suite includes the
 expensive native parity cases and therefore also requires Pixi and the native lock.
 See [the native README](mojo/README.md) for setup, packaging and compiler constraints.
+
+
+### Shared header and runtime acceptance
+
+Surface/alignment goldens, corpus expectations, stress IR/codec checks, both
+runtime suites, and parser behavior tests use the same test bodies and expectations
+for three harnesses:
+`python`, `native-O0`, and `native-O3`. Selection defaults to all available
+implementations:
+
+```bash
+pixi run --locked pytest -q tests/surface tests/corpus tests/stress tests/e2e
+pixi run --locked pytest -q --bindgen python tests/surface tests/corpus tests/stress tests/e2e
+pixi run --locked native-shared
+```
+
+`--bindgen native` selects both native optimization levels and requires the locked
+native environment. With the default `all`, unavailable native environments are
+skipped with an installation command. Native cases carry `native` and `expensive`
+markers, so `check-light` continues to run the Python cases. `check-native`
+requires the native shared matrix in addition to differential tests.
+
+The `bindgen` fixture in `tests/header_harness.py` provides header parsing,
+CIR generation/roundtrips, constant folding, macro expansion/environments, and CLI
+execution. The parser slice includes `test_type_lowering.py`, `test_macro_closure.py`,
+`test_doc_comments.py`, and `test_target_abi.py` under `tests/unit/`. Python-only
+enum and printer-helper tests remain outside the native matrix. Native algorithms execute in
+compiled Mojo drivers or the native CLI. Python IR objects are test-only decoded
+assertion views; they do not perform native parsing, mapping, or emission. Keep
+new assertions independent of Python internals where possible, so these views
+can be replaced when Python's IR is retired.
+
+Shared fixed goldens and runtime expectations remain independent of differential
+parity. Do not regenerate expected output from whichever implementation is being
+tested. Preserve existing expected-failure statuses. Generated bindings and
+copied runtime runners stay in each case's temporary directory, preventing stale
+fixture-directory output from shadowing fresh bindings. Generated bindings always
+compile/run on the separate stable SDK; nightly runtime variables are confined
+to native generator subprocesses.
