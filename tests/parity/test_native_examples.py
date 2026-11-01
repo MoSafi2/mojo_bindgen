@@ -12,6 +12,8 @@ import pytest
 
 from mojo_bindgen.analysis.pipeline import AnalysisOrchestrator
 from mojo_bindgen.serde import dumps_cir, loads_cir
+from tests.parity.test_native_frontend import frontend as frontend
+from tests.parity.test_native_frontend import native_environment
 from tests.parity.test_native_types import MANIFEST, ROOT
 
 pytestmark = [pytest.mark.expensive, pytest.mark.integration]
@@ -116,6 +118,10 @@ def json_backend(request, tmp_path_factory):
 def python_dumps(tmp_path_factory, libraries):
     directory = tmp_path_factory.mktemp("example-python-dumps")
     results = {}
+    reference_env = libraries.copy()
+    native_env = native_environment()
+    for name in ("PATH", "CONDA_PREFIX", "MOJO_BINDGEN_CLANG_LIBRARY_PATH"):
+        reference_env[name] = native_env[name]
     for example in EXAMPLES:
         for mode in ("external_call", "owned_dl_handle"):
             output = directory / example.name / mode
@@ -126,7 +132,8 @@ def python_dumps(tmp_path_factory, libraries):
                 [
                     sys.executable,
                     "-m",
-                    "mojo_bindgen.cli",
+                    "tests.parity.frontend_reference",
+                    "cli",
                     str(PREFIX / "include" / example.header),
                     "--library",
                     example.library,
@@ -145,7 +152,7 @@ def python_dumps(tmp_path_factory, libraries):
                     "--output",
                     str(bindings),
                 ],
-                env=libraries,
+                env=reference_env,
             )
             # Expected canonical CIR is checked independently of source rendering.
             source = output / "raw.cir.json"
@@ -186,6 +193,10 @@ def test_python_json_examples_continue_natively(
     )
     assert source.read_bytes() == source_before
     assert target.read_bytes() == target_before
+    _exercise_bindings(example, mode, libraries, tmp_path, module)
+
+
+def _exercise_bindings(example, mode, libraries, tmp_path, module):
     binary = tmp_path / "smoke"
     # Import beside the fresh bindings, never beside ignored stale example output.
     smoke = tmp_path / example.smoke
@@ -208,3 +219,47 @@ def test_python_json_examples_continue_natively(
     # Existing smoke programs write files; isolate their working directory.
     result = _run([str(binary)], env=libraries, cwd=tmp_path)
     assert example.success in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize("example", EXAMPLES, ids=lambda e: e.name)
+@pytest.mark.parametrize("mode", ["external_call", "owned_dl_handle"])
+def test_native_headers_generate_examples(
+    frontend, python_dumps, libraries, example, mode, tmp_path
+):
+    reference = python_dumps[example.name, mode]
+    env = frontend.environment.copy()
+    env["CPATH"] = libraries["CPATH"]
+    env["LD_LIBRARY_PATH"] = libraries["LD_LIBRARY_PATH"]
+    module = tmp_path / f"{example.module}.mojo"
+    layout = tmp_path / f"{example.module}_layout_tests.mojo"
+    cir, mojo_ir = tmp_path / "raw.json", tmp_path / "mojo.json"
+    _run(
+        [
+            str(frontend.binary),
+            str(PREFIX / "include" / example.header),
+            "--library",
+            example.library,
+            "--link-name",
+            example.library,
+            "--link-mode",
+            mode.replace("_", "-"),
+            "--library-path",
+            str(PREFIX / f"lib/lib{example.library}.so"),
+            "--output",
+            str(module),
+            "--layout-tests",
+            str(layout),
+            "--dump-cir",
+            str(cir),
+            "--dump-mojo-ir",
+            str(mojo_ir),
+        ],
+        env=env,
+    )
+    assert module.read_bytes() == (reference / module.name).read_bytes()
+    assert layout.read_bytes() == (reference / layout.name).read_bytes()
+    assert json.loads(cir.read_text()) == json.loads((reference / "raw.cir.json").read_text())
+    assert json.loads(mojo_ir.read_text()) == json.loads(
+        (reference / "final.mojo_ir.json").read_text()
+    )
+    _exercise_bindings(example, mode, libraries, tmp_path, module)

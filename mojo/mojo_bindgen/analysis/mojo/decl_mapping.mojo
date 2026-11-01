@@ -1,3 +1,4 @@
+from ..calling_convention import require_c_calling_convention
 from std.memory import ArcPointer
 from ...ir import *
 from ..common import mojo_ident
@@ -168,6 +169,7 @@ struct UnitDeclMapper(Movable):
         return out^
 
     def _function(self, v: Function) raises -> FunctionDecl:
+        require_c_calling_convention(v.calling_convention)
         var kind = FunctionKind.WRAPPER
         var notes = List[MappingNote]()
         if v.attrs.inline_disposition != InlineDisposition.NONE:

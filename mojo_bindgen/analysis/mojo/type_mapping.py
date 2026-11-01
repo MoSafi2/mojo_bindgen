@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import assert_never
 
+from mojo_bindgen.analysis.calling_convention import require_c_calling_convention
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.facts.target import TargetQueries
 from mojo_bindgen.analysis.type_walk import validate_type_tree
@@ -327,6 +328,7 @@ class MapTypePass:
     # Function pointers
     # ------------------------
     def _map_function_ptr(self, t: CFunctionPtr) -> MojoFunctionPtr:
+        require_c_calling_convention(t.calling_convention)
         param_names = t.param_names or ()
         params = [
             MojoParam(
@@ -338,7 +340,7 @@ class MapTypePass:
         return MojoFunctionPtr(
             params=tuple(params),
             ret=self._map_validated(t.ret),
-            abi="C" if t.calling_convention in (None, "", "c") else t.calling_convention,
+            abi="C",
             thin=True,
             raises=False,
         )

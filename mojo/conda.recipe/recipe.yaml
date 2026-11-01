@@ -11,35 +11,43 @@ source:
   path: ../..
 
 build:
-  number: 0
+  number: 1
   script:
     interpreter: bash
     content:
-      - mkdir -p "${PREFIX}/bin" "${PREFIX}/lib/mojo"
-      - mojo precompile mojo/mojo_bindgen -o "${PREFIX}/lib/mojo/mojo_bindgen.mojoc"
-      - mojo build -I mojo mojo/main.mojo -o "${PREFIX}/bin/mojo-bindgen-mojo"
+      - mkdir -p "${PREFIX}/bin" "${PREFIX}/lib/mojo" "${SRC_DIR}/.compiler-tmp"
+      - export TMPDIR="${SRC_DIR}/.compiler-tmp"
+      - mojo precompile -I "${PREFIX}/lib/mojo" mojo/mojo_bindgen -o "${PREFIX}/lib/mojo/mojo_bindgen.mojoc"
+      - mojo build -I "${PREFIX}/lib/mojo" -I mojo mojo/main.mojo -o "${PREFIX}/bin/mojo-bindgen-mojo"
 
 requirements:
   build:
     - mojo-compiler ==${{ mojo_version }}
   host:
+    - libclang_mojo ==0.3.0.dev20261031 mojo1_3_0_dev2026103105_linux_64_1
     - mojo-compiler ==${{ mojo_version }}
   run:
+    - libclang_mojo ==0.3.0.dev20261031 mojo1_3_0_dev2026103105_linux_64_1
+    - clang 18.*
     - mojo-compiler ==${{ mojo_version }}
     - __glibc >=2.34,<3
 
-# libclang_mojo and its libclang/shim dependencies are added with the frontend stage.
 tests:
   - script:
+      - mkdir -p .compiler-tmp
+      - export TMPDIR="$PWD/.compiler-tmp"
       - mojo-bindgen-mojo --version
-      - mojo run test_import.mojo
+      - mojo build test_import.mojo -o installed-api-test
+      - ./installed-api-test
+      - mojo-bindgen-mojo native_smoke.h --dump-cir native.cir.json -o native.mojo
     files:
       recipe:
         - test_import.mojo
+        - native_smoke.h
 
 about:
   homepage: https://github.com/MoSafi2/mojo_bindgen
   repository: https://github.com/MoSafi2/mojo_bindgen
   license: MIT
   license_file: LICENSE
-  summary: Native Mojo bindgen recursive IR backend
+  summary: Native Mojo header-to-bindings generator

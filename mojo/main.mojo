@@ -1,16 +1,12 @@
-"""Native command entry point; header generation arrives in the frontend stage."""
-
+"""Native header-to-binding command, alongside Python during the transition."""
 from std.sys import argv
+from std.ffi import external_call, c_int
+from mojo_bindgen.cli import run_cli
 
 
-def main() raises:
-    var args = argv()
-    if len(args) == 2 and args[1] == "--version":
-        print("mojo-bindgen-mojo 0.3.5 (Mojo 1.3.0.dev2026103105; backend slice)")
-        return
-    if len(args) == 1 or (len(args) == 2 and (args[1] == "--help" or args[1] == "-h")):
-        print("mojo-bindgen-mojo: native Mojo bindgen")
-        print("Available: --help, --version. The native library generates from constructed CIR.")
-        print("Use mojo-bindgen for C header generation during the transition.")
-        return
-    raise Error("native header generation is not available yet; use mojo-bindgen")
+def main():
+    var args = List[String]()
+    for arg in argv():
+        args.append(String(arg))
+    var code = run_cli(args)
+    external_call["exit", NoneType](c_int(code))

@@ -1,4 +1,6 @@
 """Pure CIR-to-MojoIR type mapping with explicit, fixed target queries."""
+from ..calling_convention import require_c_calling_convention
+
 
 from std.memory import ArcPointer
 from ...ir import *
@@ -269,6 +271,7 @@ struct MapTypePass(Copyable, Movable):
                     )
                 return _pointer(ArcPointer(self._map(v.element.ptr()[])))
             case .c_function_ptr(v):
+                require_c_calling_convention(v.calling_convention)
                 var params = List[MojoParam]()
                 for i in range(len(v.params)):
                     var name = String()
@@ -276,12 +279,6 @@ struct MapTypePass(Copyable, Movable):
                         name = v.param_names.value()[i].copy()
                     params.append(MojoParam(name^, ArcPointer(self._map(v.params[i].type.ptr()[]))))
                 var abi = String("C")
-                if (
-                    v.calling_convention
-                    and v.calling_convention.value() != ""
-                    and v.calling_convention.value() != "c"
-                ):
-                    abi = v.calling_convention.value().copy()
                 return MojoType.mojo_function_ptr(
                     MojoFunctionPtr(ArcPointer(self._map(v.ret.ptr()[])), params^, abi^)
                 )

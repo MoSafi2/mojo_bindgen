@@ -18,6 +18,7 @@ from mojo_bindgen.codegen.mojo_ir_printer import (
 )
 from mojo_bindgen.layout_tests.generator import render_layout_test_module
 from mojo_bindgen.orchestrator import generate_from_unit
+from mojo_bindgen.parsing.lowering.const_expr import fold
 
 
 def _options(req: JSON) raises -> MojoEmitOptions:
@@ -36,7 +37,9 @@ def _options(req: JSON) raises -> MojoEmitOptions:
 def _run(req: JSON) raises -> JSON:
     var response = Dict[String, ArcPointer[JSON]]()
     var action = req.get("action").ptr()[].text()
-    if action == "roundtrip-cir":
+    if action == "fold":
+        response["expr"] = ArcPointer(encode_c_expr(fold(decode_c_expr(req.get("expr").ptr()[]))))
+    elif action == "roundtrip-cir":
         response["unit"] = ArcPointer(encode_cir(decode_cir(req.get("unit").ptr()[])))
     elif action == "roundtrip-mojo":
         response["module"] = ArcPointer(encode_mojo_ir(decode_mojo_ir(req.get("module").ptr()[])))

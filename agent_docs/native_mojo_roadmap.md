@@ -37,10 +37,10 @@ historical experiment ledger remain unchanged.
 | 4: previews | Installable native Conda previews, Mojo API, full differential CI, small Python wrapper API and old-API deprecation | Clean installed-package, native API/CLI, wrapper and generated-binding runtime tests pass |
 | 5: cutover | Make native CLI canonical, remove Python algorithms by subsystem and keep the thin wrapper | Native execution needs no Python implementation and shared acceptance coverage remains active |
 
-Stages 0–1 are complete. Stage 2 is implemented and validated, described in
-[native_backend_plan.md](native_backend_plan.md). Native parsing, CLI compatibility,
-and distribution transition remain later work. Keep the CLI skeleton honest about
-its capabilities and preserve Python's command.
+Stages 0–2 are complete. Stage 3 now implements native header parsing and CLI
+integration; see [native_frontend_plan.md](native_frontend_plan.md) for contracts,
+dependency provenance, compiler adaptations, and current acceptance. Keep Python's
+command canonical; distribution transition remains stages 4–5.
 
 ## Packaging and transition
 
@@ -49,10 +49,9 @@ previews use `mojo-bindgen-mojo`; the Conda package is `mojo-bindgen-native` and
 contains the executable plus the `mojo_bindgen` import package. Exact compiler
 requirements protect `.mojoc` compatibility. Linux x86-64 is the initial target.
 
-At stage 3, libclang_mojo and its shared-library shim must come from a reproducible
-immutable revision validated on the selected nightly. The sibling wrapper's local
-compatibility changes were uncommitted at planning time and are not a release
-source. Do not vendor or silently consume that checkout.
+Stage 3 pins the published shimless `libclang_mojo` build 1 by GitHub URL and
+SHA-256, with exact producing compiler compatibility. Its libclang 18 runtime is
+packaged transitively. No sibling checkout or native shim is consumed.
 
 At cutover, transfer `mojo-bindgen` to the native package and remove Python's
 console entry point in the same coordinated release. Keep the native alias for
@@ -148,3 +147,25 @@ runtime smoke tests. The full suite now passes **472 tests**; the light gate
 passes **396 tests with 76 deselected**. See [commands, scope and measured results](
 native_json_handoff.md). Example headers and runtimes use an independent locked
 environment; both compiler dependency locks remain unchanged.
+
+
+## Frontend-slice validation (2026-11-01, Linux x86-64)
+
+Stage 3 is implemented and validated. The native command parses C headers directly
+using the checksum-pinned shimless GitHub libclang_mojo release. Python remains the
+canonical generator and independent test reference; no command cutover or package
+publication occurred.
+
+- Full suite: **506 passed**. Light gate: format/Ruff/Pyright and **400 passed,
+  106 deselected**.
+- **18 native tests at O0/O3** pass, plus native build/precompilation/formatting.
+- All 49 shared headers match raw CIR, finalized MojoIR, binding and layout source
+  in both modes at O0/O3. Extra tests cover target and char policy, unsigned enums,
+  Unicode, bitfields, diagnostics, failure recovery and calling-convention rejection.
+- Direct native headers and retained Python JSON handoffs for all four examples
+  pass **32 example/mode/optimization cases** and stable binding runtime checks.
+- Final local Conda build and installed compiled API/CLI generation tests pass.
+
+See [the frontend implementation and dependency provenance](native_frontend_plan.md)
+for the localized upstream unsaved-file lifetime adapter, checked traversal limit,
+exact folding comparisons and test scope. Stages 4–5 remain future work.

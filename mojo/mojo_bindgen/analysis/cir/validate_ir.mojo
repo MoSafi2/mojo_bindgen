@@ -7,6 +7,7 @@ from ..traversal import (
     validate_expression,
 )
 from ..type_walk import validate_type_tree, iter_type_nodes, TypeWalkOptions
+from ..calling_convention import require_c_calling_convention
 from ..common import quoted
 
 
@@ -23,6 +24,8 @@ struct ValidateIRPass:
                     raise Error("duplicate decl_id " + quoted(key.value()) + " in Unit")
                 ids[key.value()] = decl.copy()
             match decl:
+                case .function(v):
+                    require_c_calling_convention(v.calling_convention)
                 case .struct_decl(v):
                     if not v.decl_id.byte_length():
                         raise Error("struct " + quoted(v.name) + " is missing decl_id")
@@ -43,6 +46,9 @@ struct ValidateIRPass:
                     var key: String
                     var tag: String
                     match node.ptr()[]:
+                        case .c_function_ptr(v):
+                            require_c_calling_convention(v.calling_convention)
+                            continue
                         case .type_ref(v):
                             name = v.name.copy()
                             key = v.decl_id.copy()

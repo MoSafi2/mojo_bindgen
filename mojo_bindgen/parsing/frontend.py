@@ -289,7 +289,37 @@ class ClangCompat:
         if getter is None:
             getter = getattr(t, "calling_conv", None)
         if getter is None:
-            return None
+            # Python's clang bindings omit this C API on some releases.
+            from ctypes import c_uint
+
+            query = cx.conf.lib.clang_getFunctionTypeCallingConv
+            query.argtypes = [cx.Type]
+            query.restype = c_uint
+            value = query(t)
+            names = {
+                0: "DEFAULT",
+                1: "C",
+                2: "X86_STDCALL",
+                3: "X86_FASTCALL",
+                4: "X86_THISCALL",
+                5: "X86_PASCAL",
+                6: "AAPCS",
+                7: "AAPCS_VFP",
+                8: "X86_REGCALL",
+                9: "INTEL_OCL_BICC",
+                10: "WIN64",
+                11: "X86_64_SYSV",
+                12: "X86_VECTORCALL",
+                13: "SWIFT",
+                14: "PRESERVE_MOST",
+                15: "PRESERVE_ALL",
+                16: "AARCH64_VECTORCALL",
+                17: "SWIFT_ASYNC",
+                18: "AARCH64_SVE_PCS",
+                100: "INVALID",
+                200: "UNEXPOSED",
+            }
+            return None if value in (0, 1) else names.get(value, str(value))
         try:
             value = getter() if callable(getter) else getter
         except Exception:
@@ -298,7 +328,7 @@ class ClangCompat:
             return None
         name = getattr(value, "name", None)
         if isinstance(name, str) and name:
-            return name
+            return None if name in ("C", "DEFAULT") else name
         try:
             return str(value)
         except Exception:

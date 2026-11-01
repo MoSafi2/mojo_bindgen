@@ -60,5 +60,7 @@ jobs:
         run: pixi install --manifest-path mojo/pixi.toml --locked
       - name: Install locked example headers and runtime libraries
         run: pixi install --manifest-path examples/pixi.toml --locked
-      - name: Validate native library and Python parity
+      - name: Validate native frontend, backend, and Python parity
         run: pixi run --locked check-native
+      - name: Build and test installed native package
+        run: pixi run --manifest-path mojo/pixi.toml --locked -e package package-build

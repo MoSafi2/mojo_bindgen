@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from mojo_bindgen.analysis.calling_convention import require_c_calling_convention
 from mojo_bindgen.analysis.traversal import iter_decl_referenced_types
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, iter_type_nodes, validate_type_tree
 from mojo_bindgen.ir import (
+    CFunctionPtr,
     Const,
     CType,
     Decl,
+    Function,
     MacroDecl,
     OpaqueRecordRef,
     Struct,
@@ -39,6 +42,8 @@ class ValidateIRPass:
 
         for decl in unit.decls:
             self._validate_decl_identity(decl, decl_ids)
+            if isinstance(decl, Function):
+                require_c_calling_convention(decl.calling_convention)
             if isinstance(decl, Typedef):
                 if not decl.decl_id:
                     raise IRValidationError(f"typedef {decl.name!r} is missing decl_id")
@@ -70,6 +75,8 @@ class ValidateIRPass:
         except ValueError as error:
             raise IRValidationError(str(error)) from error
         for node in iter_type_nodes(t, options=TypeWalkOptions(descend_vector_element=True)):
+            if isinstance(node, CFunctionPtr):
+                require_c_calling_convention(node.calling_convention)
             if isinstance(node, TypeRef) and not node.decl_id:
                 raise IRValidationError(f"TypeRef {node.name!r} is missing decl_id")
             if isinstance(node, StructRef) and not node.decl_id:

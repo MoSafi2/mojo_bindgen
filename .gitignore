@@ -25,3 +25,6 @@ io_uring.rs
 
 # Isolated example headers/runtime libraries
 /examples/.pixi/
+
+# Installed-package header fixture
+!/mojo/conda.recipe/native_smoke.h

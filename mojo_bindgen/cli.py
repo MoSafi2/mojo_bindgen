@@ -306,7 +306,7 @@ def run(
         if dump_preprocessed is not None:
             _write_text(dump_preprocessed, orchestrator.dump_preprocessed())
         result = orchestrator.run()
-    except (ParseError, FileNotFoundError, OSError, RuntimeError) as e:
+    except (ParseError, FileNotFoundError, OSError, RuntimeError, ValueError) as e:
         args = orchestrator.normalized_clang_args()
         stderr_console.print(
             "[bold red]mojo-bindgen error:[/bold red] "

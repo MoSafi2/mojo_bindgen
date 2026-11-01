@@ -7,6 +7,7 @@ from std.testing import assert_equal
 
 def main() raises:
     test_installed_backend()
+    test_installed_frontend()
     var mapper = MapTypePass(TargetQueries(TargetABI(8, 8, ByteOrder.LITTLE)))
     var value = CType.int_type(IntType(IntKind.INT, 4, 4))
     assert_equal(
@@ -38,3 +39,14 @@ def test_installed_backend() raises:
         "123456789012345678901234567890123456789012345678901234567890" in result.bindings_source
     )
     assert_true("def main() raises:" in result.layout_test_source.value())
+
+
+def test_installed_frontend() raises:
+    from mojo_bindgen import BindgenOptions, bindgen
+    from std.testing import assert_true
+
+    var options = BindgenOptions("native_smoke.h")
+    var result = bindgen(options)
+    assert_true("native_accept" in result.bindings_source)
+    assert_true("NativeNode" in result.bindings_source)
+    assert_true(len(result.unit.decls) > 0)

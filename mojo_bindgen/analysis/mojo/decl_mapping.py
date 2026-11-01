@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import assert_never
 
+from mojo_bindgen.analysis.calling_convention import require_c_calling_convention
 from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.mojo.alias_mapping import map_typedef_alias
 from mojo_bindgen.analysis.mojo.const_expr_mapping import (
@@ -152,6 +153,7 @@ class UnitDeclMapper:
         return [enum_decl, *aliases, *enumerants]
 
     def _map_function(self, decl: Function) -> FunctionDecl:
+        require_c_calling_convention(decl.calling_convention)
         kind = FunctionKind.WRAPPER
         diagnostics = []
         if decl.attrs.inline_disposition != InlineDisposition.NONE:

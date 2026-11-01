@@ -1,9 +1,10 @@
 # Native Mojo rewrite
 
-The native implementation lives beside Python and provides a **complete backend
-from constructed CIR**: validation, canonicalization, analysis, mapping, target
-normalization, bindings, and layout-test source. Direct C parsing and the replacement
-Python wrapper are later stages. Use the existing `mojo-bindgen` command for headers.
+The native implementation lives beside Python and generates bindings directly
+from C headers through libclang and the recursive backend. Python remains the
+canonical `mojo-bindgen` generator during the transition; native execution uses
+`mojo-bindgen-mojo`. The thin Python wrapper and distribution cutover are later
+stages.
 
 ## Development
 
@@ -19,8 +20,14 @@ pixi run --locked check-native
 ```
 
 `native-build` writes `mojo/build/mojo-bindgen-mojo` and
-`mojo/build/mojo_bindgen.mojoc`. The command currently supports `--help` and
-`--version`; it rejects header generation explicitly. Native unit tests compile
+`mojo/build/mojo_bindgen.mojoc`. Generate headers with:
+
+```bash
+pixi run --manifest-path mojo/pixi.toml --locked ./build/mojo-bindgen-mojo input.h -o bindings.mojo
+```
+
+Use `--help` for flags matching Python, including debug dumps and both link modes.
+Native unit tests compile
 and run at O0 and O3. The parity harness builds an independent test driver at both
 optimization levels and compares with the current Python implementation.
 
@@ -42,6 +49,12 @@ pixi run --manifest-path mojo/pixi.toml --locked format-check
 
 Import `CType`, `MojoType`, and payload structs from `mojo_bindgen.ir`, and use
 `MapTypePass(TargetQueries(target_abi)).run(source)` or `map_type(source, queries)`.
+For headers, import `BindgenOptions` and `bindgen` from `mojo_bindgen`; construct
+`BindgenOptions("input.h")` and pass it to `bindgen`. The result contains raw CIR,
+finalized MojoIR, binding source and optional layout source. Native emission
+settings are grouped in `options.emit_options`. Parsing options and the parser
+facade are also exported.
+
 The package facade also exports `AnalysisOrchestrator`, `MojoEmitOptions`,
 `render_mojo_module`, `render_layout_test_module`, and `generate_from_unit`.
 `generate_from_unit(unit, emit_options, layout_module_name=String("bindings"))`
@@ -66,14 +79,15 @@ codegen, and layout-test boundaries.
   only in the corruption/recovery test, and its ownership cycle is then broken.
 - Borrowed matching avoids the consuming-match miscompilation recorded in the
   historical ledger. Lifecycle and unwind behavior are checked at both optimization
-  levels; no unchecked origin casts or custom ownership wrappers are used.
+  levels. C pointer adaptation is confined to the frontend boundary; IR passes use
+  no custom ownership wrappers.
 
 The type, expression, declaration, and root debug codecs preserve the current
 Python `kind`/`fields` JSON shape,
 including defaults and nulls. Unknown fields/tags, wrong-stage children and invalid
 field values are rejected. JSON is unversioned, for debugging/testing, and changes
-with the model. Literal integers use exact canonical decimal digits; arithmetic
-remains symbolic.
+with the model. Literal integers use exact canonical decimal digits; frontend folding uses
+private exact arithmetic while published expression trees remain recursive.
 Geometry/count fields use checked machine `Int`. Floating values use binary64,
 including signed zero and Python debug JSON's nonfinite spellings. The private
 parser rejects duplicate keys, malformed escapes and excessive nesting. No runtime
@@ -133,10 +147,11 @@ remains a later milestone. The exact compiler pin applies to build, host, and ru
 requirements because `.mojoc` is compiler-specific. The compiler package currently
 brings Python tooling transitively; bindgen's native implementation does not call it.
 
-`libclang_mojo`, libclang, and its shim are intentionally absent from this slice.
-Before the frontend stage, publish/pin the sibling wrapper's compatibility fixes
-and validate them against this compiler; do not depend on an uncommitted sibling
-checkout.
+The native manifest pins the shimless GitHub `libclang_mojo` build 1 and Clang 18.
+It needs no sibling checkout or shim. The package recipe uses a checksum-verified
+release channel prepared under ignored build artifacts. See the [frontend slice](
+../agent_docs/native_frontend_plan.md) for dependency hashes, the localized
+unsaved-file lifetime adapter, and the checked 4,096-child traversal limit.
 
 See [the backend slice](../agent_docs/native_backend_plan.md),
 [the staged roadmap](../agent_docs/native_mojo_roadmap.md) and

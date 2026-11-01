@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+- Add direct native header parsing and the `mojo-bindgen-mojo` CLI alongside Python,
+  using the checksum-pinned shimless GitHub `libclang_mojo` nightly package.
+- Preserve recursive IR and exact source parity; add native frontend, CLI, target,
+  ownership and example/runtime comparisons and installed Conda checks.
+- Diagnose unsupported non-default calling conventions in both implementations
+  instead of emitting calls with the wrong ABI.
+
 ## [0.3.5] - 2026-08-26
 
 ### Changed

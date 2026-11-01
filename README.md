@@ -12,10 +12,10 @@ correctly.
 
 ## Native rewrite
 
-A native Mojo implementation is being developed alongside Python. Its library
-provides a complete backend from constructed CIR; Python remains the supported
-header-to-binding generator. See [native development and packaging](mojo/README.md) and the
-[staged roadmap](agent_docs/native_mojo_roadmap.md).
+A native Mojo implementation lives alongside Python and now generates bindings
+directly from C headers with `mojo-bindgen-mojo`. Python remains the canonical
+`mojo-bindgen` command during the transition. See [native development and packaging](mojo/README.md)
+and the [staged roadmap](agent_docs/native_mojo_roadmap.md).
 
 ## Requirements
 

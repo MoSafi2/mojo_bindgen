@@ -474,3 +474,40 @@ def test_expression_debug_roundtrips_include_nonfinite_and_all_operators(backend
     )[0]
     assert result["expr"]["kind"] == "MojoFloatLiteral"
     assert math.isnan(result["expr"]["fields"]["value"])
+
+
+def test_exact_native_constant_folding_and_invalid_operations(backend):
+    from mojo_bindgen.parsing.lowering.const_expr import fold_const_expr
+
+    rng = random.Random(31)
+    values = [0, 1, -1, 2**32 - 1, 2**64, -(2**128), 2**257 + 17]
+    values.extend(rng.getrandbits(256) * rng.choice((-1, 1)) for _ in range(24))
+    expressions = [
+        ir.CUnaryExpr(op, ir.IntLiteral(a)) for a in values for op in ("+", "-", "~", "!")
+    ]
+    for a in values:
+        for op in (
+            "+",
+            "-",
+            "*",
+            "/",
+            "%",
+            "|",
+            "^",
+            "&",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "==",
+            "!=",
+            "&&",
+            "||",
+            "<<",
+            ">>",
+        ):
+            b = rng.randint(-3, 128) if op in ("<<", ">>") else rng.choice(values)
+            expressions.append(ir.CBinaryExpr(op, ir.IntLiteral(a), ir.IntLiteral(b)))
+    requests = [{"action": "fold", "expr": to_debug_dict(expr)} for expr in expressions]
+    expected = [{"expr": to_debug_dict(fold_const_expr(expr))} for expr in expressions]
+    assert backend(requests) == expected
