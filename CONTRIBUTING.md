@@ -1,154 +1,102 @@
 # Contributing
 
-Thanks for contributing to `mojo-bindgen`.
-
-This repository is primarily a Python project that parses C with `libclang` and
-emits Mojo FFI bindings. Most contribution work falls into one of three areas:
-
-- parser changes under `mojo_bindgen/parsing/` and CIR-to-MojoIR mapping under `mojo_bindgen/analysis/`
-- Mojo IR emission changes under `mojo_bindgen/codegen/`
-- test and fixture updates under `tests/`
+Generation lives in `mojo/mojo_bindgen/`. The root `mojo_bindgen/` package is the
+Python CLI facade only. The optional previous generator and its pytest suite live
+in `legacy/python/`; they are not installed with the product.
 
 ## Development environment
 
-The repository currently targets:
-
-- Python 3.14+
-- Mojo 1.2+ (1.x), with the exact development version selected by `pixi.lock`
-- a system `libclang` compatible with the Python `libclang` wheel
-- Linux for the full Pixi + Mojo workflow
-
-### Pixi (recommended)
-
-Pixi is the primary workflow for this repo and is what CI uses on Linux.
-
-The workspace is currently locked for `linux-64` only. On other platforms, use
-a normal virtualenv and `pip install -e ".[dev]"` instead.
+Use locked Pixi environments on Linux x86-64. The generator/public Mojo library
+pin Mojo `1.3.0.dev2026103105`; generated binding checks use an isolated Mojo
+`1.2.0` environment. Do not mix their precompiled modules or runtime libraries.
 
 ```bash
+mkdir -p mojo/build/test-tmp
 pixi install --locked
-pixi shell
-pixi run lint
-pixi run format
-pixi run typecheck
-pixi run test
+pixi install --manifest-path mojo/pixi.toml --locked --all
+pixi install --manifest-path examples/pixi.toml --locked
+pixi run --locked native-build
+pixi run --locked mojo-bindgen input.h -o bindings.mojo
+pixi run --locked native-exec input.h -o direct.mojo
 ```
 
-Useful Pixi tasks:
+Root tasks:
 
-- `pixi run test`: full pytest suite
-- `pixi run test-light`: pytest excluding `expensive` tests
-- `pixi run check-light`: CI-aligned validation (`format-check`, lint, pyright, `test-light`)
-- `pixi run --locked pytest -q tests/e2e --bindgen python`: the stable Python FFI runtime gate,
-  including compiler warnings as errors and negative vararg compilation checks
-- `pixi run build`: build sdist and wheel
-- `pixi run example-sqlite` / `example-cairo` / `example-libpng` / `example-zlib`: generate and exercise example bindings
+- `test`: Python CLI/distribution unit tests using `unittest`.
+- `test-light`: CLI tests and standard-library coordinator contract tests.
+- `check-light`: Python formatting, Ruff, Pyright and light tests.
+- `native-test`: Mojo TestSuite assertions at O0/O3, including fixture and stable
+  generated-code runtime checks; no pytest or Python generator required.
+- `native-shared`: surface/corpus/stress acceptance selection.
+- `check-native`: native formatting, packaged build, coordinator and full tests.
+- `build`: source distribution and Linux wheel in `dist/release/`.
+- `example-zlib`, `example-cairo`, `example-libpng`, `example-sqlite`: facade
+  generation followed by stable-toolchain checks using shared example libraries.
 
-The default Pixi environment includes the `dev` feature set. If you only want a
-smaller install environment with Mojo + editable `mojo-bindgen`, use:
+Install system C build tools and `clang` for preprocessing/probes. The native
+manifest supplies Clang 18/libclang and packaging tools; the root environment
+needs only CLI/development dependencies. `pip install -e ".[dev]"` is an alternative
+for facade development, but does not build a native payload. Use
+`MOJO_BINDGEN_EXECUTABLE` to select an already built executable.
+
+## Tests and source organization
+
+- `mojo/mojo_bindgen/parsing/`: libclang frontend, lowering and registry.
+- `mojo/mojo_bindgen/analysis/`: CIR validation, facts and recursive mapping.
+- `mojo/mojo_bindgen/codegen/`, `layout_tests/`: normalization and printers.
+- `mojo/mojo_bindgen/ir.mojo`, `serde.mojo`: closed schemas and unversioned debug codecs.
+- `tests/mojo/`: ordinary Mojo TestSuite programs, typed ownership tests, frozen
+  reference vectors, runtime and compiler-contract acceptance.
+- `tests/cli/`: facade and distribution unit tests.
+- `tests/surface/`, `corpus/`, `stress/`, `e2e/`: shared headers, goldens and C/Mojo runners.
 
 ```bash
-pixi install -e install
-pixi shell -e install
+pixi run --locked check-light
+pixi run --locked native-test
+python -I -S scripts/run_native_tests.py --suite runtime --optimization 3
+python -I -S scripts/run_native_tests.py --list --suite unit
+pixi run --manifest-path mojo/pixi.toml --locked -e package package-build
+pixi run --locked python scripts/test_installed_distribution.py dist/release/*.whl
+pixi run --locked test-minimal-install dist/release/*.whl
 ```
 
-Set `LIBCLANG_PATH` if the shared library is not visible on the default loader
-path.
+Native workers share content-keyed successful executable caches and SDK-specific
+compiler caches. Tests always execute again. See [native testing](agent_docs/native_testing.md)
+for selection, timeouts, reports, coverage provenance and measurements.
 
-## Repository workflow
+The minimal-install gate requires Docker. It builds three disposable images from
+a digest-pinned Python slim base: pip dependencies only, libc development headers,
+then a C toolchain. Probes run without network access, as an unprivileged user,
+with a read-only root filesystem and no host mounts. Logs and package/image
+provenance are saved under `mojo/build/minimal-os/`; test image tags are removed.
 
-Before pushing, run:
+Live comparisons remain available in an isolated, opt-in reference environment:
 
 ```bash
-pixi run check-light
+pixi install --manifest-path legacy/python/pixi.toml --locked
+pixi run --locked legacy-test
+pixi run --locked legacy-parity
+pixi run --locked native-example-parity
 ```
 
-If you want formatting applied automatically first, run:
+New behavior belongs in Mojo. Keep fixtures shared, review output changes
+explicitly, cover both link modes, and preserve known failures until deliberately
+fixed. IR JSON is an unversioned debugging/testing representation: update codecs
+and snapshots together, without migrations.
 
-```bash
-pixi run format
-```
+## Formatting and releases
 
-The repository includes a helper script at
-[scripts/pre-commit.sh](scripts/pre-commit.sh) that:
+Run `pixi run format` and the native manifest's `format` task before pushing.
+`scripts/pre-commit.sh` formats, applies safe Ruff fixes, restages and runs
+`check-light`. Native changes also require the appropriate native gates.
 
-- runs `pixi run format`
-- applies safe Ruff fixes with `ruff check --fix`
-- re-stages changes
-- runs the same `check-light` validation as CI
+A release tag must agree with the Python facade, native VERSION, manifests and
+Conda recipe. CI tests installed wheels outside the checkout, the public Mojo
+API, direct execution, stable generated FFI/layouts and the installed Conda
+package. Tagged releases additionally run the isolated Python reference suite.
+Release Conda sources use an immutable Git SHA and upstream dependencies use
+artifact checksums. Nothing is published by ordinary builds or main pushes.
 
-If you want a local Git hook, symlink or copy that script into
-`.git/hooks/pre-commit` yourself.
-
-## Testing guidance
-
-- parser / IR behavior: add or update unit tests under `tests/unit/`
-- emitted Mojo surface changes: update surface expectations under `tests/surface/`
-- ABI and runtime behavior: add or update cases under `tests/e2e/`
-
-Targeted examples:
-
-```bash
-pixi run pytest -q tests/unit/test_mojo_ir_printer.py
-pixi run pytest -q tests/surface
-pixi run pytest -q tests/e2e -k fnptr_return
-```
-
-End-to-end tests require more setup than unit and surface tests because they
-compile C and Mojo artifacts. See [tests/e2e/README.md](tests/e2e/README.md)
-for the runtime matrix and fixture expectations.
-
-When changing generated output, update tests deliberately rather than
-re-baselining blindly. In particular:
-
-- keep surface goldens honest about the exact emitted Mojo API
-- keep e2e expectations aligned with both `external_call` and `owned_dl_handle`
-- prefer conservative behavior over output that looks nicer but misrepresents C
-
-## Native Mojo development
-
-The native rewrite has its own pinned nightly manifest and lock under `mojo/`.
-Use `pixi run --locked check-native` for native format/build checks, O0/O3
-ownership tests, Python/native parity, and shared native acceptance suites. `pixi run --locked check-light` keeps
-its existing stable-toolchain Python scope; the full pytest suite includes the
-expensive native parity cases and therefore also requires Pixi and the native lock.
-See [the native README](mojo/README.md) for setup, packaging and compiler constraints.
-
-
-### Shared header and runtime acceptance
-
-Surface/alignment goldens, corpus expectations, stress IR/codec checks, both
-runtime suites, and parser behavior tests use the same test bodies and expectations
-for three harnesses:
-`python`, `native-O0`, and `native-O3`. Selection defaults to all available
-implementations:
-
-```bash
-pixi run --locked pytest -q tests/surface tests/corpus tests/stress tests/e2e
-pixi run --locked pytest -q --bindgen python tests/surface tests/corpus tests/stress tests/e2e
-pixi run --locked native-shared
-```
-
-`--bindgen native` selects both native optimization levels and requires the locked
-native environment. With the default `all`, unavailable native environments are
-skipped with an installation command. Native cases carry `native` and `expensive`
-markers, so `check-light` continues to run the Python cases. `check-native`
-requires the native shared matrix in addition to differential tests.
-
-The `bindgen` fixture in `tests/header_harness.py` provides header parsing,
-CIR generation/roundtrips, constant folding, macro expansion/environments, and CLI
-execution. The parser slice includes `test_type_lowering.py`, `test_macro_closure.py`,
-`test_doc_comments.py`, and `test_target_abi.py` under `tests/unit/`. Python-only
-enum and printer-helper tests remain outside the native matrix. Native algorithms execute in
-compiled Mojo drivers or the native CLI. Python IR objects are test-only decoded
-assertion views; they do not perform native parsing, mapping, or emission. Keep
-new assertions independent of Python internals where possible, so these views
-can be replaced when Python's IR is retired.
-
-Shared fixed goldens and runtime expectations remain independent of differential
-parity. Do not regenerate expected output from whichever implementation is being
-tested. Preserve existing expected-failure statuses. Generated bindings and
-copied runtime runners stay in each case's temporary directory, preventing stale
-fixture-directory output from shadowing fresh bindings. Generated bindings always
-compile/run on the separate stable SDK; nightly runtime variables are confined
-to native generator subprocesses.
+Keep commit subjects concise and behavior-focused. PR descriptions should explain
+the resulting behavior, relevant validation and deliberate fixture changes. See
+[the distribution decision record](agent_docs/native_distribution_cutover.md).

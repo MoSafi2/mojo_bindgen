@@ -3,6 +3,12 @@
 `mojo_bindgen.ir` is the schema import surface. The production pipeline retains
 the parser → CIR analysis → Mojo mapping → target normalization → printing layers.
 
+The Python-specific dataclass, tuple and Pyright details below describe the
+reference in `legacy/python/`. Production Mojo uses recursive payload enums,
+standard `ArcPointer` children, borrowed passes and an immutable publication
+contract. Its `mojo_bindgen.ir` and `serde` APIs expose the corresponding schemas
+and free debug codecs; see [the Mojo guide](../mojo/README.md).
+
 ## Stages and publication
 
 `CType` and `CConstExpr` are closed source families. `MojoType` and

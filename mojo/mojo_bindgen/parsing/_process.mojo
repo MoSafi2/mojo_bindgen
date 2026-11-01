@@ -11,7 +11,9 @@ def shell_quote(text: String) raises -> String:
     return "'" + text.replace("'", "'\"'\"'") + "'"
 
 
-def command_output(args: List[String], input: Optional[String] = {}) raises -> String:
+def command_output(
+    args: List[String], input: Optional[String] = {}, *, quiet: Bool = False
+) raises -> String:
     var command = String()
     for arg in args:
         if command:
@@ -19,6 +21,8 @@ def command_output(args: List[String], input: Optional[String] = {}) raises -> S
         command += shell_quote(arg)
     if input:
         command = "printf %s " + shell_quote(input.value()) + " | " + command
+    if quiet:
+        command += " 2>/dev/null"
     var mode = String("r")
     var handle = popen(command.as_c_string_span(), mode.as_c_string_span())
     if not handle:

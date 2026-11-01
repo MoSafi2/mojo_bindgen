@@ -1,5 +1,11 @@
 # Shared Python/native header acceptance
 
+This is the historical pytest-sharing ledger. The native executions described
+below have moved to independent Mojo TestSuite programs; `--bindgen` selection
+and native pytest adapters have been removed. Python behavior tests now exercise
+Python only. Current commands, coverage and measured results are in
+[native testing](native_testing.md).
+
 The native frontend was committed separately as `74be8d5` before this migration.
 This slice shares the existing surface/alignment, corpus, stress and runtime test
 bodies across Python, native O0 and native O3. No golden/status/runtime expectation
@@ -101,3 +107,48 @@ survive parsing in order. Coverage is now 103 shared behaviors (309 executions;
 
 Refresh acceptance: **713 passed** in the full suite; focused parser matrix
 **114 passed**, native unit executions **36 passed**, light gate **401 passed**.
+
+## Backend behavior slice (2026-11-01)
+
+71 existing backend cases now share their original assertions across Python,
+native O0 and native O3:
+
+- `test_analysis_const_mapping.py`: two expression-mapping cases.
+- `test_analysis_unit_mapping.py`: 20 declaration-mapping cases.
+- `test_ir_codegen_edges.py`: 24 constructed-IR binding-emission cases.
+- `test_layout_tests.py`: seven layout collection/sidecar cases.
+- `test_mojo_ir_printer.py`: 18 normalization/printing cases, including two stable
+  compiler checks. Its two private serialization-helper cases and one monkeypatch
+  test remain Python-only.
+
+Eight new expression cases cover signed zero, very small/large decimal values,
+hexadecimal floats, large integers, shared recursive children, independent ABI
+contexts, repeated mapping and recovery after rejected nullptr mapping. Four new
+debug-codec cases reject unknown tags and wrong-stage roots, preserve supplied
+payloads, and successfully decode valid inputs after failures.
+
+Adapters expose direct expression/unit mapping, whole-pipeline analysis, target
+normalization, printing, layout collection/rendering and stage-specific debug
+decoding. The native driver invokes production Mojo passes. Python constructs
+assertion-view dataclasses from debug output but performs no native analysis. The
+printer test's original analysis setup also goes through the selected harness.
+Error adapters translate decoder and expression-mapping rejection into the common
+test exception; compiler/transport failures continue to fail tests. Decoder
+recovery verifies the callable adapter remains usable; existing same-process
+native differential tests retain their stronger internal-state recovery checks.
+
+The `native-shared` task now selects `--bindgen native -m native` across normal
+pytest discovery. This includes every shared fixture parameter automatically and
+excludes Python-only tests and separate differential suites. The selector collects
+**372 native cases**: 186 behaviors across O0/O3. All three harnesses yield **558
+shared executions**. Fixed goldens, production algorithms and dependencies are
+unchanged.
+
+Focused migrated/native expression matrix: **158 passed**. Final integration below
+also verifies the analysis-setup cleanup and four new codec cases.
+Light gate: format, Ruff, Pyright and **413 passed, 478 deselected**. Native
+formatting passes.
+
+Final integration: **891 passed in 380.35 seconds**, including all **558 shared
+executions** (372 native), existing differential checks, stable generated-binding
+runtime/negative-compilation tests, and the final analysis/codec wiring.

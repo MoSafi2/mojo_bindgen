@@ -1,5 +1,8 @@
 # Parsing Pipeline: C Source to CIR
 
+This document describes the retained Python reference implementation under
+`legacy/python/`. The production Mojo package follows the same pass boundaries.
+
 This document shows the current parser path from a C header on disk to the raw
 CIR `Unit` returned by `ClangParser.run()`. Analysis-owned passes start only
 after this hand-off.
@@ -51,10 +54,10 @@ flowchart TD
 - probes target ABI metadata from compile arguments
 
 This stage is in:
-- [parser.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/parser.py:87)
-- [frontend.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/frontend.py:92)
-- [registry.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/registry.py:86)
-- [target_abi.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/target_abi.py:1)
+- [parser.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/parser.py:87)
+- [frontend.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/frontend.py:92)
+- [registry.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/registry.py:86)
+- [target_abi.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/target_abi.py:1)
 
 ### 2. Raw declaration lowering
 
@@ -68,9 +71,9 @@ This stage is intentionally source-faithful. It does not do post-parse semantic
 repair.
 
 Key modules:
-- [decl_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/lowering/decl_lowering.py:31)
-- [record_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/lowering/record_lowering.py:205)
-- [type_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/parsing/lowering/type_lowering.py:71)
+- [decl_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/lowering/decl_lowering.py:31)
+- [record_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/lowering/record_lowering.py:205)
+- [type_lowering.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/parsing/lowering/type_lowering.py:71)
 
 ### 3. Record-specific lowering
 

@@ -8,6 +8,8 @@ from .ir import LinkMode, Unit
 from .serde import dumps_cir, dumps_mojo_ir
 from ._debug_json import JSON, dump_json
 from ._numbers import IntegerValue
+from ._installation import installation_root
+from ._version import VERSION
 
 
 def stderr(text: String):
@@ -15,7 +17,7 @@ def stderr(text: String):
 
 
 def help_text() -> String:
-    return """Usage: mojo-bindgen-mojo [OPTIONS] HEADER
+    return """Usage: mojo-bindgen [OPTIONS] HEADER
 
 Generate Mojo FFI from C headers using libclang.
 
@@ -27,7 +29,7 @@ Linking: --library NAME, --link-name NAME,
          --link-mode external-call|owned-dl-handle, --library-path PATH
 Diagnostics: --diagnostics text|json|silent, --diagnostics-output PATH,
              --warnings-as-errors
-Other: --help, --version
+Other: --help, --version, --print-mojo-path
 """
 
 
@@ -73,7 +75,10 @@ def run_cli(args: List[String]) -> Int:
         print(help_text(), end="")
         return 0
     if "--version" in args:
-        print("mojo-bindgen-mojo 0.3.5")
+        print("mojo-bindgen " + String(VERSION))
+        return 0
+    if "--print-mojo-path" in args:
+        print(installation_root() + "/mojo")
         return 0
     var options = BindgenOptions("")
     var clang = ClangOptions()
@@ -170,7 +175,7 @@ def run_cli(args: List[String]) -> Int:
         if not options.header:
             raise Error("missing HEADER")
     except e:
-        stderr("mojo-bindgen-mojo: " + String(e) + "\n")
+        stderr("mojo-bindgen: " + String(e) + "\n")
         return 2
     options.clang_options = clang^
     try:

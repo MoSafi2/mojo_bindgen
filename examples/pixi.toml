@@ -12,4 +12,4 @@ zlib = "*"
 pkg-config = "*"
 
 [tasks]
-test-native = "pixi run --manifest-path ../pixi.toml --locked pytest -q ../tests/parity/test_native_examples.py"
+test-native = "pixi run --manifest-path ../legacy/python/pixi.toml --locked example-parity"

@@ -1,29 +1,46 @@
 [workspace]
-name = "mojo-bindgen-native"
-version = "0.3.5"
+name = "mojo-bindgen"
+version = "0.4.0"
 channels = ["https://conda.modular.com/max-nightly/", "conda-forge"]
 platforms = ["linux-64"]
 requires-pixi = ">=0.80.0"
+
+[activation.env]
+TMPDIR = "$PIXI_PROJECT_ROOT/build/test-tmp"
 
 [dependencies]
 mojo = "==1.3.0.dev2026103105"
 libclang_mojo = { url = "https://github.com/MoSafi2/mojo_libclang/releases/download/v0.3.0-dev.20261031/libclang_mojo-0.3.0.dev20261031-mojo1_3_0_dev2026103105_linux_64_1.conda", sha256 = "30a0f607d2c41e99a03a1c6fce4ee2d2d386b8185fdc7f2ab7451d41ef6f3f7c" }
 clang = "18.*"
+python = "3.14.*"
 
 [tasks]
 build = "bash ../scripts/native_build.sh"
-test = "bash ../scripts/native_test.sh"
+test = "python -I -S ../scripts/run_native_tests.py"
+runner-check = "python -I -S ../scripts/test_native_runner.py"
 format = "bash ../scripts/native_format.sh"
 format-check = "bash ../scripts/native_format.sh --check"
 
 [feature.package.dependencies]
 rattler-build = ">=0.67,<0.68"
+patchelf = ">=0.17,<1"
+binutils = "*"
+python-build = "*"
+hatchling = ">=1.26"
+auditwheel = ">=6,<7"
 python = "3.14.*"
 
 [feature.package.tasks]
 package-render = "bash ../scripts/native_package.sh --render-only"
 package-build = "bash ../scripts/native_package.sh"
 
+[feature.stable-tests]
+channels = ["https://conda.modular.com/max/", "conda-forge"]
+
+[feature.stable-tests.dependencies]
+mojo = "==1.2.0"
+
 [environments]
 default = []
+stable-tests = { features = ["stable-tests"], no-default-feature = true }
 package = ["package"]

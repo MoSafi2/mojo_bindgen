@@ -7,7 +7,7 @@ example_init() {
   HERE="$(cd "$(dirname "$1")" && pwd)"
   REPO_ROOT="$(cd "$HERE/../.." && pwd)"
   BG=(pixi run --locked --manifest-path "$REPO_ROOT/pixi.toml" mojo-bindgen)
-  MOJO=(pixi run --locked --manifest-path "$REPO_ROOT/pixi.toml" mojo)
+  MOJO=(pixi run --locked --manifest-path "$REPO_ROOT/mojo/pixi.toml" -e stable-tests mojo)
   cd "$HERE"
 }
 

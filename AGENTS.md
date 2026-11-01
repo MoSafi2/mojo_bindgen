@@ -2,21 +2,23 @@
 
 ## Project Structure & Module Organization
 
-Core source lives in `mojo_bindgen/`.
+Production generation lives in `mojo/mojo_bindgen/`. The root `mojo_bindgen/`
+contains only the Python CLI facade.
 
-- `mojo_bindgen/parsing/`: libclang-driven parsing and C-to-IR lowering
-- `mojo_bindgen/analysis/`: IR validation, reachability, and Mojo-facing analysis
-- `mojo_bindgen/codegen/`: Mojo emission and generator orchestration
-- `mojo_bindgen/ir.py`: unified C-facing and Mojo-facing IR schemas
+- `mojo/mojo_bindgen/parsing/`: libclang-driven parsing and C-to-IR lowering
+- `mojo/mojo_bindgen/analysis/`: IR validation, reachability, and Mojo-facing analysis
+- `mojo/mojo_bindgen/codegen/`: Mojo emission and generator orchestration
+- `mojo/mojo_bindgen/ir.mojo`: separate recursive CIR and MojoIR schemas
 
 Tests live under `tests/`:
 
-- `tests/unit/` for fast isolated checks
+- `tests/mojo/` for native TestSuite checks and `tests/cli/` for facade checks
 - `tests/surface/` for parser/emitter goldens
 - `tests/corpus/`, `tests/stress/`, and `tests/e2e/` for broader coverage
 
 Supporting material lives in `examples/`, `docs/`, `scripts/`, `typings/`, and
-`CONTRIBUTING.md`.
+`CONTRIBUTING.md`. The optional Python reference, tests and typings live in
+`legacy/python/`.
 
 ## Build, Test, and Development Commands
 
@@ -33,8 +35,10 @@ pixi run check-light
 pixi run build
 ```
 
-- `pixi run test`: full pytest suite
-- `pixi run test-light`: skips `expensive` tests for faster feedback
+- `pixi run test`: Python CLI/distribution unittest suite
+- `pixi run test-light`: facade and standard-library coordinator tests
+- `pixi run native-test`: complete native acceptance at O0/O3, including stable runtime
+- `pixi run legacy-test`: opt-in isolated Python reference suite
 - `pixi run check-light`: CI-aligned validation (`format-check`, lint, pyright, light tests)
 - `pixi run build`: build sdist and wheel
 - `pixi run precommit`: format, apply safe Ruff fixes, restage, and run `check-light`
@@ -44,7 +48,8 @@ pixi run build
 The default Pixi environment includes development tooling. Use
 `pixi install -e install` for the smaller runtime-only environment.
 
-Without Pixi, use `pip install -e ".[dev]"` and run `pytest`, `ruff`, and `pyright` directly.
+Without Pixi, use `pip install -e ".[dev]"` for facade development and run
+`unittest`, `ruff`, and `pyright` directly. Native generation still needs a built payload.
 
 ## Coding Style & Naming Conventions
 
@@ -60,10 +65,12 @@ Preserve the repo’s existing style: structured IR models, concise docstrings, 
 
 ## Testing Guidelines
 
-Pytest is configured in `pytest.ini`. Name tests `test_*.py` and prefer narrow unit tests for new IR/passes. When changing emission behavior, add or update surface goldens under `tests/surface/`. Run targeted tests first, for example:
+Use Mojo TestSuite for generation/IR behavior and Python unittest for the facade.
+The optional reference pytest configuration lives in `legacy/python/pytest.ini`.
+When changing emission, update shared surface goldens deliberately. For example:
 
 ```bash
-pixi run pytest -q tests/unit/test_ir_json_roundtrip.py
+python -I -S scripts/run_native_tests.py --suite unit
 ```
 
 ## Commit & Pull Request Guidelines

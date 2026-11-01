@@ -1,0 +1,227 @@
+"""Test-only JSON boundary: constructed CIR enters an independent native backend."""
+from std.memory import ArcPointer
+from std.sys import argv
+from mojo_bindgen.ir import *
+from mojo_bindgen.serde import *
+from mojo_bindgen._debug_json import JSON, dump_json, parse_json
+from mojo_bindgen.analysis.pipeline import AnalysisOrchestrator
+from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
+from mojo_bindgen.analysis.mojo.const_expr_mapping import MapConstExprPass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.mojo.unit_mapping import MapUnitPass
+from mojo_bindgen.analysis.facts.target import TargetQueries
+from mojo_bindgen.analysis.cir.cir_canonicalizer import CIRCanonicalizer
+from mojo_bindgen.codegen.normalize_mojo_module import normalize_mojo_module
+from mojo_bindgen.codegen.mojo_ir_printer import (
+    render_mojo_module,
+    render_const_expr,
+    MojoIRPrintOptions,
+)
+from mojo_bindgen.layout_tests.generator import (
+    render_layout_test_module,
+    collect_layout_record_checks,
+)
+from mojo_bindgen.orchestrator import generate_from_unit
+from mojo_bindgen.parsing.parser import ClangParser
+from mojo_bindgen.parsing.lowering.const_expr import fold
+from mojo_bindgen.parsing.lowering.macro_env import (
+    collect_object_like_macro_env,
+    expand_object_like_macro_tokens,
+)
+
+
+def _options(req: JSON) raises -> MojoEmitOptions:
+    var options = MojoEmitOptions()
+    if req.has("linking") and req.get("linking").ptr()[].text() == "owned_dl_handle":
+        options.linking = LinkMode.OWNED_DL_HANDLE
+    if req.has("library_path_hint"):
+        options.library_path_hint = req.get("library_path_hint").ptr()[].text()
+    if req.has("module_comment"):
+        options.module_comment = req.get("module_comment").ptr()[].bool_value()
+    if req.has("emit_doc_comments"):
+        options.emit_doc_comments = req.get("emit_doc_comments").ptr()[].bool_value()
+    if req.has("strict_abi"):
+        options.strict_abi = req.get("strict_abi").ptr()[].bool_value()
+    if req.has("warn_abi"):
+        options.warn_abi = req.get("warn_abi").ptr()[].bool_value()
+    if req.has("ffi_origin"):
+        var origin = req.get("ffi_origin").ptr()[].text()
+        if origin == "any":
+            options.ffi_origin = PointerOrigin.ANY
+        elif origin != "external":
+            raise Error("unknown ffi_origin: " + origin)
+    return options^
+
+
+def _strings(value: JSON) raises -> List[String]:
+    var result = List[String]()
+    for item in value.items():
+        result.append(item.ptr()[].text())
+    return result^
+
+
+def _string_array(values: List[String]) -> JSON:
+    var result = List[ArcPointer[JSON]]()
+    for value in values:
+        result.append(ArcPointer(JSON.string(value.copy())))
+    return JSON.array(result^)
+
+
+def _parser(req: JSON) raises -> ClangParser:
+    var args = Optional[List[String]]()
+    if req.has("compile_args") and not req.get("compile_args").ptr()[].is_null():
+        args = _strings(req.get("compile_args").ptr()[])
+    var headers = List[String]()
+    if req.has("include_headers"):
+        headers = _strings(req.get("include_headers").ptr()[])
+    var fallback = False
+    if req.has("clang_macro_fallback"):
+        fallback = req.get("clang_macro_fallback").ptr()[].bool_value()
+    return ClangParser(
+        req.get("header").ptr()[].text(),
+        req.get("library").ptr()[].text(),
+        req.get("link_name").ptr()[].text(),
+        args.copy(),
+        include_headers=headers,
+        clang_macro_fallback=fallback,
+    )
+
+
+def run_operation(req: JSON) raises -> JSON:
+    var response = Dict[String, ArcPointer[JSON]]()
+    var action = req.get("action").ptr()[].text()
+    if action == "map" or action == "c-roundtrip":
+        var source = decode_c_type(req.get("type").ptr()[])
+        response["source"] = ArcPointer(encode_c_type(source))
+        if action == "map":
+            var mapper = MapTypePass(
+                TargetQueries(decode_target_abi(req.get("target_abi").ptr()[]))
+            )
+            response["mapped"] = ArcPointer(encode_mojo_type(mapper.run(source)))
+    elif action == "mojo-roundtrip":
+        response["mapped"] = ArcPointer(encode_mojo_type(decode_mojo_type(req.get("type").ptr()[])))
+    elif action == "parse-header":
+        response["unit"] = ArcPointer(encode_cir(_parser(req).run()))
+    elif action == "macro-environment":
+        var parser = _parser(req)
+        var tu = parser.frontend.parse()
+        var environment = collect_object_like_macro_env(tu)
+        var fields = Dict[String, ArcPointer[JSON]]()
+        for entry in environment.items():
+            fields[entry.key] = ArcPointer(_string_array(entry.value))
+        response["environment"] = ArcPointer(JSON.object(fields^))
+    elif action == "expand-macros":
+        var environment = Dict[String, List[String]]()
+        match req.get("environment").ptr()[]:
+            case .object(fields):
+                for entry in fields.items():
+                    environment[entry.key] = _strings(entry.value.ptr()[])
+            case _:
+                raise Error("expected macro environment object")
+        var limit = req.get("max_expansion_steps").ptr()[].int_value()
+        response["tokens"] = ArcPointer(
+            _string_array(
+                expand_object_like_macro_tokens(
+                    _strings(req.get("tokens").ptr()[]), environment, limit
+                )
+            )
+        )
+    elif action == "fold":
+        response["expr"] = ArcPointer(encode_c_expr(fold(decode_c_expr(req.get("expr").ptr()[]))))
+    elif action == "roundtrip-cir":
+        response["unit"] = ArcPointer(encode_cir(decode_cir(req.get("unit").ptr()[])))
+    elif action == "roundtrip-mojo":
+        response["module"] = ArcPointer(encode_mojo_ir(decode_mojo_ir(req.get("module").ptr()[])))
+    elif action == "roundtrip-c-expr":
+        response["expr"] = ArcPointer(encode_c_expr(decode_c_expr(req.get("expr").ptr()[])))
+    elif action == "roundtrip-mojo-expr":
+        response["expr"] = ArcPointer(encode_mojo_expr(decode_mojo_expr(req.get("expr").ptr()[])))
+    elif action == "map-unit":
+        var unit = ArcPointer(decode_cir(req.get("unit").ptr()[]))
+        response["module"] = ArcPointer(encode_mojo_ir(MapUnitPass(_options(req)).run(unit)))
+    elif action == "layout":
+        var unit = decode_cir(req.get("unit").ptr()[])
+        var module = decode_mojo_ir(req.get("module").ptr()[])
+        var records = List[ArcPointer[JSON]]()
+        for record in collect_layout_record_checks(unit, module):
+            var checks = List[ArcPointer[JSON]]()
+            for check in record.checks:
+                var fields = Dict[String, ArcPointer[JSON]]()
+                fields["label"] = ArcPointer(JSON.string(check.label))
+                fields["expression"] = ArcPointer(JSON.string(check.expression))
+                fields["expected"] = ArcPointer(JSON.integer(check.expected))
+                checks.append(ArcPointer(JSON.object(fields^)))
+            var fields = Dict[String, ArcPointer[JSON]]()
+            fields["record_name"] = ArcPointer(JSON.string(record.record_name))
+            fields["checks"] = ArcPointer(JSON.array(checks^))
+            records.append(ArcPointer(JSON.object(fields^)))
+        response["checks"] = ArcPointer(JSON.array(records^))
+        response["layout"] = ArcPointer(
+            JSON.string(
+                render_layout_test_module(unit, module, req.get("main_module_name").ptr()[].text())
+            )
+        )
+    elif action == "map-expr":
+        var expr = decode_c_expr(req.get("expr").ptr()[])
+        var mapper = MapConstExprPass(
+            MapTypePass(TargetQueries(decode_target_abi(req.get("target_abi").ptr()[])))
+        )
+        var mapped = mapper.run(expr)
+        response["source"] = ArcPointer(encode_c_expr(expr))
+        response["expr"] = ArcPointer(encode_mojo_expr(mapped))
+        response["text"] = ArcPointer(JSON.string(render_const_expr(mapped)))
+    elif action == "canonicalize":
+        response["unit"] = ArcPointer(
+            encode_cir(CIRCanonicalizer().canonicalize(decode_cir(req.get("unit").ptr()[])))
+        )
+    elif action == "normalize" or action == "render":
+        var module = decode_mojo_ir(req.get("module").ptr()[])
+        if action == "normalize":
+            module = normalize_mojo_module(module)
+        response["module"] = ArcPointer(encode_mojo_ir(module))
+        var options = _options(req)
+        response["bindings"] = ArcPointer(
+            JSON.string(
+                render_mojo_module(
+                    module, MojoIRPrintOptions(options.module_comment, options.emit_doc_comments)
+                )
+            )
+        )
+    elif action == "generate":
+        var result = generate_from_unit(
+            decode_cir(req.get("unit").ptr()[]),
+            _options(req),
+            req.get("main_module_name")
+            .ptr()[]
+            .text() if req.has("main_module_name") else String("bindings"),
+        )
+        response["normalized_unit"] = ArcPointer(encode_cir(result.normalized_unit.ptr()[]))
+        response["module"] = ArcPointer(encode_mojo_ir(result.mojo_module))
+        response["bindings"] = ArcPointer(JSON.string(result.bindings_source))
+        response["layout"] = ArcPointer(JSON.string(result.layout_test_source.value()))
+    elif action == "analyze":
+        var unit = decode_cir(req.get("unit").ptr()[])
+        var options = _options(req)
+        var analysis = AnalysisOrchestrator(options.copy()).analyze_pipeline(unit)
+        response["source"] = ArcPointer(encode_cir(unit))
+        response["normalized_unit"] = ArcPointer(encode_cir(analysis.normalized_unit.ptr()[]))
+        response["policy_light_module"] = ArcPointer(encode_mojo_ir(analysis.policy_light_module))
+        response["module"] = ArcPointer(encode_mojo_ir(analysis.mojo_module))
+        response["bindings"] = ArcPointer(
+            JSON.string(
+                render_mojo_module(
+                    analysis.mojo_module,
+                    MojoIRPrintOptions(options.module_comment, options.emit_doc_comments),
+                )
+            )
+        )
+        response["layout"] = ArcPointer(
+            JSON.string(
+                render_layout_test_module(
+                    analysis.normalized_unit.ptr()[], analysis.mojo_module, "bindings"
+                )
+            )
+        )
+    else:
+        raise Error("unknown backend test action: " + action)
+    return JSON.object(response^)

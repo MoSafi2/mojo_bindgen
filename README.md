@@ -10,57 +10,108 @@ The goal is simple: make binding generation easy and faithful as possible to the
 actual C surface, and fail conservatively when a declaration cannot be modeled
 correctly.
 
-## Native rewrite
+## Implementation
 
-A native Mojo implementation lives alongside Python and now generates bindings
-directly from C headers with `mojo-bindgen-mojo`. Python remains the canonical
-`mojo-bindgen` command during the transition. See [native development and packaging](mojo/README.md)
-and the [staged roadmap](agent_docs/native_mojo_roadmap.md).
+The upcoming **0.4.0** release runs all parsing, analysis and generation in Mojo.
+`mojo-bindgen` remains the single command, with a Python Typer/Rich facade for
+help, completion and diagnostic presentation. The Mojo executable and importable
+`mojo_bindgen` library are public interfaces. Python generation APIs have been
+removed; the previous implementation is an optional reference under
+[`legacy/python`](legacy/python/README.md).
 
 ## Requirements
 
-- Python 3.14+
-- a system `libclang` compatible with the `libclang` Python wheel
-- a Mojo 1.2+ toolchain (1.x) to build or run generated bindings
+- Linux x86-64 with x86-64-v3 instructions and glibc 2.35+
+- Python 3.14+ for the CLI facade
+- System C/C++ runtimes: `libstdc++.so.6` with `GLIBCXX_3.4.30` and `libgcc_s.so.1`
+- Mojo **1.3.0.dev2026103105** for the generator and public Mojo API, installed
+  as an exact package dependency
+- Mojo **1.2.0** to compile the generated bindings in the tested configuration
+- C development headers for the library being bound; system `clang` for
+  `--dump-preprocessed` and a C toolchain for generated-code runtime checks
 
 ## Installation
-
-### System dependencies
-
-Install Clang and the shared `libclang` library first:
-
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install -y clang libclang1
-
-# Fedora
-sudo dnf install -y clang llvm-libs
-
-# macOS (Homebrew)
-brew install llvm
-```
-
-If the shared library is not on the default loader path, set `LIBCLANG_PATH`
-to the directory containing `libclang.so` or `libclang.dylib`.
 
 ### Install from PyPI
 
 ```bash
-pip install mojo-bindgen
+pip install mojo-bindgen --extra-index-url https://whl.modular.com/nightly/simple/
 ```
 
-PyPI package: [mojo-bindgen](https://pypi.org/project/mojo-bindgen/)
+The 0.4 wheel declares `libclang==18.1.1` from PyPI and the exact `mojo-compiler`
+nightly from Modular's index. It contains our executable, compiled Mojo package,
+Clang resource headers and notices; LLVM/Clang and Mojo shared libraries come
+from dependencies. The `clang` PyPI package alone does not supply libclang or a
+compiler driver. Install system build tools when needed, for example
+`sudo apt install build-essential clang` on Ubuntu.
+
+The command above installs published releases. These 0.4 changes are not released
+until a tagged release passes the distribution gates.
+
+### Clean-system installation checks
+
+The wheel is tested in a digest-pinned official Python 3.14 Debian 12 slim image,
+without a host SDK or checkout mounted into the container. Python's slim image
+already supplies glibc and the C/C++ runtime libraries listed above. Pip installs
+Mojo, libclang and the CLI dependencies; no extra OS packages are needed to
+generate bindings in either link mode from self-contained headers or Clang's
+packaged builtin headers (`stdint.h`, `stddef.h`).
+
+Additional inputs/features have separate prerequisites:
+
+| Use | Additional Debian/Ubuntu package |
+| --- | --- |
+| Parse system C headers such as `stdio.h` | `libc6-dev` |
+| Compile a public Mojo API consumer | `build-essential` |
+| Use `--dump-preprocessed` | `clang` |
+
+Third-party headers still come from the library being bound. Pip does not install
+OS packages or arbitrary library development headers. Python itself is declared
+through `Requires-Python: >=3.14`; the container test verifies pip rejects Python
+3.13. See [the reproducible test](scripts/test_minimal_install.py).
+
+### Install from Conda
+
+The release includes a checksummed `mojo-bindgen-VERSION-channel.tar.gz` asset.
+Extract it locally, then install `mojo-bindgen=VERSION` with Conda/Mamba from that
+directory's `file://` channel plus `https://conda.modular.com/max-nightly/` and
+`conda-forge`. The channel includes the pinned `libclang_mojo` artifact; Conda
+resolves the compiler, Clang and Python facade dependencies normally.
 
 ### Install from source
 
 ```bash
 git clone https://github.com/MoSafi2/mojo_bindgen
 cd mojo_bindgen
-pip install -e .
+mkdir -p mojo/build/test-tmp
+pixi install --locked
+pixi install --manifest-path mojo/pixi.toml --locked --all
+pixi run --locked native-build
+pixi run --locked mojo-bindgen --help
 ```
 
 For development setup, checks, and Pixi workflows, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Public Mojo interfaces
+
+`mojo-bindgen --print-mojo-path` prints the installed import directory. Compile
+against it with the exact generator nightly:
+
+```mojo
+from mojo_bindgen import BindgenOptions, bindgen
+
+def main() raises:
+    var result = bindgen(BindgenOptions("input.h"))
+    print(result.bindings_source)
+```
+
+The direct executable is `bin/mojo-bindgen` beside that `mojo/` directory. It
+accepts the generation flags without the Python presentation layer. The Conda
+package also installs the Mojo library on its compiler's normal import path.
+For PyPI library clients, pass `-I` with the printed directory and configure
+libclang as described in [the Mojo guide](mojo/README.md). Compiled `.mojoc`
+modules require the exact compiler that produced them.
 
 ## Quick start
 

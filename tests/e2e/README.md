@@ -1,27 +1,17 @@
 # E2E Bindgen Tests
 
-This directory contains end-to-end tests that validate C -> bindgen -> Mojo runtime behavior.
-
-## Run
-
-From the repo root:
+This directory holds shared C headers, runtime implementations, Mojo runners and
+generated-source goldens. Production assertions live in `tests/mojo/runtime/` and
+run using Mojo TestSuite:
 
 ```bash
-pixi run pytest tests/e2e -v -s
+python -I -S scripts/run_native_tests.py --suite runtime
 ```
 
-The `tests/e2e` suite is also marked as `e2e`, `slow`, and `expensive`, so you
-can select or exclude it from broader runs:
+The optional Python adapters are under `legacy/python/tests/e2e/`:
 
 ```bash
-pixi run pytest -q -m e2e
-pixi run pytest -q -m "not expensive"
-```
-
-Run only the new golden runtime suite:
-
-```bash
-pixi run pytest tests/e2e/test_e2e_runtime.py -v -s
+pixi run --manifest-path legacy/python/pixi.toml --locked pytest tests/e2e -v
 ```
 
 ## Golden Runtime Corpus
@@ -55,7 +45,7 @@ The test runner reports:
 
 ## Existing Coverage
 
-- parser/emit surface checks now live under `tests/unit/` and `tests/stress/`.
+- parser/emit surface checks now live in native acceptance and the isolated legacy tests.
 - `test_e2e_runtime.py`: comprehensive golden runtime suite with explicit failure attribution.
 - `test_mojo_12.py`: checked varargs, over-aligned arrays, dynamic globals, loader
   override precedence, and failure diagnostics. Both runtime suites compile with `--Werror`.

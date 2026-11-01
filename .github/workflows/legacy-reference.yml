@@ -1,0 +1,26 @@
+name: Legacy Python reference
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  reference:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p mojo/build/test-tmp
+      - uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          manifest-path: legacy/python/pixi.toml
+          cache: true
+      - name: Install C toolchain, native SDK and shared examples
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential clang libclang-dev
+          pixi install --manifest-path mojo/pixi.toml --locked
+          pixi install --manifest-path examples/pixi.toml --locked
+      - name: Validate reference import isolation
+        run: |
+          pixi run --manifest-path legacy/python/pixi.toml --locked python -I -c "import mojo_bindgen; assert 'legacy/python' in mojo_bindgen.__file__, mojo_bindgen.__file__"
+      - name: Retained Python suite and complete differential comparison
+        run: pixi run --manifest-path legacy/python/pixi.toml --locked test --tb=short -q

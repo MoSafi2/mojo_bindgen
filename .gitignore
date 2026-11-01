@@ -28,3 +28,7 @@ io_uring.rs
 
 # Installed-package header fixture
 !/mojo/conda.recipe/native_smoke.h
+
+# Retained Python project and assembled platform payloads
+/legacy/python/.pixi/
+/mojo_bindgen/payload/

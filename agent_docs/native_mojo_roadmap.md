@@ -1,91 +1,68 @@
-# Staged native Mojo rewrite
+# Native Mojo rewrite roadmap
 
-The Python refactor is complete. Build an independent native implementation beside
-Python, keep Python as the working generator and differential reference until
-parity, then switch defaults and remove Python's implementation in stages. Keep a
-small generation-only Python wrapper at the end. The completed Python plan and
-historical experiment ledger remain unchanged.
+## Current direction after the distribution decision
 
-## Fixed architecture and repository layout
+Stages 0–3 implement the recursive native generator. Stages 4–5 now make one
+`mojo-bindgen` distribution with a Python CLI facade and a public Mojo executable
+and library. This supersedes the earlier split native package/alias and proposed
+Python high-level wrapper API. There is no Python generation API in the product.
+The completed Python refactor plan and historical experiment ledger stay intact.
 
-- Native code: `mojo/mojo_bindgen/`, with `mojo/main.mojo` as the CLI entry point.
-  Existing Python code remains in `mojo_bindgen/`.
-- Native tests: `tests/mojo/`; differential harness: `tests/parity/`. Reuse the
-  existing surface/corpus/stress/runtime headers and goldens.
-- Separate native manifest/lock in `mojo/`, initially pinning nightly
-  `1.3.0.dev2026103105` (`dc62ab6d`), Linux x86-64. Root stable-toolchain tests
-  continue independently. Compiler updates are explicit and require revalidation.
-- Recursive closed payload enums, distinct CIR/MojoIR families, and named nominal
-  references. No flat type-node store or numeric type handles.
-- Standard ARC child sharing, unique ownership where appropriate, borrowed inputs,
-  immutable publication contracts, private mutable construction, explicit mapping
-  contexts, fresh outputs, and no result memoization or interning.
-- Preserve algorithms, naming/Unicode behavior, ABI/layout decisions, diagnostics,
-  and generated binding/layout output. No performance target or new generated
-  language surface is part of the rewrite.
-- IR JSON is an unversioned debug/test representation synchronized with the model.
-  Neither generator calls the other in production.
+- Production implementation: `mojo/mojo_bindgen/`, entry point `mojo/main.mojo`.
+- Python presentation only: `mojo_bindgen/`, Typer/Rich help/completion/diagnostics.
+- Isolated previous Python implementation and pytest/parity harness:
+  `legacy/python/`, retained as an opt-in reference and excluded from artifacts.
+- Native TestSuite tests: `tests/mojo/`; CLI tests: `tests/cli/`; shared headers,
+  goldens and runtime runners remain under root `tests/`.
+- Native generator/public API pin `1.3.0.dev2026103105`; generated binding runtime
+  checks independently pin `1.2.0`. Linux x86-64-v3/glibc 2.35+ initially.
+- Separate recursive CIR/MojoIR payload enums with named declaration references,
+  standard smart pointers, borrowed passes, private builders and fresh outputs.
+  No flat type store, memoization or custom ownership framework.
+- Preserve algorithms, Unicode names, ABI decisions, diagnostics and generated
+  binding/layout sources. Debug IR JSON is unversioned and follows the code.
 
 ## Stages and completion gates
 
 | Stage | Deliverable | Gate |
 | --- | --- | --- |
-| 0: foundation | Package skeleton, exact nightly lock, build/test/format tasks, native CI, and Conda recipe | Recursive payloads, sharing, borrowed matching, destruction and exception cleanup pass at O0/O3 |
-| 1: type mapper | Complete current CType/MojoType families, callback parameters, target queries, structural validation, pure mapping, type debug codecs and test driver | Current type families match Python, including nesting, arrays, qualifiers, ABI/char policies, Unicode and failure recovery |
-| 2: backend | Expression/declaration/root schemas and codecs; validation/canonicalization, facts, mapping, policies, normalization, binding/layout printers | Shared fixture IR yields matching intermediate results and byte-identical rendered output in both link modes |
-| 3: frontend/CLI | Direct libclang_mojo parsing, registry/lowering, macros, documentation, ABI facts and frontend compatibility | Supported header corpus runs end-to-end without the Python implementation |
-| 4: previews | Installable native Conda previews, Mojo API, full differential CI, small Python wrapper API and old-API deprecation | Clean installed-package, native API/CLI, wrapper and generated-binding runtime tests pass |
-| 5: cutover | Make native CLI canonical, remove Python algorithms by subsystem and keep the thin wrapper | Native execution needs no Python implementation and shared acceptance coverage remains active |
+| 0 | Toolchain, repository, ownership tests and CI | Recursive payload lifecycle at O0/O3 |
+| 1 | Recursive types, pure mapper and codecs | Complete type-family parity |
+| 2 | Expressions, declarations, facts, normalization and backend | Semantic IR and byte-identical sources |
+| 3 | libclang frontend and complete native pipeline | Supported corpus without Python generation |
+| 4 | One PyPI/Conda product, Python presentation, public Mojo interfaces | Installed artifacts, public API, relocation and runtime checks |
+| 5 | Mojo generation by default; isolate previous Python algorithms | Native acceptance independent of Python reference |
 
-Stages 0–2 are complete. Stage 3 now implements native header parsing and CLI
-integration; see [native_frontend_plan.md](native_frontend_plan.md) for contracts,
-dependency provenance, compiler adaptations, and current acceptance. Keep Python's
-command canonical; distribution transition remains stages 4–5.
+The implementation and package gates for stages 4–5 are in
+[native_distribution_cutover.md](native_distribution_cutover.md). Publication is
+separate: build candidates and CI configuration do not constitute a release.
+The previous Python tree remains deliberately available under `legacy/python/`
+for optional comparisons, rather than being included in the installed package.
 
-## Packaging and transition
+## Distribution contract
 
-Keep `mojo-bindgen` owned by Python during coexistence. Native development and
-previews use `mojo-bindgen-mojo`; the Conda package is `mojo-bindgen-native` and
-contains the executable plus the `mojo_bindgen` import package. Exact compiler
-requirements protect `.mojoc` compatibility. Linux x86-64 is the initial target.
+The PATH command is `mojo-bindgen`. Its Python facade runs the same-named public
+executable at the package's documented payload path. `--print-mojo-path` exposes
+the public library location. Conda also installs that library on its compiler's
+normal import path. There are no native-specific product names.
 
-Stage 3 pins the published shimless `libclang_mojo` build 1 by GitHub URL and
-SHA-256, with exact producing compiler compatibility. Its libclang 18 runtime is
-packaged transitively. No sibling checkout or native shim is consumed.
+The wheel declares exact compiler/libclang dependencies; the pinned nightly uses
+Modular's extra wheel index. Conda uses its corresponding native packages and
+checksum-pinned `libclang_mojo` GitHub artifact. `.mojoc` compatibility requires the
+exact producing compiler. System Clang handles preprocessing/probes; packaged
+Clang resource headers keep frontend builtin discovery deterministic.
 
-At cutover, transfer `mojo-bindgen` to the native package and remove Python's
-console entry point in the same coordinated release. Keep the native alias for
-wrapper use. Preserve CLI flags, output/diagnostic semantics and exit behavior.
-The final Python API takes generation options and returns generated binding source,
-optional layout-test source, and diagnostics. Retire the old IR-returning and
-staged orchestration APIs after the preview deprecation period. The wrapper invokes
-the installed native executable and reports errors; the PyPI wrapper requires the
-native package separately. Native wheels are outside this initial roadmap.
+Tagged releases verify one version across all interfaces, render immutable Git
+sources, build/test installed artifacts, publish checksummed GitHub channel assets
+and then publish the wheel/sdist. No ordinary main push uploads packages.
 
-Local recipes may use checkout paths. Publishing recipes use immutable source
-commits. No package uploads or default switches occur in the first slice.
+Permanent acceptance uses Mojo TestSuite plus a standard-library process/build
+coordinator with bounded parallelism and shared caches. The legacy environment
+is a separate opt-in/live differential lane and a tagged-release comparison gate.
+See [native testing](native_testing.md), [frontend evidence](native_frontend_plan.md)
+and [the public guide](../mojo/README.md).
 
-## Acceptance and current implementation
-
-Stages 0–2 now have production sources, native tests, a shared-fixture differential
-harness, separate CI and local installed-package checks. Detailed usage and the
-compiler/Unicode constraints are in [the native README](../mojo/README.md).
-
-Keep the Python gate active. Require native ownership/lifecycle tests and mapping
-comparisons at O0/O3, plus compiler rejection of mixed-stage types and incomplete
-dispatch. Keep failed mapping reusable, inputs intact, shared DAGs valid, and nominal
-recursion distinct from structural cycles. Codecs cover the complete current type
-model, constructor defaults, unknown tags/fields, wrong-family nodes and Unicode.
-
-Before cutover require full corpus parity, byte-identical binding/layout sources
-in both link modes, existing stable-toolchain generated-code compilation/runtime
-acceptance, installed-package checks, and wrapper error tests. Preserve the last
-Python generator in Git history rather than another active reference tree.
-
-Sources: [nightly release](https://mojolang.org/releases/nightly/),
-[packaging guide](https://mojolang.org/docs/tools/packaging/),
-[module/compiler compatibility](https://mojolang.org/docs/manual/packages/),
-[historical results and prior art](mojo_rewrite_results.md).
+The following records describe the earlier stages at their original boundaries.
 
 ## First-slice validation (2026-10-31, host Linux x86-64)
 
@@ -184,3 +161,19 @@ The next shared slice adds type lowering, macro closure/expansion/folding, comme
 capture/emission and target ABI checks. All 102 shared behaviors now run across
 three harnesses (306 executions; 204 native). Full integration passes **710 tests**;
 the light gate remains **400 passed**, with no production or expectation changes.
+
+The backend shared-test slice adds declaration/expression mapping, constructed-IR
+emission, normalization/printing and layout checks, plus numeric and debug-codec
+failure/recovery contracts. Shared coverage is now 186 behaviors across three
+harnesses (558 executions, 372 native). The full suite passes **891 tests** and
+the light gate **413 tests**. `native-shared` discovers all native-marked shared
+cases automatically. Production algorithms and fixed goldens are unchanged.
+
+## Native testing prerequisite for slice 4
+
+Native TestSuite programs now own the former native pytest acceptance assertions.
+A permanent Python standard-library coordinator handles discovery, bounded parallel
+compilation/execution and shared content-keyed caches; it imports no Python bindgen
+or pytest. Python comparisons remain a separate coexistence lane. The coverage
+inventory, research, gate contract and integration measurements are recorded in
+[native testing](native_testing.md). Slice 4 requires that independent gate.

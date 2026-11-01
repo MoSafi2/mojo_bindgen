@@ -2,9 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [Unreleased — 0.4.0]
 
-- Add direct native header parsing and the `mojo-bindgen-mojo` CLI alongside Python,
+- Make Mojo the production generator for both PyPI and Conda distributions under
+  the single `mojo-bindgen` package and command. Retain a Typer/Rich Python CLI
+  facade with help, completion, colors and native diagnostic presentation.
+- Keep the direct Mojo executable and importable Mojo library public. Remove
+  Python generation/staged APIs; retain the previous generator and its tests in
+  the isolated `legacy/python/` reference project.
+- Build Linux x86-64-v3 artifacts with the exact 1.3.0.dev2026103105 nightly.
+  Declare compiler/libclang runtime dependencies instead of copying LLVM into the
+  wheel. Continue testing generated bindings on Mojo 1.2.0 separately.
+- Run permanent native acceptance with Mojo TestSuite at O0/O3 and a parallel,
+  cached standard-library coordinator independent of pytest/Python bindgen.
+- Add installed-wheel/Conda, public API, relocation and stable FFI/layout release
+  gates. Tagged releases use immutable source revisions and checksummed assets.
+
+- Add direct native header parsing and the public Mojo CLI,
   using the checksum-pinned shimless GitHub `libclang_mojo` nightly package.
 - Preserve recursive IR and exact source parity; add native frontend, CLI, target,
   ownership and example/runtime comparisons and installed Conda checks.

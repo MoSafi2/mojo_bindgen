@@ -1,45 +1,75 @@
-# Development recipe. Published recipes must use an immutable source commit.
 context:
-  version: "0.3.5"
+  version: "0.4.0"
   mojo_version: "1.3.0.dev2026103105"
 
 package:
-  name: mojo-bindgen-native
+  name: mojo-bindgen
   version: ${{ version }}
 
+# scripts/native_package.sh renders immutable Git sources for release builds.
 source:
   path: ../..
 
 build:
-  number: 1
+  number: 0
+  dynamic_linking:
+    binary_relocation: false
   script:
     interpreter: bash
     content:
-      - mkdir -p "${PREFIX}/bin" "${PREFIX}/lib/mojo" "${SRC_DIR}/.compiler-tmp"
+      - mkdir -p "${SRC_DIR}/.compiler-tmp" "${PREFIX}/lib/mojo"
       - export TMPDIR="${SRC_DIR}/.compiler-tmp"
-      - mojo precompile -I "${PREFIX}/lib/mojo" mojo/mojo_bindgen -o "${PREFIX}/lib/mojo/mojo_bindgen.mojoc"
-      - mojo build -I "${PREFIX}/lib/mojo" -I mojo mojo/main.mojo -o "${PREFIX}/bin/mojo-bindgen-mojo"
+      - export MOJO_BINDGEN_CONDA=1
+      - export MOJO_BINDGEN_SDK="${PREFIX}"
+      - export MOJO_BINDGEN_PATCHELF="${BUILD_PREFIX}/bin/patchelf"
+      - python scripts/check_release.py
+      - '"${PREFIX}/bin/python" -m pip install . --no-deps --no-build-isolation -v'
+      - unset MOJO_BINDGEN_EXECUTABLE
+      - mojo_path="$("${PREFIX}/bin/mojo-bindgen" --print-mojo-path)"
+      - cp "${mojo_path}/mojo_bindgen.mojoc" "${PREFIX}/lib/mojo/mojo_bindgen.mojoc"
 
 requirements:
   build:
-    - mojo-compiler ==${{ mojo_version }}
+    - python 3.14.*
+    - pip
+    - hatchling >=1.26
+    - patchelf >=0.17
+    - binutils
   host:
+    - python 3.14.*
+    - pip
+    - hatchling >=1.26
+    - rich >=15,<16
+    - typer >=0.25,<0.26
     - libclang_mojo ==0.3.0.dev20261031 mojo1_3_0_dev2026103105_linux_64_1
     - mojo-compiler ==${{ mojo_version }}
-  run:
-    - libclang_mojo ==0.3.0.dev20261031 mojo1_3_0_dev2026103105_linux_64_1
     - clang 18.*
+  run:
+    - python >=3.14,<3.15
+    - rich >=15,<16
+    - typer >=0.25,<0.26
+    - libclang_mojo ==0.3.0.dev20261031 mojo1_3_0_dev2026103105_linux_64_1
     - mojo-compiler ==${{ mojo_version }}
-    - __glibc >=2.34,<3
+    - clang 18.*
+    - __glibc >=2.35,<3
 
 tests:
   - script:
       - mkdir -p .compiler-tmp
       - export TMPDIR="$PWD/.compiler-tmp"
-      - mojo-bindgen-mojo --version
-      - mojo build test_import.mojo -o installed-api-test
+      - export PATH="$PREFIX/bin:/usr/bin:/bin"
+      - export LD_LIBRARY_PATH="$PREFIX/lib"
+      - export MODULAR_HOME="$PREFIX/share/max"
+      - unset CC CXX LD CFLAGS CXXFLAGS LDFLAGS LIBRARY_PATH MOJO_BINDGEN_EXECUTABLE MOJO_BINDGEN_SDK MOJO_BINDGEN_PAYLOAD
+      - mojo-bindgen --version
+      - mojo-bindgen --help
+      - mojo_path="$(mojo-bindgen --print-mojo-path)"
+      - export MOJO_BINDGEN_CLANG_LIBRARY_PATH="$PREFIX/lib/libclang.so"
+      - mojo build -I "$mojo_path" test_import.mojo -o installed-api-test
       - ./installed-api-test
-      - mojo-bindgen-mojo native_smoke.h --dump-cir native.cir.json -o native.mojo
+      - mojo-bindgen native_smoke.h --dump-cir native.cir.json -o facade.mojo
+      - '"$(dirname "$mojo_path")/bin/mojo-bindgen" native_smoke.h -o direct.mojo'
+      - cmp facade.mojo direct.mojo
     files:
       recipe:
         - test_import.mojo
@@ -50,4 +80,4 @@ about:
   repository: https://github.com/MoSafi2/mojo_bindgen
   license: MIT
   license_file: LICENSE
-  summary: Native Mojo header-to-bindings generator
+  summary: Mojo binding generator with a Python CLI facade and public Mojo API

@@ -5,65 +5,111 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check:
-    # Keep the host C toolchain stable alongside the locked Mojo environments.
+  cli:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Pixi
-        uses: prefix-dev/setup-pixi@v0.8.14
-        with:
-          cache: true
-
-      - name: Install system libclang
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential clang libclang-dev
-
-      - name: Validate repository
-        run: pixi run --locked check-light
-        env:
-          # Help libclang find the system shared library on Ubuntu runners.
-          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
-
-  ffi-runtime:
-    # Keep the host C toolchain stable alongside the locked Mojo environments.
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Pixi
-        uses: prefix-dev/setup-pixi@v0.8.14
-        with:
-          cache: true
-      - name: Install C toolchain
-        run: sudo apt-get update && sudo apt-get install -y build-essential clang libclang-dev
-      - name: Verify generated FFI on locked Mojo
-        run: pixi run --locked pytest -q tests/e2e --bindgen python
-        env:
-          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
-
-  native-types:
-    # Keep the host C toolchain stable alongside the locked Mojo environments.
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
+      - run: mkdir -p mojo/build/test-tmp
       - uses: prefix-dev/setup-pixi@v0.8.14
         with:
           cache: true
-      - name: Install C toolchain for the Python comparison frontend
-        run: sudo apt-get update && sudo apt-get install -y build-essential clang libclang-dev
-      - name: Install pinned native nightly
-        run: pixi install --manifest-path mojo/pixi.toml --locked
-      - name: Install locked example headers and runtime libraries
-        run: pixi install --manifest-path examples/pixi.toml --locked
-      - name: Validate native frontend, backend, and Python parity
-        run: pixi run --locked check-native
-      - name: Build and test installed native package
+      - name: Validate Python presentation and coordinator
+        run: pixi run --locked check-light
+      - name: Check release identities
+        run: python scripts/check_release.py
+
+  native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p mojo/build/test-tmp
+      - uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          manifest-path: mojo/pixi.toml
+          environments: default stable-tests
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Install C toolchain and shared example libraries
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential binutils clang
+          pixi install --manifest-path examples/pixi.toml --locked
+      - uses: actions/cache/restore@v4
+        id: native-cache
+        with:
+          path: |
+            mojo/build/native-testing/compiler-cache
+            mojo/build/native-testing/binaries
+          key: mojo-linux-x86-64-v3-${{ hashFiles('mojo/pixi.lock') }}-${{ github.sha }}-native
+          restore-keys: mojo-linux-x86-64-v3-${{ hashFiles('mojo/pixi.lock') }}-
+      - name: Check formatting and coordinator
+        run: |
+          pixi run --manifest-path mojo/pixi.toml --locked format-check
+          pixi run --manifest-path mojo/pixi.toml --locked runner-check
+      - name: Mojo TestSuite acceptance at O0 and O3
+        run: pixi run --manifest-path mojo/pixi.toml --locked test
+      - uses: actions/cache/save@v4
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.native-cache.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            mojo/build/native-testing/compiler-cache
+            mojo/build/native-testing/binaries
+          key: mojo-linux-x86-64-v3-${{ hashFiles('mojo/pixi.lock') }}-${{ github.sha }}-native
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-test-reports
+          path: mojo/build/native-testing/runs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-failure-inputs-and-results
+          path: mojo/build/native-testing/workspaces/**/*.json
+          retention-days: 7
+
+  distribution:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p mojo/build/test-tmp
+      - uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          cache: true
+      - name: Install pinned packaging and runtime test SDKs
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential binutils clang
+          pixi install --manifest-path mojo/pixi.toml --locked --all
+      - name: Build source distribution and platform wheel
+        run: pixi run --locked build
+      - name: Audit wheel dependencies
+        run: pixi run --manifest-path mojo/pixi.toml --locked -e package auditwheel show dist/release/*.whl
+      - name: Installed wheel, public Mojo API and stable generated FFI
+        run: pixi run --locked python scripts/test_installed_distribution.py dist/release/*.whl
+      - name: Minimal OS installation and optional system prerequisites
+        run: pixi run --locked test-minimal-install dist/release/*.whl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: minimal-os-installation-reports
+          path: mojo/build/minimal-os
+      - name: Build and test unified Conda package
         run: pixi run --manifest-path mojo/pixi.toml --locked -e package package-build
+      - name: Assemble installable release channel
+        run: pixi run --locked python scripts/build_release_channel.py
+      - name: Resolve and exercise a fresh channel installation
+        run: pixi run --locked python scripts/test_installed_channel.py dist/release/mojo-bindgen-*-channel
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distribution-candidates
+          compression-level: 0
+          path: |
+            dist/release/*.whl
+            dist/release/*.tar.gz
+            dist/release/*.conda
+            dist/release/SHA256SUMS

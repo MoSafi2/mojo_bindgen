@@ -1,41 +1,20 @@
 [workspace]
-authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
-channels = ["https://conda.modular.com/max/", "conda-forge"]
-name = "mojo_bindgen"
+name = "mojo-bindgen"
+channels = ["conda-forge"]
 platforms = ["linux-64"]
-preview = ["pixi-build"]
+requires-pixi = ">=0.80.0"
 
-[package.build]
-backend = { name = "pixi-build-python", version = "0.*" }
-
-[package.host-dependencies]
-hatchling = "==1.26.3"
-
-
-# `default` includes the `dev` feature (full tooling). Use `-e install` for a smaller
-# runtime-only environment (Mojo + mojo-bindgen, no notebooks or dev PyPI tools).
 [environments]
 default = { features = ["dev"], solve-group = "main" }
 install = { features = [], solve-group = "main" }
 
 [activation.env]
-PATH = "$PIXI_PROJECT_ROOT/bin:$PATH"
-
-[tasks]
-native-build = "pixi run --manifest-path mojo/pixi.toml --locked build"
-native-test = "pixi run --manifest-path mojo/pixi.toml --locked test"
-native-format-check = "pixi run --manifest-path mojo/pixi.toml --locked format-check"
-native-parity = "pytest -q tests/parity"
-native-shared = "pytest -q --bindgen native -m native tests/surface tests/corpus tests/stress tests/e2e tests/unit/test_type_lowering.py tests/unit/test_macro_closure.py tests/unit/test_doc_comments.py tests/unit/test_target_abi.py"
-native-example-parity = "pixi run --manifest-path examples/pixi.toml --locked test-native"
-check-native = { depends-on = ["native-format-check", "native-build", "native-test", "native-parity", "native-shared"] }
-example-zlib = "bash examples/zlib/generate.sh"
-example-cairo = "bash examples/cairo/generate.sh"
-example-libpng = "bash examples/libpng/generate.sh"
-example-sqlite = "bash examples/sqlite/generate.sh"
+TMPDIR = "$PIXI_PROJECT_ROOT/mojo/build/test-tmp"
+MOJO_BINDGEN_EXECUTABLE = "$PIXI_PROJECT_ROOT/mojo/build/payload/bin/mojo-bindgen"
+MOJO_BINDGEN_SDK = "$PIXI_PROJECT_ROOT/mojo/.pixi/envs/default"
+MOJO_BINDGEN_PATCHELF = "$PIXI_PROJECT_ROOT/mojo/.pixi/envs/package/bin/patchelf"
 
 [dependencies]
-mojo = ">=1.2,<2"
 python = ">=3.14.4,<3.15"
 pip = ">=26.0.1,<27"
 rich = ">=15.0.0,<16"
@@ -43,32 +22,42 @@ typer = ">=0.25.1,<0.26"
 
 [pypi-dependencies]
 mojo-bindgen = { path = ".", editable = true }
-build = ">=1.5.0, <2"
+build = ">=1.5.0,<2"
+
+[tasks]
+test-minimal-install = "python scripts/test_minimal_install.py"
+native-exec = "bash scripts/native_exec.sh"
+native-build = "pixi run --manifest-path mojo/pixi.toml --locked -e package build"
+native-test = "pixi run --manifest-path mojo/pixi.toml --locked test"
+native-format-check = "pixi run --manifest-path mojo/pixi.toml --locked format-check"
+native-runner-check = "python -I -S scripts/test_native_runner.py"
+native-shared = "pixi run --manifest-path mojo/pixi.toml --locked test --suite acceptance"
+check-native = { depends-on = ["native-format-check", "native-build", "native-runner-check", "native-test"] }
+legacy-test = "pixi run --manifest-path legacy/python/pixi.toml --locked test"
+legacy-parity = "pixi run --manifest-path legacy/python/pixi.toml --locked parity"
+native-parity = { depends-on = ["legacy-parity"] }
+native-example-parity = "pixi run --manifest-path legacy/python/pixi.toml --locked example-parity"
+example-zlib = "bash examples/zlib/generate.sh"
+example-cairo = "bash examples/cairo/generate.sh"
+example-libpng = "bash examples/libpng/generate.sh"
+example-sqlite = "bash examples/sqlite/generate.sh"
 
 [feature.dev.dependencies]
-ipykernel = ">=7.1.0,<8"
-jupyter = ">=1.1.1,<2"
 nodejs = ">=25.8.2,<25.9"
-rust = ">=1.90,<2"
 
 [feature.dev.pypi-dependencies]
-pytest = ">=9.0.3, <10"
-ruff = ">=0.15.12, <0.16"
-pyright = ">=1.1.409, <2"
+ruff = ">=0.15.12,<0.16"
+pyright = ">=1.1.409,<2"
 
 [feature.dev.tasks]
-test = "pytest"
-test-light = "pytest -m 'not expensive'"
-lint = "ruff check mojo_bindgen tests"
-format = "ruff format mojo_bindgen tests"
-format-check = "ruff format --check mojo_bindgen tests"
+test = "python -m unittest discover -s tests/cli -v"
+test-light = { depends-on = ["test", "native-runner-check"] }
+lint = "ruff check mojo_bindgen tests/cli tests/distribution scripts hatch_build.py"
+format = "ruff format mojo_bindgen tests/cli tests/distribution scripts hatch_build.py"
+format-check = "ruff format --check mojo_bindgen tests/cli tests/distribution scripts hatch_build.py"
 typecheck = "pyright mojo_bindgen"
 check-light = "bash scripts/check-light.sh"
 precommit = "bash scripts/pre-commit.sh"
-install-rust-bindgen = "cargo install --locked --root .pixi/tools/rust-bindgen bindgen-cli"
-rust-bindgen-version = ".pixi/tools/rust-bindgen/bin/bindgen --version"
-install-editable = "python -m pip install -e ."
-build = "python -m build"
-build-wheel = "python -m build --wheel"
-build-sdist = "python -m build --sdist"
-clean-dist = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in (Path('build'), Path('dist'))]; [shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True) for p in Path('.').glob('*.egg-info')]\""
+build = "python -m build --outdir dist/release"
+build-wheel = "python -m build --wheel --outdir dist/release"
+build-sdist = "python -m build --sdist --outdir dist/release"

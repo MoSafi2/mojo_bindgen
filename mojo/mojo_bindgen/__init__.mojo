@@ -1,4 +1,5 @@
 """Native header-to-bindings API with independent recursive CIR and MojoIR."""
+from ._version import VERSION
 from .ir import CType, MojoType, CConstExpr, MojoConstExpr, Unit, MojoModule, TargetABI
 from .analysis.mojo.type_mapping import MapTypePass, map_type
 from .analysis.facts.target import TargetQueries

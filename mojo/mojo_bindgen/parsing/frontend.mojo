@@ -1,6 +1,7 @@
 """The libclang boundary: arguments, checked traversal, and owned source facts."""
 from clang.cindex import Index, Cursor, TranslationUnit, TranslationUnitFlags, UnsavedFile
 from std.pathlib import Path
+from std.os import getenv
 from std.ffi import external_call, c_char
 from ._process import command_output
 from ..analysis.common import strip_whitespace
@@ -54,7 +55,15 @@ def default_system_compile_args() -> List[String]:
     var args: List[String] = ["-I/usr/include"]
     for driver in [String("cc"), String("clang")]:
         try:
-            var output = strip_whitespace(command_output([driver, "-print-file-name=include"]))
+            # Foreign Clang headers can shadow packaged resources, even through cc.
+            if getenv("MOJO_BINDGEN_CLANG_RESOURCE_DIR"):
+                if driver == "clang" or "clang" in command_output(
+                    [driver, "--version"], quiet=True
+                ):
+                    continue
+            var output = strip_whitespace(
+                command_output([driver, "-print-file-name=include"], quiet=True)
+            )
             var flag = "-I" + output
             if output != "include" and output and Path(output).is_dir() and flag not in args:
                 args.append(flag)
@@ -92,12 +101,17 @@ def normalized_args(args: List[String]) -> List[String]:
     var normalized = List[String]()
     var has_std = False
     var has_language = False
+    var has_resource = False
     for item in args:
         var arg = normalize_std_flag(item)
         has_std = has_std or arg.startswith("-std=")
         has_language = has_language or arg.startswith("-x")
+        has_resource = has_resource or arg.startswith("-resource-dir")
         normalized.append(arg^)
     var result = List[String]()
+    var resource = getenv("MOJO_BINDGEN_CLANG_RESOURCE_DIR")
+    if resource and not has_resource:
+        result.append("-resource-dir=" + resource)
     if not has_language:
         result.append("-x")
         result.append("c")

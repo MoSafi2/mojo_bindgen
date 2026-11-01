@@ -1,5 +1,8 @@
 # Analysis Type Mapping Pipeline
 
+This document describes the retained Python reference implementation under
+`legacy/python/`. The production Mojo package follows the same pass boundaries.
+
 This document shows how normalized CIR maps into MojoIR in the `analysis`
 layer.
 
@@ -60,7 +63,7 @@ Responsibilities:
 - delegate each top-level declaration to `UnitDeclMapper`
 
 Source:
-- [unit_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/unit_mapping.py:45)
+- [unit_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/analysis/mojo/unit_mapping.py:45)
 
 ### `MapTypePass`
 
@@ -81,7 +84,7 @@ Important rules:
 - unsupported unsized types fall back to opaque external pointers
 
 Source:
-- [type_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/type_mapping.py:132)
+- [type_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/analysis/mojo/type_mapping.py:132)
 
 ### `UnitDeclMapper`
 
@@ -99,7 +102,7 @@ Responsibilities:
 - map CIR constant expressions and macro expressions through `MapConstExprPass`
 
 Source:
-- [decl_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/decl_mapping.py:93)
+- [decl_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/analysis/mojo/decl_mapping.py:93)
 
 ### `map_struct(...)`
 
@@ -115,8 +118,8 @@ Responsibilities:
 - attach fallback diagnostics when a record must collapse to opaque storage
 
 Source:
-- [struct_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/struct_mapping.py:56)
-- [record_layout.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/facts/record_layout.py:48)
+- [struct_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/analysis/mojo/struct_mapping.py:56)
+- [record_layout.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/analysis/facts/record_layout.py:48)
 
 ### `map_union(...)`
 
@@ -124,7 +127,7 @@ Union mapping decides whether a union can stay as a typed `UnsafeUnion[...]`
 surface or must fall back to a conservative layout alias.
 
 Source:
-- [union_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/mojo_bindgen/analysis/mojo/union_mapping.py:25)
+- [union_mapping.py](/home/mohamed/Documents/Projects/mojo_bindgen/legacy/python/mojo_bindgen/analysis/mojo/union_mapping.py:25)
 
 ## Type-Level Fallback Rules
 

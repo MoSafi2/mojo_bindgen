@@ -1,48 +1,57 @@
 # Native Mojo rewrite
 
-The native implementation lives beside Python and generates bindings directly
-from C headers through libclang and the recursive backend. Python remains the
-canonical `mojo-bindgen` generator during the transition; native execution uses
-`mojo-bindgen-mojo`. The thin Python wrapper and distribution cutover are later
-stages.
+The production generator lives in this directory. Both PyPI and Conda install
+one `mojo-bindgen` product: a Python CLI facade, public Mojo executable and public
+`mojo_bindgen` import library. The optional Python comparison implementation lives
+under `legacy/python/` and is not shipped. See the root [installation guide](../README.md).
 
 ## Development
 
 From the repository root:
 
 ```bash
-pixi install --manifest-path mojo/pixi.toml --locked
+mkdir -p mojo/build/test-tmp
+pixi install --locked
+pixi install --manifest-path mojo/pixi.toml --locked --all
+pixi install --manifest-path examples/pixi.toml --locked
 pixi run --locked native-build
+pixi run --locked mojo-bindgen input.h -o bindings.mojo
+pixi run --locked native-exec input.h -o direct.mojo
 pixi run --locked native-test
-pixi run --locked native-parity
-pixi run --locked native-example-parity
 pixi run --locked check-native
 ```
 
-`native-build` writes `mojo/build/mojo-bindgen-mojo` and
-`mojo/build/mojo_bindgen.mojoc`. Generate headers with:
+`native-build` writes `mojo/build/payload/bin/mojo-bindgen` and the compiled
+packages under `mojo/build/payload/mojo/`. The facade and `native-exec` tasks select
+the development SDK in child processes. Installed executables discover their
+dependencies relative to their location. There is no second command or package name.
 
-```bash
-pixi run --manifest-path mojo/pixi.toml --locked ./build/mojo-bindgen-mojo input.h -o bindings.mojo
-```
+The manifest pins **Mojo 1.3.0.dev2026103105 (dc62ab6d)** on Linux x86-64.
+Generated bindings are checked independently on **1.2.0** in `stable-tests`.
+Never load a precompiled module from one compiler into the other. `format` and
+`format-check` use the pinned SDK's `mblack`, one file per invocation.
 
-Use `--help` for flags matching Python, including debug dumps and both link modes.
-Native unit tests compile
-and run at O0 and O3. The parity harness builds an independent test driver at both
-optimization levels and compares with the current Python implementation.
+## Installed interfaces
 
-The native manifest and lock pin **Mojo 1.3.0.dev2026103105 (dc62ab6d)** on
-Linux x86-64. The root environment retains its existing stable compiler for Python
-and generated-binding tests. Never load a precompiled package from one compiler
-into the other. Native test subprocesses put the nightly runtime library directory
-first so an activated stable environment cannot select its runtime accidentally.
+`mojo-bindgen --print-mojo-path` prints the public Mojo import directory. The
+public executable is `$(dirname "$mojo_path")/bin/mojo-bindgen`, where `mojo_path`
+is that directory. The normal PATH command is the Typer/Rich facade. Both use the
+same generator, flags, diagnostic data and output algorithms.
 
-Formatting uses the SDK's `mblack`, one file per invocation; this is the formatter
-behind `mojo format` and also supports a non-mutating `--check` mode:
+The Conda package installs `mojo_bindgen.mojoc` on the compiler's default import
+path. PyPI clients add `-I "$mojo_path"` when compiling against the exact nightly.
+For a PyPI library client, point `MOJO_BINDGEN_CLANG_LIBRARY_PATH` at
+`clang/native/libclang.so` in the installation's site-packages, and set
+`MOJO_BINDGEN_CLANG_RESOURCE_DIR` to `$(dirname "$mojo_path")/lib/clang/18`.
+The public executable configures these automatically. An explicitly supplied
+`-resource-dir` Clang argument takes precedence.
 
-```bash
-pixi run --manifest-path mojo/pixi.toml --locked format
-pixi run --manifest-path mojo/pixi.toml --locked format-check
+```mojo
+from mojo_bindgen import BindgenOptions, bindgen
+
+def main() raises:
+    var result = bindgen(BindgenOptions("input.h"))
+    print(result.bindings_source)
 ```
 
 ## Library contracts
@@ -138,14 +147,18 @@ pixi run --manifest-path mojo/pixi.toml --locked -e package package-render
 pixi run --manifest-path mojo/pixi.toml --locked -e package package-build
 ```
 
-The development recipe builds the executable and precompiled import package from
-this checkout and tests their installed form outside the source tree. Artifacts
-are written under `mojo/build/conda`. The development CLI package declares glibc
-2.34 or newer, matching its inspected ELF symbol requirements. Nothing is uploaded. A publishing recipe must
-replace the development source path with an immutable Git revision; distribution
-remains a later milestone. The exact compiler pin applies to build, host, and run
-requirements because `.mojoc` is compiler-specific. The compiler package currently
-brings Python tooling transitively; bindgen's native implementation does not call it.
+The recipe builds one `mojo-bindgen` package from this checkout and tests its
+installed facade, direct executable and public Mojo API outside the source tree.
+Artifacts go under `mojo/build/conda`. The complete runtime requires glibc 2.35+
+and x86-64-v3. `MOJO_BINDGEN_SOURCE_REVISION` renders immutable Git sources for
+release builds; local builds use the checkout. Neither command uploads packages.
+
+The wheel declares exact `mojo-compiler==1.3.0.dev2026103105` and
+`libclang==18.1.1` dependencies. Use Modular's nightly extra wheel index for the
+compiler. Conda maps these to its compiler/Clang packages instead; it does not
+install pip's libclang into the same environment. LLVM and compiler shared
+libraries are supplied by dependencies. Our payload keeps only the executable,
+compiled Mojo modules, Clang resource headers and dependency notices.
 
 The native manifest pins the shimless GitHub `libclang_mojo` build 1 and Clang 18.
 It needs no sibling checkout or shim. The package recipe uses a checksum-verified
@@ -170,5 +183,10 @@ The `large_alignment` fixture records the latter failure explicitly. Native
 binding runtime checks still run in both modes; passing layout runtime checks cover
 other fixture records. The runtime fixtures omit the unrelated system
 `max_align_t` declaration, while full-header intermediate and byte comparisons
-include it. Fixing these behaviors requires a coordinated Python/native change;
-this rewrite preserves the existing output contract.
+include it. Fixing these behaviors requires deliberate output and fixture changes; this
+cutover preserves the existing output contract.
+
+Native acceptance now uses standard Mojo `TestSuite` programs and a standard-library
+Python coordinator, independently of pytest/Python bindgen. Install the isolated
+`stable-tests` environment for generated-binding checks. See the [native testing
+contract](../agent_docs/native_testing.md) for parallelism, caches, selection and reports.

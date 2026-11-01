@@ -1,0 +1,1810 @@
+[
+  {
+    "id": "tests/surface/alignment/test_alignment_goldens.py::test_alignment_fixture_external_goldens[python-packed_struct_comment]",
+    "fixture": "test_alignment_goldens/580a3dcb6a04.json.gz",
+    "group": "test_alignment_goldens",
+    "native_test": "test_alignment_fixture_external_goldens_580a3dcb6a04",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_alignment_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/alignment/test_alignment_goldens.py::test_alignment_fixture_external_goldens[python-policy_matrix]",
+    "fixture": "test_alignment_goldens/d66b44f9ac77.json.gz",
+    "group": "test_alignment_goldens",
+    "native_test": "test_alignment_fixture_external_goldens_d66b44f9ac77",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_alignment_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-callback_typedef_alias]",
+    "fixture": "test_surface_goldens/55e3f7e57858.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_55e3f7e57858",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-enum_named_basic]",
+    "fixture": "test_surface_goldens/d0acf541ca35.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_d0acf541ca35",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-enum_namespace_rules]",
+    "fixture": "test_surface_goldens/60b7c4345ce0.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_60b7c4345ce0",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-fixed_array_field]",
+    "fixture": "test_surface_goldens/ba46b190cd09.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_ba46b190cd09",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-global_stub_const_ptr]",
+    "fixture": "test_surface_goldens/db26d1e59562.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_db26d1e59562",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-globals_and_consts]",
+    "fixture": "test_surface_goldens/e803b9da59fa.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_e803b9da59fa",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-macro_comments]",
+    "fixture": "test_surface_goldens/39cb1ad905c1.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_39cb1ad905c1",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-macro_literals]",
+    "fixture": "test_surface_goldens/ed337d64b1e7.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_ed337d64b1e7",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-nested_flexible_tail_terminal]",
+    "fixture": "test_surface_goldens/7c155b2d6f18.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_7c155b2d6f18",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-non_register_return_stub]",
+    "fixture": "test_surface_goldens/e27e24e8a8a3.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_e27e24e8a8a3",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-opaque_forward_ptrs]",
+    "fixture": "test_surface_goldens/07c0a2087c08.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_07c0a2087c08",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-scalar_fn_basic]",
+    "fixture": "test_surface_goldens/63c75e978463.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_63c75e978463",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-struct_plain_fields]",
+    "fixture": "test_surface_goldens/135880c7bfdc.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_135880c7bfdc",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-typedef_chain]",
+    "fixture": "test_surface_goldens/2c49d7a8ef24.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_2c49d7a8ef24",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/surface/test_surface_goldens.py::test_surface_fixture_external[python-variadic_stub]",
+    "fixture": "test_surface_goldens/5a68ae3046e9.json.gz",
+    "group": "test_surface_goldens",
+    "native_test": "test_surface_fixture_external_5a68ae3046e9",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_surface_goldens.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-anonymous_members_common]",
+    "fixture": "test_header_corpus/09b0a02a2403.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_09b0a02a2403",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-array_of_ptrs]",
+    "fixture": "test_header_corpus/33eef68da406.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_33eef68da406",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-arrays_and_records]",
+    "fixture": "test_header_corpus/71dab7f16477.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_71dab7f16477",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-atomic_scalar_and_field]",
+    "fixture": "test_header_corpus/8307eef6464a.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_8307eef6464a",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-bitfield_zero_width]",
+    "fixture": "test_header_corpus/d3e29f7a99b6.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_d3e29f7a99b6",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-complex_types]",
+    "fixture": "test_header_corpus/f825bd7dfb00.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_f825bd7dfb00",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-globals_and_consts]",
+    "fixture": "test_header_corpus/eaca7f2ec9eb.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_eaca7f2ec9eb",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-inline_linkage]",
+    "fixture": "test_header_corpus/1603029dd5fc.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_1603029dd5fc",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-opaque_handles]",
+    "fixture": "test_header_corpus/aeb8bd6f745f.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_aeb8bd6f745f",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-ptr_to_array_small]",
+    "fixture": "test_header_corpus/7e8ff4e157a5.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_7e8ff4e157a5",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-static_array_param]",
+    "fixture": "test_header_corpus/e63b890d8f34.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_e63b890d8f34",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-vector_extension_types]",
+    "fixture": "test_header_corpus/a964b7702d8a.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_a964b7702d8a",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-vla_param]",
+    "fixture": "test_header_corpus/7479c5ef54fb.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_7479c5ef54fb",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/corpus/test_header_corpus.py::test_header_corpus_case[python-zero_length_array]",
+    "fixture": "test_header_corpus/c9e39aaf0e6f.json.gz",
+    "group": "test_header_corpus",
+    "native_test": "test_header_corpus_case_c9e39aaf0e6f",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_header_corpus.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_emit.py::test_stress_fixture_emits_non_empty_source[python-pathological_core]",
+    "fixture": "test_stress_emit/4b788d03feee.json.gz",
+    "group": "test_stress_emit",
+    "native_test": "test_stress_fixture_emits_non_empty_source_4b788d03feee",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_emit.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_emit.py::test_stress_fixture_emits_non_empty_source[python-pathological_layout]",
+    "fixture": "test_stress_emit/f06bea605089.json.gz",
+    "group": "test_stress_emit",
+    "native_test": "test_stress_fixture_emits_non_empty_source_f06bea605089",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_emit.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_emit.py::test_stress_fixture_emits_non_empty_source[python-pathological_macros]",
+    "fixture": "test_stress_emit/75fa650043fe.json.gz",
+    "group": "test_stress_emit",
+    "native_test": "test_stress_fixture_emits_non_empty_source_75fa650043fe",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_emit.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_ir.py::test_stress_fixture_json_round_trip[python-pathological_core]",
+    "fixture": "test_stress_ir/77cac253f8c0.json.gz",
+    "group": "test_stress_ir",
+    "native_test": "test_stress_fixture_json_round_trip_77cac253f8c0",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_ir.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_ir.py::test_stress_fixture_json_round_trip[python-pathological_layout]",
+    "fixture": "test_stress_ir/9f26dbb3501c.json.gz",
+    "group": "test_stress_ir",
+    "native_test": "test_stress_fixture_json_round_trip_9f26dbb3501c",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_ir.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_ir.py::test_stress_fixture_json_round_trip[python-pathological_macros]",
+    "fixture": "test_stress_ir/0e6551fff2a0.json.gz",
+    "group": "test_stress_ir",
+    "native_test": "test_stress_fixture_json_round_trip_0e6551fff2a0",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_ir.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_ir.py::test_pathological_core_preserves_selected_hard_declarations[python]",
+    "fixture": "test_stress_ir/178f05555cb8.json.gz",
+    "group": "test_stress_ir",
+    "native_test": "test_pathological_core_preserves_selected_hard_declarations_178f05555cb8",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_ir.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_ir.py::test_pathological_macros_preserves_supported_and_unsupported_forms[python]",
+    "fixture": "test_stress_ir/9a82b2112aaa.json.gz",
+    "group": "test_stress_ir",
+    "native_test": "test_pathological_macros_preserves_supported_and_unsupported_forms_9a82b2112aaa",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_ir.mojo"
+  },
+  {
+    "id": "tests/stress/test_stress_ir.py::test_pathological_layout_preserves_selected_layout_edges[python]",
+    "fixture": "test_stress_ir/55ba6fe62428.json.gz",
+    "group": "test_stress_ir",
+    "native_test": "test_pathological_layout_preserves_selected_layout_edges_55ba6fe62428",
+    "native_source": "tests/mojo/suites/test_fixtures.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_stress_ir.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-anon_struct_union]",
+    "fixture": "test_e2e_runtime/bb53c84b8e55.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_bb53c84b8e55",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-atomic_types_runtime]",
+    "fixture": "test_e2e_runtime/c5f400a92861.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_c5f400a92861",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-complex_types_runtime]",
+    "fixture": "test_e2e_runtime/1787d826609b.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_1787d826609b",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-const_array_decay]",
+    "fixture": "test_e2e_runtime/1d7066d83f79.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_1d7066d83f79",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-fnptr_return]",
+    "fixture": "test_e2e_runtime/aa8a2cebee24.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_aa8a2cebee24",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-full_surface_runtime]",
+    "fixture": "test_e2e_runtime/3a1e3d45424f.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_3a1e3d45424f",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-functional_math]",
+    "fixture": "test_e2e_runtime/da9d5607963c.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_da9d5607963c",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-functional_records]",
+    "fixture": "test_e2e_runtime/30890e6fff2e.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_30890e6fff2e",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-globals_consts_runtime]",
+    "fixture": "test_e2e_runtime/3767c59b41cf.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_3767c59b41cf",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-incomplete_array_padding]",
+    "fixture": "test_e2e_runtime/eb246d0a82a2.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_eb246d0a82a2",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-large_alignment]",
+    "fixture": "test_e2e_runtime/bd3ce1acc22e.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_bd3ce1acc22e",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-opaque_forward]",
+    "fixture": "test_e2e_runtime/1a34a4cca7e4.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_1a34a4cca7e4",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-ptr_to_array]",
+    "fixture": "test_e2e_runtime/c72018a09db3.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_c72018a09db3",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-vector_extension_types_runtime]",
+    "fixture": "test_e2e_runtime/9f72b1e09094.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_9f72b1e09094",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_e2e_runtime.py::test_golden_runtime_case[python-zero_length_tail_access]",
+    "fixture": "test_e2e_runtime/fa04bb2ad777.json.gz",
+    "group": "test_e2e_runtime",
+    "native_test": "test_golden_runtime_case_fa04bb2ad777",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_e2e_runtime.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_checked_varargs_and_overaligned_array[python]",
+    "fixture": "test_mojo_12/bc162a853174.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_checked_varargs_and_overaligned_array_bc162a853174",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_sum()-missing fixed C arguments]",
+    "fixture": "test_mojo_12/b161d7969fdb.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_b161d7969fdb",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_sum(Int64(1), c_int(1))-fixed argument 0]",
+    "fixture": "test_mojo_12/2b0d1c0f1e03.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_2b0d1c0f1e03",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_sum(c_int(1), Int8(2))-promote]",
+    "fixture": "test_mojo_12/b8b0b96ed493.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_b8b0b96ed493",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_sum(c_int(1), True)-promote]",
+    "fixture": "test_mojo_12/81009faf1a93.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_81009faf1a93",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_values(c_int(1), Float32(1.25))-promote]",
+    "fixture": "test_mojo_12/955fda263eb2.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_955fda263eb2",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_sum(c_int(1), String(\"unsafe\"))-as_c_string_span]",
+    "fixture": "test_mojo_12/8463afa558fb.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_8463afa558fb",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_varargs_reject_unsafe_arguments[python-mf_sum(c_int(1), Optional[c_int](1))-promote]",
+    "fixture": "test_mojo_12/81dbfd031ef3.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_varargs_reject_unsafe_arguments_81dbfd031ef3",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_dynamic_globals_and_override_precedence[python]",
+    "fixture": "test_mojo_12/5bea586e7394.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_dynamic_globals_and_override_precedence_5bea586e7394",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_missing_dynamic_symbol_keeps_non_raising_diagnostic[python]",
+    "fixture": "test_mojo_12/d28ab08e3b46.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_missing_dynamic_symbol_keeps_non_raising_diagnostic_d28ab08e3b46",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/e2e/test_mojo_12.py::test_missing_library_has_candidate_diagnostic[python]",
+    "fixture": "test_mojo_12/9f46869db373.json.gz",
+    "group": "test_mojo_12",
+    "native_test": "test_missing_library_has_candidate_diagnostic_9f46869db373",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_mojo_12.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_type_lowering_preserves_typedefs_by_context[python]",
+    "fixture": "test_type_lowering/dd5b6d22437e.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_type_lowering_preserves_typedefs_by_context_dd5b6d22437e",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_type_lowering_preserves_callback_parameter_names_across_positions[python]",
+    "fixture": "test_type_lowering/18bfc5469eb3.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_type_lowering_preserves_callback_parameter_names_across_positions_18bfc5469eb3",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_decl_lowering_preserves_inline_and_noreturn_function_attrs[python]",
+    "fixture": "test_type_lowering/56a356e4c632.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_decl_lowering_preserves_inline_and_noreturn_function_attrs_56a356e4c632",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed[python]",
+    "fixture": "test_type_lowering/bdad55f401c8.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_codegen_preserves_callback_parameter_names_and_falls_back_for_unnamed_bdad55f401c8",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_type_lowering_fully_canonicalizes_nested_typedef_chain[python]",
+    "fixture": "test_type_lowering/c0750d859c63.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_type_lowering_fully_canonicalizes_nested_typedef_chain_c0750d859c63",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_handles_nested_anon_and_bitfields[python]",
+    "fixture": "test_type_lowering/f436d7156348.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_handles_nested_anon_and_bitfields_f436d7156348",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_preserves_typedef_backed_bitfields[python]",
+    "fixture": "test_type_lowering/1a77f97be758.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_preserves_typedef_backed_bitfields_1a77f97be758",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_parser_materializes_named_embedded_structs_from_included_headers[python]",
+    "fixture": "test_type_lowering/e85c30e0742b.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_parser_materializes_named_embedded_structs_from_included_headers_e85c30e0742b",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_preserves_direct_anonymous_record_members[python]",
+    "fixture": "test_type_lowering/5dc8ac389959.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_preserves_direct_anonymous_record_members_5dc8ac389959",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_codegen_emits_synthesized_fields_for_direct_anonymous_members[python]",
+    "fixture": "test_type_lowering/7b6efde3a7b4.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_codegen_emits_synthesized_fields_for_direct_anonymous_members_7b6efde3a7b4",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_handles_recursive_pointer_to_self[python]",
+    "fixture": "test_type_lowering/d26ed230c7de.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_handles_recursive_pointer_to_self_d26ed230c7de",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_marks_trailing_empty_and_zero_length_fams[python]",
+    "fixture": "test_type_lowering/58b751250361.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_marks_trailing_empty_and_zero_length_fams_58b751250361",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_warns_for_non_trailing_fam_like_field[python]",
+    "fixture": "test_type_lowering/0f1b110002de.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_warns_for_non_trailing_fam_like_field_0f1b110002de",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_type_lowering_preserves_qualified_atomic_pointee[python]",
+    "fixture": "test_type_lowering/312d59155374.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_type_lowering_preserves_qualified_atomic_pointee_312d59155374",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef[python]",
+    "fixture": "test_type_lowering/b67324960495.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_type_lowering_recovers_vector_lane_count_for_vector_size_typedef_b67324960495",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_emits_named_nested_record_defs_for_pointer_fields[python]",
+    "fixture": "test_type_lowering/1bfa46edf8c5.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_emits_named_nested_record_defs_for_pointer_fields_1bfa46edf8c5",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_emits_named_nested_record_defs_for_value_fields[python]",
+    "fixture": "test_type_lowering/1ac282c65f95.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_emits_named_nested_record_defs_for_value_fields_1ac282c65f95",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_record_lowering_reuses_named_nested_record_nominally_after_definition[python]",
+    "fixture": "test_type_lowering/356b5bd923f1.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_record_lowering_reuses_named_nested_record_nominally_after_definition_356b5bd923f1",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_codegen_emits_named_nested_record_defs_before_parent[python]",
+    "fixture": "test_type_lowering/50f02f2bc518.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_codegen_emits_named_nested_record_defs_before_parent_50f02f2bc518",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_type_lowering.py::test_type_lowering_preserves_declarations_beyond_child_limit[python]",
+    "fixture": "test_type_lowering/cf06de5084c4.json.gz",
+    "group": "test_type_lowering",
+    "native_test": "test_type_lowering_preserves_declarations_beyond_child_limit_cf06de5084c4",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_lowering.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_fold_const_expr_unary_neg_int[python]",
+    "fixture": "test_macro_closure/0827881b6553.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_fold_const_expr_unary_neg_int_0827881b6553",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_fold_const_expr_binary_bitwise_chain[python]",
+    "fixture": "test_macro_closure/e212ee1923d3.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_fold_const_expr_binary_bitwise_chain_e212ee1923d3",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_expand_object_like_respects_recursion_guard[python]",
+    "fixture": "test_macro_closure/069aece77c76.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_expand_object_like_respects_recursion_guard_069aece77c76",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_expand_object_like_substitutes_included_name[python]",
+    "fixture": "test_macro_closure/01d7395d4fa6.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_expand_object_like_substitutes_included_name_01d7395d4fa6",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_macro_closure_cross_include_header[python]",
+    "fixture": "test_macro_closure/e054de7428f7.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_macro_closure_cross_include_header_e054de7428f7",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_include_headers_emit_translation_unit_declarations_and_macros[python]",
+    "fixture": "test_macro_closure/22e134f1f6b5.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_include_headers_emit_translation_unit_declarations_and_macros_22e134f1f6b5",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_empty_macros_are_pruned_from_translation_unit[python]",
+    "fixture": "test_macro_closure/4e19c47ea34b.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_empty_macros_are_pruned_from_translation_unit_4e19c47ea34b",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_collect_object_like_macro_env_last_wins[python]",
+    "fixture": "test_macro_closure/d7f36508d008.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_collect_object_like_macro_env_last_wins_d7f36508d008",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_ordered_macro_values_do_not_fold_through_later_definitions[python]",
+    "fixture": "test_macro_closure/5dd55441662c.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_ordered_macro_values_do_not_fold_through_later_definitions_5dd55441662c",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_clang_macro_fallback_evaluates_unsupported_integer_macro[python]",
+    "fixture": "test_macro_closure/5f7de2a5802e.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_clang_macro_fallback_evaluates_unsupported_integer_macro_5f7de2a5802e",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_clang_macro_fallback_evaluates_parsed_but_unclean_macro[python]",
+    "fixture": "test_macro_closure/5684f0150a5e.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_clang_macro_fallback_evaluates_parsed_but_unclean_macro_5684f0150a5e",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_clang_macro_fallback_preserves_parsed_unsigned_macro_type[python]",
+    "fixture": "test_macro_closure/e5b7e23f487a.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_clang_macro_fallback_preserves_parsed_unsigned_macro_type_e5b7e23f487a",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_macro_closure.py::test_macro_env_does_not_fold_through_unemitted_compiler_macros[python]",
+    "fixture": "test_macro_closure/549a719c9102.json.gz",
+    "group": "test_macro_closure",
+    "native_test": "test_macro_env_does_not_fold_through_unemitted_compiler_macros_549a719c9102",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_macro_closure.mojo"
+  },
+  {
+    "id": "tests/unit/test_doc_comments.py::test_parser_captures_docs_on_public_declarations[python]",
+    "fixture": "test_doc_comments/790c57172c12.json.gz",
+    "group": "test_doc_comments",
+    "native_test": "test_parser_captures_docs_on_public_declarations_790c57172c12",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_doc_comments.mojo"
+  },
+  {
+    "id": "tests/unit/test_doc_comments.py::test_mojo_emits_docs_and_respects_disable_option[python]",
+    "fixture": "test_doc_comments/8f26a51ce2ce.json.gz",
+    "group": "test_doc_comments",
+    "native_test": "test_mojo_emits_docs_and_respects_disable_option_8f26a51ce2ce",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_doc_comments.mojo"
+  },
+  {
+    "id": "tests/unit/test_target_abi.py::test_clang_parser_records_target_abi_on_unit[python]",
+    "fixture": "test_target_abi/6a99540b9e7d.json.gz",
+    "group": "test_target_abi",
+    "native_test": "test_clang_parser_records_target_abi_on_unit_6a99540b9e7d",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_target_abi.mojo"
+  },
+  {
+    "id": "tests/unit/test_target_abi.py::test_unit_json_roundtrip_preserves_target_abi[python]",
+    "fixture": "test_target_abi/f82bd657bdd2.json.gz",
+    "group": "test_target_abi",
+    "native_test": "test_unit_json_roundtrip_preserves_target_abi_f82bd657bdd2",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_target_abi.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_const_expr_maps_binary_ref_cast_and_sizeof_nodes[python]",
+    "fixture": "test_analysis_const_mapping/83464734ef41.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_const_expr_maps_binary_ref_cast_and_sizeof_nodes_83464734ef41",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_const_expr_parses_decimal_and_hex_float_literals[python]",
+    "fixture": "test_analysis_const_mapping/b18580b08584.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_const_expr_parses_decimal_and_hex_float_literals_b18580b08584",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_float_numeric_edges[python-0.0-0.0]",
+    "fixture": "test_analysis_const_mapping/9989d78b8e69.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_float_numeric_edges_9989d78b8e69",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_float_numeric_edges[python--0.0--0.0]",
+    "fixture": "test_analysis_const_mapping/fce5e0c6f07c.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_float_numeric_edges_fce5e0c6f07c",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_float_numeric_edges[python-1e-300-1e-300]",
+    "fixture": "test_analysis_const_mapping/485e1e9c90f6.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_float_numeric_edges_485e1e9c90f6",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_float_numeric_edges[python-1e300-1e+300]",
+    "fixture": "test_analysis_const_mapping/54dcb952e2c1.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_float_numeric_edges_54dcb952e2c1",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_float_numeric_edges[python-0x1.8p+2F-6.0]",
+    "fixture": "test_analysis_const_mapping/f02c5a7947bb.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_float_numeric_edges_f02c5a7947bb",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_map_float_numeric_edges[python-0x1p-1022-2.2250738585072014e-308]",
+    "fixture": "test_analysis_const_mapping/3bd46e2f9065.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_map_float_numeric_edges_3bd46e2f9065",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_expression_mapping_recovers_after_rejected_nullptr[python]",
+    "fixture": "test_analysis_const_mapping/41cee805a0b8.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_expression_mapping_recovers_after_rejected_nullptr_41cee805a0b8",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_const_mapping.py::test_recursive_expression_mapping_preserves_shared_inputs[python]",
+    "fixture": "test_analysis_const_mapping/bc3bc879a0db.json.gz",
+    "group": "test_analysis_const_mapping",
+    "native_test": "test_recursive_expression_mapping_preserves_shared_inputs_bc3bc879a0db",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_const_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_builds_module_metadata_and_preserves_decl_order[python]",
+    "fixture": "test_analysis_unit_mapping/91128f572e27.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_builds_module_metadata_and_preserves_decl_order_91128f572e27",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_uses_owned_dl_handle_module_policy_for_wrappers[python]",
+    "fixture": "test_analysis_unit_mapping/06d8776fdfdb.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_uses_owned_dl_handle_module_policy_for_wrappers_06d8776fdfdb",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_maps_typedef_and_enum_surface_forms[python]",
+    "fixture": "test_analysis_unit_mapping/42e2cc8c815f.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_maps_typedef_and_enum_surface_forms_42e2cc8c815f",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_maps_function_and_global[python]",
+    "fixture": "test_analysis_unit_mapping/0667c0c37240.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_maps_function_and_global_0667c0c37240",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_stubs_inline_functions_and_preserves_attrs[python]",
+    "fixture": "test_analysis_unit_mapping/446d7a42d6c4.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_stubs_inline_functions_and_preserves_attrs_446d7a42d6c4",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_maps_const_and_supported_macro_to_aliases[python]",
+    "fixture": "test_analysis_unit_mapping/244b32e3fbf7.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_maps_const_and_supported_macro_to_aliases_244b32e3fbf7",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_emits_placeholder_macro_when_not_parsed[python]",
+    "fixture": "test_analysis_unit_mapping/5f33bd7e5256.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_emits_placeholder_macro_when_not_parsed_5f33bd7e5256",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_preserves_macro_with_unemitted_reference[python]",
+    "fixture": "test_analysis_unit_mapping/f4a1caf46ab6.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_preserves_macro_with_unemitted_reference_f4a1caf46ab6",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_preserves_macro_with_unfolded_c_logical_operator[python]",
+    "fixture": "test_analysis_unit_mapping/e2223998106c.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_preserves_macro_with_unfolded_c_logical_operator_e2223998106c",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_maps_structs_and_unions_with_real_record_layouts[python]",
+    "fixture": "test_analysis_unit_mapping/8d3e1083ade5.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_maps_structs_and_unions_with_real_record_layouts_8d3e1083ade5",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_uses_unsafe_union_for_repeated_types_union[python]",
+    "fixture": "test_analysis_unit_mapping/57b9c9b66c11.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_uses_unsafe_union_for_repeated_types_union_57b9c9b66c11",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_keeps_incomplete_union_as_placeholder_alias[python]",
+    "fixture": "test_analysis_unit_mapping/90244efc9b5f.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_keeps_incomplete_union_as_placeholder_alias_90244efc9b5f",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_maps_structs_that_store_union_members_by_named_alias[python]",
+    "fixture": "test_analysis_unit_mapping/223e0ab75909.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_maps_structs_that_store_union_members_by_named_alias_223e0ab75909",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_keeps_raw_callback_types_inline[python]",
+    "fixture": "test_analysis_unit_mapping/7dae617268bb.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_keeps_raw_callback_types_inline_7dae617268bb",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_synthesizes_aliases_for_external_typeref_uses[python]",
+    "fixture": "test_analysis_unit_mapping/3ea606c9f8d9.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_synthesizes_aliases_for_external_typeref_uses_3ea606c9f8d9",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width[python]",
+    "fixture": "test_analysis_unit_mapping/fc279eb6c4a5.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_synthesizes_exact_width_stdint_aliases_as_fixed_width_fc279eb6c4a5",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_maps_local_exact_width_typedef_and_chain[python]",
+    "fixture": "test_analysis_unit_mapping/1485739115dd.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_maps_local_exact_width_typedef_and_chain_1485739115dd",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint[python]",
+    "fixture": "test_analysis_unit_mapping/b2c0637a95b0.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_keeps_unrelated_unsigned_int_typedef_as_c_uint_b2c0637a95b0",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_keeps_ordinary_long_as_c_long[python]",
+    "fixture": "test_analysis_unit_mapping/e6d599bda567.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_keeps_ordinary_long_as_c_long_e6d599bda567",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_analysis_unit_mapping.py::test_map_unit_keeps_placeholder_const_when_const_expr_mapping_fails[python]",
+    "fixture": "test_analysis_unit_mapping/9f1b146e84a4.json.gz",
+    "group": "test_analysis_unit_mapping",
+    "native_test": "test_map_unit_keeps_placeholder_const_when_const_expr_mapping_fails_9f1b146e84a4",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_analysis_unit_mapping.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_integer_cast_macro_as_single_scalar_call[python]",
+    "fixture": "test_ir_codegen_edges/7b2f110db7e1.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_integer_cast_macro_as_single_scalar_call_7b2f110db7e1",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct[python]",
+    "fixture": "test_ir_codegen_edges/56a1f1112619.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_incomplete_struct_emitted_as_opaque_stub_not_as_layout_struct_56a1f1112619",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors[python]",
+    "fixture": "test_ir_codegen_edges/e240ca9cdb36.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_pure_bitfield_struct_as_storage_plus_accessors_e240ca9cdb36",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors[python]",
+    "fixture": "test_ir_codegen_edges/d4d8dc9baf67.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_mixed_struct_bitfields_as_storage_plus_accessors_d4d8dc9baf67",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_preserves_typedef_names_for_bitfield_accessors[python]",
+    "fixture": "test_ir_codegen_edges/cea1edf9efaa.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_preserves_typedef_names_for_bitfield_accessors_cea1edf9efaa",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_struct[python]",
+    "fixture": "test_ir_codegen_edges/a4acda68dadc.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_resets_bitfield_storage_after_zero_width_boundary_in_mixed_struct_a4acda68dadc",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct[python]",
+    "fixture": "test_ir_codegen_edges/7582e1bd5b30.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_zero_init_only_for_anonymous_only_pure_bitfield_struct_7582e1bd5b30",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_omits_self_alias_typedef_for_complete_union_name[python]",
+    "fixture": "test_ir_codegen_edges/92bbd843c055.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_omits_self_alias_typedef_for_complete_union_name_92bbd843c055",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_renders_global_var_stub_and_macro_comments[python]",
+    "fixture": "test_ir_codegen_edges/b565517c82ce.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_renders_global_var_stub_and_macro_comments_b565517c82ce",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_macro_and_const_before_global_and_function_sections[python]",
+    "fixture": "test_ir_codegen_edges/1acf8ffa4bd8.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_macro_and_const_before_global_and_function_sections_1acf8ffa4bd8",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_strips_c_float_suffix_in_macro_and_const[python]",
+    "fixture": "test_ir_codegen_edges/040a069b73c5.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_strips_c_float_suffix_in_macro_and_const_040a069b73c5",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_imports_simd_complex_atomic_and_emits_fallback_notes[python]",
+    "fixture": "test_ir_codegen_edges/327514490783.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_imports_simd_complex_atomic_and_emits_fallback_notes_327514490783",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_imports_atomic_for_representable_atomic_types[python]",
+    "fixture": "test_ir_codegen_edges/d465d057a24d.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_imports_atomic_for_representable_atomic_types_d465d057a24d",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields[python]",
+    "fixture": "test_ir_codegen_edges/9c0190d73a25.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_omits_copy_traits_and_fieldwise_init_for_atomic_struct_fields_9c0190d73a25",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_global_const_wrapper_for_const_qualified_scalar[python]",
+    "fixture": "test_ir_codegen_edges/e6fab93555cf.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_global_const_wrapper_for_const_qualified_scalar_e6fab93555cf",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_preserves_typedef_names_in_fields_globals_and_aliases[python]",
+    "fixture": "test_ir_codegen_edges/5525968e9afd.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_preserves_typedef_names_in_fields_globals_and_aliases_5525968e9afd",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_function_pointer_return_wrappers_for_both_link_modes[python]",
+    "fixture": "test_ir_codegen_edges/85faea9ab837.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_function_pointer_return_wrappers_for_both_link_modes_85faea9ab837",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_struct_field_callback_aliases[python]",
+    "fixture": "test_ir_codegen_edges/894d79fd3ef7.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_struct_field_callback_aliases_894d79fd3ef7",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_nominal_union_alias_for_struct_arm_union[python]",
+    "fixture": "test_ir_codegen_edges/63968f1bdabc.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_nominal_union_alias_for_struct_arm_union_63968f1bdabc",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_documented_inline_array_fallback_for_duplicated_type_union[python]",
+    "fixture": "test_ir_codegen_edges/0d8759557ca3.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_documented_inline_array_fallback_for_duplicated_type_union_0d8759557ca3",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_uses_callback_alias_types_in_wrapper_abi_lists[python]",
+    "fixture": "test_ir_codegen_edges/1a63371d7d6f.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_uses_callback_alias_types_in_wrapper_abi_lists_1a63371d7d6f",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists[python]",
+    "fixture": "test_ir_codegen_edges/a8e54b819b45.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_keeps_nested_callback_typedef_in_wrapper_abi_lists_a8e54b819b45",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_emits_std_ffi_c_aliases_and_imports_by_default[python]",
+    "fixture": "test_ir_codegen_edges/43f6ee810863.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_emits_std_ffi_c_aliases_and_imports_by_default_43f6ee810863",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_ir_codegen_edges.py::test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures[python]",
+    "fixture": "test_ir_codegen_edges/e44c24105582.json.gz",
+    "group": "test_ir_codegen_edges",
+    "native_test": "test_generator_imports_std_ffi_scalars_used_only_in_callback_signatures_e44c24105582",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_ir_codegen_edges.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_collect_layout_record_checks_for_plain_struct_with_padding[python]",
+    "fixture": "test_layout_tests/95eab877197d.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_collect_layout_record_checks_for_plain_struct_with_padding_95eab877197d",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_collect_layout_record_checks_uses_emitted_indices_after_bitfield_padding[python]",
+    "fixture": "test_layout_tests/ab3247cc497b.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_collect_layout_record_checks_uses_emitted_indices_after_bitfield_padding_ab3247cc497b",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_collect_layout_record_checks_for_opaque_storage_skips_field_offsets[python]",
+    "fixture": "test_layout_tests/ac6b7d212475.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_collect_layout_record_checks_for_opaque_storage_skips_field_offsets_ac6b7d212475",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_collect_layout_record_checks_for_bitfield_storage_group_offset[python]",
+    "fixture": "test_layout_tests/6fc2f0faadc4.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_collect_layout_record_checks_for_bitfield_storage_group_offset_6fc2f0faadc4",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups[python]",
+    "fixture": "test_layout_tests/647bb25621a0.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_collect_layout_record_checks_uses_emitted_indices_for_bitfield_groups_647bb25621a0",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_collect_layout_record_checks_skips_incomplete_union_and_missing_record_decl[python]",
+    "fixture": "test_layout_tests/159553085b0c.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_collect_layout_record_checks_skips_incomplete_union_and_missing_record_decl_159553085b0c",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_layout_tests.py::test_render_layout_test_module_imports_records_and_calls_tests[python]",
+    "fixture": "test_layout_tests/8f223049082c.json.gz",
+    "group": "test_layout_tests",
+    "native_test": "test_render_layout_test_module_imports_records_and_calls_tests_8f223049082c",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_layout_tests.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_struct_decl_preserves_trait_order[python]",
+    "fixture": "test_mojo_ir_printer/c97f6c2e5190.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_struct_decl_preserves_trait_order_c97f6c2e5190",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_mojo_module_external_surface_with_synthesized_callback_aliases[python]",
+    "fixture": "test_mojo_ir_printer/4f0954f0f361.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_mojo_module_external_surface_with_synthesized_callback_aliases_4f0954f0f361",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_bitfield_accessors_branch_on_target_endianness_comptime[python]",
+    "fixture": "test_mojo_ir_printer/251306d1878f.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_bitfield_accessors_branch_on_target_endianness_comptime_251306d1878f",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_callback_alias_uses_none_in_signature_position[python]",
+    "fixture": "test_mojo_ir_printer/43f49c2b4de9.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_callback_alias_uses_none_in_signature_position_43f49c2b4de9",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_struct_emits_flexible_tail_helpers[python]",
+    "fixture": "test_mojo_ir_printer/db64aa039fe4.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_struct_emits_flexible_tail_helpers_db64aa039fe4",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_normalize_and_render_sizeof_imports_std_sys_info[python]",
+    "fixture": "test_mojo_ir_printer/ae0f3e38d170.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_normalize_and_render_sizeof_imports_std_sys_info_ae0f3e38d170",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit[python]",
+    "fixture": "test_mojo_ir_printer/efeb748b5593.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_normalize_mojo_module_makes_callback_hoisting_and_imports_explicit_efeb748b5593",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies[python]",
+    "fixture": "test_mojo_ir_printer/5d551be97f7c.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_normalize_mojo_module_coalesces_seeded_and_discovered_dependencies_5d551be97f7c",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_mojo_module_uses_owned_dl_handle_library_path_hint[python]",
+    "fixture": "test_mojo_ir_printer/a87f41276b5e.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_mojo_module_uses_owned_dl_handle_library_path_hint_a87f41276b5e",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_owned_dl_handle_sanitizes_library_path_env_var[python]",
+    "fixture": "test_mojo_ir_printer/5cc3c75ca1c0.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_owned_dl_handle_sanitizes_library_path_env_var_5cc3c75ca1c0",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_owned_dl_handle_function_local_does_not_collide_with_parameters[python]",
+    "fixture": "test_mojo_ir_printer/fe20c2bc8d04.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_owned_dl_handle_function_local_does_not_collide_with_parameters_fe20c2bc8d04",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_render_mojo_module_emits_inline_directive_stub_comments[python]",
+    "fixture": "test_mojo_ir_printer/a4244b538689.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_render_mojo_module_emits_inline_directive_stub_comments_a4244b538689",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_normalize_mojo_module_sets_align_decorator_before_printing[python]",
+    "fixture": "test_mojo_ir_printer/87f0f66956e2.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_normalize_mojo_module_sets_align_decorator_before_printing_87f0f66956e2",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_normalize_and_printer_keep_union_byte_fallback_without_unsafe_union_import[python]",
+    "fixture": "test_mojo_ir_printer/d2491febe2bb.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_normalize_and_printer_keep_union_byte_fallback_without_unsafe_union_import_d2491febe2bb",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_printer_uses_explicit_align_decorator_only[python]",
+    "fixture": "test_mojo_ir_printer/f3cea8fd6a4f.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_printer_uses_explicit_align_decorator_only_f3cea8fd6a4f",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_printer_renders_lowered_struct_layout_members_without_normalize_inference[python]",
+    "fixture": "test_mojo_ir_printer/353d71fa5986.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_printer_renders_lowered_struct_layout_members_without_normalize_inference_353d71fa5986",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_rendered_mojo_module_compiles_with_mixed_decl_kinds[python]",
+    "fixture": "test_mojo_ir_printer/94196c4865d6.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_rendered_mojo_module_compiles_with_mixed_decl_kinds_94196c4865d6",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_mojo_ir_printer.py::test_rendered_docstring_comments_escape_backslashes_for_mojo[python]",
+    "fixture": "test_mojo_ir_printer/00ad0d1a0c88.json.gz",
+    "group": "test_mojo_ir_printer",
+    "native_test": "test_rendered_docstring_comments_escape_backslashes_for_mojo_00ad0d1a0c88",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_mojo_ir_printer.mojo"
+  },
+  {
+    "id": "tests/unit/test_backend_contracts.py::test_debug_decoder_failure_preserves_input_and_recovers[python-unknown-tag-cir]",
+    "fixture": "test_backend_contracts/f59a496cf91d.json.gz",
+    "group": "test_backend_contracts",
+    "native_test": "test_debug_decoder_failure_preserves_input_and_recovers_f59a496cf91d",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_contracts.mojo"
+  },
+  {
+    "id": "tests/unit/test_backend_contracts.py::test_debug_decoder_failure_preserves_input_and_recovers[python-unknown-tag-mojo]",
+    "fixture": "test_backend_contracts/46d41663b373.json.gz",
+    "group": "test_backend_contracts",
+    "native_test": "test_debug_decoder_failure_preserves_input_and_recovers_46d41663b373",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_contracts.mojo"
+  },
+  {
+    "id": "tests/unit/test_backend_contracts.py::test_debug_decoder_failure_preserves_input_and_recovers[python-wrong-stage-cir]",
+    "fixture": "test_backend_contracts/698bbff91783.json.gz",
+    "group": "test_backend_contracts",
+    "native_test": "test_debug_decoder_failure_preserves_input_and_recovers_698bbff91783",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_contracts.mojo"
+  },
+  {
+    "id": "tests/unit/test_backend_contracts.py::test_debug_decoder_failure_preserves_input_and_recovers[python-wrong-stage-mojo]",
+    "fixture": "test_backend_contracts/9a265ba472c8.json.gz",
+    "group": "test_backend_contracts",
+    "native_test": "test_debug_decoder_failure_preserves_input_and_recovers_9a265ba472c8",
+    "native_source": "tests/mojo/suites/test_backend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_contracts.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_types::test_every_source_family_matches_python",
+    "fixture": "test_type_vectors/2e950a668626.json.gz",
+    "group": "test_type_vectors",
+    "native_test": "test_every_source_family_matches_python",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_types::test_parsed_fixture_type_slots_match_python",
+    "fixture": "test_type_vectors/c92b23446e1b.json.gz",
+    "group": "test_type_vectors",
+    "native_test": "test_parsed_fixture_type_slots_match_python",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_types::test_target_family_roundtrips_and_rejects_wrong_stages",
+    "fixture": "test_type_vectors/b15846d8ffd6.json.gz",
+    "group": "test_type_vectors",
+    "native_test": "test_target_family_roundtrips_and_rejects_wrong_stages",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_types::test_unicode_normalization_and_utf8_json",
+    "fixture": "test_type_vectors/a3eb9cdd9f37.json.gz",
+    "group": "test_type_vectors",
+    "native_test": "test_unicode_normalization_and_utf8_json",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_type_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_all_shared_fixture_intermediates_and_exact_sources",
+    "fixture": "test_backend_vectors/ffa5f9cdb887.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_all_shared_fixture_intermediates_and_exact_sources",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_constructed_ir_exact_values_options_and_generate_api",
+    "fixture": "test_backend_vectors/188454d82967.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_constructed_ir_exact_values_options_and_generate_api",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_expressions_numeric_edges_and_failure_recovery",
+    "fixture": "test_backend_vectors/71bf463a5179.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_expressions_numeric_edges_and_failure_recovery",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_debug_decoders_defaults_wrong_family_and_unknown_fields",
+    "fixture": "test_backend_vectors/8ca683d850f9.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_debug_decoders_defaults_wrong_family_and_unknown_fields",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_validation_errors_and_same_process_recovery",
+    "fixture": "test_backend_vectors/fa04eb7cb721.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_validation_errors_and_same_process_recovery",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_constructed_target_roundtrip_normalization_and_printer",
+    "fixture": "test_backend_vectors/7218b42a5e5d.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_constructed_target_roundtrip_normalization_and_printer",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_expression_debug_roundtrips_include_nonfinite_and_all_operators",
+    "fixture": "test_backend_vectors/f8437a318507.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_expression_debug_roundtrips_include_nonfinite_and_all_operators",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "tests.parity.test_native_backend::test_exact_native_constant_folding_and_invalid_operations",
+    "fixture": "test_backend_vectors/cd551e8363d2.json.gz",
+    "group": "test_backend_vectors",
+    "native_test": "test_exact_native_constant_folding_and_invalid_operations",
+    "native_source": "tests/mojo/suites/test_vectors.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_backend_vectors.mojo"
+  },
+  {
+    "id": "test_reject_missing_expression_case",
+    "fixture": "test_compile_contracts/31f4f035a1b3.json.gz",
+    "group": "test_compile_contracts",
+    "native_test": "test_reject_missing_expression_case",
+    "native_source": "tests/mojo/suites/test_compiler.mojo",
+    "original_native_source": "tests/mojo/compile_fail/test_compile_contracts.mojo"
+  },
+  {
+    "id": "test_reject_source_child_in_target",
+    "fixture": "test_compile_contracts/9e2d3178bff8.json.gz",
+    "group": "test_compile_contracts",
+    "native_test": "test_reject_source_child_in_target",
+    "native_source": "tests/mojo/suites/test_compiler.mojo",
+    "original_native_source": "tests/mojo/compile_fail/test_compile_contracts.mojo"
+  },
+  {
+    "id": "test_reject_mapping_target_as_source",
+    "fixture": "test_compile_contracts/31cd14e17fdc.json.gz",
+    "group": "test_compile_contracts",
+    "native_test": "test_reject_mapping_target_as_source",
+    "native_source": "tests/mojo/suites/test_compiler.mojo",
+    "original_native_source": "tests/mojo/compile_fail/test_compile_contracts.mojo"
+  },
+  {
+    "id": "test_reject_missing_type_case",
+    "fixture": "test_compile_contracts/7149e483154c.json.gz",
+    "group": "test_compile_contracts",
+    "native_test": "test_reject_missing_type_case",
+    "native_source": "tests/mojo/suites/test_compiler.mojo",
+    "original_native_source": "tests/mojo/compile_fail/test_compile_contracts.mojo"
+  },
+  {
+    "id": "test_reject_source_expression_in_target",
+    "fixture": "test_compile_contracts/8823422a3326.json.gz",
+    "group": "test_compile_contracts",
+    "native_test": "test_reject_source_expression_in_target",
+    "native_source": "tests/mojo/suites/test_compiler.mojo",
+    "original_native_source": "tests/mojo/compile_fail/test_compile_contracts.mojo"
+  },
+  {
+    "id": "test_reject_printer_source_module",
+    "fixture": "test_compile_contracts/d3de51f60f9d.json.gz",
+    "group": "test_compile_contracts",
+    "native_test": "test_reject_printer_source_module",
+    "native_source": "tests/mojo/suites/test_compiler.mojo",
+    "original_native_source": "tests/mojo/compile_fail/test_compile_contracts.mojo"
+  },
+  {
+    "id": "test_cli_help",
+    "fixture": "test_cli_contracts/e8761671cbf0.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_help",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_cli_version",
+    "fixture": "test_cli_contracts/e8b21075406a.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_version",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_cli_unknown",
+    "fixture": "test_cli_contracts/5973cef6f9a6.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_unknown",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_cli_missing",
+    "fixture": "test_cli_contracts/7dd243f0a8c7.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_missing",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_cli_parse_error",
+    "fixture": "test_cli_contracts/7af2afeb6497.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_parse_error",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_cli_calling_convention",
+    "fixture": "test_cli_contracts/54694d4fd4b1.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_calling_convention",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_zlib_external_call",
+    "fixture": "test_examples/59e5dce947a1.json.gz",
+    "group": "test_examples",
+    "native_test": "test_zlib_external_call",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_zlib_owned_dl_handle",
+    "fixture": "test_examples/79c573a92299.json.gz",
+    "group": "test_examples",
+    "native_test": "test_zlib_owned_dl_handle",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_cairo_external_call",
+    "fixture": "test_examples/ba09e6b34c4f.json.gz",
+    "group": "test_examples",
+    "native_test": "test_cairo_external_call",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_cairo_owned_dl_handle",
+    "fixture": "test_examples/4687e3978a52.json.gz",
+    "group": "test_examples",
+    "native_test": "test_cairo_owned_dl_handle",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_libpng_external_call",
+    "fixture": "test_examples/2a8beb1119f9.json.gz",
+    "group": "test_examples",
+    "native_test": "test_libpng_external_call",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_libpng_owned_dl_handle",
+    "fixture": "test_examples/56f34c37423e.json.gz",
+    "group": "test_examples",
+    "native_test": "test_libpng_owned_dl_handle",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_sqlite_external_call",
+    "fixture": "test_examples/11fd58e063c5.json.gz",
+    "group": "test_examples",
+    "native_test": "test_sqlite_external_call",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_sqlite_owned_dl_handle",
+    "fixture": "test_examples/4cbc6b6096e5.json.gz",
+    "group": "test_examples",
+    "native_test": "test_sqlite_owned_dl_handle",
+    "native_source": "tests/mojo/suites/test_examples.mojo",
+    "original_native_source": "tests/mojo/examples/test_examples.mojo"
+  },
+  {
+    "id": "test_warning_exit_and_json",
+    "fixture": "test_cli_contracts/f2497658bcc5.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_warning_exit_and_json",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_cli_preprocess_public_headers",
+    "fixture": "test_cli_contracts/892300036bfc.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_cli_preprocess_public_headers",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_layout_runtime_full_surface_runtime",
+    "fixture": "test_layout_runtime/d01475dcca73.json.gz",
+    "group": "test_layout_runtime",
+    "native_test": "test_layout_runtime_full_surface_runtime",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_layout_runtime.mojo"
+  },
+  {
+    "id": "test_layout_runtime_large_alignment",
+    "fixture": "test_layout_runtime/6c4a67c63b66.json.gz",
+    "group": "test_layout_runtime",
+    "native_test": "test_layout_runtime_large_alignment",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_layout_runtime.mojo"
+  },
+  {
+    "id": "test_layout_runtime_zero_length_tail_access",
+    "fixture": "test_layout_runtime/6ed4d31360c5.json.gz",
+    "group": "test_layout_runtime",
+    "native_test": "test_layout_runtime_zero_length_tail_access",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_layout_runtime.mojo"
+  },
+  {
+    "id": "test_unicode_target_host",
+    "fixture": "test_cli_contracts/dc63a4c61859.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_unicode_target_host",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_unicode_target_i386",
+    "fixture": "test_cli_contracts/a872cbf06507.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_unicode_target_i386",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  },
+  {
+    "id": "test_unicode_target_unsigned_char",
+    "fixture": "test_cli_contracts/7c49065cfdb8.json.gz",
+    "group": "test_cli_contracts",
+    "native_test": "test_unicode_target_unsigned_char",
+    "native_source": "tests/mojo/suites/test_frontend.mojo",
+    "original_native_source": "tests/mojo/acceptance/test_cli_contracts.mojo"
+  }
+]

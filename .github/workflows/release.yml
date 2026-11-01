@@ -1,10 +1,3 @@
-# Build sdist/wheel on version tags and publish to PyPI (trusted publishing / OIDC).
-#
-# One-time PyPI setup: https://docs.pypi.org/trusted-publishers/
-# - Project → Settings → Publishing → add a trusted publisher for this repo,
-#   workflow "release.yml", and (if used below) environment "pypi".
-# - Create a GitHub Environment named "pypi" if you keep the environment block
-#   (Protection rules are optional; empty is fine).
 name: Release build
 
 on:
@@ -15,41 +8,83 @@ permissions:
   contents: read
 
 jobs:
+  acceptance:
+    uses: ./.github/workflows/ci.yml
+  reference:
+    uses: ./.github/workflows/legacy-reference.yml
   build:
-    runs-on: ubuntu-latest
+    needs: [acceptance, reference]
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - run: mkdir -p mojo/build/test-tmp
+      - uses: prefix-dev/setup-pixi@v0.8.14
         with:
-          python-version: "3.14"
-
-      - name: Install build
-        run: python -m pip install --upgrade pip build
-
-      - name: Build distributions
-        run: python -m build
-
+          cache: true
+      - name: Install pinned distribution toolchains
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential binutils clang
+          pixi install --manifest-path mojo/pixi.toml --locked --all
+      - name: Verify immutable release identity
+        run: python scripts/check_release.py --tag "$GITHUB_REF_NAME" --revision "$GITHUB_SHA"
+      - name: Build and test artifacts from the tagged source
+        env:
+          MOJO_BINDGEN_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          pixi run --locked build
+          pixi run --locked python scripts/test_installed_distribution.py dist/release/*.whl
+          pixi run --locked test-minimal-install dist/release/*.whl
+          pixi run --manifest-path mojo/pixi.toml --locked -e package package-build
+          pixi run --locked python scripts/build_release_channel.py
+          pixi run --locked python scripts/test_installed_channel.py dist/release/mojo-bindgen-*-channel
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: dist/
+          name: release
+          compression-level: 0
+          path: |
+            dist/release/*.whl
+            dist/release/*.tar.gz
+            dist/release/*.conda
+            dist/release/SHA256SUMS
 
   publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: pypi
       url: https://pypi.org/project/mojo-bindgen/
     permissions:
       id-token: write
+      contents: write
     steps:
-      - name: Download distributions
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI
+          name: release
+          path: dist/release
+      - name: Publish checksummed GitHub assets first
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [[ "$draft" == "false" ]]; then
+            mkdir -p dist/published
+            gh release download "$tag" --pattern SHA256SUMS --dir dist/published
+            cmp dist/release/SHA256SUMS dist/published/SHA256SUMS
+          else
+            if [[ -z "$draft" ]]; then
+              gh release create "$tag" --verify-tag --draft --title "mojo-bindgen ${tag#v}" --notes "Unified mojo-bindgen distribution: Python CLI facade, public Mojo executable and Mojo API. The Python reference implementation is retained under legacy/python."
+            fi
+            gh release upload "$tag" dist/release/* --clobber
+            gh release edit "$tag" --draft=false
+          fi
+          mkdir -p dist/pypi
+          cp dist/release/mojo_bindgen-*.whl dist/release/mojo_bindgen-*.tar.gz dist/pypi/
+      - name: Publish Python platform wheels and source distribution
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/pypi
+          skip-existing: true

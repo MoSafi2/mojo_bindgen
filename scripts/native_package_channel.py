@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import io
-from pathlib import Path
 import tarfile
 import urllib.request
+from pathlib import Path
 
 ARCHIVE = "libclang_mojo-0.3.0.dev20261031-conda-channel.tar.gz"
 URL = f"https://github.com/MoSafi2/mojo_libclang/releases/download/v0.3.0-dev.20261031/{ARCHIVE}"

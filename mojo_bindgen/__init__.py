@@ -1,25 +1,7 @@
-"""C header → Mojo FFI bindings via libclang."""
+"""Command-line presentation for the Mojo implementation of mojo-bindgen.
 
-from __future__ import annotations
+The programmatic generator API is the Mojo ``mojo_bindgen`` package.
+"""
 
-from importlib.metadata import PackageNotFoundError, version
-
-from mojo_bindgen.orchestrator import (
-    BindgenOptions,
-    BindgenOrchestrator,
-    BindgenResult,
-    bindgen,
-)
-
-try:
-    __version__ = version("mojo-bindgen")
-except PackageNotFoundError:
-    __version__ = "0.3.5"
-
-__all__ = [
-    "BindgenOptions",
-    "BindgenOrchestrator",
-    "BindgenResult",
-    "__version__",
-    "bindgen",
-]
+__version__ = "0.4.0"
+__all__ = ["__version__"]
