@@ -1,14 +1,12 @@
 """Target geometry from Clang, never from the generator host's Mojo ABI."""
 from clang.cindex import Index, UnsavedFile, CursorKind
-from ._compat import parse_translation_unit
 from .frontend import normalized_args, children
 from ..ir import TargetABI, ByteOrder
 
 
 def probe_target_abi(args: List[String]) raises -> TargetABI:
     var index = Index.create()
-    var tu = parse_translation_unit(
-        index,
+    var tu = index.parse(
         "__bindgen_target_abi_probe.c",
         normalized_args(args),
         [UnsavedFile("__bindgen_target_abi_probe.c", "void *__bindgen_p;\n")],

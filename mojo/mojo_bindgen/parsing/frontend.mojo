@@ -5,7 +5,6 @@ from std.ffi import external_call, c_char
 from ._process import command_output
 from ..analysis.common import strip_whitespace
 from ..ir import IRDiagnostic
-from ._compat import parse_translation_unit
 
 
 struct ClangOptions(Copyable, Movable):
@@ -117,7 +116,6 @@ def tokens(ref cursor: Cursor) raises -> List[String]:
 
 
 def children(ref cursor: Cursor) raises -> List[Cursor]:
-    # The wrapper iterator silently truncates at 4096; its checked API raises.
     return cursor.children()
 
 
@@ -160,11 +158,10 @@ struct ClangFrontend(Copyable, Movable):
         if len(self.include_headers):
             path = self.umbrella_path()
             unsaved.append(UnsavedFile(path.copy(), self.umbrella_source()))
-        return parse_translation_unit(
-            index,
+        return index.parse(
             path,
             self.compile_args,
-            files=unsaved,
+            unsaved_files=unsaved,
             options=TranslationUnitFlags.DETAILED_PREPROCESSING_RECORD
             | TranslationUnitFlags.SKIP_FUNCTION_BODIES
             | TranslationUnitFlags.INCLUDE_BRIEF_COMMENTS_IN_CODE_COMPLETION,

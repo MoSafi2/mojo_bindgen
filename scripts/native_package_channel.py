@@ -10,7 +10,7 @@ import urllib.request
 
 ARCHIVE = "libclang_mojo-0.3.0.dev20261031-conda-channel.tar.gz"
 URL = f"https://github.com/MoSafi2/mojo_libclang/releases/download/v0.3.0-dev.20261031/{ARCHIVE}"
-SHA256 = "4fc36b8f450c8286792699c1d2090d52645c12f115d2145983e8003d3b539d19"
+SHA256 = "37db41a5476b98661b66fafe048c54927e9c2686feef7d68b2b3645d54f00889"
 
 
 def main() -> None:

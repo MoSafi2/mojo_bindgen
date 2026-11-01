@@ -1,17 +1,14 @@
 from clang.cindex import Index, UnsavedFile
-from mojo_bindgen.parsing._compat import parse_translation_unit
 from mojo_bindgen.parsing.registry import RecordRegistry, RecordState
 from mojo_bindgen.parsing._identity import sha256_prefix
 from mojo_bindgen.ir import Struct
-from std.testing import assert_equal, assert_true, assert_raises, TestSuite
+from std.testing import assert_equal, assert_true, TestSuite
 
 
 def test_identity_and_registry_rollback() raises:
     assert_equal(sha256_prefix("abc"), "ba7816bf8f01cfea")
     var index = Index.create()
-    var tu = parse_translation_unit(
-        index, "registry.h", [], [UnsavedFile("registry.h", "struct Node;\n")]
-    )
+    var tu = index.parse("registry.h", [], [UnsavedFile("registry.h", "struct Node;\n")])
     var root = tu.cursor()
     var registry = RecordRegistry(root)
     var header = Struct("node", "Node", "Node", [], 0, 1, is_complete=False)
@@ -38,10 +35,14 @@ def test_checked_children_does_not_truncate() raises:
     for i in range(4100):
         source += "int variable_" + String(i) + ";\n"
     var index = Index.create()
-    var tu = parse_translation_unit(index, "overflow.h", [], [UnsavedFile("overflow.h", source^)])
+    var tu = index.parse("overflow.h", [], [UnsavedFile("overflow.h", source^)])
     var root = tu.cursor()
-    with assert_raises():
-        _ = root.children()
+    var nodes = root.children()
+    assert_equal(len(nodes), 4100)
+    assert_equal(nodes[0].spelling(), "variable_0")
+    assert_equal(nodes[4099].spelling(), "variable_4099")
+    var registry = RecordRegistry(root)
+    assert_equal(len(registry.top_level), 4100)
 
 
 def main() raises:

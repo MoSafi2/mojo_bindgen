@@ -167,7 +167,7 @@ publication occurred.
 - Final local Conda build and installed compiled API/CLI generation tests pass.
 
 See [the frontend implementation and dependency provenance](native_frontend_plan.md)
-for the localized upstream unsaved-file lifetime adapter, checked traversal limit,
+for dependency provenance, upstream unsaved-file ownership and traversal fixes,
 exact folding comparisons and test scope. Stages 4–5 remain future work.
 
 

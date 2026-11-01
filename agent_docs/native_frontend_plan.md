@@ -12,18 +12,18 @@ native development uses `mojo-bindgen-mojo`. No default switch or publication.
 - GitHub package: `libclang_mojo 0.3.0.dev20261031`, build
   `mojo1_3_0_dev2026103105_linux_64_1`.
 - Package SHA-256:
-  `4f3399db303c6f82b5a5df07fa27c255e15f8b3a2bce0a013bfc439c4ee4063c`.
+  `30a0f607d2c41e99a03a1c6fce4ee2d2d386b8185fdc7f2ab7451d41ef6f3f7c`.
 - Release-channel archive SHA-256:
-  `4fc36b8f450c8286792699c1d2090d52645c12f115d2145983e8003d3b539d19`.
-- Upstream metadata revision: `b08f435189c2e515b66b0b53e63a4de753b17849`;
-  producing source: `e1885cf9a558439e62478cfa07c2929db9594519`.
+  `37db41a5476b98661b66fafe048c54927e9c2686feef7d68b2b3645d54f00889`.
+- Upstream metadata revision: `274e0a1aab5af78ef5b4fae3983bc4e04f0571cd`;
+  producing source: `e8448e3d0b6d4cbe1da5e3ffa71a2bd06e04356a`.
 - Upstream replaced assets and moved the prerelease tag. The explicit URL/hash
   and native lock are authoritative. Neither the sibling checkout nor a native
   shim is a dependency. Pixi >=0.80 is required.
 
 Sources: [release](https://github.com/MoSafi2/mojo_libclang/releases/tag/v0.3.0-dev.20261031),
-[consumer manifest](https://github.com/MoSafi2/mojo_libclang/blob/b08f435189c2e515b66b0b53e63a4de753b17849/packaging/consumers/v0.3.0-dev.20261031/pixi.toml),
-[recipe](https://github.com/MoSafi2/mojo_libclang/blob/b08f435189c2e515b66b0b53e63a4de753b17849/packaging/modular-community/libclang_mojo/recipe.yaml).
+[consumer manifest](https://github.com/MoSafi2/mojo_libclang/blob/274e0a1aab5af78ef5b4fae3983bc4e04f0571cd/packaging/consumers/v0.3.0-dev.20261031/pixi.toml),
+[recipe](https://github.com/MoSafi2/mojo_libclang/blob/274e0a1aab5af78ef5b4fae3983bc4e04f0571cd/packaging/modular-community/libclang_mojo/recipe.yaml).
 
 ## Implemented architecture
 
@@ -58,22 +58,17 @@ conventions normalize to the previous default, preserving ordinary output.
 
 ## Localized compatibility constraints
 
-1. **Unsaved-file owner lifetime.** Build 1's `Index.parse` extracts untracked
-   pointers from its local `UnsavedFileArena`, whose destructor can run before the
-   C call. A direct unsaved-only header failed to parse; inspecting an arena after
-   its last borrow exposed freed strings. `parsing/_compat.mojo` borrows the arena
-   across the raw parse call and owns argument buffers through `finally`. It
-   returns the normal high-level TranslationUnit. Remove this adapter after an
-   upstream lifetime fix passes the O0/O3 regression. No shim or vendoring.
-2. **Traversal limit.** Upstream's iterator silently truncates above 4,096 immediate
-   children. Native parsing exclusively uses checked `children()` and reports the
-   capacity failure. Overflow is tested. Removing the upstream limit is outside
-   this slice; supported corpus/example inputs must pass without reaching it.
-3. **Paths/processes.** The pinned stdlib lacks path canonicalization and a checked
+The republished build 1 incorporates upstream's cap-free cursor traversal and
+origin-tracked unsaved buffers. Callers use `Index.parse` directly; the local
+`_compat.mojo` adapter has been removed. The registry regression now verifies all
+4,100 children and their boundary names rather than expecting overflow failure.
+A shared Python/native header regression also checks all 4,100 declarations.
+
+1. **Paths/processes.** The pinned stdlib lacks path canonicalization and a checked
    argv subprocess capture API. Linux realpath uses caller-owned PATH_MAX storage;
    compiler subprocess arguments are shell-quoted, status is checked, stdout bytes
    and trailing newlines are retained. Raw C pointer adaptation stays here.
-4. **Unsigned enum values.** The high-level wrapper returns Int for unsigned C
+2. **Unsigned enum values.** The high-level wrapper returns Int for unsigned C
    values; adapt the preserved UInt64 bits before decimal conversion.
 
 Keep existing backend layout limitations documented in `native_backend_plan.md`.
@@ -89,7 +84,7 @@ Do not fix them incidentally or loosen parity assertions to hide them.
   in both link modes and at O0/O3. Existing intermediate backend parity stays on.
 - Native headers for zlib/Cairo/libpng/SQLite compare against Python, then generated
   bindings compile/run on stable. Existing Python-JSON handoffs remain tested.
-- Dedicated tests cover keepalive, registry publication/rollback, child overflow,
+- Dedicated tests cover keepalive, registry publication/rollback, uncapped child traversal,
   wide folding, Unicode paths/names, unsigned enums, targets/char policy, CLI
   diagnostics/options/errors, debug dumps, and ABI rejection without output.
 - Conda builds verify the upstream channel checksum, install named exact package
@@ -121,5 +116,21 @@ Package scripts explicitly set compiler scratch inside isolated build/test scrip
 as well as the outer package runner; the final package build and tests passed.
 
 The historical experiment ledger, completed Python refactor plan, root stable lock
-and generated source goldens are unchanged. The documented child-count limit and
-existing backend layout-test limitations remain explicit acceptance boundaries.
+and generated source goldens are unchanged. The child-count limit and unsaved-file adapter were retired after the upstream
+fixes. Existing backend layout-test limitations remain acceptance boundaries.
+
+## Upstream fix refresh validation (2026-11-01)
+
+The republished package and channel hashes above include source revision
+`e8448e3d0b6d4cbe1da5e3ffa71a2bd06e04356a`. The local adapter is deleted;
+all four production parsing paths use upstream `Index.parse` directly.
+
+- Focused shared parser matrix: **114 passed**, including 4,100 declarations.
+- Native unit tests: **36 executions passed** across O0/O3, including unsaved
+  buffers, uncapped traversal and registry rollback. Native formatting passes.
+- Light gate: format/Ruff/Pyright pass; **401 passed, 312 deselected**.
+- Full integration: **713 passed in 365.02 seconds**, including corpus, parity,
+  generated-binding runtime and negative-compilation coverage.
+- Installed dependency metadata matches the new SHA-256; the upstream packaging
+  channel download verifies against its new hash. No package build or publication
+  was performed for this refresh.

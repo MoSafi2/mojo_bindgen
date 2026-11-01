@@ -1,6 +1,5 @@
 """Opt-in Clang evaluation for macros outside the local expression subset."""
 from clang.cindex import Index, UnsavedFile, CursorKind
-from .._compat import parse_translation_unit
 from ..frontend import walk
 from ...ir import CConstExpr
 from ..._numbers import IntegerValue
@@ -42,8 +41,7 @@ struct ClangMacroFallback(Copyable, Movable):
         source += "enum { __mojo_bindgen_macro_value = (" + name + ") };\n"
         try:
             var index = Index.create()
-            var tu = parse_translation_unit(
-                index,
+            var tu = index.parse(
                 "__mojo_bindgen_macro_fallback.c",
                 self.args,
                 [UnsavedFile("__mojo_bindgen_macro_fallback.c", source^)],

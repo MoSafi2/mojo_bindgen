@@ -1,16 +1,14 @@
 from clang.cindex import Index, UnsavedFile, TranslationUnitFlags
-from mojo_bindgen.parsing._compat import parse_translation_unit
 from mojo_bindgen.parsing.frontend import children, tokens, collect_diagnostics
 from std.testing import assert_equal, TestSuite
 
 
 def test_installed_clang() raises:
     var index = Index.create()
-    var tu = parse_translation_unit(
-        index,
+    var tu = index.parse(
         "/tmp/mojo_bindgen_frontend_test.h",
         args=["-xc"],
-        files=[
+        unsaved_files=[
             UnsavedFile(
                 "/tmp/mojo_bindgen_frontend_test.h", "struct Point { int x; };\nint add(int x);\n"
             )

@@ -456,3 +456,13 @@ def test_codegen_emits_named_nested_record_defs_before_parent(
         "var aConstraintUsage: Optional[Pointer[sqlite3_index_constraint_usage, MutUntrackedOrigin]]"
         in out
     )
+
+
+def test_type_lowering_preserves_declarations_beyond_child_limit(
+    tmp_path: Path, bindgen: HeaderHarness
+) -> None:
+    header = tmp_path / "many_declarations.h"
+    header.write_text("".join(f"int function_{i}(void);\n" for i in range(4100)))
+    unit = bindgen.parse_header(header, library="many", link_name="many", compile_args=[])
+    functions = [decl.name for decl in unit.decls if isinstance(decl, Function)]
+    assert functions == [f"function_{i}" for i in range(4100)]

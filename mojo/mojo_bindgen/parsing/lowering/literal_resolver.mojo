@@ -1,6 +1,5 @@
 """Parse-context integer facts, cached by C spelling rather than node identity."""
 from clang.cindex import Index, CursorKind, UnsavedFile
-from .._compat import parse_translation_unit
 from ..frontend import children, normalized_args
 from ...ir import IntType, IntKind
 from .primitive import primitive, default_int
@@ -18,8 +17,7 @@ struct LiteralResolver(Copyable, Movable):
         if spelling in self.types:
             return self.types[spelling].copy()
         var index = Index.create()
-        var tu = parse_translation_unit(
-            index,
+        var tu = index.parse(
             "__bindgen_suffix_probe.c",
             self.args,
             [UnsavedFile("__bindgen_suffix_probe.c", spelling + " __bindgen_m;\n")],

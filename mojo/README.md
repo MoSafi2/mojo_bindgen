@@ -150,8 +150,8 @@ brings Python tooling transitively; bindgen's native implementation does not cal
 The native manifest pins the shimless GitHub `libclang_mojo` build 1 and Clang 18.
 It needs no sibling checkout or shim. The package recipe uses a checksum-verified
 release channel prepared under ignored build artifacts. See the [frontend slice](
-../agent_docs/native_frontend_plan.md) for dependency hashes, the localized
-unsaved-file lifetime adapter, and the checked 4,096-child traversal limit.
+../agent_docs/native_frontend_plan.md) for dependency hashes and upstream fixes for unsaved-file ownership and uncapped
+child traversal. Native parsing uses the upstream API directly.
 
 See [the backend slice](../agent_docs/native_backend_plan.md),
 [the staged roadmap](../agent_docs/native_mojo_roadmap.md) and

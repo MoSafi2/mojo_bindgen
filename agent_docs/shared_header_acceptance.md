@@ -90,3 +90,14 @@ formatting also passes.
 
 Final integration: **710 passed in 380.24 seconds**, including all 306 shared
 executions and existing differential, runtime and negative-compilation coverage.
+
+## Upstream frontend fixes (2026-11-01)
+
+The refreshed pinned libclang package removes the cursor child-count cap and
+retains unsaved buffers through parsing. Native code now calls `Index.parse`
+directly. A new shared regression checks that all 4,100 function declarations
+survive parsing in order. Coverage is now 103 shared behaviors (309 executions;
+206 native), with 401 light tests. Prior measured counts above are historical.
+
+Refresh acceptance: **713 passed** in the full suite; focused parser matrix
+**114 passed**, native unit executions **36 passed**, light gate **401 passed**.
