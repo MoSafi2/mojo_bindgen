@@ -140,7 +140,7 @@ def _target_children(t: MojoType) -> List[ArcPointer[MojoType]]:
                         out.append(a.type.copy())
                     case _:
                         pass
-        case .builtin_type(_) | .named_type(_):
+        case .builtin_type(_) | .named_type(_) | .opaque_storage_type(_):
             pass
     return out^
 

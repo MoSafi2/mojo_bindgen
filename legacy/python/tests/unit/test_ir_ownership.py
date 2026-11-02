@@ -267,6 +267,7 @@ def test_failed_declaration_does_not_claim_an_emitted_constant(is_macro: bool) -
     types = MapTypePass(DEFAULT_TARGET_QUERIES)
     mapper = UnitDeclMapper(
         MappingSession(
+            context=build_analysis_context(_unit(bad, reference)),
             unit=_unit(bad, reference),
             options=MojoEmitOptions(),
             type_mapper=types,
@@ -274,8 +275,9 @@ def test_failed_declaration_does_not_claim_an_emitted_constant(is_macro: bool) -
             struct_context=StructMappingContext({}, types),
         )
     )
-    with pytest.raises(TypeMappingError):
-        mapper.map_decl(bad)
+    (placeholder,) = mapper.map_decl(bad)
+    assert isinstance(placeholder, AliasDecl)
+    assert placeholder.const_value is None
     (result,) = mapper.map_decl(reference)
     assert isinstance(result, AliasDecl)
     assert result.const_value is None

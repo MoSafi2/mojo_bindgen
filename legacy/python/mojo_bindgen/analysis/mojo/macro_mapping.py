@@ -9,7 +9,7 @@ from mojo_bindgen.analysis.common import mojo_ident
 from mojo_bindgen.analysis.mojo.const_expr_mapping import ConstExprMappingError, MapConstExprPass
 from mojo_bindgen.analysis.mojo.const_value_mapping import typed_const_value
 from mojo_bindgen.analysis.mojo.mapping_support import mapping_note, stub_note
-from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass, TypeMappingError
 from mojo_bindgen.ir import (
     AliasDecl,
     AliasKind,
@@ -68,15 +68,16 @@ class MacroMapper:
 
         try:
             value = self.const_expr_mapper.run(decl.expr)
-        except ConstExprMappingError:
+            typed_value = typed_const_value(value, decl.type, type_mapper=self.type_mapper)
+        except (ConstExprMappingError, TypeMappingError):
             if isinstance(decl.expr, CNullPtrLiteral):
                 return self._comment_alias(
                     decl,
                     f"macro {decl.name}: null pointer macro is not emitted directly",
                 )
-            return None
-
-        typed_value = typed_const_value(value, decl.type, type_mapper=self.type_mapper)
+            return self._comment_alias(
+                decl, f"macro {decl.name}: expression has no supported Mojo value representation"
+            )
         self.emitted_const_names.add(name)
         return AliasDecl(
             name=name,

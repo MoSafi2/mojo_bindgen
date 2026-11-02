@@ -3,7 +3,6 @@ from clang.cindex import CursorKind, Cursor
 from ..ir import Unit, Decl
 from .frontend import ClangFrontend, default_system_compile_args, collect_diagnostics, walk
 from .registry import RecordRegistry, is_record
-from .target_abi import probe_target_abi
 from .lowering.const_expr import ConstExprParser
 from .lowering.macro_fallback import ClangMacroFallback
 from .lowering.decl_lowering import lower_decl, lower_macro
@@ -94,7 +93,7 @@ struct ClangParser(Copyable, Movable):
             self.frontend.header.copy(),
             self.library.copy(),
             self.link_name.copy(),
-            probe_target_abi(self.frontend.compile_args),
+            parser.abi.copy(),
             decls^,
             registry.diagnostics.copy(),
         )

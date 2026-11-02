@@ -1814,5 +1814,13 @@
     "native_test": "test_c_abi_memory_returns",
     "native_source": "tests/mojo/suites/test_runtime.mojo",
     "original_native_source": "tests/mojo/runtime/test_c_abi_returns.mojo"
+  },
+  {
+    "id": "test_opaque_storage_runtime",
+    "fixture": "test_opaque_storage_runtime/storage.json",
+    "group": "test_opaque_storage_runtime",
+    "native_test": "test_opaque_storage_runtime",
+    "native_source": "tests/mojo/suites/test_runtime.mojo",
+    "original_native_source": "tests/mojo/runtime/test_opaque_storage.mojo"
   }
 ]

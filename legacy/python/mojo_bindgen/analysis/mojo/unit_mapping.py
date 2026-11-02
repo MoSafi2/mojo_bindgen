@@ -47,6 +47,7 @@ class MapUnitPass:
             context = build_analysis_context(unit)
         type_mapper = MapTypePass(queries=context.target_queries)
         session = MappingSession(
+            context=context,
             unit=unit,
             options=self._options,
             type_mapper=type_mapper,

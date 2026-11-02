@@ -4,6 +4,7 @@ from ..._numbers import parse_float, parse_hex_float
 from ..traversal import validate_expression
 from ..common import mojo_ident, mojo_float_literal_text
 from .type_mapping import MapTypePass
+from ..facts.type_layout import type_size
 
 
 @fieldwise_init
@@ -23,6 +24,14 @@ struct MapConstExprPass(Copyable, Movable):
             case .char_literal(v):
                 return MojoConstExpr.char_literal(v.copy())
             case .c_float_literal(v):
+                if (
+                    v.spelling.lower().endswith("l")
+                    and self.type_mapping.queries.float_format(FloatKind.LONG_DOUBLE)
+                    != FloatFormat.BINARY64
+                ):
+                    raise Error(
+                        "extended floating literal has no supported Mojo value representation"
+                    )
                 var text = mojo_float_literal_text(v.spelling)
                 var lowered = text.lower()
                 var value: Float64
@@ -50,6 +59,8 @@ struct MapConstExprPass(Copyable, Movable):
                     )
                 )
             case .c_cast_expr(v):
+                if not self.type_mapping.value_supported(v.target[]):
+                    raise Error("cast target has no supported Mojo value representation")
                 return MojoConstExpr.mojo_cast_expr(
                     MojoCastExpr(
                         ArcPointer(self.type_mapping.run(v.target.ptr()[])),
@@ -57,9 +68,10 @@ struct MapConstExprPass(Copyable, Movable):
                     )
                 )
             case .c_size_of_expr(v):
-                return MojoConstExpr.mojo_size_of_expr(
-                    MojoSizeOfExpr(ArcPointer(self.type_mapping.run(v.target.ptr()[])))
-                )
+                var size = type_size(v.target[])
+                if not size:
+                    raise Error("sizeof target has no known source size")
+                return MojoConstExpr.int_literal(IntLiteral(size.value()))
             case .c_call_expr(v):
                 var args = List[ArcPointer[MojoConstExpr]]()
                 for a in v.args:

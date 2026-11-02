@@ -22,6 +22,7 @@ from mojo_bindgen.ir import (
     MojoType,
     NamedType,
     OpaqueStorageMember,
+    OpaqueStorageType,
     PaddingMember,
     ParametricArg,
     ParametricBase,
@@ -244,7 +245,7 @@ class PolicyInferencePass:
             if t.nullable:
                 return MojoPassability.REGISTER_PASSABLE
             return MojoPassability.TRIVIAL_REGISTER_PASSABLE
-        if isinstance(t, MojoArray):
+        if isinstance(t, (MojoArray, OpaqueStorageType)):
             return MojoPassability.MEMORY_ONLY
         if isinstance(t, ParametricType):
             if t.base in (ParametricBase.SIMD, ParametricBase.COMPLEX_SIMD):
@@ -279,6 +280,8 @@ class PolicyInferencePass:
         return []
 
     def _type_transfer_traits(self, t: MojoType) -> TransferTraits:
+        if isinstance(t, OpaqueStorageType):
+            return TransferTraits(copyable=True, movable=True)
         if isinstance(t, BuiltinType):
             supported = t.name in _TRIVIAL_BUILTINS
             return TransferTraits(copyable=supported, movable=supported)

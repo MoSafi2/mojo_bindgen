@@ -11,12 +11,19 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from mojo_bindgen.analysis.facts.record_layout import PlainFieldFact, RecordLayoutFacts
+from mojo_bindgen.analysis.facts.representation import (
+    RepresentationKind,
+    storage_type,
+    target_layout,
+)
+from mojo_bindgen.analysis.facts.type_layout import peel_layout_wrappers, type_layout
 from mojo_bindgen.analysis.mojo.mapping_support import field_display_name, try_map_type
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.analysis.type_walk import TypeWalkOptions, collect_type_nodes
 from mojo_bindgen.ir import (
     CArray,
     CType,
+    EnumRef,
     Field,
     FlexibleTail,
     MojoArray,
@@ -59,6 +66,7 @@ class RecordStorageFacts:
     flexible_tail: FlexibleTail | None = None
     diagnostic_notes: tuple[str, ...] = ()
     fallback_reasons: tuple[str, ...] = ()
+    target_layout: tuple[int, int] | None = None
 
     @property
     def uses_typed_storage(self) -> bool:
@@ -167,6 +175,9 @@ class RecordStorageAnalyzer:
                 storage_kind=RecordStorageKind.OPAQUE_STORAGE,
                 by_value_embedding=ByValueEmbeddingDecision(False, (layout.layout_problems[0],)),
                 fallback_reasons=layout.layout_problems,
+                target_layout=target_layout(
+                    storage_type(record.size_bytes, record.align_bytes), self.type_mapper.queries
+                ),
             )
             self._record_cache[record.decl_id] = facts
             return facts
@@ -175,6 +186,25 @@ class RecordStorageAnalyzer:
         storage_kind = (
             RecordStorageKind.TYPED if by_value.valid else RecordStorageKind.OPAQUE_STORAGE
         )
+        geometry = (
+            self._target_geometry(record, layout)
+            if storage_kind == RecordStorageKind.TYPED
+            else None
+        )
+        reasons = () if by_value.valid else by_value.detail
+        if storage_kind == RecordStorageKind.TYPED and geometry != (
+            layout.size_bytes,
+            layout.align_bytes,
+        ):
+            storage_kind = RecordStorageKind.OPAQUE_STORAGE
+            reasons = (
+                *reasons,
+                "mapped physical fields do not reproduce the source layout; opaque storage emitted",
+            )
+        if storage_kind == RecordStorageKind.OPAQUE_STORAGE:
+            geometry = target_layout(
+                storage_type(record.size_bytes, record.align_bytes), self.type_mapper.queries
+            )
         facts = RecordStorageFacts(
             decl_id=record.decl_id,
             is_union=False,
@@ -183,10 +213,85 @@ class RecordStorageAnalyzer:
             storage_kind=storage_kind,
             by_value_embedding=by_value,
             flexible_tail=by_value.flexible_tail,
-            fallback_reasons=() if by_value.valid else by_value.detail,
+            fallback_reasons=reasons,
+            target_layout=geometry,
         )
         self._record_cache[record.decl_id] = facts
         return facts
+
+    def _reaches_active(self, key: str, active: set[str], seen: set[str]) -> bool:
+        if key in active:
+            return True
+        if key in seen or key not in self.records_by_decl_id:
+            return False
+        seen.add(key)
+        return any(
+            self._reaches_active(child.decl_id, active, seen)
+            for field in self.records_by_decl_id[key].fields
+            for child in _embedded_struct_refs(field.type)
+        )
+
+    def _opaque_embedding(self, key: str, active: set[str]) -> bool:
+        if key not in self.records_by_decl_id or self._reaches_active(key, active, set()):
+            return False
+        storage = self.analyze_record(self.records_by_decl_id[key])
+        return (
+            storage.storage_kind == RecordStorageKind.OPAQUE_STORAGE
+            and storage.target_layout is not None
+        )
+
+    def _mapped_shape(self, t: CType) -> tuple[int, int] | None:
+        core = peel_layout_wrappers(t)
+        if isinstance(core, StructRef):
+            decl = self.records_by_decl_id.get(core.decl_id)
+            if decl is None or not decl.is_complete:
+                return None
+            if decl.size_bytes == 0 and not decl.fields and decl.align_bytes == 1:
+                return 0, 1
+            return target_layout(
+                storage_type(decl.size_bytes, decl.align_bytes), self.type_mapper.queries
+            )
+        if isinstance(core, EnumRef):
+            return self._mapped_shape(core.underlying)
+        if isinstance(core, CArray):
+            if core.array_kind not in ("fixed", "flexible"):
+                return None
+            child = self._mapped_shape(core.element)
+            return None if child is None else (child[0] * (core.size or 0), child[1])
+        return target_layout(self.type_mapper.run(core), self.type_mapper.queries)
+
+    def _target_geometry(self, decl: Struct, facts: RecordLayoutFacts) -> tuple[int, int] | None:
+        items: list[tuple[int, int, int]] = []
+        for f in facts.plain_fields:
+            shape = self._mapped_shape(decl.fields[f.index].type)
+            if shape is None or shape[0] != f.size_bytes:
+                return None
+            items.append((f.byte_offset, *shape))
+        for run in facts.bitfield_runs:
+            shape = self._mapped_shape(run.unsigned_storage_type)
+            if shape is None:
+                return None
+            items.append((run.byte_offset, *shape))
+        for pad in facts.padding_spans:
+            offset, remaining = pad.byte_offset, pad.size_bytes
+            while remaining > 0:
+                width = next(n for n in (8, 4, 2, 1) if remaining >= n and offset % n == 0)
+                items.append(
+                    (offset, width, min(width, self.type_mapper.queries._abi.pointer_align_bytes))
+                )
+                offset += width
+                remaining -= width
+        current, alignment = 0, 1
+        for offset, size, align in sorted(items, key=lambda item: item[0]):
+            if align <= 0:
+                return None
+            current = (current + align - 1) // align * align
+            if current != offset:
+                return None
+            current += size
+            alignment = max(alignment, align)
+        alignment = max(alignment, facts.align_bytes or 1)
+        return (current + alignment - 1) // alignment * alignment, alignment
 
     def _record_typed_storage_by_value(
         self,
@@ -242,7 +347,7 @@ class RecordStorageAnalyzer:
                 ByValueEmbeddingDecision(False, ("referenced definition is incomplete",)),
             )
         if decl_id in active:
-            return None, None, ByValueEmbeddingDecision(True)
+            return None, None, ByValueEmbeddingDecision(False, ("recursive by-value record",))
 
         facts = self._layout(decl)
         if not facts.is_complete:
@@ -273,6 +378,30 @@ class RecordStorageAnalyzer:
             )
             if reason is not None or mapped_type is None:
                 return ByValueEmbeddingDecision(False, ((reason or "field could not be mapped"),))
+            representation = self.type_mapper.run(peel_layout_wrappers(field.type))
+            if (
+                self.type_mapper.representation(peel_layout_wrappers(field.type)).kind
+                != RepresentationKind.VALUE
+            ):
+                return ByValueEmbeddingDecision(
+                    False,
+                    (
+                        f"field `{field_display_name(field, field_fact.index)}` has no value-compatible Mojo type; opaque storage emitted",
+                    ),
+                )
+            source_shape = type_layout(field.type)
+            target_shape = target_layout(representation, self.type_mapper.queries)
+            if (
+                source_shape is not None
+                and target_shape is not None
+                and source_shape != target_shape
+            ):
+                return ByValueEmbeddingDecision(
+                    False,
+                    (
+                        f"field `{field_display_name(field, field_fact.index)}` has incompatible target storage geometry; opaque storage emitted",
+                    ),
+                )
             if field.fam_pattern is not None:
                 tail_decision = _direct_flexible_tail_decision(field, field_fact, mapped_type)
                 if not tail_decision.valid:
@@ -308,6 +437,8 @@ class RecordStorageAnalyzer:
         for ref in refs:
             decision = self._record_typed_storage_by_value(ref.decl_id, active=active)
             if not decision.valid:
+                if self._opaque_embedding(ref.decl_id, active):
+                    continue
                 return _embedded_record_failure(field, field_fact, ref, decision)
             if decision.flexible_tail is not None:
                 nested_tail_decisions.append((ref, decision))

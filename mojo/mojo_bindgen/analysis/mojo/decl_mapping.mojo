@@ -1,8 +1,10 @@
+from ..facts.parameter_types import parameter_type
 from ..calling_convention import require_c_calling_convention
 from std.memory import ArcPointer
 from ...ir import *
 from ..common import mojo_ident
 from ..facts.type_layout import peel_layout_wrappers
+from ..facts.representation import contains_storage
 from ..facts.c_abi import CABIQueries
 from .mojo_emit_options import MojoEmitOptions
 from .type_mapping import MapTypePass
@@ -113,6 +115,14 @@ struct UnitDeclMapper(Movable):
                         kind = GlobalKind.STUB
                     case _:
                         pass
+                var notes = List[MappingNote]()
+                if not self.session.type_mapper.value_supported(v.type[]):
+                    kind = GlobalKind.STUB
+                    notes.append(
+                        stub_note(
+                            "global has no supported Mojo value representation; manual binding required"
+                        )
+                    )
                 out.append(
                     MojoDecl.global_decl(
                         GlobalDecl(
@@ -121,40 +131,13 @@ struct UnitDeclMapper(Movable):
                             ArcPointer(self.session.type_mapper.run(v.type.ptr()[])),
                             v.is_const,
                             kind,
+                            diagnostics=notes^,
                             doc=v.doc.copy(),
                         )
                     )
                 )
             case .const_decl(v):
-                var notes = List[MappingNote]()
-                var name = mojo_ident(v.name)
-                if has_null(v.expr.ptr()[]):
-                    notes.append(
-                        stub_note(
-                            "constant expression could not be mapped; placeholder alias emitted"
-                        )
-                    )
-                    out.append(
-                        MojoDecl.alias_decl(
-                            AliasDecl(
-                                name^, AliasKind.CONST_VALUE, diagnostics=notes^, doc=v.doc.copy()
-                            )
-                        )
-                    )
-                else:
-                    var value = self.session.const_expr_mapper.run(v.expr.ptr()[])
-                    var typed = typed_const_value(value, v.type.ptr()[], self.session.type_mapper)
-                    self.emitted_const_names[name] = True
-                    out.append(
-                        MojoDecl.alias_decl(
-                            AliasDecl(
-                                name^,
-                                AliasKind.CONST_VALUE,
-                                const_value=ArcPointer(typed^),
-                                doc=v.doc.copy(),
-                            )
-                        )
-                    )
+                out.append(MojoDecl.alias_decl(self._constant(v)))
             case .macro_decl(v):
                 var mapper = MacroMapper(
                     self.session.const_expr_mapper.copy(), self.session.type_mapper.copy()
@@ -165,11 +148,34 @@ struct UnitDeclMapper(Movable):
             case .struct_decl(v):
                 if v.is_union:
                     out.append(
-                        MojoDecl.alias_decl(MapUnionPass(self.session.type_mapper.copy()).run(v))
+                        MojoDecl.alias_decl(
+                            MapUnionPass(
+                                self.session.type_mapper.copy(),
+                                self.session.struct_context.facts.copy(),
+                            ).run(v)
+                        )
                     )
                 else:
                     out.append(MojoDecl.struct_decl(map_struct(v, self.session.struct_context)))
         return out^
+
+    def _constant(mut self, v: Const) raises -> AliasDecl:
+        var name = mojo_ident(v.name)
+        try:
+            if has_null(v.expr[]):
+                raise Error("null constant")
+            var value = self.session.const_expr_mapper.run(v.expr[])
+            var typed = typed_const_value(value, v.type[], self.session.type_mapper)
+            self.emitted_const_names[name] = True
+            return AliasDecl(
+                name, AliasKind.CONST_VALUE, const_value=ArcPointer(typed^), doc=v.doc.copy()
+            )
+        except:
+            var notes = List[MappingNote]()
+            notes.append(
+                stub_note("constant expression could not be mapped; placeholder alias emitted")
+            )
+            return AliasDecl(name, AliasKind.CONST_VALUE, diagnostics=notes^, doc=v.doc.copy())
 
     def _function(mut self, v: Function) raises -> FunctionDecl:
         require_c_calling_convention(v.calling_convention)
@@ -191,6 +197,11 @@ struct UnitDeclMapper(Movable):
             and self.c_abi.memory_return_eligible(v)
         ):
             kind = FunctionKind.EXTERN_DECLARATION
+        if kind == FunctionKind.WRAPPER or kind == FunctionKind.EXTERN_DECLARATION:
+            var reason = self.c_abi.signature_reason(v)
+            if reason:
+                kind = FunctionKind.ABI_STUB
+                notes.append(stub_note(reason.value() + "; callable binding omitted"))
         var params = List[MojoParam]()
         for i in range(len(v.params)):
             var p = v.params[i].copy()
@@ -198,7 +209,13 @@ struct UnitDeclMapper(Movable):
             var name = mojo_ident(p.name, fallback) if p.name.byte_length() else fallback.copy()
             params.append(
                 MojoParam(
-                    name^, ArcPointer(self.session.type_mapper.run(p.type.ptr()[])), p.doc.copy()
+                    name^,
+                    ArcPointer(
+                        self.session.type_mapper.run(
+                            parameter_type(p.type[], self.session.unit[].target_abi)
+                        )
+                    ),
+                    p.doc.copy(),
                 )
             )
         var fixed: Optional[Int] = {}

@@ -71,8 +71,9 @@ A shared Python/native header regression also checks all 4,100 declarations.
 2. **Unsigned enum values.** The high-level wrapper returns Int for unsigned C
    values; adapt the preserved UInt64 bits before decimal conversion.
 
-Keep existing backend layout limitations documented in `native_backend_plan.md`.
-Do not fix them incidentally or loosen parity assertions to hide them.
+This frontend milestone retained the backend layout limitations rather than
+changing parity expectations incidentally. They are now deliberately resolved in
+both implementations by [representation safety](representation_safety.md).
 
 ## Acceptance
 
@@ -117,7 +118,8 @@ as well as the outer package runner; the final package build and tests passed.
 
 The historical experiment ledger, completed Python refactor plan, root stable lock
 and generated source goldens are unchanged. The child-count limit and unsaved-file adapter were retired after the upstream
-fixes. Existing backend layout-test limitations remain acceptance boundaries.
+fixes. Its historical layout exclusions have since been removed by the
+[representation safety changes](representation_safety.md).
 
 ## Upstream fix refresh validation (2026-11-01)
 

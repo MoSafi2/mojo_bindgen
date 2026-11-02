@@ -17,4 +17,4 @@ comptime MCC_TARGET = c_int(9)
 # macro MCC_NULL: null pointer macro is not emitted directly
 # define MCC_NULL ( ( void * ) 0 )
 
-comptime MCC_SIZEOF = size_of[c_int]()
+comptime MCC_SIZEOF = c_int(4)

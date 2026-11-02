@@ -1,0 +1,10 @@
+{
+  "value": 1,
+  "guard": 1,
+  "size": 48,
+  "align": 16,
+  "array_size": 96,
+  "c_size": 48,
+  "c_align": 16,
+  "c_stride": 48
+}

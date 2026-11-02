@@ -11,7 +11,7 @@ from mojo_bindgen._debug_json import parse_json, dump_json
 from mojo_bindgen.analysis.common import normalized_name, mojo_ident
 
 
-def _mapper(var triple: Optional[String] = {}) -> MapTypePass:
+def _mapper(var triple: Optional[String] = String("x86_64-unknown-linux-gnu")) -> MapTypePass:
     return MapTypePass(TargetQueries(TargetABI(8, 8, ByteOrder.LITTLE, triple^)))
 
 

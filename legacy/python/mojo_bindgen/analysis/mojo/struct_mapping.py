@@ -12,6 +12,7 @@ from mojo_bindgen.analysis.facts.record_storage import (
     RecordStorageKind,
     analyze_record_storage_facts,
 )
+from mojo_bindgen.analysis.facts.representation import storage_type
 from mojo_bindgen.analysis.mojo.mapping_support import (
     field_display_name,
     field_mojo_name,
@@ -24,6 +25,7 @@ from mojo_bindgen.ir import (
     AtomicType,
     BitfieldField,
     BitfieldGroupMember,
+    BuiltinType,
     Initializer,
     InitializerParam,
     MojoType,
@@ -393,6 +395,17 @@ def _opaque_storage_struct_decl(
     diagnostic_notes: tuple[str, ...] = (),
     fallback_reasons: tuple[str, ...] = (),
 ) -> StructDecl:
+    if isinstance(storage_type(facts.size_bytes, facts.align_bytes), BuiltinType):
+        return StructDecl(
+            name=record_name(decl),
+            kind=StructKind.OPAQUE,
+            diagnostics=(
+                struct_note(
+                    "record has no representable storage geometry; incomplete placeholder emitted"
+                ),
+            ),
+            doc=decl.doc,
+        )
     align, align_decorator = _compute_align_policy(facts, uses_opaque_storage=True)
     return StructDecl(
         name=record_name(decl),

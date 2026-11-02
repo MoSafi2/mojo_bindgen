@@ -91,7 +91,7 @@ struct _PolicyState(Movable):
                 return (
                     MojoPassability.REGISTER_PASSABLE if v.nullable else MojoPassability.TRIVIAL_REGISTER_PASSABLE
                 )
-            case .mojo_array(_):
+            case .opaque_storage_type(_) | .mojo_array(_):
                 return MojoPassability.MEMORY_ONLY
             case .parametric_type(v):
                 return (
@@ -154,7 +154,7 @@ struct _PolicyState(Movable):
                 return TransferTraits(
                     v.name != MojoBuiltin.UNSUPPORTED, v.name != MojoBuiltin.UNSUPPORTED
                 )
-            case .mojo_function_ptr(_) | .mojo_pointer(_):
+            case .opaque_storage_type(_) | .mojo_function_ptr(_) | .mojo_pointer(_):
                 return TransferTraits(True, True)
             case .mojo_array(v):
                 return self.type_transfer(v.element.ptr()[])

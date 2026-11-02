@@ -14,9 +14,9 @@ from mojo_bindgen.ir import (
     FunctionKind,
     IntKind,
     IntType,
-    MojoArray,
     MojoBuiltin,
     NamedType,
+    OpaqueStorageType,
     ParametricBase,
     ParametricType,
     TypeArg,
@@ -29,9 +29,7 @@ def test_atomic_layout_is_not_assumed_transparent() -> None:
     value = IntType(IntKind.INT, 4, 4)
     atomic = AtomicType(value, size_bytes=16, align_bytes=16)
     assert type_layout(atomic) == (16, 16)
-    assert MapTypePass(queries=DEFAULT_TARGET_QUERIES).run(atomic) == MojoArray(
-        BuiltinType(MojoBuiltin.UINT8), 16
-    )
+    assert MapTypePass(queries=DEFAULT_TARGET_QUERIES).run(atomic) == OpaqueStorageType(16, 16)
     compatible = AtomicType(value, size_bytes=4, align_bytes=4)
     assert MapTypePass(queries=DEFAULT_TARGET_QUERIES).run(compatible) == ParametricType(
         ParametricBase.ATOMIC, (TypeArg(BuiltinType(MojoBuiltin.C_INT)),)
@@ -81,9 +79,9 @@ def test_non_register_return_and_inline_variadic_are_stubs(tmp_path: Path) -> No
     )
     result = bindgen(BindgenOptions(header=header))
     functions = {d.name: d for d in result.mojo_module.decls if isinstance(d, FunctionDecl)}
-    assert functions["make"].kind == FunctionKind.NON_REGISTER_RETURN_STUB
+    assert functions["make"].kind == FunctionKind.EXTERN_DECLARATION
     assert functions["local"].kind == FunctionKind.DIRECTIVE_STUB
-    assert "def make(" not in result.bindings_source
+    assert '@extern("make")' in result.bindings_source
     assert "def local(" not in result.bindings_source
 
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from mojo_bindgen.analysis.common import mojo_float_literal_text, mojo_ident
+from mojo_bindgen.analysis.facts.type_layout import type_size
 from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
 from mojo_bindgen.ir import (
     CBinaryExpr,
@@ -18,6 +19,8 @@ from mojo_bindgen.ir import (
     CRefExpr,
     CSizeOfExpr,
     CUnaryExpr,
+    FloatFormat,
+    FloatKind,
     IntLiteral,
     MojoBinaryExpr,
     MojoCallExpr,
@@ -25,7 +28,6 @@ from mojo_bindgen.ir import (
     MojoConstExpr,
     MojoFloatLiteral,
     MojoRefExpr,
-    MojoSizeOfExpr,
     MojoUnaryExpr,
     StringLiteral,
 )
@@ -51,6 +53,14 @@ class MapConstExprPass:
             case IntLiteral() | StringLiteral() | CharLiteral():
                 return expr
             case CFloatLiteral():
+                if (
+                    expr.spelling.lower().endswith("l")
+                    and self.type_mapping.queries.float_format(FloatKind.LONG_DOUBLE)
+                    != FloatFormat.BINARY64
+                ):
+                    raise ConstExprMappingError(
+                        "extended floating literal has no supported Mojo value representation"
+                    )
                 return MojoFloatLiteral(self._parse_float_literal(expr.spelling))
             case CRefExpr():
                 return MojoRefExpr(mojo_ident(expr.name))
@@ -59,9 +69,16 @@ class MapConstExprPass:
             case CBinaryExpr():
                 return MojoBinaryExpr(expr.op, self.run(expr.lhs), self.run(expr.rhs))
             case CCastExpr():
+                if not self.type_mapping.value_supported(expr.target):
+                    raise ConstExprMappingError(
+                        "cast target has no supported Mojo value representation"
+                    )
                 return MojoCastExpr(self.type_mapping.run(expr.target), self.run(expr.expr))
             case CSizeOfExpr():
-                return MojoSizeOfExpr(self.type_mapping.run(expr.target))
+                size = type_size(expr.target)
+                if size is None:
+                    raise ConstExprMappingError("sizeof target has no known source size")
+                return IntLiteral(size)
             case CCallExpr():
                 return MojoCallExpr(
                     self.run(expr.callee), tuple(self.run(arg) for arg in expr.args)

@@ -5,6 +5,9 @@ from typing import assert_never
 
 from mojo_bindgen.analysis.calling_convention import require_c_calling_convention
 from mojo_bindgen.analysis.common import mojo_ident
+from mojo_bindgen.analysis.facts.c_abi import CABIQueries
+from mojo_bindgen.analysis.facts.context import AnalysisContext
+from mojo_bindgen.analysis.facts.parameter_types import parameter_type
 from mojo_bindgen.analysis.mojo.alias_mapping import map_typedef_alias
 from mojo_bindgen.analysis.mojo.const_expr_mapping import (
     ConstExprMappingError,
@@ -18,7 +21,7 @@ from mojo_bindgen.analysis.mojo.struct_mapping import (
     StructMappingContext,
     map_struct,
 )
-from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass
+from mojo_bindgen.analysis.mojo.type_mapping import MapTypePass, TypeMappingError
 from mojo_bindgen.analysis.mojo.union_mapping import MapUnionPass
 from mojo_bindgen.ir import (
     AliasDecl,
@@ -74,6 +77,7 @@ class MappingSession:
     type_mapper: MapTypePass
     const_expr_mapper: MapConstExprPass
     struct_context: StructMappingContext
+    context: AnalysisContext
 
 
 class UnitDeclMapper:
@@ -82,7 +86,8 @@ class UnitDeclMapper:
     def __init__(self, session: MappingSession) -> None:
         self.session = session
         self._emitted_const_names: set[str] = set()
-        self._union_mapper = MapUnionPass(type_mapper=session.type_mapper)
+        self._c_abi = CABIQueries(session.context)
+        self._union_mapper = MapUnionPass(type_mapper=session.type_mapper, context=session.context)
         self._macro_mapper = MacroMapper(
             const_expr_mapper=session.const_expr_mapper,
             type_mapper=session.type_mapper,
@@ -166,6 +171,17 @@ class UnitDeclMapper:
         elif decl.is_variadic and self.session.options.linking == "owned_dl_handle":
             kind = FunctionKind.VARIADIC_STUB
             diagnostics.append(stub_note("OwnedDLHandle does not expose variadic C ABI metadata"))
+        elif (
+            not decl.is_variadic
+            and self.session.options.linking == "external_call"
+            and self._c_abi.memory_return_eligible(decl)
+        ):
+            kind = FunctionKind.EXTERN_DECLARATION
+        if kind in (FunctionKind.WRAPPER, FunctionKind.EXTERN_DECLARATION):
+            reason = self._c_abi.signature_reason(decl)
+            if reason:
+                kind = FunctionKind.ABI_STUB
+                diagnostics.append(stub_note(reason + "; callable binding omitted"))
         return FunctionDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
@@ -173,7 +189,9 @@ class UnitDeclMapper:
                 (
                     MojoParam(
                         name=mojo_ident(param.name, fallback=f"a{i}") if param.name else f"a{i}",
-                        type=self.session.type_mapper.run(param.type),
+                        type=self.session.type_mapper.run(
+                            parameter_type(param.type, self.session.unit.target_abi)
+                        ),
                         doc=param.doc,
                     )
                     for i, param in enumerate(decl.params)
@@ -204,19 +222,30 @@ class UnitDeclMapper:
                 else source_type.canonical
             )
         is_atomic = isinstance(source_type, AtomicType)
+        value_supported = self.session.type_mapper.value_supported(decl.type)
         return GlobalDecl(
             name=mojo_ident(decl.name),
             link_name=decl.link_name,
             value_type=mapped_type,
             is_const=decl.is_const,
-            kind=(GlobalKind.STUB if is_atomic else GlobalKind.WRAPPER),
+            kind=(GlobalKind.STUB if is_atomic or not value_supported else GlobalKind.WRAPPER),
+            diagnostics=(
+                (
+                    stub_note(
+                        "global has no supported Mojo value representation; manual binding required"
+                    ),
+                )
+                if not value_supported
+                else ()
+            ),
             doc=decl.doc,
         )
 
     def _map_const(self, decl: Const) -> AliasDecl:
         try:
             value = self.session.const_expr_mapper.run(decl.expr)
-        except ConstExprMappingError:
+            typed_value = self._typed_const_value(value, decl.type)
+        except (ConstExprMappingError, TypeMappingError):
             return AliasDecl(
                 name=mojo_ident(decl.name),
                 kind=AliasKind.CONST_VALUE,
@@ -226,7 +255,6 @@ class UnitDeclMapper:
                 doc=decl.doc,
             )
         name = mojo_ident(decl.name)
-        typed_value = self._typed_const_value(value, decl.type)
         self._emitted_const_names.add(name)
         return AliasDecl(
             name=name,

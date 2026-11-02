@@ -11,9 +11,8 @@ from mojo_bindgen.ir import (
     Field,
     IntKind,
     IntType,
-    MojoArray,
     MojoBuiltin,
-    NamedType,
+    OpaqueStorageType,
     ParametricBase,
     ParametricType,
     Struct,
@@ -25,7 +24,7 @@ from tests.bindgen_helpers import DEFAULT_TARGET_QUERIES
 
 
 def _i16() -> IntType:
-    return IntType(int_kind=IntKind.SHORT, size_bytes=2, align_bytes=4)
+    return IntType(int_kind=IntKind.SHORT, size_bytes=2, align_bytes=2)
 
 
 def _i32() -> IntType:
@@ -46,11 +45,11 @@ def test_map_union_uses_unsafe_union_for_distinct_supported_member_types() -> No
             Field(
                 name="b",
                 source_name="b",
-                type=StructRef(decl_id="struct:Widget", name="Widget", c_name="Widget"),
+                type=_u32(),
                 byte_offset=0,
             ),
         ),
-        size_bytes=8,
+        size_bytes=4,
         align_bytes=4,
         is_union=True,
         is_complete=True,
@@ -61,7 +60,10 @@ def test_map_union_uses_unsafe_union_for_distinct_supported_member_types() -> No
         kind=AliasKind.UNION_LAYOUT,
         type_value=ParametricType(
             base=ParametricBase.UNSAFE_UNION,
-            args=(TypeArg(type=BuiltinType(MojoBuiltin.C_INT)), TypeArg(type=NamedType("Widget"))),
+            args=(
+                TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),
+                TypeArg(type=BuiltinType(MojoBuiltin.C_UINT)),
+            ),
         ),
     )
 
@@ -118,11 +120,8 @@ def test_map_union_falls_back_for_unsupported_member_type() -> None:
         is_complete=True,
     )
     mapped = map_union(decl, type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES))
-    assert mapped.type_value == ParametricType(
-        base=ParametricBase.UNSAFE_UNION,
-        args=(TypeArg(type=MojoArray(element=BuiltinType(MojoBuiltin.UINT8), size=4)),),
-    )
-    assert mapped.diagnostics == ()
+    assert mapped.type_value == OpaqueStorageType(4, 4)
+    assert "size and alignment" in mapped.diagnostics[-1].message
 
 
 def test_map_union_falls_back_for_self_referential_member_type() -> None:
@@ -146,7 +145,7 @@ def test_map_union_falls_back_for_self_referential_member_type() -> None:
         is_complete=True,
     )
     mapped = map_union(decl, type_mapper=MapTypePass(queries=DEFAULT_TARGET_QUERIES))
-    assert mapped.type_value == MojoArray(element=BuiltinType(MojoBuiltin.UINT8), size=8)
+    assert mapped.type_value == OpaqueStorageType(8, 8)
     assert mapped.diagnostics[0].category == "union_mapping"
     assert "self-referential type `Node`" in mapped.diagnostics[0].message
 

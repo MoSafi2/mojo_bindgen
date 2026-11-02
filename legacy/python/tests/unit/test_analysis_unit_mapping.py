@@ -37,6 +37,7 @@ from mojo_bindgen.ir import (
     MojoPointer,
     MojoRefExpr,
     NamedType,
+    OpaqueStorageType,
     PaddingMember,
     ParametricBase,
     ParametricType,
@@ -70,7 +71,12 @@ def _u64() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+        target_triple="x86_64-unknown-linux-gnu",
+    )
 
 
 def _field(
@@ -197,7 +203,7 @@ def test_map_unit_maps_typedef_and_enum_surface_forms(bindgen: HeaderHarness) ->
     enum_decl = mapped.decls[2]
     enumerant_decl = mapped.decls[3]
     assert typedef_decl == AliasDecl(
-        name="size_t", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("UInt")
+        name="size_t", kind=AliasKind.TYPE_ALIAS, type_value=BuiltinType(MojoBuiltin.C_UINT)
     )
     assert signed_typedef_decl == AliasDecl(
         name="ssize_t", kind=AliasKind.TYPE_ALIAS, type_value=NamedType("Int")
@@ -456,11 +462,9 @@ def test_map_unit_maps_structs_and_unions_with_real_record_layouts(bindgen: Head
     assert plain_decl.diagnostics == ()
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
-    assert union_decl.type_value == ParametricType(
-        base=ParametricBase.UNSAFE_UNION,
-        args=(TypeArg(type=BuiltinType(MojoBuiltin.C_INT)), TypeArg(type=NamedType("Widget"))),
-    )
-    assert union_decl.diagnostics == ()
+    assert union_decl.type_value == OpaqueStorageType(8, 8)
+
+    assert "size and alignment" in union_decl.diagnostics[-1].message
 
 
 def test_map_unit_uses_unsafe_union_for_repeated_types_union(bindgen: HeaderHarness) -> None:
@@ -576,9 +580,8 @@ def test_map_unit_maps_structs_that_store_union_members_by_named_alias(
     holder_decl = mapped.decls[1]
     assert isinstance(union_decl, AliasDecl)
     assert union_decl.kind == AliasKind.UNION_LAYOUT
-    assert union_decl.type_value == ParametricType(
-        base=ParametricBase.UNSAFE_UNION, args=(TypeArg(type=BuiltinType(MojoBuiltin.C_INT)),)
-    )
+    assert union_decl.type_value == OpaqueStorageType(8, 8)
+
     assert isinstance(holder_decl, StructDecl)
     assert holder_decl.kind == StructKind.PLAIN
     assert holder_decl.members == (

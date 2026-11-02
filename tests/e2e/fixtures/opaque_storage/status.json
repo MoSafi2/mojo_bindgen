@@ -1,0 +1,12 @@
+{
+  "phases": {
+    "bindgen_external": "pass",
+    "bindgen_dl": "pass",
+    "emit_external": "pass",
+    "emit_dl": "pass",
+    "mojo_build_external": "pass",
+    "mojo_build_dl": "pass",
+    "runtime_external": "pass",
+    "runtime_owned_dl_handle": "pass"
+  }
+}

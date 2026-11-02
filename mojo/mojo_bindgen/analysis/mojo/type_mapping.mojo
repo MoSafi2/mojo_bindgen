@@ -6,13 +6,16 @@ from std.memory import ArcPointer
 from ...ir import *
 from ..common import normalized_name
 from ..facts.target import TargetQueries
+from ..facts.parameter_types import parameter_type, pointee_is_const
+from ..facts.representation import (
+    storage_type,
+    target_layout,
+    contains_storage,
+    TypeRepresentationFacts,
+    RepresentationKind,
+)
+from ..facts.type_layout import type_layout, peel_layout_wrappers
 from ..type_walk import validate_type_tree
-
-
-def _opaque_bytes(size: Int) -> MojoType:
-    return MojoType.mojo_array(
-        MojoArray(ArcPointer(MojoType.builtin_type(BuiltinType(MojoBuiltin.UINT8))), size)
-    )
 
 
 def _pointer(
@@ -47,18 +50,6 @@ def _int_dtype(v: IntType) -> Optional[String]:
     return String("DType." + ("int" if signed else "uint") + String(v.size_bytes * 8))
 
 
-def _float_dtype(kind: FloatKind) -> Optional[String]:
-    match kind:
-        case .FLOAT16:
-            return String("DType.float16")
-        case .FLOAT:
-            return String("DType.float32")
-        case .DOUBLE:
-            return String("DType.float64")
-        case .LONG_DOUBLE | .FLOAT128:
-            return {}
-
-
 @fieldwise_init
 struct _ScalarInfo(Copyable, Movable):
     var dtype: Optional[String]
@@ -67,18 +58,18 @@ struct _ScalarInfo(Copyable, Movable):
     var scalar: Bool
 
 
-def _scalar_info(t: CType) -> _ScalarInfo:
+def _scalar_info(t: CType, queries: TargetQueries) -> _ScalarInfo:
     match t:
         case .type_ref(v):
-            return _scalar_info(v.canonical.ptr()[])
+            return _scalar_info(v.canonical.ptr()[], queries)
         case .qualified_type(v):
-            return _scalar_info(v.unqualified.ptr()[])
+            return _scalar_info(v.unqualified.ptr()[], queries)
         case .atomic_type(v):
-            return _scalar_info(v.value_type.ptr()[])
+            return _scalar_info(v.value_type.ptr()[], queries)
         case .int_type(v):
             return _ScalarInfo(_int_dtype(v), v.size_bytes, v.align_bytes, True)
         case .float_type(v):
-            return _ScalarInfo(_float_dtype(v.float_kind), v.size_bytes, v.align_bytes, True)
+            return _ScalarInfo(queries.float_dtype(v), v.size_bytes, v.align_bytes, True)
         case .void_type(_):
             return _ScalarInfo({}, {}, {}, True)
         case .c_pointer(_) | .c_array(_) | .c_function_ptr(_) | .struct_ref(_) | .enum_ref(
@@ -138,6 +129,28 @@ struct MapTypePass(Copyable, Movable):
     def run(self, t: CType) raises -> MojoType:
         validate_type_tree(t)
         return self._map(t)
+
+    def representation(self, t: CType) raises -> TypeRepresentationFacts:
+        var mapped = self.run(t)
+        var kind = RepresentationKind.VALUE
+        var reason = String()
+        if contains_storage(mapped):
+            kind = RepresentationKind.STORAGE
+            reason = "type has storage without a supported value representation"
+            if case .builtin_type(v) = mapped:
+                if v.name == MojoBuiltin.UNSUPPORTED:
+                    kind = RepresentationKind.UNSUPPORTED
+                    reason = "type has no known representable storage geometry"
+        return TypeRepresentationFacts(kind, target_layout(mapped, self.queries), reason^)
+
+    def value_supported(self, t: CType) raises -> Bool:
+        match t:
+            case .type_ref(v):
+                return self.value_supported(v.canonical[])
+            case .qualified_type(v):
+                return self.value_supported(v.unqualified[])
+            case _:
+                return not contains_storage(self.run(t))
 
     def _primitive(self, v: IntType) raises -> MojoType:
         var kind = v.int_kind
@@ -212,31 +225,79 @@ struct MapTypePass(Copyable, Movable):
         return MojoType.builtin_type(BuiltinType(builtin))
 
     def _float(self, v: FloatType) -> MojoType:
-        var builtin: MojoBuiltin
-        match v.float_kind:
-            case .FLOAT16:
-                builtin = MojoBuiltin.FLOAT16
-            case .FLOAT:
-                builtin = MojoBuiltin.C_FLOAT
-            case .DOUBLE | .LONG_DOUBLE:
-                builtin = MojoBuiltin.C_DOUBLE
-            case .FLOAT128:
-                return _opaque_bytes(v.size_bytes)
-        return MojoType.builtin_type(BuiltinType(builtin))
+        if not self.queries.float_compatible(v):
+            return storage_type(v.size_bytes, v.align_bytes)
+        var format = self.queries.float_format(v.float_kind)
+        if format == FloatFormat.BINARY16:
+            return MojoType.builtin_type(BuiltinType(MojoBuiltin.FLOAT16))
+        if format == FloatFormat.BINARY32:
+            return MojoType.builtin_type(BuiltinType(MojoBuiltin.C_FLOAT))
+        return MojoType.builtin_type(BuiltinType(MojoBuiltin.C_DOUBLE))
 
-    def _pointee(self, t: CType, mutability: PointerMutability) raises -> MojoType:
+    def _pointee(self, t: CType, var mutability: PointerMutability) raises -> MojoType:
+        if pointee_is_const(t):
+            mutability = PointerMutability.IMMUT
         match t:
             case .void_type(_):
                 return _pointer(mutability=mutability, nullable=True)
             case _:
-                return _pointer(ArcPointer(self._map(t)), mutability, True)
+                var mapped = self._map(t)
+                if not self.value_supported(t):
+                    if case .builtin_type(v) = self._map(peel_layout_wrappers(t)):
+                        if v.name == MojoBuiltin.UNSUPPORTED:
+                            return _pointer(mutability=mutability, nullable=True)
+                return _pointer(ArcPointer(mapped^), mutability, True)
+
+    def _callback_value(self, t: CType, result: Bool = False) raises -> Bool:
+        match t:
+            case .type_ref(v):
+                return self._callback_value(v.canonical[], result)
+            case .qualified_type(v):
+                return self._callback_value(v.unqualified[], result)
+            case .enum_ref(v):
+                return self._callback_value(CType.int_type(v.underlying.copy()))
+            case .void_type(_):
+                return result
+            case .int_type(v):
+                return v.int_kind != IntKind.EXT_INT and not contains_storage(self._map(t))
+            case .float_type(v):
+                return v.float_kind != FloatKind.FLOAT16 and not contains_storage(self._map(t))
+            case .c_pointer(_) | .c_function_ptr(_):
+                return not contains_storage(self._map(t))
+            case _:
+                return False
 
     def _map(self, t: CType) raises -> MojoType:
+        var mapped = self._map_unchecked(t)
+        match t:
+            case .int_type(_) | .float_type(_) | .atomic_type(_) | .vector_type(_) | .complex_type(
+                _
+            ) | .c_pointer(_) | .c_function_ptr(_):
+                var source = type_layout(t)
+                var target = target_layout(mapped, self.queries)
+                if source and (not target or source.value() != target.value()):
+                    return storage_type(source.value()[0], source.value()[1])
+            case .c_array(v):
+                if v.array_kind == ArrayKind.fixed and v.size_bytes > 0 and v.align_bytes:
+                    var target = target_layout(mapped, self.queries)
+                    if target and (
+                        target.value()[0] != v.size_bytes
+                        or target.value()[1] != v.align_bytes.value()
+                    ):
+                        return storage_type(v.size_bytes, v.align_bytes)
+            case _:
+                pass
+        return mapped^
+
+    def _map_unchecked(self, t: CType) raises -> MojoType:
         match t:
             case .void_type(_):
                 return MojoType.builtin_type(BuiltinType(MojoBuiltin.NONE))
             case .int_type(v):
-                return self._primitive(v)
+                try:
+                    return self._primitive(v)
+                except:
+                    return storage_type(v.size_bytes, v.align_bytes)
             case .float_type(v):
                 return self._float(v)
             case .qualified_type(v):
@@ -247,8 +308,8 @@ struct MapTypePass(Copyable, Movable):
                 return MojoType.named_type(NamedType(normalized_name(v.name)))
             case .enum_ref(v):
                 return MojoType.named_type(NamedType(normalized_name(v.name)))
-            case .opaque_record_ref(_):
-                return _pointer()
+            case .opaque_record_ref(v):
+                return storage_type(v.size_bytes, v.align_bytes)
             case .c_pointer(v):
                 if not v.pointee:
                     return _pointer(nullable=True)
@@ -272,18 +333,36 @@ struct MapTypePass(Copyable, Movable):
                 return _pointer(ArcPointer(self._map(v.element.ptr()[])))
             case .c_function_ptr(v):
                 require_c_calling_convention(v.calling_convention)
+                var compatible = (
+                    self.queries.supported_c_abi()
+                    and not v.is_variadic
+                    and self._callback_value(v.ret[], True)
+                )
+                for p in v.params:
+                    compatible = compatible and self._callback_value(
+                        parameter_type(p.type[], self.queries.abi)
+                    )
+                if not compatible:
+                    return _pointer(nullable=True)
                 var params = List[MojoParam]()
                 for i in range(len(v.params)):
                     var name = String()
                     if v.param_names and i < len(v.param_names.value()):
                         name = v.param_names.value()[i].copy()
-                    params.append(MojoParam(name^, ArcPointer(self._map(v.params[i].type.ptr()[]))))
+                    params.append(
+                        MojoParam(
+                            name^,
+                            ArcPointer(
+                                self._map(parameter_type(v.params[i].type[], self.queries.abi))
+                            ),
+                        )
+                    )
                 var abi = String("C")
                 return MojoType.mojo_function_ptr(
                     MojoFunctionPtr(ArcPointer(self._map(v.ret.ptr()[])), params^, abi^)
                 )
             case .atomic_type(v):
-                var info = _scalar_info(v.value_type.ptr()[])
+                var info = _scalar_info(v.value_type.ptr()[], self.queries)
                 if (
                     info.dtype
                     and info.scalar
@@ -299,34 +378,32 @@ struct MapTypePass(Copyable, Movable):
                 if not size or size.value() == 0:
                     size = _stripped_storage(v.value_type.ptr()[])
                 if size and size.value() != 0:
-                    return _opaque_bytes(size.value())
+                    return storage_type(size, v.align_bytes)
                 raise Error("atomic storage has no representable scalar type or known size")
             case .vector_type(v):
                 if not v.count:
-                    return _opaque_bytes(v.size_bytes)
-                var info = _scalar_info(v.element.ptr()[])
-                if info.dtype:
+                    return storage_type(v.size_bytes, v.align_bytes)
+                var info = _scalar_info(v.element.ptr()[], self.queries)
+                if info.dtype and not contains_storage(self._map(v.element[])):
                     var args = List[ParametricArg]()
                     args.append(ParametricArg.d_type_arg(DTypeArg(info.dtype.value().copy())))
                     args.append(ParametricArg.const_arg(ConstArg(v.count.value())))
                     return MojoType.parametric_type(ParametricType(ParametricBase.SIMD, args^))
-                return MojoType.mojo_array(
-                    MojoArray(ArcPointer(self._map(v.element.ptr()[])), v.count.value())
-                )
+                return storage_type(v.size_bytes, v.align_bytes)
             case .complex_type(v):
-                var dtype = _float_dtype(v.element.float_kind)
-                if dtype:
+                var dtype = self.queries.float_dtype(v.element)
+                if dtype and self.queries.float_compatible(v.element):
                     var args = List[ParametricArg]()
                     args.append(ParametricArg.d_type_arg(DTypeArg(dtype.value().copy())))
                     args.append(ParametricArg.const_arg(ConstArg(1)))
                     return MojoType.parametric_type(
                         ParametricType(ParametricBase.COMPLEX_SIMD, args^)
                     )
-                return MojoType.mojo_array(MojoArray(ArcPointer(self._float(v.element)), 2))
+                return storage_type(v.size_bytes, v.align_bytes)
             case .unsupported_type(v):
                 if v.size_bytes and v.size_bytes.value() > 0:
-                    return _opaque_bytes(v.size_bytes.value())
-                return _pointer()
+                    return storage_type(v.size_bytes, v.align_bytes)
+                return MojoType.builtin_type(BuiltinType(MojoBuiltin.UNSUPPORTED))
 
 
 def map_type(t: CType, queries: TargetQueries) raises -> MojoType:

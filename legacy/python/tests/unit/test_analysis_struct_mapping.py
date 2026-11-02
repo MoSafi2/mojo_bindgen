@@ -791,15 +791,8 @@ def test_map_struct_falls_back_only_after_mojo_type_mapping_failure() -> None:
     )
     mapped = map_struct(decl, context=_context_for(decl))
     assert mapped.fieldwise_init is False
-    assert mapped.diagnostics == ()
-    assert mapped.members == (
-        StoredMember(
-            index=0,
-            name="mystery",
-            type=MojoArray(element=BuiltinType(MojoBuiltin.UINT8), size=4),
-            byte_offset=0,
-        ),
-    )
+    assert "no value-compatible Mojo type" in mapped.diagnostics[0].message
+    assert mapped.members == (OpaqueStorageMember(name="storage", size_bytes=4),)
 
 
 def test_map_struct_tracks_flexible_tail_metadata() -> None:

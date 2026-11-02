@@ -1,10 +1,11 @@
+from .representation import contains_storage, target_layout, storage_type, RepresentationKind
+from .type_layout import peel_layout_wrappers, type_layout
 from std.memory import ArcPointer
 from ...ir import *
-from .record_layout import RecordLayoutFacts, PlainFieldFact
+from .record_layout import RecordLayoutFacts, PlainFieldFact, align_up
 from ..type_walk import iter_type_nodes, TypeWalkOptions
 from ..mojo.type_mapping import MapTypePass
 from ..mojo.mapping_support import try_map_type, field_display_name
-from .type_layout import peel_layout_wrappers
 
 
 __enum RecordStorageKind(Equatable, ImplicitlyCopyable, Movable):
@@ -41,7 +42,6 @@ struct ByValueEmbeddingDecision(Copyable, Movable):
         self.flexible_tail = flexible_tail^
 
 
-@fieldwise_init
 struct RecordStorageFacts(Copyable, Movable):
     var decl_id: String
     var is_union: Bool
@@ -52,6 +52,32 @@ struct RecordStorageFacts(Copyable, Movable):
     var flexible_tail: Optional[FlexibleTail]
     var diagnostic_notes: List[String]
     var fallback_reasons: List[String]
+
+    var target_layout: Optional[Tuple[Int, Int]]
+
+    def __init__(
+        out self,
+        var decl_id: String,
+        is_union: Bool,
+        is_complete: Bool,
+        var layout: RecordLayoutFacts,
+        storage_kind: RecordStorageKind,
+        var by_value_embedding: ByValueEmbeddingDecision,
+        var flexible_tail: Optional[FlexibleTail],
+        var diagnostic_notes: List[String],
+        var fallback_reasons: List[String],
+        var target_layout: Optional[Tuple[Int, Int]] = {},
+    ):
+        self.decl_id = decl_id^
+        self.is_union = is_union
+        self.is_complete = is_complete
+        self.layout = layout^
+        self.storage_kind = storage_kind
+        self.by_value_embedding = by_value_embedding^
+        self.flexible_tail = flexible_tail^
+        self.diagnostic_notes = diagnostic_notes^
+        self.fallback_reasons = fallback_reasons^
+        self.target_layout = target_layout^
 
     def uses_typed_storage(self) -> Bool:
         return self.storage_kind == RecordStorageKind.TYPED
@@ -170,7 +196,9 @@ struct RecordStorageAnalyzer(Movable):
         else:
             var decl = self.records_by_decl_id[key].copy()
             var facts = self.record_layouts[key].copy()
-            if decl.is_union or key in active:
+            if key in active:
+                decision = _failure("recursive by-value record")
+            elif decl.is_union:
                 pass
             elif not decl.is_complete or not facts.is_complete:
                 decision = _failure("referenced definition is incomplete")
@@ -203,6 +231,24 @@ struct RecordStorageAnalyzer(Movable):
                 return _failure(
                     mapped[1].value() if mapped[1] else String("field could not be mapped")
                 )
+            var representation = self.type_mapper.run(peel_layout_wrappers(field.type[]))
+            if (
+                self.type_mapper.representation(peel_layout_wrappers(field.type[])).kind
+                != RepresentationKind.VALUE
+            ):
+                return _failure(
+                    "field `"
+                    + field_display_name(field, f.index)
+                    + "` has no value-compatible Mojo type; opaque storage emitted"
+                )
+            var source_shape = type_layout(field.type[])
+            var target_shape = target_layout(representation, self.type_mapper.queries)
+            if source_shape and target_shape and source_shape.value() != target_shape.value():
+                return _failure(
+                    "field `"
+                    + field_display_name(field, f.index)
+                    + "` has incompatible target storage geometry; opaque storage emitted"
+                )
             if field.fam_pattern:
                 var tail = _direct_tail(field, f, mapped[0].value().ptr()[])
                 if not tail.valid:
@@ -215,6 +261,8 @@ struct RecordStorageAnalyzer(Movable):
             for v in refs:
                 var decision = self._by_value(v.decl_id, active)
                 if not decision.valid:
+                    if self._opaque_embedding(v.decl_id, active):
+                        continue
                     var target = v.c_name.copy() if v.c_name.byte_length() else v.name.copy()
                     var suffix = decision.detail[0].copy() if len(decision.detail) else String(
                         "embedded record is not layout-emittable by value"
@@ -279,6 +327,109 @@ struct RecordStorageAnalyzer(Movable):
                     return _failure(mapped[1].value())
         return ByValueEmbeddingDecision(True)
 
+    def _reaches_active(
+        self, key: String, active: Dict[String, Bool], mut seen: Dict[String, Bool]
+    ) raises -> Bool:
+        if key in active:
+            return True
+        if key in seen or key not in self.records_by_decl_id:
+            return False
+        seen[key] = True
+        for field in self.records_by_decl_id[key].fields:
+            for child in embedded_struct_refs(field.type[]):
+                if self._reaches_active(child.decl_id, active, seen):
+                    return True
+        return False
+
+    def _opaque_embedding(mut self, key: String, active: Dict[String, Bool]) raises -> Bool:
+        if key not in self.records_by_decl_id:
+            return False
+        var seen = Dict[String, Bool]()
+        if self._reaches_active(key, active, seen):
+            return False
+        var record = self.records_by_decl_id[key].copy()
+        var storage = self.analyze_record(record)
+        return storage.storage_kind == RecordStorageKind.OPAQUE_STORAGE and storage.target_layout
+
+    def _mapped_shape(self, t: CType) raises -> Optional[Tuple[Int, Int]]:
+        var core = peel_layout_wrappers(t)
+        match core:
+            case .struct_ref(v):
+                if v.decl_id not in self.records_by_decl_id:
+                    return {}
+                ref decl = self.records_by_decl_id[v.decl_id]
+                if not decl.is_complete:
+                    return {}
+                if decl.size_bytes == 0 and not len(decl.fields) and decl.align_bytes == 1:
+                    return (0, 1)
+                return target_layout(
+                    storage_type(decl.size_bytes, decl.align_bytes), self.type_mapper.queries
+                )
+            case .enum_ref(v):
+                return self._mapped_shape(CType.int_type(v.underlying.copy()))
+            case .c_array(v):
+                if v.array_kind == ArrayKind.fixed or v.array_kind == ArrayKind.flexible:
+                    var child = self._mapped_shape(v.element[])
+                    if child:
+                        return (
+                            child.value()[0] * (v.size.value() if v.size else 0),
+                            child.value()[1],
+                        )
+                return {}
+            case _:
+                return target_layout(self.type_mapper.run(core), self.type_mapper.queries)
+
+    def _target_geometry(
+        self, decl: Struct, facts: RecordLayoutFacts
+    ) raises -> Optional[Tuple[Int, Int]]:
+        var items = List[Tuple[Int, Int, Int]]()
+        for f in facts.plain_fields:
+            var shape = self._mapped_shape(decl.fields[f.index].type[])
+            if not shape or shape.value()[0] != f.size_bytes:
+                return {}
+            items.append((f.byte_offset, shape.value()[0], shape.value()[1]))
+        for run in facts.bitfield_runs:
+            var shape = self._mapped_shape(CType.int_type(run.unsigned_storage_type.copy()))
+            if not shape:
+                return {}
+            items.append((run.byte_offset, shape.value()[0], shape.value()[1]))
+        for pad in facts.padding_spans:
+            var offset = pad.byte_offset
+            var remaining = pad.size_bytes
+            while remaining > 0:
+                for width in [8, 4, 2, 1]:
+                    if remaining >= width and offset % width == 0:
+                        items.append(
+                            (
+                                offset,
+                                width,
+                                min(width, self.type_mapper.queries.abi.pointer_align_bytes),
+                            )
+                        )
+                        offset += width
+                        remaining -= width
+                        break
+        for i in range(1, len(items)):
+            var j = i
+            while j > 0 and items[j][0] < items[j - 1][0]:
+                var tmp = items[j]
+                items[j] = items[j - 1]
+                items[j - 1] = tmp
+                j -= 1
+        var current = 0
+        var alignment = 1
+        for item in items:
+            if item[2] <= 0:
+                return {}
+            current = align_up(current, item[2])
+            if current != item[0]:
+                return {}
+            current += item[1]
+            alignment = max(alignment, item[2])
+        if facts.align_bytes:
+            alignment = max(alignment, facts.align_bytes.value())
+        return (align_up(current, alignment), alignment)
+
     def analyze_record(mut self, record: Struct) raises -> RecordStorageFacts:
         if record.decl_id in self._record_cache:
             return self._record_cache[record.decl_id].copy()
@@ -303,6 +454,22 @@ struct RecordStorageAnalyzer(Movable):
             if not decision.valid:
                 kind = RecordStorageKind.OPAQUE_STORAGE
                 reasons = decision.detail.copy()
+        var geometry: Optional[Tuple[Int, Int]] = {}
+        if complete:
+            if kind == RecordStorageKind.TYPED:
+                geometry = self._target_geometry(record, layout)
+                if not geometry or geometry.value() != (
+                    layout.size_bytes,
+                    layout.align_bytes.value(),
+                ):
+                    kind = RecordStorageKind.OPAQUE_STORAGE
+                    reasons.append(
+                        "mapped physical fields do not reproduce the source layout; opaque storage emitted"
+                    )
+            if kind == RecordStorageKind.OPAQUE_STORAGE or kind == RecordStorageKind.UNION:
+                geometry = target_layout(
+                    storage_type(record.size_bytes, record.align_bytes), self.type_mapper.queries
+                )
         var result = RecordStorageFacts(
             record.decl_id.copy(),
             record.is_union,
@@ -313,6 +480,7 @@ struct RecordStorageAnalyzer(Movable):
             decision.flexible_tail.copy(),
             List[String](),
             reasons^,
+            geometry^,
         )
         self._record_cache[record.decl_id] = result.copy()
         return result^

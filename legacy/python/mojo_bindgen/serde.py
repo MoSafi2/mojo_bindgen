@@ -68,6 +68,8 @@ _NODES: dict[str, type] = {
         ir.GlobalVar,
         ir.IRDiagnostic,
         ir.TargetABI,
+        ir.FloatABI,
+        ir.OpaqueStorageType,
         ir.Unit,
         ir.PrimitiveDType,
         ir.MappingNote,
@@ -131,6 +133,7 @@ _FAMILIES: dict[TypeAliasType, dict[str, type]] = {
                 ir.MojoArray,
                 ir.MojoFunctionPtr,
                 ir.ParametricType,
+                ir.OpaqueStorageType,
             ),
         ),
         (

@@ -61,7 +61,12 @@ def _bool() -> IntType:
 
 
 def _abi() -> TargetABI:
-    return TargetABI(pointer_size_bytes=8, pointer_align_bytes=8, byte_order=ByteOrder.LITTLE)
+    return TargetABI(
+        pointer_size_bytes=8,
+        pointer_align_bytes=8,
+        byte_order=ByteOrder.LITTLE,
+        target_triple="x86_64-unknown-linux-gnu",
+    )
 
 
 def _field(
@@ -642,7 +647,7 @@ def test_generator_imports_simd_complex_atomic_and_emits_fallback_notes(
     unit = Unit(source_header="t.h", library="t", link_name="t", target_abi=_abi(), decls=(st,))
     out = bindgen.generate(unit, MojoEmitOptions())
     assert "var storage: Array[UInt8, 32]" in out
-    assert "atomic field `fallback_atomic` has no layout-compatible Atomic[T]" in out
+    assert "field `fallback_atomic` has no value-compatible Mojo type" in out
     assert "var fallback_atomic: Int32" not in out
 
 

@@ -6,6 +6,8 @@ from .record_policies import _PolicyState, _trivial_name
 
 def _type(t: MojoType, callback: Bool = False) raises:
     match t:
+        case .opaque_storage_type(_):
+            raise Error("unresolved opaque storage in finalized MojoIR")
         case .builtin_type(_) | .named_type(_):
             pass
         case .mojo_pointer(v):
@@ -51,6 +53,8 @@ def _expr(expr: MojoConstExpr) raises:
 
 def _extern_type(t: MojoType, state: _PolicyState, mut active: Dict[String, Bool]) raises -> Bool:
     match t:
+        case .opaque_storage_type(_):
+            return False
         case .builtin_type(v):
             return v.name != MojoBuiltin.UNSUPPORTED
         case .mojo_pointer(_) | .mojo_function_ptr(_):
@@ -148,8 +152,17 @@ def validate_finalized_mojo_module(module: MojoModule, required: ModuleDependenc
                             _type(group.storage_type[])
                             for field in group.fields:
                                 _type(field.logical_type[])
-                        case .padding_member(_) | .opaque_storage_member(_):
-                            pass
+                        case .padding_member(p):
+                            if p.storage_width_bytes != p.size_bytes or (
+                                p.storage_width_bytes != 1
+                                and p.storage_width_bytes != 2
+                                and p.storage_width_bytes != 4
+                                and p.storage_width_bytes != 8
+                            ):
+                                raise Error("unresolved padding in finalized MojoIR")
+                        case .opaque_storage_member(p):
+                            if p.size_bytes < 0:
+                                raise Error("negative opaque storage size")
                 for member in v.comptime_members:
                     if member.type_value:
                         _type(member.type_value.value()[])

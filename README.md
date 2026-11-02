@@ -248,6 +248,12 @@ verify emitted layouts and symbols against your target toolchain.
   pointer-based usage work, but atomic globals are still emitted as stubs and
   some surfaces require manual handling. Bindings use `Atomic[T]`; incompatible
   atomic storage is opaque and is never silently treated as non-atomic storage.
+- **Extended floating types:** Clang's source format and geometry determine
+  numeric compatibility. Unsupported formats (including x87 `long double`) use
+  aligned opaque storage. Records containing them retain faithful size/alignment,
+  but unsupported by-value functions, callbacks and globals are not exposed as
+  callable numeric interfaces; diagnostics explain these stubs. C pointer-based
+  access remains available. `sizeof` uses source geometry.
 - **By-value returns:** direct-link bindings use Mojo 1.2 C ABI declarations for
   eligible typed records containing fixed arrays. Packed, padded, explicitly
   aligned, bitfield, atomic, flexible-tail and opaque layouts remain conservative.

@@ -2,6 +2,7 @@ from std.memory import ArcPointer
 from ...ir import *
 from ..common import quoted, mojo_align_decorator_ok
 from ..facts.context import AnalysisContext
+from ..facts.representation import storage_type
 from ..facts.record_layout import RecordLayoutFacts
 from ..facts.record_storage import RecordStorageKind
 from .mapping_support import (
@@ -43,6 +44,15 @@ def _diagnostics(
 def _opaque(
     decl: Struct, facts: RecordLayoutFacts, notes: List[String], reasons: List[String]
 ) -> StructDecl:
+    if case .builtin_type(_) = storage_type(facts.size_bytes, facts.align_bytes):
+        var unsupported = StructDecl(record_name(decl), kind=StructKind.OPAQUE, doc=decl.doc.copy())
+        unsupported.diagnostics = _diagnostics(facts, notes, reasons)
+        unsupported.diagnostics.append(
+            struct_note(
+                "record has no representable storage geometry; incomplete placeholder emitted"
+            )
+        )
+        return unsupported^
     var result = StructDecl(
         record_name(decl), kind=StructKind.PLAIN, align=facts.align_bytes, doc=decl.doc.copy()
     )

@@ -23,6 +23,10 @@ def typed_const_value(
 ) -> MojoConstExpr:
     """Apply Mojo-facing type coercions needed for emitted constant aliases."""
 
+    if not type_mapper.value_supported(decl_type):
+        from .const_expr_mapping import ConstExprMappingError
+
+        raise ConstExprMappingError("constant type has no supported Mojo value representation")
     mapped_type = type_mapper.run(decl_type)
     if isinstance(mapped_type, BuiltinType) and mapped_type.name in _MOJO_INT_TYPES:
         return _coerce_integral_const(value, mapped_type)

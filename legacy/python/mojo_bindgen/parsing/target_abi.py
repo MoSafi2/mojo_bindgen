@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import clang.cindex as cx
 
-from mojo_bindgen.ir import ByteOrder, TargetABI
+from mojo_bindgen.ir import ByteOrder, FloatABI, FloatFormat, FloatKind, TargetABI
 from mojo_bindgen.utils import build_c_parse_args
 
 _PROBE_FILENAME = "__bindgen_target_abi_probe.c"
 _PROBE_DECL_NAME = "__bindgen_p"
-_PROBE_SOURCE = f"void *{_PROBE_DECL_NAME};\n"
+_PROBE_SOURCE = "void *__bindgen_p;\nfloat __bindgen_float;\nenum { __bindgen_float_mant = __FLT_MANT_DIG__, __bindgen_float_exp = __FLT_MAX_EXP__ };\ndouble __bindgen_double;\nenum { __bindgen_double_mant = __DBL_MANT_DIG__, __bindgen_double_exp = __DBL_MAX_EXP__ };\nlong double __bindgen_long_double;\nenum { __bindgen_long_double_mant = __LDBL_MANT_DIG__, __bindgen_long_double_exp = __LDBL_MAX_EXP__ };\nenum { __bindgen_radix = __FLT_RADIX__ };\n"
 
 
 class TargetABIProbeError(RuntimeError):
@@ -39,6 +39,7 @@ def _extract_pointer_abi(tu: cx.TranslationUnit) -> TargetABI | None:
                 pointer_align_bytes=align_bytes,
                 byte_order=byte_order,
                 target_triple=_target_triple_text(target_info),
+                float_abi=_extract_floats(tu),
             )
         return None
     finally:
@@ -157,3 +158,34 @@ def probe_target_abi(compile_args: list[str]) -> TargetABI:
 
 
 __all__ = ["TargetABIProbeError", "probe_target_abi"]
+
+
+def _extract_floats(tu: cx.TranslationUnit) -> tuple[FloatABI, ...]:
+    values: dict[str, int] = {}
+    shapes: dict[str, tuple[int, int]] = {}
+    for cursor in tu.cursor.get_children():
+        if cursor.kind == cx.CursorKind.ENUM_DECL:
+            values.update((c.spelling, c.enum_value) for c in cursor.get_children())
+        elif cursor.kind == cx.CursorKind.VAR_DECL:
+            shapes[cursor.spelling] = cursor.type.get_size(), cursor.type.get_align()
+    formats = {
+        (11, 16): FloatFormat.BINARY16,
+        (24, 128): FloatFormat.BINARY32,
+        (53, 1024): FloatFormat.BINARY64,
+        (64, 16384): FloatFormat.X87_EXTENDED,
+        (113, 16384): FloatFormat.BINARY128,
+        (106, 1024): FloatFormat.DOUBLE_DOUBLE,
+    }
+    out = []
+    for name, kind in (
+        ("float", FloatKind.FLOAT),
+        ("double", FloatKind.DOUBLE),
+        ("long_double", FloatKind.LONG_DOUBLE),
+    ):
+        prefix = "__bindgen_" + name
+        size, align = shapes[prefix]
+        fmt = formats.get((values[prefix + "_mant"], values[prefix + "_exp"]), FloatFormat.UNKNOWN)
+        if values["__bindgen_radix"] != 2:
+            fmt = FloatFormat.UNKNOWN
+        out.append(FloatABI(kind, fmt, size, align))
+    return tuple(out)

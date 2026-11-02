@@ -10,7 +10,9 @@ from mojo_bindgen.analysis.mojo.mojo_emit_options import MojoEmitOptions
 from mojo_bindgen.codegen.mojo_ir_printer import MojoIRPrintOptions, render_mojo_module
 from mojo_bindgen.ir import ByteOrder, MojoModule, TargetABI, Unit
 
-DEFAULT_TARGET_QUERIES = TargetQueries(TargetABI(8, 8, ByteOrder.LITTLE))
+DEFAULT_TARGET_QUERIES = TargetQueries(
+    TargetABI(8, 8, ByteOrder.LITTLE, "x86_64-unknown-linux-gnu")
+)
 
 
 def _bindgen_options_from_emit_options(unit: Unit, options: MojoEmitOptions) -> BindgenOptions:

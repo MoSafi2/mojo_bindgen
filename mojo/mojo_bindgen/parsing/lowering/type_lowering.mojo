@@ -1,6 +1,7 @@
 """Clang types to recursive CIR; result construction is local to each call."""
 from clang.cindex import Type, TypeKind, Cursor, CursorKind
 from std.memory import ArcPointer
+from ...analysis.facts.parameter_types import decay_array_parameter
 from ...ir import (
     CType,
     VoidType,
@@ -112,9 +113,15 @@ def lower_type(
                 shape = ArrayKind.flexible
         else:
             shape = ArrayKind.variable
+        var lowered_element = lower_type(registry, element, ctx)
+        var q = qualifiers(element)
+        if q.is_const or q.is_volatile or q.is_restrict:
+            lowered_element = CType.qualified_type(
+                QualifiedType(ArcPointer(lowered_element^), q.copy())
+            )
         return CType.c_array(
             CArray(
-                ArcPointer(lower_type(registry, element, ctx)),
+                ArcPointer(lowered_element^),
                 count^,
                 shape,
                 max(0, t.size()),
@@ -286,9 +293,10 @@ def lower_fnptr(
         for i in range(len(sugared)):
             var shape = normalize(sugared[i].copy())
             var actual = normalize(adjusted[i].copy())
-            if shape.kind() == TypeKind.CONSTANT_ARRAY and actual.kind() == TypeKind.POINTER:
-                shape = actual.copy()
-            params.append(CParam("", ArcPointer(lower_type(registry, shape, ctx))))
+            var lowered = lower_type(registry, shape, ctx)
+            if actual.kind() == TypeKind.POINTER:
+                lowered = decay_array_parameter(lowered, actual.size(), safe_align(actual))
+            params.append(CParam("", ArcPointer(lowered^)))
         variadic = t.is_function_variadic()
     if cursor and len(params):
         var parameter_nodes = List[Cursor]()

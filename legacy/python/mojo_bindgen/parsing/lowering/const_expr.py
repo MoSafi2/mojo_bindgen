@@ -36,6 +36,7 @@ from mojo_bindgen.ir import (
 )
 from mojo_bindgen.parsing.frontend import ClangCompat
 from mojo_bindgen.parsing.lowering.literal_resolver import LiteralResolver
+from mojo_bindgen.parsing.target_abi import probe_target_abi
 
 _INT_LITERAL_RE = re.compile(
     r"^([+-]?)" r"(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)" r"([uUlL]*)$",
@@ -348,6 +349,7 @@ class ConstExprParser:
         macro_values: Mapping[str, ParsedConstExpr] | None = None,
         macro_defaults: bool = False,
     ) -> None:
+        self.target_abi = probe_target_abi(literal_resolver.compile_args)
         self.literal_resolver = literal_resolver
         self.macro_values = macro_values
         self.macro_defaults = macro_defaults
@@ -624,15 +626,16 @@ class ConstExprParser:
             return rhs
         return lhs
 
-    @staticmethod
-    def _primitive_for_float_literal_suffix(suffix: str) -> FloatType:
-        """Choose a best-effort primitive type for a float literal suffix."""
-        s = suffix.lower()
-        if "f" in s:
-            return FloatType(float_kind=FloatKind.FLOAT, size_bytes=4, align_bytes=4)
-        if "l" in s:
-            return FloatType(float_kind=FloatKind.LONG_DOUBLE, size_bytes=16, align_bytes=16)
-        return FloatType(float_kind=FloatKind.DOUBLE, size_bytes=8, align_bytes=8)
+    def _primitive_for_float_literal_suffix(self, suffix: str) -> FloatType:
+        kind = (
+            FloatKind.FLOAT
+            if "f" in suffix.lower()
+            else (FloatKind.LONG_DOUBLE if "l" in suffix.lower() else FloatKind.DOUBLE)
+        )
+        for item in self.target_abi.float_abi:
+            if item.kind == kind:
+                return FloatType(kind, item.size_bytes, item.align_bytes)
+        return FloatType(kind, 0)
 
     @classmethod
     def _is_null_pointer_tokens(cls, tokens: list[str]) -> bool:

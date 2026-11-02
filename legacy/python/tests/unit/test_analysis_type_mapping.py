@@ -24,6 +24,7 @@ from mojo_bindgen.ir import (
     MojoParam,
     MojoPointer,
     NamedType,
+    OpaqueStorageType,
     ParametricBase,
     ParametricType,
     PointerMutability,
@@ -150,31 +151,31 @@ def test_map_type_maps_complex_and_vector_surface_forms_and_fallbacks() -> None:
     )
     assert map_type(
         ComplexType(element=long_double, size_bytes=32), queries=DEFAULT_TARGET_QUERIES
-    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.C_DOUBLE), size=2)
+    ) == OpaqueStorageType(32, 16)
     assert map_type(
         VectorType(element=f32, count=4, size_bytes=16), queries=DEFAULT_TARGET_QUERIES
     ) == ParametricType(base=ParametricBase.SIMD, args=(DTypeArg("DType.float32"), ConstArg(4)))
     assert map_type(
-        VectorType(element=long_double, count=2, size_bytes=32), queries=DEFAULT_TARGET_QUERIES
-    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.C_DOUBLE), size=2)
+        VectorType(element=long_double, count=2, size_bytes=32, align_bytes=16),
+        queries=DEFAULT_TARGET_QUERIES,
+    ) == OpaqueStorageType(32, 16)
     assert map_type(
-        VectorType(element=f32, count=None, size_bytes=16), queries=DEFAULT_TARGET_QUERIES
-    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.UINT8), size=16)
+        VectorType(element=f32, count=None, size_bytes=16, align_bytes=16),
+        queries=DEFAULT_TARGET_QUERIES,
+    ) == OpaqueStorageType(16, 16)
 
 
 def test_map_type_maps_unsupported_type_to_inline_bytes_when_sized() -> None:
     unsupported = UnsupportedType(
         category="unknown", spelling="mystery_t", reason="not modeled", size_bytes=16, align_bytes=8
     )
-    assert map_type(unsupported, queries=DEFAULT_TARGET_QUERIES) == MojoArray(
-        element=BuiltinType(name=MojoBuiltin.UINT8), size=16
-    )
+    assert map_type(unsupported, queries=DEFAULT_TARGET_QUERIES) == OpaqueStorageType(16, 8)
 
 
 def test_map_type_maps_unsized_unsupported_type_to_opaque_pointer() -> None:
     unsupported = UnsupportedType(category="unknown", spelling="mystery_t", reason="not modeled")
-    assert map_type(unsupported, queries=DEFAULT_TARGET_QUERIES) == MojoPointer(
-        pointee=None, mutability=PointerMutability.MUT
+    assert map_type(unsupported, queries=DEFAULT_TARGET_QUERIES) == BuiltinType(
+        MojoBuiltin.UNSUPPORTED
     )
 
 
@@ -208,7 +209,7 @@ def test_map_type_maps_float128_to_inline_bytes() -> None:
     assert map_type(
         FloatType(float_kind=FloatKind.FLOAT128, size_bytes=16, align_bytes=16),
         queries=DEFAULT_TARGET_QUERIES,
-    ) == MojoArray(element=BuiltinType(name=MojoBuiltin.UINT8), size=16)
+    ) == OpaqueStorageType(16, 16)
 
 
 def test_map_type_repeats_without_retaining_results_for_nested_typeref_shapes() -> None:

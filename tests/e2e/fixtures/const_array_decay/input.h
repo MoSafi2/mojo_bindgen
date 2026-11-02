@@ -5,5 +5,6 @@
 
 int32_t cad_sum4(const int32_t values[4]);
 int32_t cad_sanity(void);
+const int32_t *cad_values(void);
 
 #endif

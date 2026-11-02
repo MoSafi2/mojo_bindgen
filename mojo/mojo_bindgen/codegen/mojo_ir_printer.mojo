@@ -134,8 +134,17 @@ def _origin(origin: PointerOrigin, mutability: PointerMutability) -> String:
     )
 
 
+def render_comment_type(t: MojoType) -> String:
+    try:
+        return render_type(t)
+    except:
+        return "<unsupported>"
+
+
 def render_type(t: MojoType) raises -> String:
     match t:
+        case .opaque_storage_type(_):
+            raise Error("opaque storage must be normalized before printing")
         case .builtin_type(v):
             if v.name == MojoBuiltin.UNSUPPORTED:
                 raise Error("cannot render MojoBuiltin.UNSUPPORTED as valid Mojo")
@@ -355,7 +364,9 @@ struct MojoIRPrinter(Copyable, Movable):
         var b = CodeBuilder()
         self._doc(b, decl.doc)
         _diagnostics(b, decl.diagnostics)
-        var value = render_type(decl.value_type.ptr()[])
+        var value = render_comment_type(
+            decl.value_type[]
+        ) if decl.kind == GlobalKind.STUB else render_type(decl.value_type[])
         if decl.kind == GlobalKind.STUB:
             var atomic = False
             match decl.value_type.ptr()[]:
@@ -397,17 +408,24 @@ struct MojoIRPrinter(Copyable, Movable):
 
     def _function(self, decl: FunctionDecl) raises -> String:
         var b = CodeBuilder()
+        var callable = (
+            decl.kind == FunctionKind.WRAPPER or decl.kind == FunctionKind.EXTERN_DECLARATION
+        )
         var names = List[String]()
         var params = List[String]()
         var types = List[String]()
         for i in range(len(decl.params)):
             var name = _param_name(decl.params[i].name, i)
-            var t = render_type(decl.params[i].type.ptr()[])
+            var t = render_type(decl.params[i].type[]) if callable else render_comment_type(
+                decl.params[i].type[]
+            )
             names.append(name)
             params.append(name + ": " + t)
             types.append(t)
         var params_text = ", ".join(params)
-        var ret = render_type(decl.return_type.ptr()[])
+        var ret = render_type(decl.return_type[]) if callable else render_comment_type(
+            decl.return_type[]
+        )
         var symbol = decl.call_target.symbol if decl.call_target.symbol else decl.link_name
         var escaped = escape_mojo_string(symbol)
         if decl.kind == FunctionKind.EXTERN_DECLARATION:
@@ -419,7 +437,8 @@ struct MojoIRPrinter(Copyable, Movable):
             b.add("...")
             return b.render()
         if (
-            decl.kind == FunctionKind.VARIADIC_STUB
+            decl.kind == FunctionKind.ABI_STUB
+            or decl.kind == FunctionKind.VARIADIC_STUB
             or decl.kind == FunctionKind.DIRECTIVE_STUB
             or decl.kind == FunctionKind.NON_REGISTER_RETURN_STUB
         ):
@@ -754,25 +773,11 @@ def _unique(base: String, names: List[String]) -> String:
     return result^
 
 
-def _padding(mut b: CodeBuilder, member: PaddingMember):
-    var chunks = List[String]()
-    var offset = member.byte_offset
-    var remaining = member.size_bytes
-    while remaining > 0:
-        for size in [8, 4, 2, 1]:
-            if remaining >= size and offset % size == 0:
-                chunks.append("UInt" + String(size * 8))
-                offset += size
-                remaining -= size
-                break
-    for i in range(len(chunks)):
-        b.add(
-            "var "
-            + member.name
-            + ("_" + String(i) if len(chunks) > 1 else String())
-            + ": "
-            + chunks[i]
-        )
+def _padding(mut b: CodeBuilder, member: PaddingMember) raises:
+    var width = member.storage_width_bytes
+    if (width != 1 and width != 2 and width != 4 and width != 8) or width != member.size_bytes:
+        raise Error("unresolved padding in finalized MojoIR")
+    b.add("var " + member.name + ": UInt" + String(width * 8))
 
 
 def _tail(mut b: CodeBuilder, name: String, tail: FlexibleTail) raises:

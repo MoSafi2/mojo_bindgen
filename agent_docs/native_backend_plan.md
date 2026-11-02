@@ -109,22 +109,12 @@ capability is inferred from backend parity.
 
 ## Preserved reference limitations
 
-Stable-toolchain execution exposed two existing Python layout-test limitations;
-the rewrite preserves them to retain identical generated sources:
-
-- On this host, system `max_align_t` contains a 16-byte `long double` but its mapped
-  target field is 8 bytes. Full-header parity includes this declaration. The
-  runtime fixtures omit this unrelated system declaration before generation.
-- `large_alignment` prints multiple scalar padding fields for one padding IR
-  member. The layout-test generator counts that member as one reflected index,
-  so `la_item.b.offset` reads the preceding padding field (8 instead of 16). The
-  differential runtime test explicitly expects this existing sidecar failure;
-  bindings themselves compile and run in both link modes.
-
-These are coordinated future fixes to both implementations, not native parity
-exemptions. Other selected sidecars execute successfully; native full-header
-output remains byte-identical to Python, including these limitations.
-
+At the original backend milestone, full-header runtime checks exposed the
+`max_align_t` extended-float mismatch and a reflected-index error after expanded
+padding. Those historical exclusions are removed by the coordinated native and
+Python reference changes in [representation safety](representation_safety.md).
+Opaque storage preserves the former's geometry, and physical padding normalization
+fixes the latter. Both complete layout sidecars must now pass.
 
 ## Real example JSON handoff
 

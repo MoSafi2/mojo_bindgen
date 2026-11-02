@@ -108,11 +108,11 @@ The production Python generator and root stable toolchain remain unchanged.
   representative fixtures in both modes. A local Conda package passed installed
   import and backend-generation checks outside the checkout; nothing was uploaded.
 
-The existing system `max_align_t`/long-double mismatch and split-padding reflected
-index bug remain unchanged. Their exact acceptance scope is recorded in
-[native_backend_plan.md](native_backend_plan.md#preserved-reference-limitations).
-Native parsing and CLI header generation remain stage 3 work; wrapper/distribution
-transition remains stages 4–5.
+At that milestone, system `max_align_t` and split-padding layout reflection
+retained the Python reference limitations. The coordinated
+[representation safety changes](representation_safety.md) now resolve both and
+remove their runtime exclusions. Native parsing and CLI header generation were
+still stage 3 work at this original milestone.
 
 
 ## Real example JSON follow-up (2026-11-01)

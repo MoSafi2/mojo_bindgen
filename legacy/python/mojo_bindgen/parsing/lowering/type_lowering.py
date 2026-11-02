@@ -7,6 +7,7 @@ from enum import auto
 
 import clang.cindex as cx
 
+from mojo_bindgen.analysis.facts.parameter_types import decay_array_parameter
 from mojo_bindgen.ir import (
     ArrayKind,
     AtomicType,
@@ -260,11 +261,11 @@ class TypeLowerer:
         (C array parameter decay, including ``[static N]``), lower the canonical
         pointer so the ABI matches C.
         """
-        s = _normalize(sugared)
         c = _normalize(canonical)
-        if s.kind == cx.TypeKind.CONSTANTARRAY and c.kind == cx.TypeKind.POINTER:
-            return self.lower(canonical, ctx)
-        return self.lower(sugared, ctx)
+        lowered = self.lower(sugared, ctx)
+        if c.kind == cx.TypeKind.POINTER:
+            return decay_array_parameter(lowered, c.get_size(), _safe_align(c))
+        return lowered
 
     def _lower_fnptr(
         self,
@@ -340,7 +341,11 @@ class TypeLowerer:
         )
 
     def _lower_array(self, t: cx.Type, ctx: TypeContext) -> CType:
-        element = self.lower(t.get_array_element_type(), ctx)
+        raw_element = t.get_array_element_type()
+        element = self.lower(raw_element, ctx)
+        q = _qualifiers(raw_element)
+        if q.is_const or q.is_volatile or q.is_restrict:
+            element = QualifiedType(element, q)
         size = t.get_array_size() if t.kind == cx.TypeKind.CONSTANTARRAY else None
         return CArray(
             element=element,

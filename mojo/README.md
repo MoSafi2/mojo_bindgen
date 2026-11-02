@@ -171,20 +171,19 @@ See [the backend slice](../agent_docs/native_backend_plan.md),
 [historical evidence](../agent_docs/mojo_rewrite_results.md).
 
 
-## Preserved layout-test limitations
+## Storage and C interoperability
 
-Full-header parity intentionally preserves two Python-backend limitations found
-by the new runtime checks. On this host, system `max_align_t` contains a 16-byte
-`long double`, which currently maps to an 8-byte target type. Also, a padding IR
-member can print multiple scalar fields while the layout-test generator counts it
-as one field, giving an incorrect reflected index for a following field.
+Source floating formats and geometry are queried through Clang. Numeric types are
+emitted only when the generated-binding toolchain has a matching representation.
+Unsupported extended floats use aligned opaque storage; containing records keep
+source size, alignment and stride. Unsafe by-value calls and callback signatures
+become diagnostic stubs or opaque addresses. This does not implement extended
+floating arithmetic or automatic C bridges.
 
-The `large_alignment` fixture records the latter failure explicitly. Native
-binding runtime checks still run in both modes; passing layout runtime checks cover
-other fixture records. The runtime fixtures omit the unrelated system
-`max_align_t` declaration, while full-header intermediate and byte comparisons
-include it. Fixing these behaviors requires deliberate output and fixture changes; this
-cutover preserves the existing output contract.
+Normalization expands padding into physical fields before printing and layout
+reflection. Full-header layout checks include `max_align_t`, and
+`large_alignment` is required to pass. The implementation contract and validation
+are recorded in [the representation safety plan](../agent_docs/representation_safety.md).
 
 Native acceptance now uses standard Mojo `TestSuite` programs and a standard-library
 Python coordinator, independently of pytest/Python bindgen. Install the isolated

@@ -6,3 +6,5 @@ int32_t cad_sanity(void) {
     const int32_t values[4] = {10, 11, 12, 9};
     return cad_sum4(values);
 }
+
+const int32_t *cad_values(void) { static const int32_t values[4] = {1,2,3,4}; return values; }

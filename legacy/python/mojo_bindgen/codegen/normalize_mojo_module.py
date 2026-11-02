@@ -41,12 +41,14 @@ from mojo_bindgen.ir import (
     MojoUnaryExpr,
     NamedType,
     OpaqueStorageMember,
+    OpaqueStorageType,
     PaddingMember,
     ParametricType,
     StoredMember,
     StringLiteral,
     StructDecl,
     StructMember,
+    StructTraits,
     SupportDecl,
     SupportDeclKind,
     TypeArg,
@@ -62,6 +64,28 @@ class NormalizeMojoModulePass:
     """Resolve printer-facing facts into explicit MojoIR."""
 
     def run(self, module: MojoModule) -> MojoModule:
+        self._start(module)
+
+        normalized_decls = [self._normalize_decl(decl) for decl in module.decls]
+        all_decls = [
+            *self._synth_aliases,
+            *self._storage_decls,
+            *self._ordered_decls(normalized_decls),
+        ]
+        dependencies = self._collect_dependencies(all_decls)
+
+        result = replace(
+            module,
+            dependencies=dependencies,
+            decls=tuple(all_decls),
+        )
+
+        from mojo_bindgen.analysis.mojo.validate_finalized import validate_finalized_mojo_module
+
+        validate_finalized_mojo_module(result, result.dependencies)
+        return result
+
+    def _start(self, module: MojoModule) -> None:
         self._module = module
         self._reserved_names = {decl.name for decl in module.decls}
         self._function_signature_names = {
@@ -69,27 +93,54 @@ class NormalizeMojoModulePass:
             for decl in module.decls
             if isinstance(decl, AliasDecl) and decl.kind == AliasKind.CALLBACK_SIGNATURE
         }
+        self._storage_names: dict[tuple[int, int], str] = {}
+        self._storage_decls: list[StructDecl] = []
         self._synth_aliases: list[AliasDecl] = []
         self._synth_aliases_by_path: dict[tuple[str, ...], str] = {}
         self._imports_by_module: dict[str, set[str]] = {}
         self._support_decl_kinds: set[SupportDeclKind] = set()
 
-        normalized_decls = [self._normalize_decl(decl) for decl in module.decls]
-        all_decls = [*self._synth_aliases, *self._ordered_decls(normalized_decls)]
-        dependencies = self._collect_dependencies(all_decls)
-
-        return replace(
-            module,
-            dependencies=dependencies,
-            decls=tuple(all_decls),
-        )
+    @staticmethod
+    def _physical_members(decl: StructDecl) -> tuple[StructMember, ...]:
+        names = {
+            m.name
+            if isinstance(m, (StoredMember, PaddingMember, OpaqueStorageMember))
+            else m.storage_name
+            for m in decl.members
+        }
+        out: list[StructMember] = []
+        for member in decl.members:
+            if not isinstance(member, PaddingMember) or member.storage_width_bytes:
+                out.append(member)
+                continue
+            offset, remaining = member.byte_offset, member.size_bytes
+            if remaining < 0:
+                raise NormalizeMojoModuleError("negative padding span")
+            chunks: list[tuple[int, int]] = []
+            while remaining > 0:
+                width = next(n for n in (8, 4, 2, 1) if remaining >= n and offset % n == 0)
+                chunks.append((offset, width))
+                offset += width
+                remaining -= width
+            for i, (offset, width) in enumerate(chunks):
+                base = member.name if len(chunks) == 1 else f"{member.name}_{i}"
+                name, suffix = base, 2
+                while name in names and name != member.name:
+                    name = f"{base}_{suffix}"
+                    suffix += 1
+                names.add(name)
+                out.append(PaddingMember(name, width, offset, width))
+        return tuple(out)
 
     def _normalize_decl(self, decl: MojoDecl) -> MojoDecl:
         if isinstance(decl, StructDecl):
             return replace(
                 decl,
                 align_decorator=self._resolve_align_decorator(decl),
-                members=tuple(self._normalize_member(decl.name, member) for member in decl.members),
+                members=tuple(
+                    self._normalize_member(decl.name, member)
+                    for member in self._physical_members(decl)
+                ),
                 comptime_members=tuple(
                     self._normalize_comptime_member(decl.name, member)
                     for member in decl.comptime_members
@@ -233,6 +284,35 @@ class NormalizeMojoModulePass:
         *,
         allow_inline_function: bool = False,
     ) -> MojoType:
+        if isinstance(t, OpaqueStorageType):
+            if (
+                t.size_bytes <= 0
+                or t.align_bytes <= 0
+                or t.align_bytes & (t.align_bytes - 1)
+                or t.size_bytes % t.align_bytes
+                or t.align_bytes > 2**29
+            ):
+                raise NormalizeMojoModuleError("invalid opaque storage geometry")
+            key = (t.size_bytes, t.align_bytes)
+            if key not in self._storage_names:
+                base = f"_bindgen_storage_{key[0]}_{key[1]}"
+                name = base
+                suffix = 2
+                while name in self._reserved_names:
+                    name = f"{base}_{suffix}"
+                    suffix += 1
+                self._reserved_names.add(name)
+                self._storage_names[key] = name
+                self._storage_decls.append(
+                    StructDecl(
+                        name=name,
+                        align=t.align_bytes,
+                        align_decorator=t.align_bytes,
+                        traits=(StructTraits.COPYABLE, StructTraits.MOVABLE),
+                        members=(OpaqueStorageMember("storage", t.size_bytes),),
+                    )
+                )
+            return NamedType(self._storage_names[key])
         if isinstance(t, BuiltinType):
             return t
         if isinstance(t, NamedType):
@@ -370,7 +450,9 @@ class NormalizeMojoModulePass:
         )
         return name
 
-    def _collect_dependencies(self, decls: list[MojoDecl]) -> ModuleDependencies:
+    def _collect_dependencies(
+        self, decls: list[MojoDecl], *, compatibility_imports: bool = True
+    ) -> ModuleDependencies:
         self._seed_dependencies(self._module.dependencies)
 
         for decl in decls:
@@ -412,10 +494,16 @@ class NormalizeMojoModulePass:
                 decl,
             )
 
-        if self._module.link_mode == LinkMode.EXTERNAL_CALL and any(
-            not isinstance(decl, AliasDecl)
-            and not (isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.DIRECTIVE_STUB)
-            for decl in decls
+        if (
+            compatibility_imports
+            and self._module.link_mode == LinkMode.EXTERNAL_CALL
+            and any(
+                not isinstance(decl, AliasDecl)
+                and not (
+                    isinstance(decl, FunctionDecl) and decl.kind == FunctionKind.DIRECTIVE_STUB
+                )
+                for decl in decls
+            )
         ):
             self._record_import("std.ffi", "external_call")
 
@@ -556,6 +644,8 @@ class NormalizeMojoModulePass:
         assert_never(expr)
 
     def _collect_type_imports(self, t: MojoType) -> None:
+        if isinstance(t, OpaqueStorageType):
+            raise NormalizeMojoModuleError("unresolved opaque storage dependency")
         if isinstance(t, BuiltinType):
             if t.name.value.startswith("c_"):
                 self._record_import("std.ffi", t.name.value)
@@ -649,3 +739,9 @@ __all__ = [
     "NormalizeMojoModulePass",
     "normalize_mojo_module",
 ]
+
+
+def required_module_dependencies(module: MojoModule) -> ModuleDependencies:
+    state = NormalizeMojoModulePass()
+    state._start(replace(module, dependencies=ModuleDependencies()))
+    return state._collect_dependencies(list(module.decls), compatibility_imports=False)

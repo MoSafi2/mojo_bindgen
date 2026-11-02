@@ -1,0 +1,405 @@
+{
+  "id": "test_opaque_storage_runtime",
+  "reference": "Shared C source and independently asserted Mojo 1.2 geometry, stride and C value verification",
+  "files": {
+    "runner_external.mojo": "from std.sys.info import size_of, align_of\nimport opaque_storage_bindings_external as bindings\n\n\ndef main() raises:\n    var first = bindings.extended_fixture()\n    if not first:\n        raise Error(\"missing extended fixture\")\n    var second = first.value().unsafe_offset(1)\n    bindings.extended_set(second)\n    print(\"value|\", bindings.extended_check(second))\n    print(\"guard|\", bindings.extended_guard())\n    print(\"size|\", size_of[bindings.Extended]())\n    print(\"align|\", align_of[bindings.Extended]())\n    print(\"array_size|\", size_of[Array[bindings.Extended, 2]]())\n    print(\"c_size|\", bindings.extended_size())\n    print(\"c_align|\", bindings.extended_align())\n    print(\"c_stride|\", bindings.extended_stride())\n    if size_of[bindings.ExtendedUnion]() != Int(bindings.extended_union_size()) or align_of[\n        bindings.ExtendedUnion\n    ]() != Int(bindings.extended_union_align()):\n        raise Error(\"opaque union geometry mismatch\")\n",
+    "runner_dl.mojo": "from std.sys.info import size_of, align_of\nimport opaque_storage_bindings_dl as bindings\n\n\ndef main() raises:\n    var first = bindings.extended_fixture()\n    if not first:\n        raise Error(\"missing extended fixture\")\n    var second = first.value().unsafe_offset(1)\n    bindings.extended_set(second)\n    print(\"value|\", bindings.extended_check(second))\n    print(\"guard|\", bindings.extended_guard())\n    print(\"size|\", size_of[bindings.Extended]())\n    print(\"align|\", align_of[bindings.Extended]())\n    print(\"array_size|\", size_of[Array[bindings.Extended, 2]]())\n    print(\"c_size|\", bindings.extended_size())\n    print(\"c_align|\", bindings.extended_align())\n    print(\"c_stride|\", bindings.extended_stride())\n    if size_of[bindings.ExtendedUnion]() != Int(bindings.extended_union_size()) or align_of[\n        bindings.ExtendedUnion\n    ]() != Int(bindings.extended_union_align()):\n        raise Error(\"opaque union geometry mismatch\")\n",
+    "binary64.h": "long double binary64_add(long double value);\n",
+    "binary64.c": "#include \"binary64.h\"\nlong double binary64_add(long double value) { return value + 0.5L; }\n",
+    "binary64_consumer.mojo": "from binary64_bindings import binary64_add\nfrom std.testing import assert_equal\ndef main() raises:\n    assert_equal(binary64_add(3.5), 4.0)\n    print(\"binary64 long double C ABI passed\")\n"
+  },
+  "operations": [],
+  "writes": [],
+  "steps": [
+    {
+      "role": "cc",
+      "args": [
+        "-shared",
+        "-fPIC",
+        "@ROOT@/tests/e2e/fixtures/opaque_storage/impl.c",
+        "-o",
+        "@WORK@/libopaque_storage.so"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "native-cli",
+      "args": [
+        "@ROOT@/tests/e2e/fixtures/opaque_storage/input.h",
+        "--library",
+        "opaque_storage",
+        "--link-name",
+        "opaque_storage",
+        "--link-mode",
+        "external-call",
+        "--library-path",
+        "@WORK@/libopaque_storage.so",
+        "-o",
+        "@WORK@/opaque_storage_bindings_external.mojo",
+        "--layout-tests",
+        "@WORK@/layout_external.mojo"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/runner_external.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libopaque_storage.so",
+        "-O0",
+        "--Werror",
+        "-o",
+        "@WORK@/runner_external_0"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/runner_external_0"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "value| 1",
+        "guard| 1",
+        "size| 48",
+        "align| 16",
+        "array_size| 96",
+        "c_stride| 48"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/runner_external.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libopaque_storage.so",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/runner_external_3"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/runner_external_3"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "value| 1",
+        "guard| 1",
+        "size| 48",
+        "align| 16",
+        "array_size| 96",
+        "c_stride| 48"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/layout_external.mojo",
+        "-I",
+        "@WORK@",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/layout_external"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/layout_external"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "native-cli",
+      "args": [
+        "@ROOT@/tests/e2e/fixtures/opaque_storage/input.h",
+        "--library",
+        "opaque_storage",
+        "--link-name",
+        "opaque_storage",
+        "--link-mode",
+        "owned-dl-handle",
+        "--library-path",
+        "@WORK@/libopaque_storage.so",
+        "-o",
+        "@WORK@/opaque_storage_bindings_dl.mojo",
+        "--layout-tests",
+        "@WORK@/layout_dl.mojo"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/runner_dl.mojo",
+        "-I",
+        "@WORK@",
+        "-O0",
+        "--Werror",
+        "-o",
+        "@WORK@/runner_dl_0"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/runner_dl_0"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "value| 1",
+        "guard| 1",
+        "size| 48",
+        "align| 16",
+        "array_size| 96",
+        "c_stride| 48"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/runner_dl.mojo",
+        "-I",
+        "@WORK@",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/runner_dl_3"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/runner_dl_3"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "value| 1",
+        "guard| 1",
+        "size| 48",
+        "align| 16",
+        "array_size| 96",
+        "c_stride| 48"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/layout_dl.mojo",
+        "-I",
+        "@WORK@",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/layout_dl"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/layout_dl"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "cc",
+      "args": [
+        "-shared",
+        "-fPIC",
+        "-mlong-double-64",
+        "@WORK@/binary64.c",
+        "-o",
+        "@WORK@/libbinary64.so"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "native-cli",
+      "args": [
+        "@WORK@/binary64.h",
+        "--library",
+        "binary64",
+        "--link-name",
+        "binary64",
+        "--library-path",
+        "@WORK@/libbinary64.so",
+        "--clang-arg=-mlong-double-64",
+        "--link-mode",
+        "external-call",
+        "-o",
+        "@WORK@/binary64_bindings.mojo"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/binary64_consumer.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libbinary64.so",
+        "-O0",
+        "--Werror",
+        "-o",
+        "@WORK@/external_call0"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/external_call0"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "binary64 long double C ABI passed"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/binary64_consumer.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libbinary64.so",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/external_call3"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/external_call3"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "binary64 long double C ABI passed"
+      ]
+    },
+    {
+      "role": "native-cli",
+      "args": [
+        "@WORK@/binary64.h",
+        "--library",
+        "binary64",
+        "--link-name",
+        "binary64",
+        "--library-path",
+        "@WORK@/libbinary64.so",
+        "--clang-arg=-mlong-double-64",
+        "--link-mode",
+        "owned-dl-handle",
+        "-o",
+        "@WORK@/binary64_bindings.mojo"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/binary64_consumer.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libbinary64.so",
+        "-O0",
+        "--Werror",
+        "-o",
+        "@WORK@/owned_dl_handle0"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/owned_dl_handle0"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "binary64 long double C ABI passed"
+      ]
+    },
+    {
+      "role": "stable",
+      "args": [
+        "build",
+        "@WORK@/binary64_consumer.mojo",
+        "-I",
+        "@WORK@",
+        "-Xlinker",
+        "@WORK@/libbinary64.so",
+        "-O3",
+        "--Werror",
+        "-o",
+        "@WORK@/owned_dl_handle3"
+      ],
+      "env": {},
+      "returncode": 0
+    },
+    {
+      "role": "program",
+      "args": [
+        "@WORK@/owned_dl_handle3"
+      ],
+      "env": {},
+      "returncode": 0,
+      "stdout_contains": [
+        "binary64 long double C ABI passed"
+      ]
+    }
+  ],
+  "diagnostics": []
+}

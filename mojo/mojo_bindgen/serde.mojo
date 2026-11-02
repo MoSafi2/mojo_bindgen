@@ -77,6 +77,27 @@ def _decode_floatkind(value: JSON) raises -> FloatKind:
             raise Error("invalid FloatKind: " + text)
 
 
+def _decode_floatformat(value: JSON) raises -> FloatFormat:
+    var text = value.text()
+    match text:
+        case "unknown":
+            return FloatFormat.UNKNOWN
+        case "binary16":
+            return FloatFormat.BINARY16
+        case "binary32":
+            return FloatFormat.BINARY32
+        case "binary64":
+            return FloatFormat.BINARY64
+        case "binary128":
+            return FloatFormat.BINARY128
+        case "x87_extended":
+            return FloatFormat.X87_EXTENDED
+        case "double_double":
+            return FloatFormat.DOUBLE_DOUBLE
+        case _:
+            raise Error("unknown FloatFormat " + text)
+
+
 def _decode_pointermutability(value: JSON) raises -> PointerMutability:
     var text = value.text()
     match text:
@@ -184,6 +205,8 @@ def _decode_globalkind(value: JSON) raises -> GlobalKind:
 def _decode_functionkind(value: JSON) raises -> FunctionKind:
     var text = value.text()
     match text:
+        case "abi_stub":
+            return FunctionKind.ABI_STUB
         case "wrapper":
             return FunctionKind.WRAPPER
         case "extern_declaration":
@@ -1033,6 +1056,20 @@ def _encode_carray(value: CArray) -> JSON:
     fields["size_bytes"] = ArcPointer(JSON.integer(value.size_bytes))
     fields["align_bytes"] = ArcPointer(_encode_optional_int(value.align_bytes))
     return node("CArray", fields^)
+
+
+def _decode_opaquestoragetype(value: JSON) raises -> OpaqueStorageType:
+    var f = _fields(value, "OpaqueStorageType", "|size_bytes|align_bytes|")
+    return OpaqueStorageType(
+        f[].get("size_bytes")[].int_value(), f[].get("align_bytes")[].int_value()
+    )
+
+
+def _encode_opaquestoragetype(value: OpaqueStorageType) -> JSON:
+    var f = Dict[String, ArcPointer[JSON]]()
+    f["size_bytes"] = ArcPointer(JSON.integer(value.size_bytes))
+    f["align_bytes"] = ArcPointer(JSON.integer(value.align_bytes))
+    return node("OpaqueStorageType", f^)
 
 
 def _decode_mojoarray(value: JSON) raises -> MojoArray:
@@ -1980,9 +2017,30 @@ def _encode_irdiagnostic(value: IRDiagnostic) -> JSON:
     return node("IRDiagnostic", fields^)
 
 
+def _decode_floatabi(value: JSON) raises -> FloatABI:
+    var f = _fields(value, "FloatABI", "|kind|format|size_bytes|align_bytes|")
+    return FloatABI(
+        _decode_floatkind(f[].get("kind")[]),
+        _decode_floatformat(f[].get("format")[]),
+        f[].get("size_bytes")[].int_value(),
+        f[].get("align_bytes")[].int_value(),
+    )
+
+
+def _encode_floatabi(value: FloatABI) -> JSON:
+    var f = Dict[String, ArcPointer[JSON]]()
+    f["kind"] = ArcPointer(JSON.string(value.kind.value()))
+    f["format"] = ArcPointer(JSON.string(value.format.value()))
+    f["size_bytes"] = ArcPointer(JSON.integer(value.size_bytes))
+    f["align_bytes"] = ArcPointer(JSON.integer(value.align_bytes))
+    return node("FloatABI", f^)
+
+
 def _decode_targetabi(value: JSON) raises -> TargetABI:
     var fields = _fields(
-        value, "TargetABI", "|pointer_size_bytes|pointer_align_bytes|byte_order|target_triple|"
+        value,
+        "TargetABI",
+        "|pointer_size_bytes|pointer_align_bytes|byte_order|target_triple|float_abi|",
     )
     var v_pointer_size_bytes = fields.ptr()[].get("pointer_size_bytes").ptr()[].int_value()
     var v_pointer_align_bytes = fields.ptr()[].get("pointer_align_bytes").ptr()[].int_value()
@@ -1990,7 +2048,13 @@ def _decode_targetabi(value: JSON) raises -> TargetABI:
     var v_target_triple: Optional[String] = {}
     if fields.ptr()[].has("target_triple"):
         v_target_triple = _decode_optional_string(fields.ptr()[].get("target_triple").ptr()[])
-    return TargetABI(v_pointer_size_bytes, v_pointer_align_bytes, v_byte_order^, v_target_triple^)
+    var floats = List[FloatABI]()
+    if fields[].has("float_abi"):
+        for child in fields[].get("float_abi")[].items():
+            floats.append(_decode_floatabi(child[]))
+    return TargetABI(
+        v_pointer_size_bytes, v_pointer_align_bytes, v_byte_order^, v_target_triple^, floats^
+    )
 
 
 def _encode_targetabi(value: TargetABI) -> JSON:
@@ -1999,6 +2063,10 @@ def _encode_targetabi(value: TargetABI) -> JSON:
     fields["pointer_align_bytes"] = ArcPointer(JSON.integer(value.pointer_align_bytes))
     fields["byte_order"] = ArcPointer(JSON.string(value.byte_order.value()))
     fields["target_triple"] = ArcPointer(_encode_optional_string(value.target_triple))
+    var floats = List[ArcPointer[JSON]]()
+    for item in value.float_abi:
+        floats.append(ArcPointer(_encode_floatabi(item)))
+    fields["float_abi"] = ArcPointer(JSON.array(floats^))
     return node("TargetABI", fields^)
 
 
@@ -2219,11 +2287,16 @@ def _encode_storedmember(value: StoredMember) -> JSON:
 
 
 def _decode_paddingmember(value: JSON) raises -> PaddingMember:
-    var fields = _fields(value, "PaddingMember", "|name|size_bytes|byte_offset|")
+    var fields = _fields(
+        value, "PaddingMember", "|name|size_bytes|byte_offset|storage_width_bytes|"
+    )
     var v_name = fields.ptr()[].get("name").ptr()[].text()
     var v_size_bytes = fields.ptr()[].get("size_bytes").ptr()[].int_value()
     var v_byte_offset = fields.ptr()[].get("byte_offset").ptr()[].int_value()
-    return PaddingMember(v_name^, v_size_bytes, v_byte_offset)
+    var width = 0
+    if fields[].has("storage_width_bytes"):
+        width = fields[].get("storage_width_bytes")[].int_value()
+    return PaddingMember(v_name^, v_size_bytes, v_byte_offset, width)
 
 
 def _encode_paddingmember(value: PaddingMember) -> JSON:
@@ -2231,6 +2304,7 @@ def _encode_paddingmember(value: PaddingMember) -> JSON:
     fields["name"] = ArcPointer(JSON.string(value.name.copy()))
     fields["size_bytes"] = ArcPointer(JSON.integer(value.size_bytes))
     fields["byte_offset"] = ArcPointer(JSON.integer(value.byte_offset))
+    fields["storage_width_bytes"] = ArcPointer(JSON.integer(value.storage_width_bytes))
     return node("PaddingMember", fields^)
 
 
@@ -2757,6 +2831,8 @@ def decode_mojo_type(value: JSON) raises -> MojoType:
             return MojoType.named_type(_decode_namedtype(value))
         case "MojoPointer":
             return MojoType.mojo_pointer(_decode_mojopointer(value))
+        case "OpaqueStorageType":
+            return MojoType.opaque_storage_type(_decode_opaquestoragetype(value))
         case "MojoArray":
             return MojoType.mojo_array(_decode_mojoarray(value))
         case "MojoFunctionPtr":
@@ -2769,6 +2845,8 @@ def decode_mojo_type(value: JSON) raises -> MojoType:
 
 def encode_mojo_type(value: MojoType) -> JSON:
     match value:
+        case .opaque_storage_type(v):
+            return _encode_opaquestoragetype(v)
         case .builtin_type(v):
             return _encode_builtintype(v)
         case .named_type(v):

@@ -63,3 +63,37 @@ def type_align(t: CType) -> Optional[Int]:
     if layout:
         return layout.value()[1]
     return {}
+
+
+def type_size(t: CType) -> Optional[Int]:
+    var core = peel_layout_wrappers(t)
+    match core:
+        case .enum_ref(v):
+            return v.underlying.size_bytes
+        case .int_type(v):
+            return v.size_bytes
+        case .float_type(v):
+            return v.size_bytes
+        case .c_array(v):
+            return (
+                v.size_bytes if v.size_bytes > 0
+                or (v.size and v.size.value() == 0) else Optional[Int]()
+            )
+        case .complex_type(v):
+            return v.size_bytes
+        case .vector_type(v):
+            return v.size_bytes
+        case .c_pointer(v):
+            return v.size_bytes
+        case .c_function_ptr(v):
+            return v.size_bytes
+        case .struct_ref(v):
+            return v.size_bytes
+        case .opaque_record_ref(v):
+            return v.size_bytes
+        case .unsupported_type(v):
+            return v.size_bytes
+        case .atomic_type(v):
+            return v.size_bytes if v.size_bytes else type_size(v.value_type[])
+        case .void_type(_) | .type_ref(_) | .qualified_type(_):
+            return {}

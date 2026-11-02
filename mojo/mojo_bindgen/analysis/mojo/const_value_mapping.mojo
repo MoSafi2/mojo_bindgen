@@ -40,5 +40,7 @@ def _coerce(value: MojoConstExpr, t: MojoType) -> MojoConstExpr:
 def typed_const_value(
     value: MojoConstExpr, decl_type: CType, type_mapper: MapTypePass
 ) raises -> MojoConstExpr:
+    if not type_mapper.value_supported(decl_type):
+        raise Error("constant type has no supported Mojo value representation")
     var mapped = type_mapper.run(decl_type)
     return _coerce(value, mapped) if _integral(mapped) else value.copy()

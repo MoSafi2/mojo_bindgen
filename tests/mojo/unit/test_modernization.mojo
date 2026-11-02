@@ -16,7 +16,12 @@ from mojo_bindgen.serde import dumps_cir, dumps_mojo_ir, loads_mojo_ir
 
 
 def _block() -> Unit:
-    var unit = Unit("block.h", "block", "block", TargetABI(8, 8, ByteOrder.LITTLE))
+    var unit = Unit(
+        "block.h",
+        "block",
+        "block",
+        TargetABI(8, 8, ByteOrder.LITTLE, String("x86_64-unknown-linux-gnu")),
+    )
     var fields = List[Field]()
     fields.append(
         Field(

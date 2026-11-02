@@ -107,6 +107,24 @@ class ByteOrder(StrEnum):
     BIG = "big"
 
 
+class FloatFormat(StrEnum):
+    UNKNOWN = "unknown"
+    BINARY16 = "binary16"
+    BINARY32 = "binary32"
+    BINARY64 = "binary64"
+    BINARY128 = "binary128"
+    X87_EXTENDED = "x87_extended"
+    DOUBLE_DOUBLE = "double_double"
+
+
+@dataclass(frozen=True)
+class FloatABI:
+    kind: FloatKind
+    format: FloatFormat
+    size_bytes: int
+    align_bytes: int
+
+
 @dataclass(frozen=True)
 class Qualifiers:
     """C type qualifiers preserved on pointee types and other referenced types."""
@@ -713,6 +731,7 @@ class TargetABI:
     pointer_align_bytes: int
     byte_order: ByteOrder
     target_triple: str | None = None
+    float_abi: tuple[FloatABI, ...] = ()
 
 
 type Decl = Union[Function, Struct, Enum, Typedef, Const, MacroDecl, GlobalVar]
@@ -771,7 +790,6 @@ PRIMITIVE_BUILTINS: dict[IntKind | FloatKind | str, MojoBuiltin] = {
     FloatKind.FLOAT16: MojoBuiltin.FLOAT16,
     FloatKind.FLOAT: MojoBuiltin.C_FLOAT,
     FloatKind.DOUBLE: MojoBuiltin.C_DOUBLE,
-    FloatKind.LONG_DOUBLE: MojoBuiltin.C_DOUBLE,
     FloatKind.FLOAT128: MojoBuiltin.UNSUPPORTED,
 }
 _INT_DTYPE_TABLE: dict[tuple[bool, int], str] = {
@@ -785,11 +803,6 @@ _INT_DTYPE_TABLE: dict[tuple[bool, int], str] = {
     (False, 8): "DType.uint64",
     (True, 16): "DType.int128",
     (False, 16): "DType.uint128",
-}
-_FLOAT_DTYPE_TABLE: dict[FloatKind, str] = {
-    FloatKind.FLOAT16: "DType.float16",
-    FloatKind.FLOAT: "DType.float32",
-    FloatKind.DOUBLE: "DType.float64",
 }
 _MOJO_INT_TYPES = (
     MojoBuiltin.INT8,
@@ -823,9 +836,11 @@ class GlobalKind(StrEnum):
 
 class FunctionKind(StrEnum):
     WRAPPER = "wrapper"
+    EXTERN_DECLARATION = "extern_declaration"
     VARIADIC_STUB = "variadic_stub"
     DIRECTIVE_STUB = "directive_stub"
     NON_REGISTER_RETURN_STUB = "non_register_return_stub"
+    ABI_STUB = "abi_stub"
 
 
 class LinkMode(StrEnum):
@@ -936,8 +951,22 @@ type CType = Union[
     EnumRef,
     TypeRef,
 ]
+
+
+@dataclass(frozen=True)
+class OpaqueStorageType:
+    size_bytes: int
+    align_bytes: int
+
+
 type MojoType = Union[
-    BuiltinType, NamedType, MojoPointer, MojoArray, MojoFunctionPtr, ParametricType
+    BuiltinType,
+    NamedType,
+    MojoPointer,
+    MojoArray,
+    MojoFunctionPtr,
+    ParametricType,
+    OpaqueStorageType,
 ]
 
 
@@ -955,6 +984,7 @@ class PaddingMember:
     name: str
     size_bytes: int
     byte_offset: int
+    storage_width_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -1228,6 +1258,9 @@ __all__ = [
     "SupportDecl",
     "SupportDeclKind",
     "TargetABI",
+    "FloatABI",
+    "FloatFormat",
+    "OpaqueStorageType",
     "TypeArg",
     "TypeRef",
     "Typedef",

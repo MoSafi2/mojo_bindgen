@@ -2,6 +2,7 @@
 from std.memory import ArcPointer
 from ..ir import *
 from ..analysis.traversal import validate_mojo_module
+from ..analysis.mojo.physical_members import physical_members
 from ..analysis.mojo.validate_finalized import validate_finalized_mojo_module
 from ..analysis.common import mojo_ident, mojo_align_decorator_ok, sort_strings
 
@@ -34,6 +35,8 @@ def _key(path: List[String]) -> String:
 struct _NormalizeState(Movable):
     var module: MojoModule
     var reserved: Dict[String, Bool]
+    var storage_decls: List[StructDecl]
+    var storage_names: Dict[String, String]
     var aliases: List[AliasDecl]
     var aliases_by_path: Dict[String, String]
     var imports: Dict[String, Dict[String, Bool]]
@@ -42,6 +45,8 @@ struct _NormalizeState(Movable):
     def __init__(out self, module: MojoModule):
         self.module = module.copy()
         self.reserved = Dict[String, Bool]()
+        self.storage_decls = List[StructDecl]()
+        self.storage_names = Dict[String, String]()
         self.aliases = List[AliasDecl]()
         self.aliases_by_path = Dict[String, String]()
         self.imports = Dict[String, Dict[String, Bool]]()
@@ -91,6 +96,33 @@ struct _NormalizeState(Movable):
         )
         return name^
 
+    def storage_type(mut self, v: OpaqueStorageType) raises -> MojoType:
+        if (
+            v.size_bytes <= 0
+            or v.align_bytes <= 0
+            or (v.align_bytes & (v.align_bytes - 1)) != 0
+            or v.align_bytes > (1 << 29)
+            or v.size_bytes % v.align_bytes
+        ):
+            raise Error("invalid opaque storage geometry")
+        var key = String(v.size_bytes) + "_" + String(v.align_bytes)
+        if key not in self.storage_names:
+            var base = "_bindgen_storage_" + key
+            var name = base.copy()
+            var suffix = 2
+            while name in self.reserved:
+                name = base + "_" + String(suffix)
+                suffix += 1
+            self.reserved[name] = True
+            self.storage_names[key] = name.copy()
+            var decl = StructDecl(name, align=v.align_bytes, align_decorator=v.align_bytes)
+            decl.traits = [StructTraits.COPYABLE, StructTraits.MOVABLE]
+            decl.members.append(
+                StructMember.opaque_storage_member(OpaqueStorageMember("storage", v.size_bytes))
+            )
+            self.storage_decls.append(decl^)
+        return MojoType.named_type(NamedType(self.storage_names[key].copy()))
+
     def function_type(
         mut self, value: MojoFunctionPtr, path: List[String]
     ) raises -> MojoFunctionPtr:
@@ -107,6 +139,8 @@ struct _NormalizeState(Movable):
 
     def type(mut self, t: MojoType, path: List[String]) raises -> MojoType:
         match t:
+            case .opaque_storage_type(v):
+                return self.storage_type(v)
             case .builtin_type(_) | .named_type(_):
                 return t.copy()
             case .mojo_pointer(v):
@@ -236,10 +270,11 @@ struct _NormalizeState(Movable):
                 return MojoDecl.global_decl(out^)
             case .struct_decl(v):
                 var out = v.copy()
+                out.members = physical_members(v)
                 if not v.align_decorator and v.align and mojo_align_decorator_ok(v.align.value()):
                     out.align_decorator = v.align
-                for i in range(len(v.members)):
-                    match v.members[i]:
+                for i in range(len(out.members)):
+                    match out.members[i]:
                         case .stored_member(m):
                             var member = m.copy()
                             member.type = ArcPointer(
@@ -310,6 +345,8 @@ struct _NormalizeState(Movable):
 
     def type_imports(mut self, t: MojoType) raises:
         match t:
+            case .opaque_storage_type(_):
+                raise Error("unresolved opaque storage dependency")
             case .builtin_type(v):
                 var name = v.name.value()
                 if name.startswith("c_"):
@@ -532,6 +569,8 @@ def normalize_mojo_module(module: MojoModule) raises -> MojoModule:
     result.decls = List[MojoDecl]()
     for alias in state.aliases:
         result.decls.append(MojoDecl.alias_decl(alias.copy()))
+    for storage in state.storage_decls:
+        result.decls.append(MojoDecl.struct_decl(storage.copy()))
     for rank in range(4):
         for d in normalized:
             var current: Int

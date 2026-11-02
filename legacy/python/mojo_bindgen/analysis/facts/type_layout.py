@@ -92,3 +92,31 @@ def _explicit_layout(
     if size_bytes is None or align_bytes is None:
         return None
     return size_bytes, align_bytes
+
+
+def type_size(t: CType) -> int | None:
+    core = peel_layout_wrappers(t)
+    match core:
+        case EnumRef():
+            return core.underlying.size_bytes
+        case (
+            IntType()
+            | FloatType()
+            | ComplexType()
+            | VectorType()
+            | CPointer()
+            | CFunctionPtr()
+            | StructRef()
+            | OpaqueRecordRef()
+            | UnsupportedType()
+        ):
+            return core.size_bytes
+        case CArray():
+            return core.size_bytes if core.size_bytes > 0 or core.size == 0 else None
+        case AtomicType():
+            return core.size_bytes if core.size_bytes is not None else type_size(core.value_type)
+        case VoidType():
+            return None
+        case TypeRef() | QualifiedType():
+            raise AssertionError("unpeeled source wrapper")
+    assert_never(core)

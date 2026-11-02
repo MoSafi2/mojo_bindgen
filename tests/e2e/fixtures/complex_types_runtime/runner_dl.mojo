@@ -1,3 +1,4 @@
+from complex_types_runtime_bindings_dl import cplx64_add, cplx64_real, cplx64_imag
 from complex_types_runtime_bindings_dl import cplx_add, cplx_imag, cplx_mul, cplx_real
 from std.complex import ComplexSIMD
 
@@ -12,3 +13,9 @@ def main() raises:
     print("cplx_add_imag_case0|", cplx_imag(add_out))
     print("cplx_mul_real_case0|", cplx_real(mul_out))
     print("cplx_mul_imag_case0|", cplx_imag(mul_out))
+
+    var wide = cplx64_add(
+        ComplexSIMD[DType.float64, 1](1.5, -2.0), ComplexSIMD[DType.float64, 1](2.25, 0.5)
+    )
+    if cplx64_real(wide) != 3.75 or cplx64_imag(wide) != -1.5:
+        raise Error("C complex-double ABI mismatch")

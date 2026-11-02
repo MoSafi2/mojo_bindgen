@@ -52,6 +52,7 @@ from mojo_bindgen.ir import (
     MojoUnaryExpr,
     NamedType,
     OpaqueStorageMember,
+    OpaqueStorageType,
     PaddingMember,
     ParametricArg,
     ParametricBase,
@@ -82,21 +83,6 @@ def _escape_mojo_string(value: str) -> str:
 
 def _escape_mojo_char(value: str) -> str:
     return _escape_mojo_string(value).replace("'", "\\'")
-
-
-def _padding_scalar_chunks(byte_offset: int, size_bytes: int) -> list[str]:
-    chunks: list[str] = []
-    offset = byte_offset
-    remaining = size_bytes
-    chunk_types = ((8, "UInt64"), (4, "UInt32"), (2, "UInt16"), (1, "UInt8"))
-    while remaining > 0:
-        for chunk_size, chunk_type in chunk_types:
-            if remaining >= chunk_size and offset % chunk_size == 0:
-                chunks.append(chunk_type)
-                offset += chunk_size
-                remaining -= chunk_size
-                break
-    return chunks
 
 
 def _clean_doc_comment(doc: DocComment | None) -> list[str]:
@@ -212,6 +198,11 @@ class MojoIRPrinter:
         return self._options
 
     def render(self, module: MojoModule) -> str:
+        from mojo_bindgen.analysis.mojo.validate_finalized import validate_finalized_mojo_module
+
+        from .normalize_mojo_module import required_module_dependencies
+
+        validate_finalized_mojo_module(module, required_module_dependencies(module))
         parts: list[str] = []
         if self._options.module_comment:
             parts.append(self._render_module_header(module))
@@ -352,14 +343,12 @@ class MojoIRPrinter:
 
     @staticmethod
     def _render_padding_member(b: CodeBuilder, member: PaddingMember) -> None:
-        chunks = _padding_scalar_chunks(member.byte_offset, member.size_bytes)
-        if not chunks:
-            return
-        if len(chunks) == 1:
-            b.add(f"var {member.name}: {chunks[0]}")
-            return
-        for i, chunk_type in enumerate(chunks):
-            b.add(f"var {member.name}_{i}: {chunk_type}")
+        if (
+            member.storage_width_bytes not in (1, 2, 4, 8)
+            or member.storage_width_bytes != member.size_bytes
+        ):
+            raise ValueError("unresolved padding in finalized MojoIR")
+        b.add(f"var {member.name}: UInt{member.storage_width_bytes * 8}")
 
     def _render_bitfield_group_accessors(
         self,
@@ -561,29 +550,42 @@ class MojoIRPrinter:
 
     def _render_function_decl(self, decl: FunctionDecl) -> str:
         b = CodeBuilder()
+        render_type = (
+            self._render_type
+            if decl.kind in (FunctionKind.WRAPPER, FunctionKind.EXTERN_DECLARATION)
+            else self._render_comment_type
+        )
         param_names = [
             self._render_param_name(param.name, i) for i, param in enumerate(decl.params)
         ]
         params = [
-            f"{param_name}: {self._render_type(param.type)}"
+            f"{param_name}: {render_type(param.type)}"
             for param_name, param in zip(param_names, decl.params, strict=True)
         ]
         params_text = ", ".join(params)
-        return_type = self._render_type(decl.return_type)
+        return_type = render_type(decl.return_type)
         symbol = self._link_symbol(decl.call_target, decl.link_name)
         symbol_lit = _escape_mojo_string(symbol)
         bracket_inner = ", ".join(
-            [f'"{symbol}"', return_type] + [self._render_type(param.type) for param in decl.params]
+            [f'"{symbol}"', return_type] + [render_type(param.type) for param in decl.params]
         )
         call_args = ", ".join(param_names)
 
+        if decl.kind == FunctionKind.EXTERN_DECLARATION:
+            b.extend(self._diagnostic_lines(decl.diagnostics))
+            b.add(f'@extern("{symbol_lit}")')
+            b.add(f'def {decl.name}({params_text}) abi("C") -> {return_type}:')
+            b.indent()
+            self._render_docstring(b, decl.doc)
+            b.add("...")
+            return b.render()
         if decl.kind == FunctionKind.VARIADIC_STUB:
             b.extend(self._doc_comment_lines(decl.doc))
             b.extend(self._diagnostic_lines(decl.diagnostics))
             b.add("# variadic C function - OwnedDLHandle does not expose variadic ABI metadata:")
             b.add(f"# {return_type} {symbol}({params_text}, ...)")
             return b.render()
-        if decl.kind == FunctionKind.DIRECTIVE_STUB:
+        if decl.kind in (FunctionKind.DIRECTIVE_STUB, FunctionKind.ABI_STUB):
             b.extend(self._doc_comment_lines(decl.doc))
             b.extend(self._diagnostic_lines(decl.diagnostics))
             directives = self._render_function_directives(decl)
@@ -600,7 +602,7 @@ class MojoIRPrinter:
             b.extend(self._doc_comment_lines(decl.doc))
             b.extend(self._diagnostic_lines(decl.diagnostics))
             b.add(
-                "# C return type is not RegisterPassable - Mojo FFI cannot model this return; bind manually."
+                "# C return type is not RegisterPassable - this binding requires manual handling."
             )
             b.add(f"# {return_type} {symbol}({params_text})")
             return b.render()
@@ -694,7 +696,11 @@ class MojoIRPrinter:
         b = CodeBuilder()
         b.extend(self._doc_comment_lines(decl.doc))
         b.extend(self._diagnostic_lines(decl.diagnostics))
-        value_type = self._render_type(decl.value_type)
+        value_type = (
+            self._render_comment_type(decl.value_type)
+            if decl.kind == GlobalKind.STUB
+            else self._render_type(decl.value_type)
+        )
         if decl.kind == GlobalKind.STUB:
             if (
                 isinstance(decl.value_type, ParametricType)
@@ -725,7 +731,15 @@ class MojoIRPrinter:
             return
         b.add(f"# comptime {member.name}: missing payload")
 
+    def _render_comment_type(self, t: MojoType) -> str:
+        try:
+            return self._render_type(t)
+        except MojoIRPrintError:
+            return "<unsupported>"
+
     def _render_type(self, t: MojoType) -> str:
+        if isinstance(t, OpaqueStorageType):
+            raise ValueError("opaque storage must be normalized before printing")
         if isinstance(t, BuiltinType):
             if t.name == MojoBuiltin.UNSUPPORTED:
                 raise MojoIRPrintError("cannot render MojoBuiltin.UNSUPPORTED as valid Mojo")

@@ -35,6 +35,7 @@ from runtime.test_mojo_12 import test_missing_library_has_candidate_diagnostic_9
 from runtime.test_layout_runtime import test_layout_runtime_full_surface_runtime
 from runtime.test_layout_runtime import test_layout_runtime_large_alignment
 from runtime.test_layout_runtime import test_layout_runtime_zero_length_tail_access
+from runtime.test_opaque_storage import test_opaque_storage_runtime
 from runtime.test_c_abi_returns import test_c_abi_memory_returns
 
 
@@ -74,4 +75,5 @@ def main() raises:
     suite.test[test_layout_runtime_large_alignment]()
     suite.test[test_layout_runtime_zero_length_tail_access]()
     suite.test[test_c_abi_memory_returns]()
+    suite.test[test_opaque_storage_runtime]()
     suite^.run()

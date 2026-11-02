@@ -1,13 +1,36 @@
 from std.memory import ArcPointer
+from ..facts.context import AnalysisContext
+from ..facts.c_abi import CABIQueries
 from ...ir import *
 from ..common import quoted
 from .mapping_support import union_note, stub_note, record_name, field_display_name, try_map_type
 from .type_mapping import MapTypePass
+from ..facts.representation import contains_storage, target_layout, storage_type
+from ..facts.type_layout import peel_layout_wrappers
 
 
-@fieldwise_init
 struct MapUnionPass(Copyable, Movable):
     var type_mapper: MapTypePass
+
+    var context: Optional[ArcPointer[AnalysisContext]]
+
+    def __init__(
+        out self,
+        var type_mapper: MapTypePass,
+        var context: Optional[ArcPointer[AnalysisContext]] = {},
+    ):
+        self.type_mapper = type_mapper^
+        self.context = context^
+
+    def _shape(self, t: CType) raises -> Optional[Tuple[Int, Int]]:
+        var core = peel_layout_wrappers(t)
+        if case .struct_ref(v) = core:
+            if self.context and v.decl_id in self.context.value()[].record_storage:
+                var queries = CABIQueries(self.context.value().copy())
+                if queries.record(v.decl_id).eligible:
+                    return self.context.value()[].record_storage[v.decl_id].target_layout
+            return {}
+        return target_layout(self.type_mapper.run(core), self.type_mapper.queries)
 
     def run(self, decl: Struct) raises -> AliasDecl:
         if not decl.is_union:
@@ -30,6 +53,8 @@ struct MapUnionPass(Copyable, Movable):
                     + "; using byte-storage fallback"
                 )
             )
+        var target_size = 0
+        var target_align = 1
         var arms = List[ArcPointer[MojoType]]()
         var arm_names = List[String]()
         for i in range(len(decl.fields)):
@@ -46,6 +71,13 @@ struct MapUnionPass(Copyable, Movable):
                 if mapped[1]:
                     diagnostics.append(union_note(mapped[1].value()))
                 continue
+            var representation = self.type_mapper.run(peel_layout_wrappers(f.type[]))
+            var shape = self._shape(f.type[])
+            if not shape or contains_storage(representation):
+                eligible = False
+            else:
+                target_size = max(target_size, shape.value()[0])
+                target_align = max(target_align, shape.value()[1])
             var self_reference = False
             match mapped[0].value().ptr()[]:
                 case .named_type(v):
@@ -81,6 +113,12 @@ struct MapUnionPass(Copyable, Movable):
             if not duplicate:
                 arms.append(mapped[0].value().copy())
                 arm_names.append(field_name^)
+        if (
+            not len(arms)
+            or ((target_size + target_align - 1) // target_align) * target_align != decl.size_bytes
+            or target_align != decl.align_bytes
+        ):
+            eligible = False
         var target: MojoType
         if eligible:
             var args = List[ParametricArg]()
@@ -88,19 +126,12 @@ struct MapUnionPass(Copyable, Movable):
                 args.append(ParametricArg.type_arg(TypeArg(arm.copy())))
             target = MojoType.parametric_type(ParametricType(ParametricBase.UNSAFE_UNION, args^))
         else:
-            target = MojoType.mojo_array(
-                MojoArray(
-                    ArcPointer(MojoType.builtin_type(BuiltinType(MojoBuiltin.UINT8))),
-                    decl.size_bytes,
-                )
-            )
+            target = storage_type(decl.size_bytes, decl.align_bytes)
             diagnostics.append(
                 union_note(
                     "union `"
                     + decl.c_name
-                    + "` mapped as Array[UInt8, "
-                    + String(decl.size_bytes)
-                    + "] to preserve layout"
+                    + "` mapped as aligned opaque storage to preserve size and alignment"
                 )
             )
         return AliasDecl(

@@ -18,6 +18,11 @@ todo.md
 !/mojo/**/*.mojo
 !/tests/mojo/*.mojo
 !/tests/mojo/**/*.mojo
+# Shared checked-in C fixtures and Mojo consumers (generated bindings stay ignored).
+!/tests/e2e/fixtures/*/input.h
+!/tests/e2e/fixtures/*/runner_external.mojo
+!/tests/e2e/fixtures/*/runner_dl.mojo
+!/tests/e2e/fixtures/*/expect.emit.*.mojo
 /mojo/.pixi/
 *.mojoc
 io_uring.json

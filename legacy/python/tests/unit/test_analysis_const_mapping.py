@@ -23,7 +23,6 @@ from mojo_bindgen.ir import (
     MojoCastExpr,
     MojoFloatLiteral,
     MojoRefExpr,
-    MojoSizeOfExpr,
     TargetABI,
 )
 from tests.header_harness import HarnessError, HeaderHarness
@@ -44,9 +43,7 @@ def test_map_const_expr_maps_binary_ref_cast_and_sizeof_nodes(bindgen: HeaderHar
         CCastExpr(target=c_int, expr=IntLiteral(7)),
         target_abi=DEFAULT_ABI,
     ) == MojoCastExpr(target=BuiltinType(MojoBuiltin.C_INT), expr=IntLiteral(7))
-    assert bindgen.map_expr(CSizeOfExpr(target=c_int), target_abi=DEFAULT_ABI) == MojoSizeOfExpr(
-        target=BuiltinType(MojoBuiltin.C_INT)
-    )
+    assert bindgen.map_expr(CSizeOfExpr(target=c_int), target_abi=DEFAULT_ABI) == IntLiteral(4)
 
 
 def test_map_const_expr_parses_decimal_and_hex_float_literals(bindgen: HeaderHarness) -> None:

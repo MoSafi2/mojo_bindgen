@@ -124,7 +124,9 @@ No tag, package upload or Git push is part of this implementation task.
   metadata. Pixi consumers declare glibc 2.35 as their system requirement.
 - Native formatting, precompilation/build and developer facade/direct smoke-source
   comparison pass. Workflow syntax passes actionlint. Binding/layout source goldens
-  are unchanged. Existing layout limitations remain documented in `mojo/README.md`.
+  were unchanged at this milestone. The subsequent
+  [representation safety changes](representation_safety.md) deliberately update
+  storage output and remove the two historical layout exclusions.
 
 These are local candidates and local checks; no package, release tag or Git push
 was published. Linux acceptance does not imply ARM/macOS support.

@@ -50,8 +50,8 @@ Copying the smoke program is necessary: compiling it in its original example
 folder can import ignored stale generated bindings before searching `-I` paths.
 Tests run in temporary directories and do not replace existing example outputs.
 Layout source is compared in full; these large example sidecars are not executed.
-The two known Python layout-test limitations remain documented in
-[native_backend_plan.md](native_backend_plan.md#preserved-reference-limitations).
+The two Python layout-test limitations preserved at this milestone are now
+resolved by [representation safety](representation_safety.md).
 
 ## Standalone file handoff
 

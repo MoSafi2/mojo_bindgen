@@ -417,8 +417,10 @@ def test_assign_record_policies_breaks_recursive_register_passable_cycles() -> N
         ),
     )
     left_decl, right_decl = _lowered_structs(left, right)
-    assert left_decl.fieldwise_init is True
-    assert right_decl.fieldwise_init is True
+    assert left_decl.fieldwise_init is False
+    assert right_decl.fieldwise_init is False
+    assert left_decl.members == (OpaqueStorageMember("storage", 8),)
+    assert right_decl.members == (OpaqueStorageMember("storage", 8),)
     assert left_decl.passability == MojoPassability.MEMORY_ONLY
     assert right_decl.passability == MojoPassability.MEMORY_ONLY
     assert left_decl.traits == (StructTraits.COPYABLE, StructTraits.MOVABLE)

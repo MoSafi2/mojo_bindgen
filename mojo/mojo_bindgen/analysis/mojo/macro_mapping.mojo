@@ -85,15 +85,25 @@ struct MacroMapper(Copyable, Movable):
             if blocker:
                 return _comment(decl, "macro " + decl.name + ": " + blocker.value())
             if not has_null(decl.expr.value().ptr()[]):
-                var value = self.const_expr_mapper.run(decl.expr.value().ptr()[])
-                var typed = typed_const_value(value, decl.type.value().ptr()[], self.type_mapper)
-                emitted[name] = True
-                return AliasDecl(
-                    name^,
-                    AliasKind.MACRO_VALUE,
-                    const_value=ArcPointer(typed^),
-                    doc=decl.doc.copy(),
-                )
+                try:
+                    var value = self.const_expr_mapper.run(decl.expr.value().ptr()[])
+                    var typed = typed_const_value(
+                        value, decl.type.value().ptr()[], self.type_mapper
+                    )
+                    emitted[name] = True
+                    return AliasDecl(
+                        name^,
+                        AliasKind.MACRO_VALUE,
+                        const_value=ArcPointer(typed^),
+                        doc=decl.doc.copy(),
+                    )
+                except:
+                    return _comment(
+                        decl,
+                        "macro "
+                        + decl.name
+                        + ": expression has no supported Mojo value representation",
+                    )
         if decl.diagnostic and decl.diagnostic.value().byte_length():
             return _comment(decl, "macro " + decl.name + ": " + decl.diagnostic.value())
         var notes = List[MappingNote]()

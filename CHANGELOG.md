@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased — 0.4.0]
 
+- Probe source floating formats and validate target value, storage and call
+  capabilities independently. Preserve extended floats and containing records as
+  aligned opaque storage; diagnose unsafe callable interfaces instead of narrowing
+  values. Honor compatible `-mlong-double-64` targets.
+- Normalize padding into concrete emitted fields before reflection, fixing
+  `large_alignment` offsets. Include system `max_align_t` in full layout checks.
+- Preserve const array element qualifiers and apply C parameter decay explicitly.
+  Extend C-backed runtime coverage for opaque storage, complex values and arrays.
+
 - Emit Mojo 1.2-compatible direct C declarations for eligible fixed-array record
   returns, retaining conservative layout checks and dynamic-loading restrictions.
 - Derive IR payload equality, share analysis facts and avoid retaining diagnostic

@@ -88,6 +88,41 @@ __enum FloatKind(Equatable, ImplicitlyCopyable, Movable):
                 return "FLOAT128"
 
 
+__enum FloatFormat(Equatable, ImplicitlyCopyable, Movable):
+    case UNKNOWN
+    case BINARY16
+    case BINARY32
+    case BINARY64
+    case BINARY128
+    case X87_EXTENDED
+    case DOUBLE_DOUBLE
+
+    def value(self) -> String:
+        match self:
+            case .UNKNOWN:
+                return "unknown"
+            case .BINARY16:
+                return "binary16"
+            case .BINARY32:
+                return "binary32"
+            case .BINARY64:
+                return "binary64"
+            case .BINARY128:
+                return "binary128"
+            case .X87_EXTENDED:
+                return "x87_extended"
+            case .DOUBLE_DOUBLE:
+                return "double_double"
+
+
+@fieldwise_init
+struct FloatABI(Copyable, Equatable, Movable):
+    var kind: FloatKind
+    var format: FloatFormat
+    var size_bytes: Int
+    var align_bytes: Int
+
+
 __enum PointerMutability(Equatable, ImplicitlyCopyable, Movable):
     case MUT
     case IMMUT
@@ -223,6 +258,7 @@ __enum FunctionKind(Equatable, ImplicitlyCopyable, Movable):
     case VARIADIC_STUB
     case DIRECTIVE_STUB
     case NON_REGISTER_RETURN_STUB
+    case ABI_STUB
 
     def value(self) -> String:
         match self:
@@ -234,6 +270,8 @@ __enum FunctionKind(Equatable, ImplicitlyCopyable, Movable):
                 return "variadic_stub"
             case .DIRECTIVE_STUB:
                 return "directive_stub"
+            case .ABI_STUB:
+                return "abi_stub"
             case .NON_REGISTER_RETURN_STUB:
                 return "non_register_return_stub"
 
@@ -1318,6 +1356,7 @@ struct TargetABI(Copyable, Equatable, Movable):
     var pointer_align_bytes: Int
     var byte_order: ByteOrder
     var target_triple: Optional[String]
+    var float_abi: List[FloatABI]
 
     def __init__(
         out self,
@@ -1325,11 +1364,13 @@ struct TargetABI(Copyable, Equatable, Movable):
         var pointer_align_bytes: Int,
         var byte_order: ByteOrder,
         var target_triple: Optional[String] = {},
+        var float_abi: List[FloatABI] = [],
     ):
         self.pointer_size_bytes = pointer_size_bytes
         self.pointer_align_bytes = pointer_align_bytes
         self.byte_order = byte_order^
         self.target_triple = target_triple^
+        self.float_abi = float_abi^
 
 
 struct Unit(Copyable, Equatable, Movable):
@@ -1421,6 +1462,12 @@ struct BuiltinType(Copyable, Equatable, Movable):
         self.name = name^
 
 
+@fieldwise_init
+struct OpaqueStorageType(Copyable, Equatable, Movable):
+    var size_bytes: Int
+    var align_bytes: Int
+
+
 struct NamedType(Copyable, Equatable, Movable):
     var name: String
 
@@ -1493,11 +1540,19 @@ struct PaddingMember(Copyable, Equatable, Movable):
     var name: String
     var size_bytes: Int
     var byte_offset: Int
+    var storage_width_bytes: Int
 
-    def __init__(out self, var name: String, var size_bytes: Int, var byte_offset: Int):
+    def __init__(
+        out self,
+        var name: String,
+        var size_bytes: Int,
+        var byte_offset: Int,
+        var storage_width_bytes: Int = 0,
+    ):
         self.name = name^
         self.size_bytes = size_bytes
         self.byte_offset = byte_offset
+        self.storage_width_bytes = storage_width_bytes
 
 
 struct OpaqueStorageMember(Copyable, Equatable, Movable):
@@ -1882,6 +1937,7 @@ __enum CType(Copyable, Equatable, Movable):
 __enum MojoType(Copyable, Equatable, Movable):
     case builtin_type(BuiltinType)
     case named_type(NamedType)
+    case opaque_storage_type(OpaqueStorageType)
     case mojo_pointer(MojoPointer)
     case mojo_array(MojoArray)
     case mojo_function_ptr(MojoFunctionPtr)
@@ -1895,6 +1951,10 @@ __enum MojoType(Copyable, Equatable, Movable):
         match self:
             case .builtin_type(a):
                 if case .builtin_type(b) = other:
+                    return a == b
+                return False
+            case .opaque_storage_type(a):
+                if case .opaque_storage_type(b) = other:
                     return a == b
                 return False
             case .named_type(a):

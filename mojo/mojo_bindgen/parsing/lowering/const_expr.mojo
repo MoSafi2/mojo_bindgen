@@ -22,6 +22,8 @@ from ...ir import (
 )
 from ..._numbers import IntegerValue, parse_float, parse_hex_float
 from .literal_resolver import LiteralResolver
+from ..target_abi import probe_target_abi
+from ...ir import TargetABI
 from .primitive import default_int
 from ._integer import BigInteger, unary, binary
 
@@ -234,12 +236,14 @@ def combine(lhs: Optional[CType], rhs: Optional[CType]) -> Optional[CType]:
 
 
 struct ConstExprParser(Copyable, Movable):
+    var abi: TargetABI
     var literal_resolver: LiteralResolver
     var macro_values: Dict[String, ParsedConstExpr]
     var stream: List[String]
     var index: Int
 
-    def __init__(out self, args: List[String]):
+    def __init__(out self, args: List[String]) raises:
+        self.abi = probe_target_abi(args)
         self.literal_resolver = LiteralResolver(args)
         self.macro_values = Dict[String, ParsedConstExpr]()
         self.stream = List[String]()
@@ -456,16 +460,19 @@ struct ConstExprParser(Copyable, Movable):
                 else:
                     _ = parse_float(number)
                 var kind = FloatKind.DOUBLE
-                var size = 8
                 if "f" in suffix:
                     kind = FloatKind.FLOAT
-                    size = 4
                 elif "l" in suffix:
                     kind = FloatKind.LONG_DOUBLE
-                    size = 16
+                var size = 0
+                var align: Optional[Int] = {}
+                for item in self.abi.float_abi:
+                    if item.kind == kind:
+                        size = item.size_bytes
+                        align = item.align_bytes
                 return ParsedConstExpr(
                     CConstExpr.c_float_literal(CFloatLiteral(token.copy())),
-                    CType.float_type(FloatType(kind, size, size)),
+                    CType.float_type(FloatType(kind, size, align)),
                 )
             except:
                 pass

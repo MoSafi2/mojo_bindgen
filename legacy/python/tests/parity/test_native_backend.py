@@ -357,9 +357,6 @@ def test_native_generated_bindings_and_layout_on_stable(backend, tmp_path, case)
         text=True,
     )
     unit = ClangParser(fixture / "input.h", library=case, link_name=case).run()
-    # The current Python model narrows this system record's long double. Full-header
-    # byte parity covers it above; runtime layout acceptance targets fixture records.
-    unit = replace(unit, decls=tuple(decl for decl in unit.decls if decl.name != "max_align_t"))
     requests = [
         {
             "action": "generate",
@@ -410,14 +407,7 @@ def test_native_generated_bindings_and_layout_on_stable(backend, tmp_path, case)
         ran = subprocess.run(
             [str(tmp_path / "layout")], capture_output=True, text=True, env=env, timeout=60
         )
-        if case == "large_alignment":
-            # Preserve the existing layout-generator defect: one IR padding member
-            # prints multiple fields, so the following reflected index is too small.
-            # Full-byte parity above intentionally keeps both implementations aligned.
-            assert ran.returncode != 0
-            assert "la_item.b.offset: got 8, expected 16" in ran.stdout + ran.stderr
-        else:
-            assert ran.returncode == 0, ran.stdout + ran.stderr
+        assert ran.returncode == 0, ran.stdout + ran.stderr
 
 
 def test_expression_debug_roundtrips_include_nonfinite_and_all_operators(backend):
